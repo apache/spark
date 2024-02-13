@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -105,11 +106,15 @@ object IntervalUtils extends SparkIntervalUtils {
       intervalStr: String,
       typeName: String,
       fallBackNotice: Option[String] = None) = {
-    throw new IllegalArgumentException(
-      s"Interval string does not match $intervalStr format of " +
-        s"${supportedFormat((startFiled, endField)).map(format => s"`$format`").mkString(", ")} " +
-        s"when cast to $typeName: ${input.toString}" +
-        s"${fallBackNotice.map(s => s", $s").getOrElse("")}")
+    throw new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3214",
+      messageParameters = Map(
+        "intervalStr" -> intervalStr,
+        "supportedFormat" -> supportedFormat((startFiled, endField))
+          .map(format => s"`$format`").mkString(", "),
+        "typeName" -> typeName,
+        "input" -> input.toString,
+        "fallBackNotice" -> fallBackNotice.map(s => s", $s").getOrElse("")))
   }
 
   val supportedFormat = Map(
@@ -198,8 +203,10 @@ object IntervalUtils extends SparkIntervalUtils {
       f
     } catch {
       case NonFatal(e) =>
-        throw new IllegalArgumentException(
-          s"Error parsing interval $interval string: ${e.getMessage}", e)
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3213",
+          messageParameters = Map("interval" -> interval, "msg" -> e.getMessage),
+          cause = e)
     }
   }
 
@@ -499,8 +506,12 @@ object IntervalUtils extends SparkIntervalUtils {
           secondsFraction = 0
         case DT.SECOND =>
           // No-op
-        case _ => throw new IllegalArgumentException(s"Cannot support (" +
-          s"interval '$input' ${DT.fieldToString(from)} to ${DT.fieldToString(to)}) expression")
+        case _ => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3212",
+          messageParameters = Map(
+            "input" -> input,
+            "from" -> DT.fieldToString(from),
+            "to" -> DT.fieldToString(to)))
       }
       var micros = secondsFraction
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
@@ -509,8 +520,10 @@ object IntervalUtils extends SparkIntervalUtils {
       new CalendarInterval(0, sign * days, sign * micros)
     } catch {
       case e: Exception =>
-        throw new IllegalArgumentException(
-          s"Error parsing interval day-time string: ${e.getMessage}", e)
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3211",
+          messageParameters = Map("msg" -> e.getMessage),
+          cause = e)
     }
   }
 
@@ -546,9 +559,7 @@ object IntervalUtils extends SparkIntervalUtils {
       case Array(secondsStr, nanosStr) =>
         val seconds = parseSeconds(secondsStr)
         Math.addExact(seconds, parseNanos(nanosStr, seconds < 0))
-      case _ =>
-        throw new IllegalArgumentException(
-          "Interval string does not match second-nano format of ss.nnnnnnnnn")
+      case _ => throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3210")
     }
   }
 

@@ -30,6 +30,7 @@ import scala.util.control.Exception._
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
@@ -209,7 +210,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _ => structType
         }
       case e: XMLEvent =>
-        throw new IllegalArgumentException(s"Failed to parse data with unexpected event $e")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3239",
+          messageParameters = Map("e" -> e.toString))
     }
   }
 

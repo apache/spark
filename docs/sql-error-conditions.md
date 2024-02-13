@@ -372,17 +372,25 @@ If this problem persists, you may consider using `rdd.checkpoint()` instead, whi
 
 `MapObjects` does not support the class `<cls>` as resulting collection.
 
-### CODEC_NOT_AVAILABLE
+### [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-available-error-class.html)
 
 SQLSTATE: 56038
 
-The codec `<codecName>` is not available. Consider to set the config `<configKey>` to `<configVal>`.
+The codec `<codecName>` is not available.
+
+For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-available-error-class.html)
 
 ### CODEC_SHORT_NAME_NOT_FOUND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot find a short name for the codec `<codecName>`.
+
+### COLLATION_INVALID_NAME
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
 
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
@@ -718,6 +726,12 @@ For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.
 
 Failed parsing struct: `<raw>`.
 
+### FAILED_READ_FILE
+
+SQLSTATE: KD001
+
+Encountered error while reading file `<path>`.
+
 ### FAILED_REGISTER_CLASS_WITH_KRYO
 
 SQLSTATE: KD000
@@ -993,6 +1007,12 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 `<message>`
 
 ### INTERNAL_ERROR_STORAGE
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
+### INTERNAL_ERROR_TWS
 
 [SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
@@ -2019,6 +2039,24 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
+### STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to remove default column family with reserved name=`<colFamilyName>`.
+
+### STATE_STORE_MULTIPLE_VALUES_PER_KEY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Store does not support multiple values per key
+
+### STATE_STORE_UNSUPPORTED_OPERATION
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<operationType>` operation not supported with `<entity>`
+
 ### STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST
 
 [SQLSTATE: 42713](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2157,6 +2195,12 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
 
+### TWS_VALUE_SHOULD_NOT_BE_NULL
+
+[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+New value should be non-null for `<typeOfState>`
+
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2170,6 +2214,12 @@ Please ensure that the number of aliases provided matches the number of columns 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias `<aliasName>`; please remove this alias and then try the query again.
+
+### UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' expression (`<expression>`) that does not include a corresponding alias; please update the UDTF to specify an alias there and then try the query again.
 
 ### UNABLE_TO_ACQUIRE_MEMORY
 

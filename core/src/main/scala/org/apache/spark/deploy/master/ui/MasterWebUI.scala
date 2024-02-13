@@ -21,6 +21,7 @@ import java.net.{InetAddress, NetworkInterface, SocketException}
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, MasterStateResponse, RequestMasterState}
+import org.apache.spark.deploy.Utils.addRenderLogHandler
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
@@ -42,7 +43,7 @@ class MasterWebUI(
 
   val masterEndpointRef = master.self
   val killEnabled = master.conf.get(UI_KILL_ENABLED)
-  val decommissionDisabled = !master.conf.get(DECOMMISSION_ENABLED)
+  val decommissionEnabled = master.conf.get(DECOMMISSION_ENABLED)
   val decommissionAllowMode = master.conf.get(MASTER_UI_DECOMMISSION_ALLOW_MODE)
 
   initialize()
@@ -54,16 +55,19 @@ class MasterWebUI(
     attachPage(new LogPage(this))
     attachPage(masterPage)
     addStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)
+    addRenderLogHandler(this, master.conf)
     if (killEnabled) {
       attachHandler(createRedirectHandler(
         "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
       attachHandler(createRedirectHandler(
         "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
+    }
+    if (decommissionEnabled) {
       attachHandler(createServletHandler("/workers/kill", new HttpServlet {
         override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
           val hostnames: Seq[String] = Option(req.getParameterValues("host"))
             .getOrElse(Array[String]()).toImmutableArraySeq
-          if (decommissionDisabled || !isDecommissioningRequestAllowed(req)) {
+          if (!isDecommissioningRequestAllowed(req)) {
             resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
           } else {
             val removedWorkers = masterEndpointRef.askSync[Integer](

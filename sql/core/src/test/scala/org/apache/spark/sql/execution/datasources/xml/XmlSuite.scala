@@ -22,6 +22,7 @@ import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 import javax.xml.stream.XMLStreamException
 
 import scala.collection.immutable.ArraySeq
@@ -31,10 +32,11 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException}
+import org.apache.spark.{DebugFilesystem, SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.xml.XmlOptions
@@ -247,9 +249,9 @@ class XmlSuite
         .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
         .collect()
     }
+    assert(exceptionInParsing.getErrorClass == "FAILED_READ_FILE")
     checkError(
-      // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParsing.getCause.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
@@ -273,10 +275,10 @@ class XmlSuite
         .option("mode", FailFastMode.name)
         .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
         .show()
-    }.getCause.getCause
+    }
+    assert(exceptionInParsing.getErrorClass == "FAILED_READ_FILE")
     checkError(
-      // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParsing.asInstanceOf[SparkException],
+      exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
@@ -2387,10 +2389,12 @@ class XmlSuite
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
         }
+        assert(err.getErrorClass == "TASK_WRITE_FAILED")
+        val msg = err.getCause.getMessage
         assert(
-          err.getMessage.contains("Unsupported field: OffsetSeconds") ||
-            err.getMessage.contains("Unable to extract value") ||
-            err.getMessage.contains("Unable to extract ZoneId"))
+          msg.contains("Unsupported field: OffsetSeconds") ||
+            msg.contains("Unable to extract value") ||
+            msg.contains("Unable to extract ZoneId"))
       }
     }
   }
@@ -2770,11 +2774,10 @@ class XmlSuite
       val df = spark.read.option("rowTag", "ROW").option("multiLine", true).xml(xmlPath.toString)
       fs.delete(xmlPath, true)
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        val e = intercept[SparkException] {
+        val e = intercept[SparkFileNotFoundException] {
           df.collect()
         }
-        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
-        assert(e.getCause.getMessage.contains(".xml does not exist"))
+        assert(e.getMessage.contains(".xml does not exist"))
       }
 
       sampledTestData.write.option("rowTag", "ROW").xml(xmlPath.toString)
@@ -2867,9 +2870,9 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-
-            assert(e.getCause.getCause.isInstanceOf[XMLStreamException])
-            assert(e.getMessage.contains(errorMsg))
+            assert(e.getErrorClass == "TASK_WRITE_FAILED")
+            assert(e.getCause.isInstanceOf[XMLStreamException])
+            assert(e.getCause.getMessage.contains(errorMsg))
         }
       }
     }
@@ -2879,5 +2882,93 @@ class XmlSuite
     checkValidation("1field", "Illegal first name character '1'")
     checkValidation("field name with space", "Illegal name character ' '")
     checkValidation("field", "", false)
+  }
+
+  test("SPARK-46355: Check Number of open files") {
+    withSQLConf("fs.file.impl" -> classOf[XmlSuiteDebugFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        val numFiles = 10
+        val numRecords = 10000
+        val data =
+          spark.sparkContext.parallelize(
+            (0 until numRecords).map(i => Row(i.toLong, (i * 2).toLong)))
+        val schema = buildSchema(field("a1", LongType), field("a2", LongType))
+        val df = spark.createDataFrame(data, schema)
+
+        // Write numFiles files
+        df.repartition(numFiles)
+          .write
+          .mode(SaveMode.Overwrite)
+          .option("rowTag", "row")
+          .xml(path)
+
+        // Serialized file read for Schema inference
+        val dfRead = spark.read
+          .option("rowTag", "row")
+          .xml(path)
+        assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
+        assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+
+        XmlSuiteDebugFileSystem.reset()
+        // Serialized file read for parsing across multiple executors
+        assert(dfRead.count() === numRecords)
+        assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
+        assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+      }
+    }
+  }
+}
+
+// Mock file system that checks the number of open files
+class XmlSuiteDebugFileSystem extends DebugFilesystem {
+
+  override def open(f: org.apache.hadoop.fs.Path, bufferSize: Int): FSDataInputStream = {
+    val wrapped: FSDataInputStream = super.open(f, bufferSize)
+    // All files should be closed before reading next one
+    XmlSuiteDebugFileSystem.open()
+    new FSDataInputStream(wrapped.getWrappedStream) {
+      override def close(): Unit = {
+        try {
+          wrapped.close()
+        } finally {
+          XmlSuiteDebugFileSystem.close()
+        }
+      }
+    }
+  }
+}
+
+object XmlSuiteDebugFileSystem {
+  private val openCounterPerThread = new ConcurrentHashMap[Long, Int]()
+  private val maxFilesPerThread = new ConcurrentHashMap[Long, Int]()
+
+  def reset() : Unit = {
+    maxFilesPerThread.clear()
+  }
+
+  def open() : Unit = {
+    val threadId = Thread.currentThread().getId
+    // assert that there are no open files for this executor
+    assert(openCounterPerThread.getOrDefault(threadId, 0) == 0)
+    openCounterPerThread.put(threadId, 1)
+    maxFilesPerThread.put(threadId, maxFilesPerThread.getOrDefault(threadId, 0) + 1)
+  }
+
+  def close(): Unit = {
+    val threadId = Thread.currentThread().getId
+    if (openCounterPerThread.get(threadId) == 1) {
+      openCounterPerThread.put(threadId, 0)
+    }
+    assert(openCounterPerThread.get(threadId) == 0)
+  }
+
+  def maxFiles() : Int = {
+    maxFilesPerThread.values().asScala.max
+  }
+
+  def totalFiles() : Int = {
+    maxFilesPerThread.values().asScala.sum
   }
 }

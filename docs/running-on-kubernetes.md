@@ -592,7 +592,7 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kubernetes.context</code></td>

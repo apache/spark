@@ -18,18 +18,16 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.io.{FileNotFoundException, IOException}
 
-import scala.util.control.NonFatal
-
-import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.sql.execution.datasources.PartitionedFile
 
 class FilePartitionReader[T](
-    readers: Iterator[PartitionedFileReader[T]],
+    files: Iterator[PartitionedFile],
+    buildReader: PartitionedFile => PartitionReader[T],
     options: FileSourceOptions)
   extends PartitionReader[T] with Logging {
   private var currentReader: PartitionedFileReader[T] = null
@@ -39,9 +37,13 @@ class FilePartitionReader[T](
 
   override def next(): Boolean = {
     if (currentReader == null) {
-      if (readers.hasNext) {
+      if (files.hasNext) {
+        val file = files.next()
+        logInfo(s"Reading file $file")
+        // Sets InputFileBlockHolder for the file block's information
+        InputFileBlockHolder.set(file.urlEncodedPath, file.start, file.length)
         try {
-          currentReader = getNextReader()
+          currentReader = PartitionedFileReader(file, buildReader(file))
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file.", e)
@@ -53,6 +55,7 @@ class FilePartitionReader[T](
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
             currentReader = null
+          case e: Throwable => throw FileDataSourceV2.attachFilePath(file.urlEncodedPath, e)
         }
       } else {
         return false
@@ -64,21 +67,12 @@ class FilePartitionReader[T](
     val hasNext = try {
       currentReader != null && currentReader.next()
     } catch {
-      case e: SchemaColumnConvertNotSupportedException =>
-        throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
-          currentReader.file.urlEncodedPath,
-          e.getColumn, e.getLogicalType, e.getPhysicalType, e)
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
         false
-      case sue: SparkUpgradeException => throw sue
-      case NonFatal(e) =>
-        e.getCause match {
-          case sue: SparkUpgradeException => throw sue
-          case _ => throw QueryExecutionErrors.cannotReadFilesError(e,
-            currentReader.file.urlEncodedPath)
-        }
+      case e: Throwable =>
+        throw FileDataSourceV2.attachFilePath(currentReader.file.urlEncodedPath, e)
     }
     if (hasNext) {
       true
@@ -96,14 +90,5 @@ class FilePartitionReader[T](
       currentReader.close()
     }
     InputFileBlockHolder.unset()
-  }
-
-  private def getNextReader(): PartitionedFileReader[T] = {
-    val reader = readers.next()
-    logInfo(s"Reading file $reader")
-    // Sets InputFileBlockHolder for the file block's information
-    val file = reader.file
-    InputFileBlockHolder.set(file.urlEncodedPath, file.start, file.length)
-    reader
   }
 }
