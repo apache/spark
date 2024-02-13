@@ -979,49 +979,51 @@ class WriteStreamOperationStartResult(google.protobuf.message.Message):
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
-    QUERY_STARTED_EVENT_FIELD_NUMBER: builtins.int
+    QUERY_STARTED_EVENT_JSON_FIELD_NUMBER: builtins.int
     @property
     def query_id(self) -> global___StreamingQueryInstanceId:
         """(Required) Query instance. See `StreamingQueryInstanceId`."""
     name: builtins.str
     """An optional query name."""
-    query_started_event: builtins.str
+    query_started_event_json: builtins.str
     """Optional query started event if there is any listener registered on the client side."""
     def __init__(
         self,
         *,
         query_id: global___StreamingQueryInstanceId | None = ...,
         name: builtins.str = ...,
-        query_started_event: builtins.str | None = ...,
+        query_started_event_json: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_query_started_event",
-            b"_query_started_event",
+            "_query_started_event_json",
+            b"_query_started_event_json",
             "query_id",
             b"query_id",
-            "query_started_event",
-            b"query_started_event",
+            "query_started_event_json",
+            b"query_started_event_json",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_query_started_event",
-            b"_query_started_event",
+            "_query_started_event_json",
+            b"_query_started_event_json",
             "name",
             b"name",
             "query_id",
             b"query_id",
-            "query_started_event",
-            b"query_started_event",
+            "query_started_event_json",
+            b"query_started_event_json",
         ],
     ) -> None: ...
     def WhichOneof(
         self,
-        oneof_group: typing_extensions.Literal["_query_started_event", b"_query_started_event"],
-    ) -> typing_extensions.Literal["query_started_event"] | None: ...
+        oneof_group: typing_extensions.Literal[
+            "_query_started_event_json", b"_query_started_event_json"
+        ],
+    ) -> typing_extensions.Literal["query_started_event_json"] | None: ...
 
 global___WriteStreamOperationStartResult = WriteStreamOperationStartResult
 

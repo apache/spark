@@ -249,7 +249,7 @@ message WriteStreamOperationStartResult {
   string name = 2;
 
   // Optional query started event if there is any listener registered on the client side.
-  optional string query_started_event = 3;
+  optional string query_started_event_json = 3;
 
   // TODO: How do we indicate errors?
   // TODO: Consider adding status, last progress etc here.
