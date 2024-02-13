@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.streaming
 
-import java.io.Serializable
-
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.annotation.{Evolving, Experimental}

@@ -292,6 +292,17 @@ private[sql] class RocksDBStateStoreProvider
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
   }
+
+  override def rangeScan(startKey: UnsafeRow, endKey: UnsafeRow, colFamilyName: String):
+    Iterator[UnsafeRowPair] = {
+    // return an iterator that scans the range of keys
+    rocksDB.rangeScan(encoder.encodeKey(startKey), encoder.encodeKey(endKey), colFamilyName)
+      .map(kv => encoder.decode(kv))
+  }
+
+  override def doTTL(startTime: Long, endTime: Long): Unit = {
+    rocksDB.doTTL(startTime, endTime)
+  }
 }
 
 object RocksDBStateStoreProvider {

@@ -79,6 +79,11 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
     Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
     throw new RuntimeException("Intentional maintenance failure")
   }
+
+  override def rangeScan(startKey: UnsafeRow, endKey: UnsafeRow, colFamilyName: String):
+    Iterator[UnsafeRowPair] = Iterator.empty
+
+  override def doTTL(startTime: Long, endTime: Long): Unit = { }
 }
 
 private object FakeStateStoreProviderWithMaintenanceError {

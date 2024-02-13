@@ -34,6 +34,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.{Range, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -42,7 +43,7 @@ import org.apache.spark.sql.execution.{LocalLimitExec, SimpleMode, SparkPlan}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, MemorySink}
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider, UnsafeRowPair}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1427,6 +1428,11 @@ class TestStateStoreProvider extends StateStoreProvider {
   override def close(): Unit = { }
 
   override def getStore(version: Long): StateStore = null
+
+  override def rangeScan(startKey: UnsafeRow, endKey: UnsafeRow, colFamilyName: String):
+    Iterator[UnsafeRowPair] = Iterator.empty
+
+  override def doTTL(startTime: Long, endTime: Long): Unit = { }
 }
 
 /** A fake source that throws `ThrowingExceptionInCreateSource.exception` in `createSource` */

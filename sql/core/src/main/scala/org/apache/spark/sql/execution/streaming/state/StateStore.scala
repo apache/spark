@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -327,6 +327,11 @@ trait StateStoreProvider {
    * (specifically, same names) through `StateStore.metrics`.
    */
   def supportedCustomMetrics: Seq[StateStoreCustomMetric] = Nil
+
+  def rangeScan(startKey: UnsafeRow, endKey: UnsafeRow, colFamilyName: String):
+  Iterator[UnsafeRowPair]
+
+  def doTTL(startTime: Long, endTime: Long): Unit
 }
 
 object StateStoreProvider {
@@ -486,6 +491,7 @@ object StateStore extends Logging {
     private val executor =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
 
+    val lastTTL = new AtomicLong(0L)
     private val runnable = new Runnable {
       override def run(): Unit = {
         try {
@@ -720,6 +726,7 @@ object StateStore extends Logging {
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
     }
+    val lastTTL = maintenanceTask.lastTTL.getAndSet(System.currentTimeMillis())
     loadedProviders.synchronized {
       loadedProviders.toSeq
     }.foreach { case (id, provider) =>
@@ -734,6 +741,9 @@ object StateStore extends Logging {
           val startTime = System.currentTimeMillis()
           try {
             provider.doMaintenance()
+            provider match {
+              case rocksDB: RocksDBStateStoreProvider => rocksDB.doTTL(lastTTL, startTime)
+            }
             if (!verifyIfStoreInstanceActive(id)) {
               unload(id)
               logInfo(s"Unloaded $provider")

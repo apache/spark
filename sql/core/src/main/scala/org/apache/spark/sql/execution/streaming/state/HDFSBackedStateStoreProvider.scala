@@ -779,4 +779,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw new IllegalStateException(msg)
     }
   }
+
+  override def rangeScan(startKey: UnsafeRow, endKey: UnsafeRow, colFamilyName: String):
+    Iterator[UnsafeRowPair] = {
+      throw new UnsupportedOperationException()
+  }
+
+  override def doTTL(startTime: Long, endTime: Long): Unit = {
+    throw new UnsupportedOperationException()
+  }
 }

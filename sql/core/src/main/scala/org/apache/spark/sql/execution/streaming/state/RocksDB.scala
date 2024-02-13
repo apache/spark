@@ -27,6 +27,7 @@ import scala.jdk.CollectionConverters._
 import scala.ref.WeakReference
 import scala.util.Try
 
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
@@ -36,6 +37,7 @@ import org.rocksdb.TickerType._
 
 import org.apache.spark.{SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
@@ -290,6 +292,50 @@ class RocksDB(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
     verifyColFamilyExists(colFamilyName)
     db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+  }
+
+  // range scan from start key to end key for a certain column family.
+  // Return an iterator of values
+  def rangeScan(
+      startKey: Array[Byte],
+      endKey: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ByteArrayPair] = {
+    verifyColFamilyExists(colFamilyName)
+    val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
+    iter.seek(startKey)
+    new NextIterator[ByteArrayPair] {
+      override protected def getNext(): ByteArrayPair = {
+        if (iter.isValid && new String(iter.key()).compareTo(new String(endKey)) <= 0) {
+          byteArrayPair.set(iter.key, iter.value)
+          iter.next()
+          byteArrayPair
+        } else {
+          finished = true
+          iter.close()
+          null
+        }
+      }
+      override protected def close(): Unit = { iter.close() }
+    }
+  }
+
+  def doTTL(startTime: Long, endTime: Long): Unit = {
+    logError("IN DO TTL")
+    val startKey = SerializationUtils.serialize(startTime)
+    val endKey = SerializationUtils.serialize(endTime)
+    val iter = rangeScan(startKey, endKey, "ttl_")
+    iter.foreach { pair =>
+      val keyStateName = pair.value
+      val key = SerializationUtils.deserialize(keyStateName).asInstanceOf[InternalRow].getBinary(0)
+      val stateName = SerializationUtils.deserialize(keyStateName)
+        .asInstanceOf[InternalRow].getString(1)
+      // get value and ttl using key, statename, and check if the ttl is actually expired
+      val valueTTL = get(key, stateName)
+      val ttl = SerializationUtils.deserialize(valueTTL).asInstanceOf[InternalRow].getLong(1)
+      if (ttl >= System.currentTimeMillis()) {
+        remove(key, stateName)
+      }
+    }
   }
 
   /**
