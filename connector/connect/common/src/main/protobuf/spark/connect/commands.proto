@@ -444,7 +444,6 @@ message StreamingQueryListenerEvents {
   int32 event_type = 2;
 }
 
-
 message StreamingQueryListenerEventsResult {
   repeated StreamingQueryListenerEvents events = 1;
 }
