@@ -17,22 +17,24 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.{StateStore, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 
 class MapStateImpl[K, V](store: StateStore,
-                         stateName: String) extends MapState[K, V] with Logging {
+                         stateName: String,
+                         keyEnc: ExpressionEncoder[Any]) extends MapState[K, V] with Logging {
   store.setUseCompositeKey()
 
   /** Whether state exists or not. */
   override def exists(): Boolean = {
-    !store.prefixScan(StateEncoder.encodeKey(stateName), stateName).isEmpty
+    !store.prefixScan(StateEncoder.encodeKey(stateName, keyEnc), stateName).isEmpty
   }
 
   /** Get the state value if it exists */
   override def getValue(key: K): V = {
     require(key != null, "User key cannot be null.")
-    val encodedGroupingKey = StateEncoder.encodeKey(stateName)
+    val encodedGroupingKey = StateEncoder.encodeKey(stateName, keyEnc)
     val encodeUserKey = StateEncoder.encodeUserKey(key)
     val unsafeRowValue = store.getWithCompositeKey(encodedGroupingKey, encodeUserKey, stateName)
     if (unsafeRowValue == null) {
@@ -57,14 +59,14 @@ class MapStateImpl[K, V](store: StateStore,
     require(key != null, "User key cannot be null.")
     require(value != null, "Value put to map cannot be null.")
     val encodedValue = StateEncoder.encodeValue(value)
-    val encodedKey = StateEncoder.encodeKey(stateName)
+    val encodedKey = StateEncoder.encodeKey(stateName, keyEnc)
     val encodedUserKey = StateEncoder.encodeUserKey(key)
     store.putWithCompositeKey(encodedKey, encodedUserKey, encodedValue, stateName)
   }
 
   /** Get the map associated with grouping key */
   override def getMap(): Map[K, V] = {
-    val encodedGroupingKey = StateEncoder.encodeKey(stateName)
+    val encodedGroupingKey = StateEncoder.encodeKey(stateName, keyEnc)
     store.prefixScan(encodedGroupingKey, stateName)
       .map {
         case iter: UnsafeRowPair =>
@@ -85,7 +87,7 @@ class MapStateImpl[K, V](store: StateStore,
   /** Remove user key from map state */
   override def removeKey(key: K): Unit = {
     require(key != null, "User key cannot be null.")
-    val encodedKey = StateEncoder.encodeKey(stateName)
+    val encodedKey = StateEncoder.encodeKey(stateName, keyEnc)
     val encodedUserKey = StateEncoder.encodeUserKey(key)
     store.removeWithCompositeKey(encodedKey, encodedUserKey, stateName)
   }

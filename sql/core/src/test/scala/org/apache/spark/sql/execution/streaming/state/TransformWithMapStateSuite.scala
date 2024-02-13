@@ -87,7 +87,7 @@ class TransformWithMapStateSuite extends StreamTest {
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.noTimeouts(),
+          TimeoutMode.NoTimeouts(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -107,7 +107,7 @@ class TransformWithMapStateSuite extends StreamTest {
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.noTimeouts(),
+          TimeoutMode.NoTimeouts(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -134,7 +134,7 @@ class TransformWithMapStateSuite extends StreamTest {
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.noTimeouts(),
+          TimeoutMode.NoTimeouts(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -153,7 +153,7 @@ class TransformWithMapStateSuite extends StreamTest {
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new TestMapStateProcessor(),
-          TimeoutMode.noTimeouts(),
+          TimeoutMode.NoTimeouts(),
           OutputMode.Append())
       testStream(result, OutputMode.Append())(
         // Test exists()

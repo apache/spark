@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 
 import org.apache.spark.TaskContext
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.StateStore
@@ -136,8 +135,7 @@ class StatefulProcessorHandleImpl(
   override def getMapState[K, V](stateName: String): MapState[K, V] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
-    store.createColFamilyIfAbsent(stateName)
-    val resultState = new MapStateImpl[K, V](store, stateName)
+    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder)
     resultState
   }
 

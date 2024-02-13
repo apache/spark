@@ -83,8 +83,9 @@ private[sql] class RocksDBStateStoreProvider
                                      userKey: UnsafeRow, colFamilyName: String): UnsafeRow = {
       verify(useCompositeKey, "Please setUseCompositeKey first")
       verify(groupingKey != null, "Grouping Key cannot be null")
-      val value = encoder.decodeValue(
-        rocksDB.get(encoder.encodeCompositeKey(groupingKey, userKey), colFamilyName))
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val value = kvEncoder._2.decodeValue(
+        rocksDB.get(kvEncoder._1.encodeCompositeKey(groupingKey, userKey), colFamilyName))
       if (!isValidated && value != null) {
         StateStoreProvider.validateStateRowFormat(
           groupingKey, keySchema, value, valueSchema, storeConf)
@@ -99,8 +100,9 @@ private[sql] class RocksDBStateStoreProvider
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(groupingKey != null, "Key cannot be null")
       require(value != null, "Cannot put a null value")
-      rocksDB.put(encoder.encodeCompositeKey(groupingKey, userKey),
-        encoder.encodeValue(value), colFamilyName)
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      rocksDB.put(kvEncoder._1.encodeCompositeKey(groupingKey, userKey),
+        kvEncoder._2.encodeValue(value), colFamilyName)
     }
 
     override def removeWithCompositeKey(groupingKey: UnsafeRow, userKey: UnsafeRow,
@@ -108,7 +110,8 @@ private[sql] class RocksDBStateStoreProvider
       verify(useCompositeKey, "Please setUseCompositeKey first")
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       verify(groupingKey != null, "Grouping Key cannot be null")
-      rocksDB.remove(encoder.encodeCompositeKey(groupingKey, userKey), colFamilyName)
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      rocksDB.remove(kvEncoder._1.encodeCompositeKey(groupingKey, userKey), colFamilyName)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
