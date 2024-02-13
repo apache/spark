@@ -90,6 +90,7 @@ from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
+from pyspark.sql.connect.shell.progress import Progress
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
@@ -1173,7 +1174,10 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch_as_iterator(
-        self, req: pb2.ExecutePlanRequest, observations: Dict[str, Observation]
+        self,
+        req: pb2.ExecutePlanRequest,
+        observations: Dict[str, Observation],
+        progress: Optional["Progress"] = None,
     ) -> Iterator[
         Union[
             "pa.RecordBatch",
@@ -1252,6 +1256,13 @@ class SparkConnectClient(object):
                 yield {"get_resources_command_result": resources}
             if b.HasField("extension"):
                 yield b.extension
+            if b.HasField("execution_progress"):
+                if progress:
+                    progress.update_ticks(
+                        b.execution_progress.num_tasks,
+                        b.execution_progress.num_completed_tasks,
+                        b.execution_progress.input_bytes_read,
+                    )
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -1295,6 +1306,15 @@ class SparkConnectClient(object):
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             yield from handle_response(b)
+        except KeyboardInterrupt:
+            logger.debug(f"Interrupt request received for operation={req.operation_id}")
+            try:
+                self.interrupt_operation(req.operation_id)
+            except:
+                # Swallow all errors if aborted.
+                pass
+            if not progress is None:
+                progress.finish()
         except Exception as error:
             self._handle_error(error)
 
@@ -1318,7 +1338,8 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        for response in self._execute_and_fetch_as_iterator(req, observations):
+        progress = Progress()
+        for response in self._execute_and_fetch_as_iterator(req, observations, progress=progress):
             if isinstance(response, StructType):
                 schema = response
             elif isinstance(response, pa.RecordBatch):
@@ -1336,6 +1357,7 @@ class SparkConnectClient(object):
                         "response": response,
                     },
                 )
+        progress.finish()
 
         if len(batches) > 0:
             if self_destruct:

@@ -1178,7 +1178,7 @@ global___ExecutePlanRequest = ExecutePlanRequest
 class ExecutePlanResponse(google.protobuf.message.Message):
     """The response of a query, can be one or more for each request. Responses belonging to the
     same input query, carry the same `session_id`.
-    Next ID: 16
+    Next ID: 17
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1400,6 +1400,46 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self,
         ) -> None: ...
 
+    class ExecutionProgress(google.protobuf.message.Message):
+        """This message is used to communicate progress about the query progress during the execution."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NUM_TASKS_FIELD_NUMBER: builtins.int
+        NUM_COMPLETED_TASKS_FIELD_NUMBER: builtins.int
+        NUM_STAGES_FIELD_NUMBER: builtins.int
+        NUM_COMPLETED_STAGES_FIELD_NUMBER: builtins.int
+        INPUT_BYTES_READ_FIELD_NUMBER: builtins.int
+        num_tasks: builtins.int
+        num_completed_tasks: builtins.int
+        num_stages: builtins.int
+        num_completed_stages: builtins.int
+        input_bytes_read: builtins.int
+        def __init__(
+            self,
+            *,
+            num_tasks: builtins.int = ...,
+            num_completed_tasks: builtins.int = ...,
+            num_stages: builtins.int = ...,
+            num_completed_stages: builtins.int = ...,
+            input_bytes_read: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "input_bytes_read",
+                b"input_bytes_read",
+                "num_completed_stages",
+                b"num_completed_stages",
+                "num_completed_tasks",
+                b"num_completed_tasks",
+                "num_stages",
+                b"num_stages",
+                "num_tasks",
+                b"num_tasks",
+            ],
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     OPERATION_ID_FIELD_NUMBER: builtins.int
@@ -1411,6 +1451,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     GET_RESOURCES_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     RESULT_COMPLETE_FIELD_NUMBER: builtins.int
+    EXECUTION_PROGRESS_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1459,6 +1500,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def result_complete(self) -> global___ExecutePlanResponse.ResultComplete:
         """Response type informing if the stream is complete in reattachable execution."""
     @property
+    def execution_progress(self) -> global___ExecutePlanResponse.ExecutionProgress:
+        """(Optional) Intermediate query progress reports."""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1494,6 +1538,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         streaming_query_manager_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult
         | None = ...,
         result_complete: global___ExecutePlanResponse.ResultComplete | None = ...,
+        execution_progress: global___ExecutePlanResponse.ExecutionProgress | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1505,6 +1550,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
+            "execution_progress",
+            b"execution_progress",
             "extension",
             b"extension",
             "get_resources_command_result",
@@ -1532,6 +1579,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
+            "execution_progress",
+            b"execution_progress",
             "extension",
             b"extension",
             "get_resources_command_result",
@@ -1575,6 +1624,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "get_resources_command_result",
             "streaming_query_manager_command_result",
             "result_complete",
+            "execution_progress",
             "extension",
         ]
         | None

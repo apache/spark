@@ -40,6 +40,17 @@ private[sql] class SparkResult[T](
     timeZoneId: String)
     extends AutoCloseable { self =>
 
+  /**
+   * Progress of the query execution. This information can be accessed from the iterator.
+   */
+  case class Progress (
+    totalTasks: Long = 0,
+    completedTasks: Long = 0,
+    totalStages: Long = 0,
+    completedStages: Long = 0,
+    inputBytesRead: Long = 0)
+
+  var progress: Progress = new Progress()
   private[this] var opId: String = _
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
@@ -96,6 +107,17 @@ private[sql] class SparkResult[T](
             s"Expected '$opId' but received '${response.getOperationId}'.")
       }
       stop |= stopOnOperationId
+
+      // Update the execution status. This information can now be accessed directly from
+      // the iterator.
+      if (response.hasExecutionProgress) {
+        progress = Progress(
+          response.getExecutionProgress.getNumTasks,
+          response.getExecutionProgress.getNumCompletedTasks,
+          response.getExecutionProgress.getNumStages,
+          response.getExecutionProgress.getNumCompletedStages,
+          response.getExecutionProgress.getInputBytesRead)
+      }
 
       if (response.hasSchema) {
         // The original schema should arrive before ArrowBatches.

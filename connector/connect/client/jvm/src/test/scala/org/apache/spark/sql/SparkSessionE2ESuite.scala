@@ -229,6 +229,16 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
+  test("progress is available for the spark result") {
+    val result = spark
+      .range(10000)
+      .repartition(1000)
+      .collectResult()
+    assert(result.length == 10000)
+    assert(result.progress.totalTasks > 100)
+    assert(result.progress.completedTasks > 100)
+  }
+
   test("interrupt operation") {
     val session = spark
     import session.implicits._
