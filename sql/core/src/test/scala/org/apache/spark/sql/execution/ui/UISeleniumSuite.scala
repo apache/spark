@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.commons.text.StringEscapeUtils.escapeJava
 import org.apache.commons.text.translate.EntityArrays._
-import org.openqa.selenium.By
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.{interval, timeout}
@@ -51,8 +50,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     val webUrl = spark.sparkContext.uiWebUrl
     assert(webUrl.isDefined, "please turn on spark.ui.enabled")
     go to s"${webUrl.get}/SQL"
-    findAll(cssSelector("""#failed-table td .stacktrace-details"""))
-      .map(_.underlying.findElement(By.xpath("..")).getText).toList
+    findAll(cssSelector("""#failed-table td .stacktrace-details""")).map(_.text).toList
   }
 
   private def findErrorSummaryOnSQLUI(): String = {
@@ -104,13 +102,13 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
       val sd = findErrorMessageOnSQLUI()
       assert(sd.size === 1, "Analyze fail shall show the query in failed table")
-      assert(sd.head.startsWith("TABLE_OR_VIEW_NOT_FOUND"))
+      assert(sd.head.startsWith("[TABLE_OR_VIEW_NOT_FOUND]"))
 
       val id = findExecutionIDOnSQLUI()
       // check query detail page
       go to s"${spark.sparkContext.uiWebUrl.get}/SQL/execution/?id=$id"
       val planDot = findAll(cssSelector(""".dot-file""")).map(_.text).toList
-      assert(planDot.size === 1)
+      assert(planDot.head.startsWith("digraph G {"))
       val planDetails = findAll(cssSelector("""#physical-plan-details""")).map(_.text).toList
       assert(planDetails.head.isEmpty)
     }
