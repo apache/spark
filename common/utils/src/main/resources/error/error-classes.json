@@ -3313,8 +3313,25 @@
   },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
-      "Streaming stateful operator name does not match with the operator in state metadata with the same operator id (id: <operatorId>). This likely to happen when user changes stateful operator of existing streaming query. Stateful Operator name for current batch: <currentOperatorName>; Operator name in the state metadata: <stateMetadataOperatorName>."
+      "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user changes stateful operator of existing streaming query."
     ],
+    "subClass" : {
+      "MISS_IN_CURRENT_BATCH" : {
+        "message" : [
+          "Operator exists in state metadata but not in current batch. Likely user has removed an operator after restart. Stateful Operator id in state metadata: <operatorId>; Operator name in state metadata: <operatorName>. <hint>"
+        ]
+      },
+      "MISS_IN_METADATA" : {
+        "message" : [
+          "Operator exists in current batch but not in state metadata. Likely user added a new operator after restart. Stateful Operator id for current batch: <operatorId>; Operator name for current batch: <operatorName>. <hint>"
+        ]
+      },
+      "NAME_NOT_MATCH" : {
+        "message" : [
+          "Found operator id in state metadata, but name not match. Likely user replace the operator after restart. Stateful Operator id for current batch: <operatorId>; Operator name for current batch: <operatorName>. Operator name in the state metadata: <hint>."
+        ]
+      }
+    },
     "sqlState" : "42K03"
   },
   "STREAM_FAILED" : {

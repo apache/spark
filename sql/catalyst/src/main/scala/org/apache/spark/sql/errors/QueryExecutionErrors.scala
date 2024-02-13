@@ -1703,15 +1703,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def statefulOperatorNotMatchInStateMetadataError(
+      subClass: String,
       operatorId: Long,
-      currentOperatorName: String, stateMetadataOperatorName: String):
+      operatorName: String, hint: String):
     SparkRuntimeException = {
       new SparkRuntimeException(
-        errorClass = "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA",
+        errorClass = s"STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA.$subClass",
         messageParameters = Map(
           "operatorId" -> operatorId.toString,
-          "currentOperatorName" -> currentOperatorName,
-          "stateMetadataOperatorName" -> stateMetadataOperatorName)
+          "operatorName" -> operatorName,
+          "hint" -> hint)
       )
   }
 
