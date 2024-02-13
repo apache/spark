@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
 object CompressionCodecs {
@@ -42,9 +43,9 @@ object CompressionCodecs {
       }
       codecName
     } catch {
-      case e: ClassNotFoundException =>
-        throw new IllegalArgumentException(s"Codec [$codecName] " +
-          s"is not available. Known codecs are ${shortCompressionCodecNames.keys.mkString(", ")}.")
+      case _: ClassNotFoundException =>
+        throw QueryExecutionErrors.codecNotAvailableError(
+          codecName, shortCompressionCodecNames.keys.mkString(", "))
     }
   }
 

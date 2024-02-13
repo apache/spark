@@ -607,7 +607,7 @@ The caching key is built up from the following information:
 
 The following properties are available to configure the consumer pool:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.consumer.cache.capacity</td>
@@ -657,7 +657,7 @@ Note that it doesn't leverage Apache Commons Pool due to the difference of chara
 
 The following properties are available to configure the fetched data pool:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.timeout</td>
@@ -912,7 +912,7 @@ It will use different Kafka producer when delegation token is renewed; Kafka pro
 
 The following properties are available to configure the producer pool:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td>spark.kafka.producer.cache.timeout</td>
@@ -1039,7 +1039,7 @@ When none of the above applies then unsecure connection assumed.
 
 Delegation tokens can be obtained from multiple clusters and <code>${cluster}</code> is an arbitrary unique identifier which helps to group different configurations.
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.auth.bootstrap.servers</code></td>

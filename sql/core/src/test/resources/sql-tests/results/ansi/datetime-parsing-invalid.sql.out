@@ -122,6 +122,22 @@ org.apache.spark.SparkUpgradeException
 
 
 -- !query
+select to_timestamp('366', 'DD')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid date 'DayOfYear 366' as '1970' is not a leap year"
+  }
+}
+
+
+-- !query
 select to_timestamp('9', 'DDD')
 -- !query schema
 struct<>

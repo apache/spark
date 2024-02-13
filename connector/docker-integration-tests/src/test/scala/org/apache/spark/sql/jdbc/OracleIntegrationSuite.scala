@@ -359,10 +359,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
 
   test("SPARK-20427/SPARK-20921: read table use custom schema by jdbc api") {
     // default will throw IllegalArgumentException
-    val e = intercept[org.apache.spark.SparkException] {
+    val e = intercept[org.apache.spark.SparkArithmeticException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
-    assert(e.getCause().isInstanceOf[ArithmeticException])
     assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
 
     // custom schema can read data

@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.util.{SparkStringUtils, StringConcat}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, SparkStringUtils, StringConcat}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.SparkCollectionUtils
@@ -118,6 +118,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = SparkCollectionUtils.toMapWithIndex(fieldNames)
+  private lazy val nameToIndexCaseInsensitive: CaseInsensitiveMap[Int] =
+    CaseInsensitiveMap[Int](nameToIndex.toMap)
 
   override def equals(that: Any): Boolean = {
     that match {
@@ -313,6 +315,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {
     nameToIndex.get(name)
+  }
+
+  private[sql] def getFieldIndexCaseInsensitive(name: String): Option[Int] = {
+    nameToIndexCaseInsensitive.get(name)
   }
 
   /**

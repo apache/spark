@@ -28,7 +28,7 @@ import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.errors.SparkCoreErrors.{toConf, toConfVal}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -92,12 +92,7 @@ private[spark] object CompressionCodec {
     } catch {
       case _: ClassNotFoundException | _: IllegalArgumentException => None
     }
-    codec.getOrElse(throw new SparkIllegalArgumentException(
-      errorClass = "CODEC_NOT_AVAILABLE",
-      messageParameters = Map(
-        "codecName" -> codecName,
-        "configKey" -> toConf(IO_COMPRESSION_CODEC.key),
-        "configVal" -> toConfVal(FALLBACK_COMPRESSION_CODEC))))
+    codec.getOrElse(throw SparkCoreErrors.codecNotAvailableError(codecName))
   }
 
   /**

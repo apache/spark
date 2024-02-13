@@ -561,7 +561,9 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     // app is no longer incomplete
     listApplications(false) should not contain(appId)
 
-    assert(jobcount === getNumJobs("/jobs"))
+    eventually(stdTimeout, stdInterval) {
+      assert(jobcount === getNumJobs("/jobs"))
+    }
 
     // no need to retain the test dir now the tests complete
     ShutdownHookManager.registerShutdownDeleteDir(logDir)

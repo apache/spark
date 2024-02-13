@@ -448,18 +448,11 @@ abstract class OrcSuite
 
       // with schema merging, there should throw exception
       withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
-        val exception = intercept[SparkException] {
+        val ex = intercept[SparkException] {
           spark.read.orc(basePath).columns.length
-        }.getCause
-
-        val innerException = orcImp match {
-          case "native" => exception
-          case "hive" => exception.getCause
-          case impl =>
-            throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
         }
-
-        assert(innerException.asInstanceOf[SparkException].getErrorClass ===
+        assert(ex.getErrorClass == "CANNOT_MERGE_SCHEMAS")
+        assert(ex.getCause.asInstanceOf[SparkException].getErrorClass ===
           "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
       }
 

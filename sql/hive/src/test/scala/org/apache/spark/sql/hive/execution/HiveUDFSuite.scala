@@ -746,9 +746,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       withTable("HiveGenericUDFTable") {
         sql(s"create table HiveGenericUDFTable as select false as v")
         val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
-        val e = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException]
         checkError(
-          e,
+          intercept[SparkException](df.collect()),
           "FAILED_EXECUTE_UDF",
           parameters = Map(
             "functionName" ->
@@ -788,7 +787,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           .stripMargin.replaceAll("\n", " ").trim
 
         checkError(
-          exception = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException],
+          exception = intercept[SparkException](df.collect()),
           errorClass = "FAILED_EXECUTE_UDF",
           parameters = Map(
             "functionName" ->
