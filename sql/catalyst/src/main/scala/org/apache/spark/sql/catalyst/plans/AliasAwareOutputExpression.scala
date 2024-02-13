@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Empty2Null, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateNamedStruct, Empty2Null, Expression, GetStructField, NamedExpression, SortOrder}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -62,6 +62,26 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
     aliases
   }
 
+  @transient
+  private lazy val structFieldsMap = {
+    val aliases = mutable.Map[Expression, mutable.ArrayBuffer[Expression]]()
+    outputExpressions.reverse.foreach {
+      case a @ Alias(CreateNamedStruct(grandchildren), _) =>
+        grandchildren.grouped(2).zipWithIndex.foreach {
+          case (Seq(_, value: AttributeReference), idx) =>
+            val buffer = aliases.getOrElseUpdate(strip(value).canonicalized,
+              mutable.ArrayBuffer.empty)
+            val getField = GetStructField(a.toAttribute, idx)
+            if (buffer.size < aliasCandidateLimit) {
+              buffer += getField
+            }
+          case _ =>
+        }
+      case _ =>
+    }
+    aliases
+  }
+
   protected def hasAlias: Boolean = aliasMap.nonEmpty
 
   /**
@@ -69,15 +89,22 @@ trait AliasAwareOutputExpression extends SQLConfHelper {
    */
   protected def projectExpression(expr: Expression): Stream[Expression] = {
     val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
+    def isInOutputSet(e: Expression): Boolean = e match {
+      case a: Attribute => outputSet.contains(a)
+      case _ => false
+    }
     expr.multiTransformDown {
       // Mapping with aliases
       case e: Expression if aliasMap.contains(e.canonicalized) =>
         aliasMap(e.canonicalized).toSeq ++ (if (e.containsChild.nonEmpty) Seq(e) else Seq.empty)
 
+      case e: Expression if structFieldsMap.contains(e.canonicalized) && !isInOutputSet(e) =>
+        structFieldsMap(e.canonicalized).toSeq
       // Prune if we encounter an attribute that we can't map and it is not in output set.
       // This prune will go up to the closest `multiTransformDown()` call and returns `Stream.empty`
       // there.
-      case a: Attribute if !outputSet.contains(a) => Seq.empty
+      case a: Attribute if !outputSet.contains(a) =>
+        Seq.empty
     }
   }
 }

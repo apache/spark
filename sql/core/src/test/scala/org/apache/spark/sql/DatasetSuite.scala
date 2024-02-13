@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExam
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, ResolvedHint, SHUFFLE_MERGE}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -489,6 +490,24 @@ class DatasetSuite extends QueryTest
     checkDataset(
       joined,
       (1, 1), (2, 2))
+  }
+
+  test("SPARK-47037: joinWith should not introduce unnecessary shuffles") {
+    def shuffleMergeHint(ds: Dataset[ClassData]): Dataset[ClassData] = {
+      val logical = ds.queryExecution.logical
+      Dataset[ClassData](ds.sparkSession,
+        ResolvedHint(logical, HintInfo(strategy = Some(SHUFFLE_MERGE))))(ds.exprEnc)
+    }
+
+    val ds1 = shuffleMergeHint(Seq(ClassData("b", 1), ClassData("c", 2)).toDS().repartition($"a"))
+    val ds2 = shuffleMergeHint(Seq(ClassData("a", 1), ClassData("b", 2)).toDS().repartition($"a"))
+
+    val joined = ds1.joinWith(ds2, ds1("a") === ds2("a"), "left")
+    val joinPlan = joined.queryExecution.executedPlan
+    val exchangePlans = collect(joinPlan) {
+      case shuffle: ShuffleExchangeExec => shuffle
+    }
+    assert(exchangePlans.length == 2)
   }
 
   test("joinWith tuple with primitive, expression") {
