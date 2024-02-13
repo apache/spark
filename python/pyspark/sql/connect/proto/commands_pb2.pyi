@@ -979,23 +979,49 @@ class WriteStreamOperationStartResult(google.protobuf.message.Message):
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
+    QUERY_STARTED_EVENT_FIELD_NUMBER: builtins.int
     @property
     def query_id(self) -> global___StreamingQueryInstanceId:
         """(Required) Query instance. See `StreamingQueryInstanceId`."""
     name: builtins.str
     """An optional query name."""
+    query_started_event: builtins.str
+    """Optional query started event if there is any listener registered on the lient side."""
     def __init__(
         self,
         *,
         query_id: global___StreamingQueryInstanceId | None = ...,
         name: builtins.str = ...,
+        query_started_event: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["query_id", b"query_id"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_query_started_event",
+            b"_query_started_event",
+            "query_id",
+            b"query_id",
+            "query_started_event",
+            b"query_started_event",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["name", b"name", "query_id", b"query_id"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_query_started_event",
+            b"_query_started_event",
+            "name",
+            b"name",
+            "query_id",
+            b"query_id",
+            "query_started_event",
+            b"query_started_event",
+        ],
     ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_query_started_event", b"_query_started_event"],
+    ) -> typing_extensions.Literal["query_started_event"] | None: ...
 
 global___WriteStreamOperationStartResult = WriteStreamOperationStartResult
 
@@ -1800,6 +1826,81 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
     ): ...
 
 global___StreamingQueryManagerCommandResult = StreamingQueryManagerCommandResult
+
+class StreamingQueryListenerBusCommand(google.protobuf.message.Message):
+    """The protocol for client-side StreamingQueryListener.
+    This command will only be set when either the first listener is added to the client, or the last
+    listener is removed from the client.
+    The add_listener_bus_listener command will only be set true in the first case.
+    The remove_listener_bus_listener command will only be set true in the second case.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ADD_LISTENER_BUS_LISTENER_FIELD_NUMBER: builtins.int
+    REMOVE_LISTENER_BUS_LISTENER_FIELD_NUMBER: builtins.int
+    add_listener_bus_listener: builtins.bool
+    remove_listener_bus_listener: builtins.bool
+    def __init__(
+        self,
+        *,
+        add_listener_bus_listener: builtins.bool = ...,
+        remove_listener_bus_listener: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "add_listener_bus_listener",
+            b"add_listener_bus_listener",
+            "remove_listener_bus_listener",
+            b"remove_listener_bus_listener",
+        ],
+    ) -> None: ...
+
+global___StreamingQueryListenerBusCommand = StreamingQueryListenerBusCommand
+
+class StreamingQueryListenerEventsResult(google.protobuf.message.Message):
+    """The protocol for the returned events in the long-running response channel.
+    There is no query_started_event, it is added as a field in WriteStreamOperationStartResult
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUERY_PROGRESS_EVENT_FIELD_NUMBER: builtins.int
+    QUERY_TERMINATED_EVENT_FIELD_NUMBER: builtins.int
+    QUERY_IDLE_EVENT_FIELD_NUMBER: builtins.int
+    @property
+    def query_progress_event(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def query_terminated_event(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    @property
+    def query_idle_event(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        query_progress_event: collections.abc.Iterable[builtins.str] | None = ...,
+        query_terminated_event: collections.abc.Iterable[builtins.str] | None = ...,
+        query_idle_event: collections.abc.Iterable[builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "query_idle_event",
+            b"query_idle_event",
+            "query_progress_event",
+            b"query_progress_event",
+            "query_terminated_event",
+            b"query_terminated_event",
+        ],
+    ) -> None: ...
+
+global___StreamingQueryListenerEventsResult = StreamingQueryListenerEventsResult
 
 class GetResourcesCommand(google.protobuf.message.Message):
     """Command to get the output of 'SparkContext.resources'"""
