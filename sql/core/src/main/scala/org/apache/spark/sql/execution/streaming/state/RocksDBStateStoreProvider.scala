@@ -93,8 +93,8 @@ private[sql] class RocksDBStateStoreProvider
 
     override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val rowPair = new UnsafeRowPair()
       rocksDB.iterator(colFamilyName).map { kv =>
-        val rowPair = new UnsafeRowPair()
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         if (!isValidated && rowPair.value != null && !useColumnFamilies) {
@@ -113,8 +113,8 @@ private[sql] class RocksDBStateStoreProvider
         "Prefix scan requires setting prefix key!")
 
       val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
+      val rowPair = new UnsafeRowPair()
       rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
-        val rowPair = new UnsafeRowPair()
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
@@ -314,7 +314,7 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies)
   }
 
-  @volatile private var keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
+  private val keyValueEncoderMap = new java.util.concurrent.ConcurrentHashMap[String,
     (RocksDBKeyStateEncoder, RocksDBValueStateEncoder)]
 
   private def verify(condition: => Boolean, msg: String): Unit = {

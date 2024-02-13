@@ -40,8 +40,10 @@ class ValueStateImpl[S](
     keyExprEnc: ExpressionEncoder[Any]) extends ValueState[S] with Logging {
 
   private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  private val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
 
   private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+  private val valueEncoder = UnsafeProjection.create(schemaForValueRow)
 
   store.createColFamilyIfAbsent(stateName, schemaForKeyRow, numColsPrefixKey = 0,
     schemaForValueRow)
@@ -54,18 +56,15 @@ class ValueStateImpl[S](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
 
-    val toRow = keyExprEnc.createSerializer()
-    val keyByteArr = toRow
+    val keyByteArr = keyExprEnc.createSerializer()
       .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
 
-    val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
     val keyRow = keyEncoder(InternalRow(keyByteArr))
     keyRow
   }
 
   private def encodeValue(value: S): UnsafeRow = {
     val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
-    val valueEncoder = UnsafeProjection.create(schemaForValueRow)
     val valueRow = valueEncoder(InternalRow(valueByteArr))
     valueRow
   }
