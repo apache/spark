@@ -46,6 +46,7 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.util.Utils
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
@@ -80,6 +81,7 @@ private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 /**
  * Selenium tests for the Spark Web UI.
  */
+@WebBrowserTest
 class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _

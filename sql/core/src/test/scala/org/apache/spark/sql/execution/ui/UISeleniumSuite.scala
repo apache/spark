@@ -30,8 +30,10 @@ import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.ui.SparkUICssErrorHandler
 
+@WebBrowserTest
 class UISeleniumSuite extends SparkFunSuite with WebBrowser {
 
   private var spark: SparkSession = _
