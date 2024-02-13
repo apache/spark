@@ -76,7 +76,7 @@ class IncrementalExecution(
       StreamingRelationStrategy ::
       StreamingDeduplicationStrategy ::
       StreamingGlobalLimitStrategy(outputMode) ::
-      StreamingTransformWithStateStrategy :: Nil
+      StreamingTransformWithStateStrategy ::
       TransformWithStateInPandasStrategy :: Nil
   }
 

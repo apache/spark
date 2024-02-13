@@ -82,7 +82,6 @@ class TransformWithStateInPandasPythonRunner(
       inputIterator: Iterator[InType],
       partitionIndex: Int,
       context: TaskContext): Iterator[OutType] = {
-    // var stateServerSocketChannel: ServerSocketChannel = null
     var stateServerSocket: ServerSocket = null
 
     var failed = false

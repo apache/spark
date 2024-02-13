@@ -20,6 +20,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from enum import Enum
+from itertools import groupby
 import os
 import socket
 from typing import Any
@@ -32,7 +33,6 @@ from pyspark.sql.pandas.types import (
     _create_converter_from_pandas,
     _create_converter_to_pandas,
 )
-from pyspark.sql.streaming.gen import StateMessage_pb2
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -1131,41 +1131,45 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             timezone,
             safecheck,
             assign_cols_by_name,
-            state_server_port):
-        super(TransformWithStateInPandasSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
+            arrow_max_records_per_batch):
+        super(
+            TransformWithStateInPandasSerializer,
+            self
+        ).__init__(timezone, safecheck, assign_cols_by_name)
 
-        self.state_server_port = state_server_port
+        # self.state_server_port = state_server_port
 
-        # open state server socket
-        self._client_socket = socket.socket()
-        self._client_socket.connect(("localhost", state_server_port))
-        sockfile = self._client_socket.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
-        self.state_serializer = TransformWithStateInPandasStateSerializer(sockfile)
+        # # open client connection to state server socket
+        # self._client_socket = socket.socket()
+        # self._client_socket.connect(("localhost", state_server_port))
+        # sockfile = self._client_socket.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
+        # self.state_serializer = TransformWithStateInPandasStateSerializer(sockfile)
+        self.arrow_max_records_per_batch = arrow_max_records_per_batch
+        self.key_offsets = None
 
     # Nothing special here, we need to create the handle and read
     # data in groups.
     def load_stream(self, stream):
-        data_pandas = super().load_stream(stream)
+        import pyarrow as pa
+        from itertools import tee
 
-        for data in data_pandas:
-            yield (self.state_serializer, data)
+        def generate_data_batches(batches):
+            for batch in batches:
+                data_pandas = [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
+                key_series = [data_pandas[o] for o in self.key_offsets]
+                batch_key = tuple(s[0] for s in key_series)
+                yield (batch_key, data_pandas)
+
+        _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
+        data_batches = generate_data_batches(_batches)
+
+        for k, g in groupby(data_batches, key=lambda x: x[0]):
+            yield (k, g)
 
 
     def dump_stream(self, iterator, stream):
-        try:
-            super().dump_stream(iterator, stream)
-        finally:
-            print("closing the state socket")
-            self._client_socket.close()
-            stateful_handle_call = StateMessage_pb2.StatefulProcessorHandleCall()
-            stateful_handle_call.setHandleState = StateMessage_pb2.SetHandleState(
-                StateMessage_pb2.CLOSED
-            )
-            self.state_serializer.send(stateful_handle_call.SerializeToString())
-            code = self.state_serializer.receive()
-            assert code == 0
-
-        return
+        result = [(b, t) for x in iterator for y, t in x for b in y]    
+        super().dump_stream(result, stream)
     
 class ImplicitGroupingKeyTracker:
     def __init__(self) -> None:
@@ -1177,17 +1181,11 @@ class ImplicitGroupingKeyTracker:
     def getKey(self) -> Any:
         return self._key
 
-class StatefulProcessorHandleState(Enum):
-    CREATED = 1
-    INITIALIZED = 2
-    DATA_PROCESSED = 3
-    CLOSED = 4
 
 class TransformWithStateInPandasStateSerializer:
 
     def __init__(self, sockfile) -> None:
         self.sockfile = sockfile
-        self.handleState = StatefulProcessorHandleState.CREATED
         self.grouping_key_tracker = ImplicitGroupingKeyTracker()
 
     def load_stream(self, stream):

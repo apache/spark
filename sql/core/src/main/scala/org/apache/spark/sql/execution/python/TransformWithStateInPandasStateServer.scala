@@ -22,9 +22,12 @@ import java.net.ServerSocket
 
 import scala.collection.mutable
 
+import com.google.protobuf.ByteString
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, StateRequest}
 import org.apache.spark.sql.streaming.ValueState
 
 class TransformWithStateInPandasStateServer(
@@ -51,16 +54,46 @@ class TransformWithStateInPandasStateServer(
 
     while (listeningSocket.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
-      val message = inputStream.readUTF()
 
-      logWarning(s"read message = $message")
-      performRequest(message)
-      logWarning(s"flush output stream")
+      logWarning(s"reading the version")
+      val version = inputStream.readInt()
 
-      outputStream.flush()
+      if (version != -1) {
+        logWarning(s"version = ${version}")
+        assert(version == 0)
+        val messageLen = inputStream.readInt()
+        logWarning(s"parsing a message of ${messageLen} bytes")
+
+        val messageBytes = new Array[Byte](messageLen)
+        inputStream.read(messageBytes)
+        logWarning(s"read bytes = ${messageBytes.mkString("Array(", ", ", ")")}")
+
+        val message = StateRequest.parseFrom(ByteString.copyFrom(messageBytes))
+
+        logWarning(s"read message = $message")
+        handleRequest(message)
+        logWarning(s"flush output stream")
+
+        outputStream.writeInt(0)
+        outputStream.flush()
+      }
     }
 
     logWarning(s"done from the state server thread")
+  }
+
+  private def handleRequest(message: StateRequest): Unit = {
+    if (message.getMethodCase == StateRequest.MethodCase.STATEFULPROCESSORHANDLECALL) {
+      val statefulProcessorHandleRequest = message.getStatefulProcessorHandleCall
+      val requestedState = statefulProcessorHandleRequest.getSetHandleState.getState
+
+      requestedState match {
+        case HandleState.INITIALIZED =>
+          logWarning(s"set handle state to Initialized")
+          statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+        case _ =>
+      }
+    }
   }
 
   def setHandleState(handleState: String): Unit = {

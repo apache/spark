@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.python
 import scala.concurrent.duration.NANOSECONDS
 
 import org.apache.spark.JobArtifactSet
-
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, gr
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreOps}
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 import org.apache.spark.util.CompletionIterator
 
 case class TransformWithStateInPandasExec(
@@ -55,6 +55,12 @@ case class TransformWithStateInPandasExec(
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
+  private val groupingKeyStructFields = groupingAttributes
+    .map(a => StructField(a.name, a.dataType, a.nullable))
+  private val groupingKeySchema = StructType(groupingKeyStructFields)
+  private val groupingKeyExprEncoder = ExpressionEncoder(groupingKeySchema)
+    .resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
+
 
   /** The keys that may have a watermark attribute. */
   override def keyExpressions: Seq[Attribute] = groupingAttributes
@@ -74,8 +80,6 @@ case class TransformWithStateInPandasExec(
 
   /**
    * Produces the result of the query as an `RDD[InternalRow]`
-   *
-   * TODO Override by concrete implementations of SparkPlan.
    */
   override protected def doExecute(): RDD[InternalRow] = {
     metrics
@@ -101,7 +105,8 @@ case class TransformWithStateInPandasExec(
         val data = groupAndProject(dataIterator, groupingAttributes, child.output, dedupAttributes)
 
         // TOOD (sahnib): fix this
-        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId, null, timeMode)
+        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
+          groupingKeyExprEncoder, timeMode)
         val runner = new TransformWithStateInPandasPythonRunner(
           chainedFunc,
           PythonEvalType.SQL_TRANSFORM_WITH_STATE,

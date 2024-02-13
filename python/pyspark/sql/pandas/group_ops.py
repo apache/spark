@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import sys
-from typing import Any, List, Union, TYPE_CHECKING, cast
+from typing import Any, Iterator, List, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkTypeError
@@ -23,10 +23,9 @@ from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions.builtin import udf
-from pyspark.sql.pandas.serializers import StatefulProcessorHandleState, TransformWithStateInPandasStateSerializer
 from pyspark.sql.streaming.state import GroupStateTimeout
+from pyspark.sql.streaming.state_api_client import StateApiClient, StatefulProcessorHandleState
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
-from pyspark.sql.streaming import StateMessage_pb2
 from pyspark.sql.types import StructType, _parse_datatype_string
 
 if TYPE_CHECKING:
@@ -373,23 +372,15 @@ class PandasGroupedOpsMixin:
         from pyspark.sql.functions import pandas_udf
         assert isinstance(self, GroupedData)
 
-        def transformWithStateUDF(state_serializer: TransformWithStateInPandasStateSerializer, key: Any,
-                                  inputRows: "PandasDataFrameLike") -> "PandasDataFrameLike":
-            handle = StatefulProcessorHandle(state_serializer)
-            
-            if (state_serializer.handleState == StatefulProcessorHandleState.CREATED):
+        def transformWithStateUDF(state_api_client: StateApiClient, key: Any,
+                                  inputRows: Iterator["PandasDataFrameLike"]) -> Iterator["PandasDataFrameLike"]:
+            handle = StatefulProcessorHandle(state_api_client)
+
+            if (state_api_client.handle_state == StatefulProcessorHandleState.CREATED):
                 stateful_processor.init(handle)
-                stateful_handle_call = StateMessage_pb2.StatefulProcessorHandleCall()
-                stateful_handle_call.setHandleState = StateMessage_pb2.SetHandleState(
-                    StateMessage_pb2.INITIALIZED
-                )
-                state_serializer.send(stateful_handle_call.SerializeToString())
-                code = state_serializer.receive()
-                assert code == 0
-                state_serializer.handleState = StatefulProcessorHandleState.INITIALIZED
+                state_api_client.setHandleState(StatefulProcessorHandleState.INITIALIZED)
             
-            state_serializer.grouping_key_tracker.setKey(key[0])
-            result = stateful_processor.handle_input_rows(key, inputRows)
+            result = stateful_processor.handleInputRows(key, inputRows)
             
             return result
         

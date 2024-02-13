@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package org.apache.spark.sql.execution.streaming.state;
+package pyspark.sql.streaming;
 
 message StateRequest {
   int32 version = 1;

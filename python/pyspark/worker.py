@@ -32,6 +32,7 @@ from pyspark.accumulators import (
     _accumulatorRegistry,
     _deserialize_accumulator,
 )
+from pyspark.sql.streaming.state_api_client import StateApiClient
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
 from pyspark.util import PythonEvalType, local_connect_and_auth
@@ -491,21 +492,15 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
     _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
-    def wrapped(state_serializer, key_series, value_series):
+    def wrapped(state_api_client, key, value_series_gen):
         import pandas as pd
+        values = (pd.concat(x, axis=1) for x in value_series_gen)
+        result_iter = f(state_api_client, key, values)
 
-        key = tuple(s[0] for s in key_series)
-        vals = pd.concat(value_series, axis=1)
-        print("serializer = " + str(state_serializer))
-        print("key = " + str(key))
-        print("value_series = " + str(vals))
-        result = f(state_serializer, key, vals)
-        
-        verify_pandas_result(
-            result, return_type, _assign_cols_by_name, truncate_return_schema=False
-        )
+        # TODO: add verification that elements in result_iter are
+        # indeed of type pd.DataFrame and confirm to assigned cols
 
-        return result
+        return result_iter
 
     return lambda p, k, v: [(wrapped(p, k, v), to_arrow_type(return_type))]
 
@@ -855,7 +850,6 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type)
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        print("argspec is " + str(argspec))
         return args_offsets, wrap_grouped_transform_with_state_pandas_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
@@ -1429,6 +1423,7 @@ def read_udtf(pickleSer, infile, eval_type):
 def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
+    state_server_port = None
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -1451,7 +1446,6 @@ def read_udfs(pickleSer, infile, eval_type):
             v = utf8_deserializer.loads(infile)
             runner_conf[k] = v
 
-        state_server_port = None
         state_object_schema = None
         if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             state_object_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
@@ -1489,13 +1483,11 @@ def read_udfs(pickleSer, infile, eval_type):
             )
             arrow_max_records_per_batch = int(arrow_max_records_per_batch)
 
-            print("initializing serializer with state port: " + str(state_server_port))
-
             ser = TransformWithStateInPandasSerializer(
                 timezone,
                 safecheck,
                 _assign_cols_by_name,
-                state_server_port
+                arrow_max_records_per_batch
             )
             
         elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
@@ -1666,22 +1658,21 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
+        ser.key_offsets = parsed_offsets[0][0]
+        state_api_client = StateApiClient(state_server_port)
 
         # Create function like this:
         #   mapper a: f([a[0]], [a[0], a[1]])
         def mapper(a):
-            state_serializer = a[0]
+            key = a[0]
 
-            # We know there should be at least one item in the iterator/generator.
-            # We want to peek the first element to construct the key, hence applying
-            # tee to construct the key while we retain another iterator/generator
-            # for values.
-            # keys_gen, values_gen = tee(data_gen)
-            keys = ([a[1][o] for o in parsed_offsets[0][0]])
+            def values_gen():
+                for x in a[1]:
+                    retVal = [x[1][o] for o in parsed_offsets[0][1]]
+                    yield retVal
 
             # This must be generator comprehension - do not materialize.
-            vals = ([a[1][o] for o in parsed_offsets[0][1]])
-            return f(state_serializer, keys, vals)
+            return f(state_api_client, key, values_gen())
     
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         import pyarrow as pa
