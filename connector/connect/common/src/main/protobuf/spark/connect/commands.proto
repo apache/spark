@@ -435,11 +435,18 @@ message StreamingQueryListenerBusCommand {
 }
 
 // The protocol for the returned events in the long-running response channel.
-// There is no query_started_event, it is added as a field in WriteStreamOperationStartResult
+// The event_type for QueryProgressEvent is 1;
+// for QueryTerminatedEvent is 2; for QueryIdleEvent is 3;
+// There is no QueryStartedEvent defined here,
+// it is added as a field in WriteStreamOperationStartResult
+message StreamingQueryListenerEvents {
+  string event_json = 1;
+  int32 event_type = 2;
+}
+
+
 message StreamingQueryListenerEventsResult {
-  repeated string query_progress_event = 1;
-  repeated string query_terminated_event = 2;
-  repeated string query_idle_event = 3;
+  repeated StreamingQueryListenerEvents events = 1;
 }
 
 // Command to get the output of 'SparkContext.resources'

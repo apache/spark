@@ -1859,46 +1859,51 @@ class StreamingQueryListenerBusCommand(google.protobuf.message.Message):
 
 global___StreamingQueryListenerBusCommand = StreamingQueryListenerBusCommand
 
-class StreamingQueryListenerEventsResult(google.protobuf.message.Message):
+class StreamingQueryListenerEvents(google.protobuf.message.Message):
     """The protocol for the returned events in the long-running response channel.
-    There is no query_started_event, it is added as a field in WriteStreamOperationStartResult
+    The event_type for QueryProgressEvent is 1;
+    for QueryTerminatedEvent is 2; for QueryIdleEvent is 3;
+    There is no QueryStartedEvent defined here,
+    it is added as a field in WriteStreamOperationStartResult
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    QUERY_PROGRESS_EVENT_FIELD_NUMBER: builtins.int
-    QUERY_TERMINATED_EVENT_FIELD_NUMBER: builtins.int
-    QUERY_IDLE_EVENT_FIELD_NUMBER: builtins.int
-    @property
-    def query_progress_event(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
-    @property
-    def query_terminated_event(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
-    @property
-    def query_idle_event(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    EVENT_JSON_FIELD_NUMBER: builtins.int
+    EVENT_TYPE_FIELD_NUMBER: builtins.int
+    event_json: builtins.str
+    event_type: builtins.int
     def __init__(
         self,
         *,
-        query_progress_event: collections.abc.Iterable[builtins.str] | None = ...,
-        query_terminated_event: collections.abc.Iterable[builtins.str] | None = ...,
-        query_idle_event: collections.abc.Iterable[builtins.str] | None = ...,
+        event_json: builtins.str = ...,
+        event_type: builtins.int = ...,
     ) -> None: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "query_idle_event",
-            b"query_idle_event",
-            "query_progress_event",
-            b"query_progress_event",
-            "query_terminated_event",
-            b"query_terminated_event",
+            "event_json", b"event_json", "event_type", b"event_type"
         ],
     ) -> None: ...
+
+global___StreamingQueryListenerEvents = StreamingQueryListenerEvents
+
+class StreamingQueryListenerEventsResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EVENTS_FIELD_NUMBER: builtins.int
+    @property
+    def events(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___StreamingQueryListenerEvents
+    ]: ...
+    def __init__(
+        self,
+        *,
+        events: collections.abc.Iterable[global___StreamingQueryListenerEvents] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["events", b"events"]) -> None: ...
 
 global___StreamingQueryListenerEventsResult = StreamingQueryListenerEventsResult
 
