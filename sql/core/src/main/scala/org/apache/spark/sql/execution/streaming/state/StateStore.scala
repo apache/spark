@@ -112,7 +112,11 @@ trait StateStore extends ReadStateStore {
   /**
    * Create column family with given name, if absent.
    */
-  def createColFamilyIfAbsent(colFamilyName: String): Unit
+  def createColFamilyIfAbsent(
+      colFamilyName: String,
+      keySchema: StructType,
+      numColsPrefixKey: Int,
+      valueSchema: StructType): Unit
 
   /**
    * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.types.StructType
 
 class MemoryStateStore extends StateStore() {
   import scala.jdk.CollectionConverters._
@@ -29,7 +30,11 @@ class MemoryStateStore extends StateStore() {
     map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
   }
 
-  override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+  override def createColFamilyIfAbsent(
+      colFamilyName: String,
+      keySchema: StructType,
+      numColsPrefixKey: Int,
+      valueSchema: StructType): Unit = {
     throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
