@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 
 import org.apache.spark.TaskContext
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, ValueState}
+import org.apache.spark.sql.streaming.{MapState, QueryInfo, StatefulProcessorHandle, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -130,6 +131,14 @@ class StatefulProcessorHandleImpl(
     verify(currState == CREATED, s"Cannot delete state variable with name=$stateName after " +
       "initialization is complete")
     store.removeColFamilyIfExists(stateName)
+  }
+
+  override def getMapState[K, V](stateName: String): MapState[K, V] = {
+    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
+      "initialization is complete")
+    store.createColFamilyIfAbsent(stateName)
+    val resultState = new MapStateImpl[K, V](store, stateName)
+    resultState
   }
 
 }

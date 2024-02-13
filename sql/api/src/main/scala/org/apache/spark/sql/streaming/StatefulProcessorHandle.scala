@@ -46,4 +46,10 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * @param stateName - name of the state variable
    */
   def deleteIfExists(stateName: String): Unit
+
+  /**
+   * Creates new or returns existing map state associated with stateName.
+   * The MapState persists Key-Value pairs of type [K, V].
+   */
+  def getMapState[K, V](stateName: String): MapState[K, V]
 }
