@@ -18,7 +18,7 @@
 FROM ubuntu:20.04
 
 # Upgrade package index
-# install a few other useful packages plus Open Java 11
+# install a few other useful packages plus Open Java 17
 # Remove unneeded /var/lib/apt/lists/* after install to reduce the
 # docker image size (by ~30MB)
 RUN apt-get update && \

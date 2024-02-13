@@ -129,8 +129,8 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
 
 ### Configuration
 
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
     <td><code>native</code></td>

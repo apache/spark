@@ -16,17 +16,20 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeoutMode}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
  * Physical operator for executing `TransformWithState`
@@ -38,10 +41,12 @@ import org.apache.spark.util.CompletionIterator
  * @param statefulProcessor processor methods called on underlying data
  * @param timeoutMode defines the timeout mode
  * @param outputMode defines the output mode for the statefulProcessor
+ * @param keyEncoder expression encoder for the key type
  * @param outputObjAttr Defines the output object
  * @param batchTimestampMs processing timestamp of the current batch.
  * @param eventTimeWatermarkForLateEvents event time watermark for filtering late events
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
+ * @param isStreaming defines whether the query is streaming or batch
  * @param child the physical plan for the underlying data
  */
 case class TransformWithStateExec(
@@ -52,12 +57,14 @@ case class TransformWithStateExec(
     statefulProcessor: StatefulProcessor[Any, Any, Any],
     timeoutMode: TimeoutMode,
     outputMode: OutputMode,
+    keyEncoder: ExpressionEncoder[Any],
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
-    child: SparkPlan)
+    child: SparkPlan,
+    isStreaming: Boolean = true)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
@@ -140,7 +147,11 @@ case class TransformWithStateExec(
       // by the upstream (consumer) operators in addition to the processing in this operator.
       allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
       commitTimeMs += timeTakenMs {
-        store.commit()
+        if (isStreaming) {
+          store.commit()
+        } else {
+          store.abort()
+        }
       }
       setStoreMetrics(store)
       setOperatorMetrics()
@@ -152,22 +163,113 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
-    child.execute().mapPartitionsWithStateStore[InternalRow](
-      getStateInfo,
-      schemaForKeyRow,
-      schemaForValueRow,
-      numColsPrefixKey = 0,
-      session.sqlContext.sessionState,
-      Some(session.sqlContext.streams.stateStoreCoordinator),
-      useColumnFamilies = true
-    ) {
-      case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-        val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId)
-        assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
-        statefulProcessor.init(processorHandle, outputMode)
-        processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
-        val result = processDataWithPartition(singleIterator, store, processorHandle)
-        result
+    if (isStreaming) {
+      child.execute().mapPartitionsWithStateStore[InternalRow](
+        getStateInfo,
+        schemaForKeyRow,
+        schemaForValueRow,
+        numColsPrefixKey = 0,
+        session.sqlContext.sessionState,
+        Some(session.sqlContext.streams.stateStoreCoordinator),
+        useColumnFamilies = true
+      ) {
+        case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
+          processData(store, singleIterator)
+      }
+    } else {
+      // If the query is running in batch mode, we need to create a new StateStore and instantiate
+      // a temp directory on the executors in mapPartitionsWithIndex.
+      val broadcastedHadoopConf =
+        new SerializableConfiguration(session.sessionState.newHadoopConf())
+      child.execute().mapPartitionsWithIndex[InternalRow](
+        (i, iter) => {
+          val providerId = {
+            val tempDirPath = Utils.createTempDir().getAbsolutePath
+            new StateStoreProviderId(
+              StateStoreId(tempDirPath, 0, i), getStateInfo.queryRunId)
+          }
+
+          val sqlConf = new SQLConf()
+          sqlConf.setConfString(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+            classOf[RocksDBStateStoreProvider].getName)
+          val storeConf = new StateStoreConf(sqlConf)
+
+          // Create StateStoreProvider for this partition
+          val stateStoreProvider = StateStoreProvider.createAndInit(
+            providerId,
+            schemaForKeyRow,
+            schemaForValueRow,
+            numColsPrefixKey = 0,
+            useColumnFamilies = true,
+            storeConf = storeConf,
+            hadoopConf = broadcastedHadoopConf.value)
+
+          val store = stateStoreProvider.getStore(0)
+          val outputIterator = processData(store, iter)
+          CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
+            stateStoreProvider.close()
+            statefulProcessor.close()
+          })
+        }
+      )
     }
+  }
+
+  /**
+   * Process the data in the partition using the state store and the stateful processor.
+   * @param store The state store to use
+   * @param singleIterator The iterator of rows to process
+   * @return An iterator of rows that are the result of processing the input rows
+   */
+  private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
+    CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    val processorHandle = new StatefulProcessorHandleImpl(
+      store, getStateInfo.queryRunId, keyEncoder, isStreaming)
+    assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
+    statefulProcessor.init(processorHandle, outputMode)
+    processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+    processDataWithPartition(singleIterator, store, processorHandle)
+  }
+}
+
+object TransformWithStateExec {
+
+  // Plan logical transformWithState for batch queries
+  def generateSparkPlanForBatchQueries(
+      keyDeserializer: Expression,
+      valueDeserializer: Expression,
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      statefulProcessor: StatefulProcessor[Any, Any, Any],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode,
+      keyEncoder: ExpressionEncoder[Any],
+      outputObjAttr: Attribute,
+      child: SparkPlan): SparkPlan = {
+    val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
+    val statefulOperatorStateInfo = StatefulOperatorStateInfo(
+      checkpointLocation = "", // empty checkpointLocation will be populated in doExecute
+      queryRunId = UUID.randomUUID(),
+      operatorId = 0,
+      storeVersion = 0,
+      numPartitions = shufflePartitions
+    )
+
+    new TransformWithStateExec(
+      keyDeserializer,
+      valueDeserializer,
+      groupingAttributes,
+      dataAttributes,
+      statefulProcessor,
+      timeoutMode,
+      outputMode,
+      keyEncoder,
+      outputObjAttr,
+      Some(statefulOperatorStateInfo),
+      Some(System.currentTimeMillis),
+      None,
+      None,
+      child,
+      isStreaming = false)
   }
 }

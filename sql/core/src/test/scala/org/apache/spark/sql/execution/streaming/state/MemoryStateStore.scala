@@ -30,7 +30,11 @@ class MemoryStateStore extends StateStore() {
   }
 
   override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-    throw new UnsupportedOperationException("Creating multiple column families is not supported")
+    throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
+  }
+
+  override def removeColFamilyIfExists(colFamilyName: String): Unit = {
+    throw StateStoreErrors.removingColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
   override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)

@@ -21,6 +21,7 @@ import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -30,6 +31,7 @@ import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.util.ThreadUtils
 
 // Unique key identifying execution by combination of user, session and operation id
 case class ExecuteKey(userId: String, sessionId: String, operationId: String)
@@ -167,8 +169,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
 
   private[connect] def shutdown(): Unit = executionsLock.synchronized {
     scheduledExecutor.foreach { executor =>
-      executor.shutdown()
-      executor.awaitTermination(1, TimeUnit.MINUTES)
+      ThreadUtils.shutdown(executor, FiniteDuration(1, TimeUnit.MINUTES))
     }
     scheduledExecutor = None
     // note: this does not cleanly shut down the executions, but the server is shutting down.

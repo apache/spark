@@ -57,7 +57,6 @@ import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.random.XORShiftRandom
 
 @SlowSQLTest
 class DataFrameSuite extends QueryTest
@@ -210,12 +209,11 @@ class DataFrameSuite extends QueryTest
     if (!ansiEnabled) {
       checkAnswer(df, expectedAnswer)
     } else {
-      val e = intercept[SparkException] {
+      val e = intercept[ArithmeticException] {
         df.collect()
       }
-      assert(e.getCause.isInstanceOf[ArithmeticException])
-      assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
-        e.getCause.getMessage.contains("Overflow in sum of decimals"))
+      assert(e.getMessage.contains("cannot be represented as Decimal") ||
+        e.getMessage.contains("Overflow in sum of decimals"))
     }
   }
 
@@ -1922,8 +1920,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-9083: sort with non-deterministic expressions") {
     val seed = 33
     val df = (1 to 100).map(Tuple1.apply).toDF("i").repartition(1)
-    val random = new XORShiftRandom(seed)
-    val expected = (1 to 100).map(_ -> random.nextDouble()).sortBy(_._2).map(_._1)
+    val expected = df.select($"i", rand(seed)).as[(Long, Double)].collect().sortBy(_._2).map(_._1)
     val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
     assert(expected === actual)
   }

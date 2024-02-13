@@ -713,8 +713,9 @@ object SQLConf {
         "shuffle partitions, but adaptively calculate the target size according to the default " +
         "parallelism of the Spark cluster. The calculated size is usually smaller than the " +
         "configured target size. This is to maximize the parallelism and avoid performance " +
-        "regression when enabling adaptive query execution. It's recommended to set this config " +
-        "to false and respect the configured target size.")
+        "regressions when enabling adaptive query execution. It's recommended to set this " +
+        "config to true on a busy cluster to make resource utilization more efficient (not many " +
+        "small tasks).")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
@@ -1560,11 +1561,11 @@ object SQLConf {
       .doc("Whether to forcibly enable some optimization rules that can change the output " +
         "partitioning of a cached query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
-        "enabled by default. The optimization rules enabled by this configuration " +
-        s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
+        "disabled by default. The optimization rule enabled by this configuration " +
+        s"is ${ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS.key}.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DEFAULT_CACHE_STORAGE_LEVEL = buildConf("spark.sql.defaultCacheStorageLevel")
     .doc("The default storage level of `dataset.cache()`, `catalog.cacheTable()` and " +
@@ -2338,7 +2339,8 @@ object SQLConf {
       .doc("When false, the `strfmt` in `format_string(strfmt, obj, ...)` and " +
         "`printf(strfmt, obj, ...)` will no longer support to use \"0$\" to specify the first " +
         "argument, the first argument should always reference by \"1$\" when use argument index " +
-        "to indicating the position of the argument in the argument list.")
+        "to indicating the position of the argument in the argument list. " +
+        "This config will be removed in the future releases.")
       .version("3.3")
       .booleanConf
       .createWithDefault(false)
@@ -4658,6 +4660,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_IGNORE_PARENTHESES_AROUND_STAR =
+    buildConf("spark.sql.legacy.ignoreParenthesesAroundStar")
+    .internal()
+    .doc("When set to true, SELECT (*) equals SELECT * FROM T instead of SELECT struct(*)." +
+      "SELECT (*) was never documented as defined behavior."
+    )
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4707,7 +4719,9 @@ object SQLConf {
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
         "Use raw string literals with the `r` prefix instead. "),
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
-        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead.")
+        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead."),
+      DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
+        "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\".")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -5561,6 +5575,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
 
   def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
+
+  def legacyIgnoreParenthesesAroundStar: Boolean =
+    getConf(SQLConf.LEGACY_IGNORE_PARENTHESES_AROUND_STAR)
 
   /** ********************** SQLConf functionality methods ************ */
 
