@@ -198,7 +198,7 @@ class UDFProfiler2TestsMixin:
                 self.assertRegex(
                     io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
                 )
-                self.assertTrue("udf_%d.pstats" % id in os.listdir(d))
+                self.assertTrue(f"udf_{id}_perf.pstats" in os.listdir(d))
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,

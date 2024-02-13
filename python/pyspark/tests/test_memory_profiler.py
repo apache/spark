@@ -108,7 +108,7 @@ class MemoryProfilerTests(PySparkTestCase):
 
         with tempfile.TemporaryDirectory() as d:
             self.sc.dump_profiles(d)
-            self.assertTrue("udf_%d_memory.txt" % id in os.listdir(d))
+            self.assertTrue(f"udf_{id}_memory.txt" in os.listdir(d))
 
     def test_profile_pandas_udf(self):
         udfs = [self.exec_pandas_udf_ser_to_ser, self.exec_pandas_udf_ser_to_scalar]
@@ -245,7 +245,7 @@ class MemoryProfiler2TestsMixin:
                 self.assertRegex(
                     io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
                 )
-                self.assertTrue("udf_%d_memory.txt" % id in os.listdir(d))
+                self.assertTrue(f"udf_{id}_memory.txt" in os.listdir(d))
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,

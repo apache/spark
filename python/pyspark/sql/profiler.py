@@ -175,20 +175,20 @@ class ProfilerCollector(ABC):
         with self._lock:
             stats = self._perf_profile_results
 
-        def dump(path: str, id: int) -> None:
+        def dump(id: int) -> None:
             s = stats.get(id)
 
             if s is not None:
                 if not os.path.exists(path):
                     os.makedirs(path)
-                p = os.path.join(path, "udf_%d.pstats" % id)
+                p = os.path.join(path, f"udf_{id}_perf.pstats")
                 s.dump_stats(p)
 
         if id is not None:
-            dump(path, id)
+            dump(id)
         else:
             for id in sorted(stats.keys()):
-                dump(path, id)
+                dump(id)
 
     def dump_memory_profiles(self, path: str, id: Optional[int] = None) -> None:
         """
@@ -206,22 +206,22 @@ class ProfilerCollector(ABC):
         with self._lock:
             code_map = self._memory_profile_results
 
-        def dump(path: str, id: int) -> None:
+        def dump(id: int) -> None:
             cm = code_map.get(id)
 
             if cm is not None:
                 if not os.path.exists(path):
                     os.makedirs(path)
-                p = os.path.join(path, "udf_%d_memory.txt" % id)
+                p = os.path.join(path, f"udf_{id}_memory.txt")
 
                 with open(p, "w+") as f:
                     MemoryProfiler._show_results(cm, stream=f)
 
         if id is not None:
-            dump(path, id)
+            dump(id)
         else:
             for id in sorted(code_map.keys()):
-                dump(path, id)
+                dump(id)
 
 
 class AccumulatorProfilerCollector(ProfilerCollector):
