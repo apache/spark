@@ -130,7 +130,7 @@ case class RowDataSourceScanExec(
   override def verboseStringWithOperatorId(): String = {
     super.verboseStringWithOperatorId() + (rdd match {
       case externalEngineDatasourceRdd: ExternalEngineDatasourceRDD =>
-        "Executed query: " +
+        "External engine query: " +
           externalEngineDatasourceRdd.getExternalEngineQuery +
           System.lineSeparator()
       case _ => ""

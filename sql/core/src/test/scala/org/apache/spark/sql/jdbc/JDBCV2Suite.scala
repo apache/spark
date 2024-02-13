@@ -3026,6 +3026,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("Explain shows executed SQL query") {
     val df = sql("SELECT max(id) FROM h2.test.people WHERE id > 1")
     val explained = getNormalizedExplain(df, FormattedMode)
-    assert(explained.contains("Executed query:"))
+    assert(explained.contains("External engine query:"))
   }
 }
