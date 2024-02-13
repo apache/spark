@@ -21,20 +21,20 @@ import java.util
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 
 class CaseInsensitiveStringMapSuite extends SparkFunSuite {
 
   test("put and get") {
     val options = CaseInsensitiveStringMap.empty()
-    intercept[UnsupportedOperationException] {
+    intercept[SparkUnsupportedOperationException] {
       options.put("kEy", "valUE")
     }
   }
 
   test("clear") {
     val options = new CaseInsensitiveStringMap(Map("kEy" -> "valUE").asJava)
-    intercept[UnsupportedOperationException] {
+    intercept[SparkUnsupportedOperationException] {
       options.clear()
     }
   }
