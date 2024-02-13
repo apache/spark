@@ -248,7 +248,7 @@ message WriteStreamOperationStartResult {
   // An optional query name.
   string name = 2;
 
-  // Optional query started event if there is any listener registered on the lient side.
+  // Optional query started event if there is any listener registered on the client side.
   optional string query_started_event = 3;
 
   // TODO: How do we indicate errors?
