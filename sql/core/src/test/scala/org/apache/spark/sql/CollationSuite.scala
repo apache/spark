@@ -54,7 +54,7 @@ class CollationSuite extends QueryTest with SharedSparkSession {
     assert(sql(s"select collate('aaa', 'ucs_basic_lcase')").schema(0).dataType == StringType(1))
   }
 
-  test("collate function syntax invalid args") {
+  test("collate function syntax invalid arg count") {
     Seq("'aaa','a','b'", "'aaa'", "", "'aaa'").foreach(args => {
       val paramCount = if (args == "") 0 else args.split(',').length.toString
       checkError(
@@ -68,19 +68,45 @@ class CollationSuite extends QueryTest with SharedSparkSession {
           "expectedNum" -> "2",
           "actualNum" -> paramCount.toString,
           "docroot" -> "https://spark.apache.org/docs/latest"),
-        context = ExpectedContext(
-          fragment = s"collate($args)",
-          start = 7,
-          stop = 15 + args.length)
+        context = ExpectedContext(fragment = s"collate($args)", start = 7, stop = 15 + args.length)
       )
     })
   }
 
-  test("collate function invalid data type") {
-    Seq(
+  test("collate function invalid collation data type") {
+    checkError(
+      exception = intercept[AnalysisException](sql("select collate('abc', 123)")),
+      errorClass = "UNEXPECTED_INPUT_TYPE",
+      sqlState = "42K09",
+      Map(
+        "functionName" -> "`collate`",
+        "paramIndex" -> "1",
+        "inputSql" -> "\"123\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRING\""),
+      context = ExpectedContext(fragment = s"collate('abc', 123)", start = 7, stop = 25)
+    )
+  }
+
+  test("NULL as collation name") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("select collate('abc', cast(null as string))") },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      sqlState = "42K09",
+      Map("exprName" -> "`collation`", "sqlExpr" -> "\"CAST(NULL AS STRING)\""),
+      context = ExpectedContext(
+        fragment = s"collate('abc', cast(null as string))", start = 7, stop = 42)
+    )
+  }
+
+  test("collate function invalid input data type") {
+    val testCases = Seq(
       ("1,'UCS_BASIC'", "INT"),
       ("1.1, 'UCS_BASIC'", "DECIMAL(2,1)"),
-      ("true, 'UCS_BASIC'", "BOOLEAN")).foreach(input => {
+      ("true, 'UCS_BASIC'", "BOOLEAN"))
+
+    testCases.foreach(input => {
       val (args, dataType) = input
       checkError(
         exception = intercept[ExtendedAnalysisException] { sql(s"select collate($args)") },
@@ -94,10 +120,7 @@ class CollationSuite extends QueryTest with SharedSparkSession {
           "requiredType" -> "\"STRING\""
         ),
         context = ExpectedContext(
-          fragment = s"collate($args)",
-          start = 7,
-          stop = 15 + args.length)
-      )
+          fragment = s"collate($args)", start = 7, stop = 15 + args.length))
     })
   }
 
