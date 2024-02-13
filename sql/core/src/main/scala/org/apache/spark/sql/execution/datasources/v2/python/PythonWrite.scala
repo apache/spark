@@ -17,8 +17,11 @@
 package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.types.StructType
 
 
 class PythonWrite(
@@ -31,6 +34,9 @@ class PythonWrite(
   override def toString: String = shortName
 
   override def toBatch: BatchWrite = new PythonBatchWrite(ds, shortName, info, isTruncate)
+
+  override def toStreaming: StreamingWrite =
+    new PythonStreamingWrite(ds, shortName, info, isTruncate)
 
   override def description: String = "(Python)"
 
@@ -69,5 +75,50 @@ class PythonBatchWrite(
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
     ds.source.commitWriteInPython(pythonDataSourceWriter, messages, abort = true)
+  }
+}
+
+class PythonStreamingWrite(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    info: LogicalWriteInfo,
+    isTruncate: Boolean) extends StreamingWrite {
+
+  // Store the pickled data source writer instance.
+  private var pythonDataSourceWriter: Array[Byte] = _
+
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+
+  override def createStreamingWriterFactory(
+      physicalInfo: PhysicalWriteInfo): StreamingDataWriterFactory = {
+    val writeInfo = ds.source.createWriteInfoInPython(
+      shortName,
+      info.schema(),
+      info.options(),
+      isTruncate)
+
+    pythonDataSourceWriter = writeInfo.writer
+
+    new PythonStreamingWriterFactory(ds.source, writeInfo.func, info.schema(), jobArtifactUUID)
+  }
+
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+  }
+}
+
+class PythonStreamingWriterFactory(
+    source: UserDefinedPythonDataSource,
+    pickledWriteFunc: Array[Byte],
+    inputSchema: StructType,
+    jobArtifactUUID: Option[String])
+  extends PythonBatchWriterFactory(source, pickledWriteFunc, inputSchema, jobArtifactUUID)
+  with StreamingDataWriterFactory {
+  override def createWriter(
+      partitionId: Int,
+      taskId: Long,
+      epochId: Long): DataWriter[InternalRow] = {
+    createWriter(partitionId, taskId)
   }
 }
