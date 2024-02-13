@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.execution.python
 
+import java.util.concurrent.CountDownLatch
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -119,12 +122,112 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
     val df = spark.readStream.format(dataSourceName).load()
 
+    val stopSignal = new CountDownLatch(1)
+
     val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
       checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+      if (batchId > 30) stopSignal.countDown()
     }).start()
-    Thread.sleep(3000)
+    stopSignal.await()
     q.stop()
     q.awaitTermination()
+  }
+
+  test("Streaming data source read with custom partitions") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+         |class RangePartition(InputPartition):
+         |    def __init__(self, start, end):
+         |        self.start = start
+         |        self.end = end
+         |
+         |class SimpleDataStreamReader(DataSourceStreamReader):
+         |    current = 0
+         |    def initialOffset(self):
+         |        return {"offset": "0"}
+         |    def latestOffset(self):
+         |        self.current += 2
+         |        return {"offset": str(self.current)}
+         |    def partitions(self, start: dict, end: dict):
+         |        return [RangePartition(int(start["offset"]), int(end["offset"]))]
+         |    def commit(self, end: dict):
+         |        1 + 2
+         |    def read(self, partition: RangePartition):
+         |        start, end = partition.start, partition.end
+         |        for i in range(start, end):
+         |            yield (i, )
+         |
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |
+         |    def streamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    val df = spark.readStream.format(dataSourceName).load()
+
+    val stopSignal = new CountDownLatch(1)
+
+    val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
+      checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+      if (batchId > 30) stopSignal.countDown()
+    }).start()
+    stopSignal.await()
+    q.stop()
+    q.awaitTermination()
+  }
+
+  test("Streaming data source read error") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+         |class RangePartition(InputPartition):
+         |    def __init__(self, start, end):
+         |        self.start = start
+         |        self.end = end
+         |
+         |class SimpleDataStreamReader(DataSourceStreamReader):
+         |    current = 0
+         |    def initialOffset(self):
+         |        return {"offset": "0"}
+         |    def latestOffset(self):
+         |        self.current += 2
+         |        return {"offset": str(self.current)}
+         |    def partitions(self, start: dict, end: dict):
+         |        return [RangePartition(int(start["offset"]), int(end["offset"]))]
+         |    def commit(self, end: dict):
+         |        1 + 2
+         |    def read(self, partition: RangePartition):
+         |        raise Exception("error reading data")
+         |
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |
+         |    def streamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    val df = spark.readStream.format(dataSourceName).load()
+
+    val err = intercept[StreamingQueryException] {
+      val q = df.writeStream.foreachBatch((df: DataFrame, _: Long) => {
+        df.count()
+        ()
+      }).start()
+      q.awaitTermination()
+    }
+    assert(err.getMessage.contains("error reading data"))
   }
 
   test("Error creating stream reader") {
