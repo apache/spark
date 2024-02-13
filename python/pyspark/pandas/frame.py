@@ -10607,7 +10607,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     name_like_string(name) if name is not None else "variable_{}".format(i)
                     for i, name in enumerate(self._internal.column_label_names)
                 ]
-        elif isinstance(var_name, str):
+        elif is_list_like(var_name):
+            raise ValueError(f"{var_name=} must be a scalar.")
+        else:
             var_name = [var_name]
 
         pairs = F.explode(
