@@ -36,10 +36,14 @@ import org.apache.spark.sql.types._
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     expressions match {
-      case Seq(e: Expression, collationExpr: Expression) if collationExpr.foldable =>
-        Collate(e, collationExpr.eval().toString)
-      case Seq(_: Expression, _: Expression) =>
-        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "collationName", StringType)
+      case Seq(e: Expression, collationExpr: Expression) =>
+        (collationExpr.dataType, collationExpr.foldable) match {
+          case (StringType, true) => Collate(e, collationExpr.eval().toString)
+          case (StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
+            funcName, "collationName", StringType)
+          case (dt, _) => throw QueryCompilationErrors.unexpectedInputDataTypeError(
+            funcName, 1, dt, collationExpr)
+        }
       case s => throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), s.length)
     }
   }

@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
@@ -54,7 +55,8 @@ class CollationSuite extends QueryTest with SharedSparkSession {
   }
 
   test("collate function syntax invalid args") {
-    Seq("'aaa','a','b'", "'aaa'").foreach(args => {
+    Seq("'aaa','a','b'", "'aaa'", "", "'aaa'").foreach(args => {
+      val paramCount = if (args == "") 0 else args.split(',').length.toString
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"select collate($args)")
@@ -64,8 +66,33 @@ class CollationSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "functionName" -> "`collate`",
           "expectedNum" -> "2",
-          "actualNum" -> args.split(',').length.toString,
+          "actualNum" -> paramCount.toString,
           "docroot" -> "https://spark.apache.org/docs/latest"),
+        context = ExpectedContext(
+          fragment = s"collate($args)",
+          start = 7,
+          stop = 15 + args.length)
+      )
+    })
+  }
+
+  test("collate function invalid data type") {
+    Seq(
+      ("1,'UCS_BASIC'", "INT"),
+      ("1.1, 'UCS_BASIC'", "DECIMAL(2,1)"),
+      ("true, 'UCS_BASIC'", "BOOLEAN")).foreach(input => {
+      val (args, dataType) = input
+      checkError(
+        exception = intercept[ExtendedAnalysisException] { sql(s"select collate($args)") },
+        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        sqlState = "42K09",
+        parameters = Map(
+          "sqlExpr" -> s"\"collate(${args.split(",")(0)})\"",
+          "paramIndex" -> "1",
+          "inputSql" -> s"\"${args.split(",")(0)}\"",
+          "inputType" -> s"\"$dataType\"",
+          "requiredType" -> "\"STRING\""
+        ),
         context = ExpectedContext(
           fragment = s"collate($args)",
           start = 7,
