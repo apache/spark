@@ -610,6 +610,7 @@ object TransformWithState {
       initialStateGroupingAttrs: Seq[Attribute],
       initialStateDataAttrs: Seq[Attribute],
       initialState: LogicalPlan): LogicalPlan = {
+    val keyEncoder = encoderFor[K]
     val mapped = new TransformWithState(
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
@@ -618,6 +619,7 @@ object TransformWithState {
       statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
       timeoutMode,
       outputMode,
+      keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
       CatalystSerde.generateObjAttr[U],
       child,
       hasInitialState = true,

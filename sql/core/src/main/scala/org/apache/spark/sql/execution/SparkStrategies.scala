@@ -902,7 +902,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ) :: Nil
       case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
           dataAttributes, statefulProcessor, timeoutMode, outputMode, keyEncoder,
-          outputObjAttr, child) =>
+          outputObjAttr, child, hasInitialState, initialStateGroupingAttrs, initialStateDataAttrs,
+          initialStateDeserializer, initialState) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
           groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
           keyEncoder, outputObjAttr, planLater(child)) :: Nil

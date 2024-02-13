@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Encoders, KeyValueGroupedDataset, SaveMode}
+import org.apache.spark.sql.KeyValueGroupedDataset
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.internal.SQLConf
 
 case class InputRow(key: String, action: String, value: Double)
@@ -39,7 +38,7 @@ class StatefulProcessorWithInitialStateTestClass
   override def init(processorHandle: StatefulProcessorHandle,
      operatorOutputMode: OutputMode): Unit = {
     _processorHandle = processorHandle
-    _valState = _processorHandle.getValueState[String, Double]("testInit", Encoders.STRING)
+    _valState = _processorHandle.getValueState[Double]("testInit")
   }
 
   override def close(): Unit = {}
@@ -156,24 +155,6 @@ class TransformWithStateWithInitialStateSuite extends StreamTest {
     }
   }
 
-  test("transformWithStateWithInitialState - batch should fail") {
-    val ex = intercept[Exception] {
-      val initStateDf = createInitialDfForTest
-      val df = Seq(InputRow("a", "b", -1.0)).toDS()
-        .groupByKey(x => x.key)
-        .transformWithState(new
-            StatefulProcessorWithInitialStateTestClass(),
-          TimeoutMode.NoTimeouts(), OutputMode.Append(), initStateDf
-        )
-        .write
-        .format("noop")
-        .mode(SaveMode.Append)
-        .save()
-    }
-    assert(ex.isInstanceOf[AnalysisException])
-    assert(ex.getMessage.contains("not supported"))
-  }
-
   test("transformWithStateWithInitialState - streaming with hdfsStateStoreProvider should fail") {
     val inputData = MemoryStream[InputRow]
     val result = inputData.toDS()
@@ -185,9 +166,9 @@ class TransformWithStateWithInitialStateSuite extends StreamTest {
 
     testStream(result, OutputMode.Update())(
       AddData(inputData, InputRow("a", "update", -1.0)),
-      ExpectFailure[SparkException] {
+      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
         (t: Throwable) => {
-          assert(t.getCause.getMessage.contains("not supported"))
+          assert(t.getMessage.contains("not supported"))
         }
       }
     )
