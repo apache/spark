@@ -41,6 +41,7 @@ class ValueStateImpl[S](
 
   private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
   private val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
+  private val keySerializer = keyExprEnc.createSerializer()
 
   private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
   private val valueEncoder = UnsafeProjection.create(schemaForValueRow)
@@ -56,9 +57,7 @@ class ValueStateImpl[S](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
 
-    val keyByteArr = keyExprEnc.createSerializer()
-      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
-
+    val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
     val keyRow = keyEncoder(InternalRow(keyByteArr))
     keyRow
   }
