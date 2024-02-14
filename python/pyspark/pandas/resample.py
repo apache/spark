@@ -92,7 +92,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
         self._offset = to_offset(rule)
 
-        if self._offset.rule_code not in ["A-DEC", "M", "D", "h", "min", "s"]:
+        if self._offset.rule_code not in ["A-DEC", "ME", "D", "h", "min", "s"]:
             raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
         if not getattr(self._offset, "n") > 0:
             raise ValueError("rule offset must be positive")
@@ -185,7 +185,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                 )
             )
 
-        elif rule_code == "M":
+        elif rule_code == "ME":
             assert (
                 origin.is_month_end
                 and origin.hour == 0
