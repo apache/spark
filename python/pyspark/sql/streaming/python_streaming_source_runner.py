@@ -56,13 +56,16 @@ latest_offset_func_id = 885
 partitions_func_id = 886
 commit_func_id = 887
 
+
 def initial_offset_func(reader, outfile):
     offset = reader.initialOffset()
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
+
 def latest_offset_func(reader, outfile):
     offset = reader.latestOffset()
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
+
 
 def partitions_func(reader, infile, outfile):
     start_offset = json.loads(utf8_deserializer.loads(infile))
@@ -73,14 +76,15 @@ def partitions_func(reader, infile, outfile):
     for partition in partitions:
         pickleSer._write_with_length(partition, outfile)
 
+
 def commit_func(reader, infile, outfile):
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)
 
+
 def main(infile: IO, outfile: IO) -> None:
     try:
-
         check_python_version(infile)
         setup_spark_files(infile)
 
@@ -164,6 +168,7 @@ def main(infile: IO, outfile: IO) -> None:
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
+
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.

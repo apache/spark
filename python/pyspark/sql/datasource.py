@@ -417,6 +417,7 @@ class DataSourceStreamReader(ABC):
         """
         ...
 
+
 class DataSourceWriter(ABC):
     """
     A base class for data source writers. Data source writers are responsible for saving
