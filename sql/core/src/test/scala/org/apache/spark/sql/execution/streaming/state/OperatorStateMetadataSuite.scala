@@ -274,7 +274,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         testStream(restartStream, Update)(
           StartStream(checkpointLocation = checkpointDir.toString),
           AddData(inputData, 3),
-          ExpectFailure[SparkRuntimeException] { t => {
+          ExpectFailure[SparkRuntimeException] { t =>
             def formatPairString(pair: (Long, String)): String =
               s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
 
@@ -286,7 +286,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
                 "OpsInMetadataSeq" -> opsInMetadataSeq.map(formatPairString).mkString(", "),
                 "OpsInCurBatchSeq" -> opsInCurBatchSeq.map(formatPairString).mkString(", ")))
           }
-          })
+        )
       }
     }
   }
