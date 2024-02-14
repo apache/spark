@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.collection.immutable.Seq
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -172,6 +174,70 @@ class CollationSuite extends QueryTest with SharedSparkSession {
         checkAnswer(
           sql(s"select collate('$left', '$collationName') < collate('$right', '$collationName')"),
           Row(expected))
+    }
+  }
+
+  test("create table with collation") {
+    val tableName = "parquet_dummy_tbl"
+    val collationName = "UCS_BASIC_LCASE"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 STRING COLLATE '$collationName')
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      checkAnswer(sql(s"SELECT DISTINCT collation(c1) FROM $tableName"), Seq(Row(collationName)))
+    }
+  }
+
+  test("create table with collations inside a struct") {
+    val tableName = "struct_collation_tbl"
+    val collationName = "UCS_BASIC_LCASE"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |(c1 STRUCT<name: STRING COLLATE '$collationName', age: INT>)
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'aaa', 'id', 1))")
+      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'AAA', 'id', 2))")
+
+      checkAnswer(sql(s"SELECT DISTINCT collation(c1.name) FROM $tableName"),
+        Seq(Row(collationName)))
+    }
+  }
+
+  test("add collated column with alter table") {
+    val tableName = "alter_column_tbl"
+    val collationName = "UCS_BASIC_LCASE"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 STRING)
+           |USING PARQUET
+           |""".stripMargin)
+
+      // should not return any collation
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
+          Seq())
+
+      sql(
+      s"""
+         |ALTER TABLE $tableName
+         |ADD COLUMN c2 STRING COLLATE '$collationName'
+         |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
+
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName"),
+        Seq(Row(collationName)))
     }
   }
 }
