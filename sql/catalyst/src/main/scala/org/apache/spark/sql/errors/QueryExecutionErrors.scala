@@ -1703,8 +1703,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def statefulOperatorNotMatchInStateMetadataError(
-    opsInMetadataSeq: Map[Long, String],
-    opsInCurBatchSeq: Map[Long, String]): SparkRuntimeException = {
+      opsInMetadataSeq: Map[Long, String],
+      opsInCurBatchSeq: Map[Long, String]): SparkRuntimeException = {
     def formatPairString(pair: (Long, String)): String
     = s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
     new SparkRuntimeException(
