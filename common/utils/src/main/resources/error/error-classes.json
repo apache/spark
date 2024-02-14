@@ -3780,6 +3780,11 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_ENCODER" : {
+    "message" : [
+      "Found unsupported encoder. Try switching to expression encoder."
+    ]
+  },
   "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
     "message" : [
       "Cannot create generated column <fieldName> with generation expression <expressionStr> because <reason>."
@@ -5717,11 +5722,6 @@
   "_LEGACY_ERROR_TEMP_2023" : {
     "message" : [
       "Unresolved encoder expected, but <attr> was found."
-    ]
-  },
-  "UNSUPPORTED_ENCODER" : {
-    "message" : [
-      "Found unsupported encoder. Try switching to expression encoder."
     ]
   },
   "_LEGACY_ERROR_TEMP_2025" : {
