@@ -1883,21 +1883,24 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-19896: cannot have circular references in case class") {
-    val errMsg1 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassA(null)).toDS()
-    }
-    assert(errMsg1.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
-    val errMsg2 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassC(null)).toDS()
-    }
-    assert(errMsg2.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
-    val errMsg3 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassD(null)).toDS()
-    }
-    assert(errMsg3.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassA(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassA"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassC(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassC"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassD(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassD"))
   }
 
   test("SPARK-20125: option of map") {

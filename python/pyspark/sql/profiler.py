@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from abc import ABC, abstractmethod
+import os
 import pstats
 from threading import RLock
 from typing import Dict, Optional, TYPE_CHECKING
@@ -157,6 +158,70 @@ class ProfilerCollector(ABC):
         Get the profile results.
         """
         ...
+
+    def dump_perf_profiles(self, path: str, id: Optional[int] = None) -> None:
+        """
+        Dump the perf profile results into directory `path`.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path: str
+            A directory in which to dump the perf profile.
+        id : int, optional
+            A UDF ID to be shown. If not specified, all the results will be shown.
+        """
+        with self._lock:
+            stats = self._perf_profile_results
+
+        def dump(id: int) -> None:
+            s = stats.get(id)
+
+            if s is not None:
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                p = os.path.join(path, f"udf_{id}_perf.pstats")
+                s.dump_stats(p)
+
+        if id is not None:
+            dump(id)
+        else:
+            for id in sorted(stats.keys()):
+                dump(id)
+
+    def dump_memory_profiles(self, path: str, id: Optional[int] = None) -> None:
+        """
+        Dump the memory profile results into directory `path`.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path: str
+            A directory in which to dump the memory profile.
+        id : int, optional
+            A UDF ID to be shown. If not specified, all the results will be shown.
+        """
+        with self._lock:
+            code_map = self._memory_profile_results
+
+        def dump(id: int) -> None:
+            cm = code_map.get(id)
+
+            if cm is not None:
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                p = os.path.join(path, f"udf_{id}_memory.txt")
+
+                with open(p, "w+") as f:
+                    MemoryProfiler._show_results(cm, stream=f)
+
+        if id is not None:
+            dump(id)
+        else:
+            for id in sorted(code_map.keys()):
+                dump(id)
 
 
 class AccumulatorProfilerCollector(ProfilerCollector):

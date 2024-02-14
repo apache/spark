@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.util.CollationFactory
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -26,7 +27,27 @@ import org.apache.spark.annotation.Stable
  * @param collationId The id of collation for this StringType.
  */
 @Stable
-class StringType private(val collationId: Int) extends AtomicType {
+class StringType private(val collationId: Int) extends AtomicType with Serializable {
+  /**
+   * Returns whether assigned collation is the default spark collation (UCS_BASIC).
+   */
+  def isDefaultCollation: Boolean = collationId == StringType.DEFAULT_COLLATION_ID
+
+  /**
+   * Type name that is shown to the customer.
+   * If this is an UCS_BASIC collation output is `string` due to backwards compatibility.
+   */
+  override def typeName: String =
+    if (isDefaultCollation) "string"
+    else s"string(${CollationFactory.fetchCollation(collationId).collationName})"
+
+  override def equals(obj: Any): Boolean =
+    obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
+
+  override def hashCode(): Int = collationId.hashCode()
+
+  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
+
   /**
    * The default size of a value of the StringType is 20 bytes.
    */

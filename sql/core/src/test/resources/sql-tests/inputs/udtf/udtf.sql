@@ -83,6 +83,7 @@ SELECT * FROM UDTFInvalidSelectExprParseError(TABLE(t2));
 SELECT * FROM UDTFInvalidSelectExprStringValue(TABLE(t2));
 SELECT * FROM UDTFInvalidComplexSelectExprMissingAlias(TABLE(t2));
 SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2));
+SELECT * FROM UDTFInvalidOrderByStringList(TABLE(t2));
 -- As a reminder, UDTFInvalidPartitionByAndWithSinglePartition returns this analyze result:
 --     AnalyzeResult(
 --         schema=StructType()

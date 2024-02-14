@@ -397,9 +397,9 @@ private[spark] class SparkIllegalArgumentException private(
   def this(
     errorClass: String,
     messageParameters: Map[String, String],
-    context: Array[QueryContext] = Array.empty,
-    summary: String = "",
-    cause: Throwable = null) = {
+    context: Array[QueryContext],
+    summary: String,
+    cause: Throwable) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(cause),
@@ -408,6 +408,25 @@ private[spark] class SparkIllegalArgumentException private(
       context
     )
   }
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    cause: Throwable) =
+    this(errorClass, messageParameters, Array.empty[QueryContext], "", cause)
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String]) =
+    this(errorClass, messageParameters, cause = null)
+
+  def this(
+    errorClass: String,
+    messageParameters: java.util.Map[String, String]) =
+    this(errorClass, messageParameters.asScala.toMap)
+
+  def this(errorClass: String) =
+    this(errorClass, messageParameters = Map.empty[String, String], cause = null)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
