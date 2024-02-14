@@ -186,6 +186,7 @@
         </module>
         <module name="IllegalImport">
             <property name="illegalPkgs" value="org.apache.log4j" />
+            <property name="illegalPkgs" value="org.apache.commons.lang" />
         </module>
     </module>
 </module>
