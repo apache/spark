@@ -91,7 +91,20 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         self._resamplekey = resamplekey
 
         self._offset = to_offset(rule)
-        if self._offset.rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
+        # Changed Timedelta.resolution_string() to return h, min, s instead of H, T, S
+        # from Pandas 2.2.0.
+        self._rule_code_mapping = {
+            "A-DEC": "A-DEC",
+            "M": "M",
+            "D": "D",
+            "h": "H",
+            "min": "T",
+            "s": "S",
+        }
+
+        rule_code = self._rule_code_mapping.get(self._offset.rule_code)
+
+        if rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
             raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
         if not getattr(self._offset, "n") > 0:
             raise ValueError("rule offset must be positive")
@@ -149,6 +162,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         (rule_code, n) = (self._offset.rule_code, getattr(self._offset, "n"))
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
         left_labeled, right_labeled = (self._label == "left", self._label == "right")
+
+        rule_code = self._rule_code_mapping.get(self._offset.rule_code)
 
         if rule_code == "A-DEC":
             assert (
