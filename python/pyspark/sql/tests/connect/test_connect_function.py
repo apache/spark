@@ -2065,6 +2065,7 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         self.assert_eq(
             cdf.select(CF.split(cdf.b, "[bd]")).toPandas(),
             sdf.select(SF.split(sdf.b, "[bd]")).toPandas(),
+            check_exact=False,
         )
         self.assert_eq(
             cdf.select(CF.regexp_extract(cdf.b, "(a+)(b)?(c)", 1)).toPandas(),

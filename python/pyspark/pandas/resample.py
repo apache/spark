@@ -91,20 +91,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         self._resamplekey = resamplekey
 
         self._offset = to_offset(rule)
-        # Changed Timedelta.resolution_string() to return h, min, s instead of H, T, S
-        # from Pandas 2.2.0.
-        self._rule_code_mapping = {
-            "A-DEC": "A-DEC",
-            "M": "M",
-            "D": "D",
-            "h": "H",
-            "min": "T",
-            "s": "S",
-        }
 
-        rule_code = self._rule_code_mapping.get(self._offset.rule_code)
-
-        if rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
+        if self._offset.rule_code not in ["A-DEC", "M", "D", "h", "min", "s"]:
             raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
         if not getattr(self._offset, "n") > 0:
             raise ValueError("rule offset must be positive")
@@ -162,8 +150,6 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         (rule_code, n) = (self._offset.rule_code, getattr(self._offset, "n"))
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
         left_labeled, right_labeled = (self._label == "left", self._label == "right")
-
-        rule_code = self._rule_code_mapping.get(self._offset.rule_code)
 
         if rule_code == "A-DEC":
             assert (
@@ -279,8 +265,8 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
                 ret = F.when(edge_cond, edge_label).otherwise(non_edge_label)
 
-        elif rule_code in ["H", "T", "S"]:
-            unit_mapping = {"H": "HOUR", "T": "MINUTE", "S": "SECOND"}
+        elif rule_code in ["h", "min", "s"]:
+            unit_mapping = {"h": "HOUR", "min": "MINUTE", "s": "SECOND"}
             unit_str = unit_mapping[rule_code]
 
             truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
@@ -289,10 +275,10 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             diff = timestampdiff(unit_str, origin_scol, truncated_ts_scol)
             mod = F.lit(0) if n == 1 else (diff % F.lit(n))
 
-            if rule_code == "H":
+            if rule_code == "h":
                 assert origin.minute == 0 and origin.second == 0
                 edge_cond = (mod == 0) & (F.minute(ts_scol) == 0) & (F.second(ts_scol) == 0)
-            elif rule_code == "T":
+            elif rule_code == "min":
                 assert origin.second == 0
                 edge_cond = (mod == 0) & (F.second(ts_scol) == 0)
             else:
