@@ -132,13 +132,10 @@ def main(infile: IO, outfile: IO) -> None:
                 outfile.flush()
 
         except NotImplementedError as e:
-            raise PySparkRuntimeError(
-                error_class="PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED",
-                message_parameters={"type": "reader", "error": str(e)},
-            )
+            raise e
         except Exception as e:
             raise PySparkRuntimeError(
-                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
+                error_class="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
                 message_parameters={"type": "reader", "error": str(e)},
             )
         finally:

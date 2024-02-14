@@ -139,28 +139,37 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     spark.dataSource.registerPython(errorDataSourceName, dataSource)
     val pythonDs = new PythonDataSourceV2
     pythonDs.setShortName("ErrorDataSource")
-    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
 
-    def testMicroBatchStreamError(msg: String)
+    def testMicroBatchStreamError(action: String, msg: String)
                                  (func: PythonMicroBatchStream => Unit): Unit = {
       val stream = new PythonMicroBatchStream(
         pythonDs, errorDataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
       val err = intercept[SparkException] {
         func(stream)
       }
+      checkErrorMatchPVals(err,
+        errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+        parameters = Map(
+          "action" -> action,
+          "msg" -> "(.|\\n)*"
+        ))
       assert(err.getMessage.contains(msg))
       stream.stop()
     }
 
-    testMicroBatchStreamError("[NOT_IMPLEMENTED] initialOffsets is not implemented.") {
+    testMicroBatchStreamError(
+      "initialOffset", "[NOT_IMPLEMENTED] initialOffset is not implemented") {
       stream => stream.initialOffset()
     }
 
-    testMicroBatchStreamError("[NOT_IMPLEMENTED] latestOffsets is not implemented.") {
+    testMicroBatchStreamError(
+      "latestOffset", "[NOT_IMPLEMENTED] latestOffset is not implemented") {
       stream => stream.latestOffset()
     }
 
-    testMicroBatchStreamError("[NOT_IMPLEMENTED] partitions is not implemented.") {
+    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
+    testMicroBatchStreamError(
+      "planPartitions", "[NOT_IMPLEMENTED] partitions is not implemented") {
       stream => stream.planInputPartitions(offset, offset)
     }
   }
@@ -184,30 +193,36 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     pythonDs.setShortName("ErrorDataSource")
     val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
 
-    def testMicroBatchStreamError(msg: String)
+    def testMicroBatchStreamError(action: String, msg: String)
                                  (func: PythonMicroBatchStream => Unit): Unit = {
       val stream = new PythonMicroBatchStream(
         pythonDs, errorDataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
       val err = intercept[SparkException] {
         func(stream)
       }
+      checkErrorMatchPVals(err,
+        errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+        parameters = Map(
+          "action" -> action,
+          "msg" -> "(.|\\n)*"
+        ))
       assert(err.getMessage.contains(msg))
       stream.stop()
     }
 
-    testMicroBatchStreamError("error reading initial offset") {
+    testMicroBatchStreamError("initialOffset", "error reading initial offset") {
       stream => stream.initialOffset()
     }
 
-    testMicroBatchStreamError("error reading latest offset") {
+    testMicroBatchStreamError("latestOffset", "error reading latest offset") {
       stream => stream.latestOffset()
     }
 
-    testMicroBatchStreamError("error planning partitions") {
+    testMicroBatchStreamError("planPartitions", "error planning partitions") {
       stream => stream.planInputPartitions(offset, offset)
     }
 
-    testMicroBatchStreamError("error committing offset") {
+    testMicroBatchStreamError("commitSource", "error committing offset") {
       stream => stream.commit(offset)
     }
   }

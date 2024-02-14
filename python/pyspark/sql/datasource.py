@@ -343,7 +343,7 @@ class DataSourceStreamReader(ABC):
         ...
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "initialOffsets"},
+            message_parameters={"feature": "initialOffset"},
         )
 
     def latestOffset(self) -> dict:
@@ -358,7 +358,7 @@ class DataSourceStreamReader(ABC):
         ...
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "latestOffsets"},
+            message_parameters={"feature": "latestOffset"},
         )
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
