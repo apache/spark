@@ -2464,6 +2464,12 @@ The deserializer is not supported:
 
 For more details see [UNSUPPORTED_DESERIALIZER](sql-error-conditions-unsupported-deserializer-error-class.html)
 
+### UNSUPPORTED_ENCODER
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Found unsupported encoder. Try switching to expression encoder.
+
 ### UNSUPPORTED_EXPRESSION_GENERATED_COLUMN
 
 [SQLSTATE: 42621](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
