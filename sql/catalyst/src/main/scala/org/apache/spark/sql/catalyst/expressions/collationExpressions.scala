@@ -25,7 +25,12 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr, collationName)",
+  usage = "_FUNC_(expr, collationName) - Marks a given expression with the specified collation.",
+  arguments = """
+    Arguments:
+      * expr - String expression to perform collation on.
+      * collationName - Foldable string expression that specifies the collation name.
+  """,
   examples = """
     Examples:
       > SELECT COLLATION('Spark SQL' _FUNC_ 'UCS_BASIC_LCASE');
@@ -43,7 +48,7 @@ object CollateExpressionBuilder extends ExpressionBuilder {
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
-              Collate(e, collationExpr.eval().toString)
+              Collate(e, evalCollation.toString)
             }
           case (StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
             funcName, "collationName", StringType)
@@ -75,11 +80,8 @@ case class Collate(child: Expression, collationName: String)
     defineCodeGen(ctx, ev, (in) => in)
 }
 
-/**
- * An expression that returns the collation name of a given expression.
- */
 @ExpressionDescription(
-  usage = "_FUNC_(expr)",
+  usage = "_FUNC_(expr) - Returns the collation name of a given expression.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
