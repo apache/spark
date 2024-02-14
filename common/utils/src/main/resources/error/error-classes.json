@@ -5719,9 +5719,9 @@
       "Unresolved encoder expected, but <attr> was found."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2024" : {
+  "UNSUPPORTED_ENCODER" : {
     "message" : [
-      "Only expression encoders are supported for now."
+      "Found unsupported encoder. Try switching to expression encoder."
     ]
   },
   "_LEGACY_ERROR_TEMP_2025" : {
