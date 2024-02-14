@@ -95,22 +95,22 @@ object Cast extends QueryErrorsBase {
     case (NullType, _) => true
 
     case (_, _: StringType) => true
-    case (StringType, _: BinaryType) => true
+    case (_: StringType, _: BinaryType) => true
 
-    case (StringType, BooleanType) => true
+    case (_: StringType, BooleanType) => true
     case (_: NumericType, BooleanType) => true
 
-    case (StringType, TimestampType) => true
+    case (_: StringType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
 
-    case (StringType, TimestampNTZType) => true
+    case (_: StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (StringType, _: CalendarIntervalType) => true
-    case (StringType, _: AnsiIntervalType) => true
+    case (_: StringType, _: CalendarIntervalType) => true
+    case (_: StringType, _: AnsiIntervalType) => true
 
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
     case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
@@ -118,12 +118,12 @@ object Cast extends QueryErrorsBase {
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
-    case (StringType, DateType) => true
+    case (_: StringType, DateType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
 
     case (_: NumericType, _: NumericType) => true
-    case (StringType, _: NumericType) => true
+    case (_: StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
 
@@ -192,33 +192,33 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, StringType) => true
+    case (_, _: StringType) => true
 
-    case (StringType, BinaryType) => true
+    case (_: StringType, BinaryType) => true
     case (_: IntegralType, BinaryType) => true
 
-    case (StringType, BooleanType) => true
+    case (_: StringType, BooleanType) => true
     case (DateType, BooleanType) => true
     case (TimestampType, BooleanType) => true
     case (_: NumericType, BooleanType) => true
 
-    case (StringType, TimestampType) => true
+    case (_: StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
 
-    case (StringType, TimestampNTZType) => true
+    case (_: StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (StringType, DateType) => true
+    case (_: StringType, DateType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
 
-    case (StringType, CalendarIntervalType) => true
-    case (StringType, _: DayTimeIntervalType) => true
-    case (StringType, _: YearMonthIntervalType) => true
+    case (_: StringType, CalendarIntervalType) => true
+    case (_: StringType, _: DayTimeIntervalType) => true
+    case (_: StringType, _: YearMonthIntervalType) => true
     case (_: IntegralType, DayTimeIntervalType(s, e)) if s == e => true
     case (_: IntegralType, YearMonthIntervalType(s, e)) if s == e => true
 
@@ -227,7 +227,7 @@ object Cast extends QueryErrorsBase {
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
     case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
 
-    case (StringType, _: NumericType) => true
+    case (_: StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
     case (DateType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true

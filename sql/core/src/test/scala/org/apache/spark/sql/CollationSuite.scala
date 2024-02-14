@@ -349,4 +349,122 @@ class CollationSuite extends QueryTest
       }
     }
   }
+
+  test("implicit cast of default collated strings") {
+    val tableName = "parquet_dummy_implicit_cast_t22"
+    withTable(tableName) {
+      spark.sql(
+        s"""
+           | CREATE TABLE $tableName(c1 STRING COLLATE 'SR_CI_AI',
+           | c2 STRING COLLATE 'SR_CI_AI', c3 STRING COLLATE 'SR_CS_AS', c4 STRING)
+           | USING PARQUET
+           |""".stripMargin)
+      sql(s"INSERT INTO $tableName VALUES ('a', 'a', 'a', 'a')")
+      sql(s"INSERT INTO $tableName VALUES ('A', 'A', 'A', 'A')")
+
+       // collate literal to c1's collation
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 = 'a'"),
+        Seq(Row("a"), Row("A")))
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE 'a' = c1"),
+        Seq(Row("a"), Row("A")))
+
+      // collate c1 to UCS_BASIC because it is explicitly set
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 = COLLATE('a', 'UCS_BASIC')"),
+        Seq(Row("a")))
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 = SUBSTR(COLLATE('a', 'UCS_BASIC'), 0)"),
+        Seq(Row("a")))
+
+      // in operator
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('a')"),
+        Seq(Row("a"), Row("A")))
+      // explicitly set collation inside IN operator
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('b', COLLATE('a', 'UCS_BASIC'))"),
+        Seq(Row("a")))
+
+      // concat should not change collation
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || 'a' || 'a' = 'aaa'"),
+        Seq(Row("a"), Row("A")))
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE(c2, 'UCS_BASIC') = 'aa'"),
+        Seq(Row("a")))
+
+      // concat of columns of different collations is allowed
+      // as long as we don't use binary comparison on the result
+      sql(s"SELECT c1 || c3 from $tableName")
+
+      // concat + in
+      checkAnswer(sql(s"SELECT c1 FROM $tableName where c1 || 'a' " +
+        s"IN (COLLATE('aa', 'SR_CI_AI'))"), Seq(Row("a"), Row("A")))
+      checkAnswer(sql(s"SELECT c1 FROM $tableName where c1 || 'a' " +
+        s"IN (COLLATE('aa', 'UCS_BASIC'))"), Seq(Row("a")))
+
+      // columns have different collation
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT c1 FROM $tableName WHERE c1 = c3")
+        },
+        errorClass = "COLLATION_COULD_NOT_BE_DETERMINED"
+      )
+
+      // different explicit collations are set
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |SELECT c1 FROM $tableName
+               |WHERE COLLATE('a', 'UCS_BASIC') = COLLATE('a', 'UNICODE')"""
+              .stripMargin)
+        },
+        errorClass = "COLLATION_MISMATCH",
+        parameters = Map(
+          "left" -> "string",
+          "right" -> "string(UNICODE)"
+        )
+      )
+
+      // in operator has different collations
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT c1 FROM $tableName WHERE c1 IN " +
+            "(COLLATE('a', 'UCS_BASIC'), COLLATE('b', 'UNICODE'))")
+        },
+        errorClass = "COLLATION_MISMATCH",
+        parameters = Map(
+          "left" -> "string",
+          "right" -> "string(UNICODE)"
+        )
+      )
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT c1 FROM $tableName WHERE COLLATE(c1, 'UNICODE') IN " +
+            "(COLLATE('a', 'UCS_BASIC'))")
+        },
+        errorClass = "COLLATION_MISMATCH",
+        parameters = Map(
+          "left" -> "string(UNICODE)",
+          "right" -> "string"
+        )
+      )
+
+      // concat on different implicit collations should fail
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT c1 FROM $tableName WHERE c1 || c3 = 'aa'")
+        },
+        errorClass = "COLLATION_COULD_NOT_BE_DETERMINED"
+      )
+
+      // concat + in
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE('a', 'UCS_BASIC') IN " +
+            s"(COLLATE('a', 'UNICODE'))")
+        },
+        errorClass = "COLLATION_MISMATCH",
+        parameters = Map(
+          "left" -> "string",
+          "right" -> "string(UNICODE)"
+        )
+      )
+    }
+  }
 }

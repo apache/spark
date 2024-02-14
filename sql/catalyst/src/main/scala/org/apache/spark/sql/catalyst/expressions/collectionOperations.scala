@@ -2603,7 +2603,8 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
       TypeCheckResult.TypeCheckSuccess
     } else {
       val dataTypeMismatch = children.zipWithIndex.collectFirst {
-        case (e, idx) if !allowedTypes.exists(_.acceptsType(e.dataType)) =>
+        case (e, idx)
+          if !allowedTypes.exists(dt => dt == e.dataType || dt.acceptsType(e.dataType)) =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
@@ -2644,7 +2645,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
         val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
         ByteArray.concat(inputs: _*)
       }
-    case StringType =>
+    case _: StringType =>
       input => {
         val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
         UTF8String.concat(inputs: _*)

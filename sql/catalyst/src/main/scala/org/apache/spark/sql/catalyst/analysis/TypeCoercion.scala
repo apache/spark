@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StringType, _}
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
 abstract class TypeCoercionBase {
@@ -395,6 +395,11 @@ abstract class TypeCoercionBase {
           i
         }
 
+      case i @ In(a, b) if CollationTypeCasts.shouldCast(a.dataType +: b.map(_.dataType)) =>
+        // resolve collations between the children of IN expression
+        val newChildren = CollationTypeCasts.collateToSingleType(a +: b)
+        i.copy(newChildren.head, newChildren.tail)
+
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
         findWiderCommonType(i.children.map(_.dataType)) match {
           case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
@@ -617,7 +622,17 @@ abstract class TypeCoercionBase {
         val newChildren = c.children.map { e =>
           implicitCast(e, StringType).getOrElse(e)
         }
-        c.copy(children = newChildren)
+
+        val newNode = c.copy(children = newChildren)
+        if (CollationTypeCasts.shouldCast(children.map(_.dataType))) {
+          // if original children had different collations we need to
+          // cast the output to the expected collation
+          val collationId = CollationTypeCasts.getOutputCollation(
+            children, failOnIndeterminate = false)
+          Cast(newNode, StringType(collationId))
+        } else {
+          newNode
+        }
     }
   }
 
@@ -771,6 +786,84 @@ abstract class TypeCoercionBase {
   }
 
   /**
+   * Casts expressions to resolve differences in their collations.
+   */
+  object CollationTypeCasts extends TypeCoercionRule {
+
+    override val transform: PartialFunction[Expression, Expression] = {
+      case e if !e.childrenResolved => e
+
+      case b @ BinaryComparison(left, right) if shouldCast(Seq(left.dataType, right.dataType)) =>
+        val newChildren = collateToSingleType(Seq(left, right))
+        b.withNewChildren(newChildren)
+    }
+
+    def shouldCast(types: Seq[DataType]): Boolean = {
+      types.forall(_.isInstanceOf[StringType]) && types.distinct.length > 1
+    }
+
+    /**
+     * Collates the input expressions to a single collation.
+     */
+    def collateToSingleType(exprs: Seq[Expression]): Seq[Expression] = {
+      val collationId = getOutputCollation(exprs)
+
+      exprs.map { expression =>
+        expression.dataType match {
+          case st: StringType if st.collationId == collationId =>
+            expression
+          case _: StringType =>
+            Cast(expression, StringType(collationId))
+        }
+      }
+    }
+
+    /**
+     * Based on the data types of the input expression determines a collation type
+     * which the output will have.
+     */
+    def getOutputCollation(exprs: Seq[Expression], failOnIndeterminate: Boolean = true): Int = {
+      val explicitTypes = exprs.filter(hasExplicitCollation).map(_.dataType).distinct
+
+      explicitTypes.size match {
+        case 1 => explicitTypes.head.asInstanceOf[StringType].collationId
+        case size if size > 1 => throw QueryCompilationErrors.collationMismatchError(
+          explicitTypes.head.simpleString, explicitTypes.tail.head.simpleString)
+        case _ =>
+          val dataTypes = exprs.map(_.dataType.asInstanceOf[StringType])
+
+          if (isIndeterminate(dataTypes)) {
+            if (failOnIndeterminate) {
+              throw QueryCompilationErrors.collationCouldNotBeDeterminedError()
+            } else {
+              StringType.INDETERMINATE_COLLATION_ID
+            }
+          } else {
+            dataTypes.find(!_.isDefaultCollation)
+              .getOrElse(StringType)
+              .collationId
+          }
+      }
+    }
+
+    private def isIndeterminate(dataTypes: Seq[StringType]): Boolean = {
+      dataTypes.exists(_.isIndeterminateCollation) ||
+        dataTypes.filter(!_.isDefaultCollation).distinct.size > 1
+    }
+
+    private def hasExplicitCollation(expression: Expression): Boolean = {
+      if (!expression.dataType.isInstanceOf[StringType]) {
+        false
+      } else {
+        expression match {
+          case _: Collate => true
+          case _ => expression.children.exists(hasExplicitCollation)
+        }
+      }
+    }
+  }
+
+  /**
    * Cast WindowFrame boundaries to the type they operate upon.
    */
   object WindowFrameCoercion extends TypeCoercionRule {
@@ -804,7 +897,7 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
+      case DateAdd(l, r) if r.dataType.isInstanceOf[StringType]  && r.foldable =>
         val days = try {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
@@ -812,7 +905,7 @@ abstract class TypeCoercionBase {
             throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
         }
         DateAdd(l, Literal(days))
-      case DateSub(l, r) if r.dataType == StringType && r.foldable =>
+      case DateSub(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
         val days = try {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
@@ -856,6 +949,7 @@ object TypeCoercion extends TypeCoercionBase {
       StackCoercion ::
       Division ::
       IntegralDivision ::
+      CollationTypeCasts ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
@@ -891,8 +985,8 @@ object TypeCoercion extends TypeCoercionBase {
 
   /** Promotes all the way to StringType. */
   private def stringPromotion(dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
-    case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
-    case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
+    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
+    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
     case _ => None
   }
 
@@ -915,10 +1009,10 @@ object TypeCoercion extends TypeCoercionBase {
    */
   def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    case (StringType, DateType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
-    case (DateType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
+    case (st: StringType, DateType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (DateType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
     case (StringType, TimestampType)
       => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
     case (TimestampType, StringType)
@@ -980,7 +1074,7 @@ object TypeCoercion extends TypeCoercionBase {
 
       // If the function accepts any numeric type and the input is a string, we follow the hive
       // convention and cast that input into a double
-      case (StringType, NumericType) => NumericType.defaultConcreteType
+      case (_: StringType, NumericType) => NumericType.defaultConcreteType
 
       // Implicit cast among numeric types. When we reach here, input type is not acceptable.
 
@@ -995,13 +1089,13 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: DatetimeType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
 
       // Implicit cast from/to string
-      case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
-      case (StringType, target: NumericType) => target
-      case (StringType, datetime: DatetimeType) => datetime
-      case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
-      case (StringType, BinaryType) => BinaryType
+      case (_: StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
+      case (_: StringType, target: NumericType) => target
+      case (_: StringType, datetime: DatetimeType) => datetime
+      case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
+      case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, StringType) if any != StringType => StringType
+      case (any: AtomicType, st: StringType) if any != StringType => st
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.

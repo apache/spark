@@ -29,6 +29,12 @@ import org.apache.spark.sql.catalyst.util.CollatorFactory
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
   def isDefaultCollation: Boolean = collationId == StringType.DEFAULT_COLLATION_ID
 
+  /**
+   * Returns whether the collation is indeterminate. An indeterminate collation is
+   * a result of combination of conflicting non-default implicit collations.
+   */
+  def isIndeterminateCollation: Boolean = collationId == StringType.INDETERMINATE_COLLATION_ID
+
   override def toString: String =
     if (this.isDefaultCollation) "String"
     else s"String(${CollatorFactory.getInfoForId(collationId).collationName})"
@@ -56,5 +62,6 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 case object StringType extends StringType(0) {
   // TODO: When we implement session level collation it should be used here as the default.
   val DEFAULT_COLLATION_ID = 0
+  val INDETERMINATE_COLLATION_ID: Int = -1
   def apply(collationId: Int): StringType = new StringType(collationId)
 }

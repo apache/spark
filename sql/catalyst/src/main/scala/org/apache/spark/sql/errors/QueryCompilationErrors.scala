@@ -3933,4 +3933,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableSchema" -> toSQLType(tableSchema),
         "actualSchema" -> toSQLType(actualSchema)))
   }
+
+  def collationMismatchError(left: String, right: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLLATION_MISMATCH",
+      messageParameters = Map(
+        "left" -> left,
+        "right" -> right
+      )
+    )
+  }
+
+  def collationCouldNotBeDeterminedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "COLLATION_COULD_NOT_BE_DETERMINED",
+      messageParameters = Map.empty
+    )
+  }
 }

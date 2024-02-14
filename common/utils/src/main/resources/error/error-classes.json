@@ -445,6 +445,18 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_COULD_NOT_BE_DETERMINED" : {
+    "message" : [
+      "Could not determine which collation to use for string comparison. Use COLLATE function to set the collation explicitly."
+    ],
+    "sqlState" : "22018"
+  },
+  "COLLATION_MISMATCH" : {
+    "message" : [
+      "Collation mismatch between explicit collations \"<left>\" and \"<right>\""
+    ],
+    "sqlState" : "22018"
+  },
   "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
       "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"
