@@ -17,10 +17,8 @@
 
 import os
 import sys
-import functools
 import json
-from itertools import islice
-from typing import IO, List, Iterator, Iterable
+from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
@@ -31,12 +29,9 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.connect.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
-from pyspark.sql.datasource import DataSource, InputPartition
-from pyspark.sql.pandas.types import to_arrow_schema
+from pyspark.sql.datasource import DataSource
 from pyspark.sql.types import (
     _parse_datatype_json_string,
-    BinaryType,
     StructType,
 )
 from pyspark.util import handle_worker_exception
@@ -45,7 +40,6 @@ from pyspark.worker_util import (
     read_command,
     pickleSer,
     send_accumulator_updates,
-    setup_broadcasts,
     setup_memory_limits,
     setup_spark_files,
     utf8_deserializer,
@@ -117,13 +111,6 @@ def main(infile: IO, outfile: IO) -> None:
                 },
             )
 
-        # Receive the configuration values.
-        max_arrow_batch_size = read_int(infile)
-        assert max_arrow_batch_size > 0, (
-            "The maximum arrow batch size should be greater than 0, but got "
-            f"'{max_arrow_batch_size}'"
-        )
-
         # Instantiate data source reader.
         try:
             reader = data_source.streamReader(schema=schema)
@@ -144,10 +131,10 @@ def main(infile: IO, outfile: IO) -> None:
                     commit_func(reader, infile, outfile)
                 outfile.flush()
 
-        except NotImplementedError:
+        except NotImplementedError as e:
             raise PySparkRuntimeError(
                 error_class="PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED",
-                message_parameters={"type": "reader", "method": "reader"},
+                message_parameters={"type": "reader", "error": str(e)},
             )
         except Exception as e:
             raise PySparkRuntimeError(

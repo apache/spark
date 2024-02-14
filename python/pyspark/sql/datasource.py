@@ -169,7 +169,7 @@ class DataSource(ABC):
         Parameters
         ----------
         schema : StructType
-            The schema of the data to be written.
+            The schema of the data to be read.
 
         Returns
         -------
@@ -341,6 +341,10 @@ class DataSourceStreamReader(ABC):
             A dict whose key and values are str type.
         """
         ...
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "initialOffsets"},
+        )
 
     def latestOffset(self) -> dict:
         """
@@ -352,6 +356,10 @@ class DataSourceStreamReader(ABC):
             A dict whose key and values are str type.
         """
         ...
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "latestOffsets"},
+        )
 
     def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
         """
@@ -372,7 +380,12 @@ class DataSourceStreamReader(ABC):
             must be an instance of `InputPartition` or a subclass of it.
         """
         ...
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "partitions"},
+        )
 
+    @abstractmethod
     def read(self, partition) -> Iterator[Union[Tuple, Row]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.

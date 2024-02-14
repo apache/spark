@@ -29,7 +29,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 object PythonStreamingSourceRunner {
@@ -106,8 +105,6 @@ class PythonStreamingSourceRunner(
     // Send output schema
     PythonWorkerUtils.writeUTF(outputSchema.json, dataOut)
 
-    // Send configurations
-    dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
     dataOut.flush()
 
     dataIn = new DataInputStream(

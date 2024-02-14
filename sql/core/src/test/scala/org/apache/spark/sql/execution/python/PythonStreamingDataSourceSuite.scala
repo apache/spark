@@ -31,11 +31,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |
       |class SimpleDataStreamReader(DataSourceStreamReader):
       |    def initialOffset(self):
-      |        return {"0": "2"}
+      |        return {"offset": "0"}
       |    def latestOffset(self):
-      |        return {"0": "2"}
+      |        return {"offset": "2"}
       |    def partitions(self, start: dict, end: dict):
-      |        return [InputPartition(i) for i in range(int(start["0"]))]
+      |        return [InputPartition(i) for i in range(int(start["offset"]))]
       |    def commit(self, end: dict):
       |        1 + 2
       |    def read(self, partition):
@@ -86,10 +86,10 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       pythonDs, dataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
 
     val initialOffset = stream.initialOffset()
-    assert(initialOffset.json == "{\"0\": \"2\"}")
+    assert(initialOffset.json == "{\"offset\": \"0\"}")
     for (_ <- 1 to 50) {
       val offset = stream.latestOffset()
-      assert(offset.json == "{\"0\": \"2\"}")
+      assert(offset.json == "{\"offset\": \"2\"}")
       assert(stream.planInputPartitions(offset, offset).size == 2)
       stream.commit(offset)
     }
@@ -119,6 +119,52 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(err.getMessage.contains("error creating stream reader"))
   }
 
+  test("Method not implemented in stream reader") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |from pyspark.sql.datasource import DataSourceStreamReader
+         |class ErrorDataStreamReader(DataSourceStreamReader):
+         |    def read(self, partition):
+         |        yield (0, partition.value)
+         |
+         |class $errorDataSourceName(DataSource):
+         |    def streamReader(self, schema):
+         |        return ErrorDataStreamReader()
+         |""".stripMargin
+    val inputSchema = StructType.fromDDL("input BINARY")
+
+    val dataSource = createUserDefinedPythonDataSource(errorDataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(errorDataSourceName, dataSource)
+    val pythonDs = new PythonDataSourceV2
+    pythonDs.setShortName("ErrorDataSource")
+    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
+
+    def testMicroBatchStreamError(msg: String)
+                                 (func: PythonMicroBatchStream => Unit): Unit = {
+      val stream = new PythonMicroBatchStream(
+        pythonDs, errorDataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
+      val err = intercept[SparkException] {
+        func(stream)
+      }
+      assert(err.getMessage.contains(msg))
+      stream.stop()
+    }
+
+    testMicroBatchStreamError("[NOT_IMPLEMENTED] initialOffsets is not implemented.") {
+      stream => stream.initialOffset()
+    }
+
+    testMicroBatchStreamError("[NOT_IMPLEMENTED] latestOffsets is not implemented.") {
+      stream => stream.latestOffset()
+    }
+
+    testMicroBatchStreamError("[NOT_IMPLEMENTED] partitions is not implemented.") {
+      stream => stream.planInputPartitions(offset, offset)
+    }
+  }
+
   test("Error in stream reader") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
@@ -136,7 +182,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     spark.dataSource.registerPython(errorDataSourceName, dataSource)
     val pythonDs = new PythonDataSourceV2
     pythonDs.setShortName("ErrorDataSource")
-    val offset = PythonStreamingSourceOffset("{\"0\": \"2\"}")
+    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
 
     def testMicroBatchStreamError(msg: String)
                                  (func: PythonMicroBatchStream => Unit): Unit = {
