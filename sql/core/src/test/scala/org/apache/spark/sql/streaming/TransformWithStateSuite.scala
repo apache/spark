@@ -268,6 +268,35 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  test("transformWithState - maintenance task should clean up expired state") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "1000") {
+      val inputData = MemoryStream[String]
+
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorZeroTTL(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update())
+
+      // State should expire immediately, meaning each answer is independent
+      // of previous counts
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        CheckNewAnswer(("a", "1")),
+        AddData(inputData, "a", "b"),
+        CheckNewAnswer(("a", "1"), ("b", "1")),
+        AddData(inputData, "a", "b"),
+        CheckNewAnswer(("a", "1"), ("b", "1")),
+        StopStream
+      )
+    }
+  }
+
+
   test("transformWithState - test deleteIfExists operator") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,

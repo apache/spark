@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -104,6 +104,10 @@ trait ReadStateStore {
  */
 trait StateStore extends ReadStateStore {
 
+  val schemaForTTLRowKey: StructType = new StructType().add("timestamp", BinaryType)
+
+  val schemaForTTLRowValue: StructType = new StructType().add("key", BinaryType)
+    .add("stateName", BinaryType)
   /**
    * Remove column family with given name, if present.
    */
@@ -320,6 +324,8 @@ trait StateStoreProvider {
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
+
+  def doTTL(): Unit = { }
 
   /**
    * Optional custom metrics that the implementation may want to report.
@@ -733,6 +739,7 @@ object StateStore extends Logging {
         maintenanceThreadPool.execute(() => {
           val startTime = System.currentTimeMillis()
           try {
+            provider.doTTL()
             provider.doMaintenance()
             if (!verifyIfStoreInstanceActive(id)) {
               unload(id)

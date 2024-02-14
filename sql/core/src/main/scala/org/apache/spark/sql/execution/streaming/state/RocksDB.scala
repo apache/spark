@@ -237,7 +237,7 @@ class RocksDB(
     loadedVersion = endVersion
   }
 
-  private def checkColFamilyExists(colFamilyName: String): Boolean = {
+  def checkColFamilyExists(colFamilyName: String): Boolean = {
     colFamilyNameToHandleMap.contains(colFamilyName)
   }
 
@@ -327,6 +327,7 @@ class RocksDB(
     if (conf.trackTotalNumberOfRows) {
       val value = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
       if (value != null) {
+        logError(s"Removing key $key from version $loadedVersion")
         numKeysOnWritingVersion -= 1
       }
     }

@@ -45,6 +45,7 @@ class ValueStateImpl[S](
     ttlMode: TTLMode = TTLMode.NoTTL(),
     ttl: Duration = Duration.fromNanos(0)) extends ValueState[S] with Logging {
 
+  store.createColFamilyIfAbsent ("ttl")
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
   private def encodeKey(): UnsafeRow = {
@@ -63,19 +64,48 @@ class ValueStateImpl[S](
     keyRow
   }
 
-  private def encodeValue(value: S): UnsafeRow = {
-      val ttlForVal = ttlMode match {
-        case NoTTL => -1L
-        case ProcessingTimeTTL => System.currentTimeMillis() + ttl.toMillis
-      }
-      val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
-        .add("ttl", BinaryType)
-      val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
-      val ttlByteArr = SerializationUtils.serialize(ttlForVal)
-      val valueEncoder = UnsafeProjection.create(schemaForValueRow)
-      val valueRow = valueEncoder(InternalRow(valueByteArr, ttlByteArr))
-      valueRow
+  // TODO: validate places that are trying to encode the key and check if we can eliminate/
+  // add caching for some of these calls.
+  private def keyBytes(): Array[Byte] = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (!keyOption.isDefined) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
 
+    val toRow = keyExprEnc.createSerializer()
+    toRow
+      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
+  }
+
+  private def addTTL(expirationTimestamp: Long): Unit = {
+    val timestampArr = SerializationUtils.serialize(expirationTimestamp.asInstanceOf[Serializable])
+    val stateNameArr = SerializationUtils.serialize(stateName.asInstanceOf[Serializable])
+    val groupingKeyArr = keyBytes()
+
+    val rowKeyEncoder = UnsafeProjection.create(store.schemaForTTLRowKey)
+    val rowValueEncoder = UnsafeProjection.create(store.schemaForTTLRowValue)
+
+    val rowKey = rowKeyEncoder(InternalRow(timestampArr))
+    val rowValue = rowValueEncoder(InternalRow(groupingKeyArr, stateNameArr))
+    store.put(rowKey, rowValue, "ttl")
+  }
+
+  private def encodeValue(value: S): UnsafeRow = {
+    val ttlForVal = ttlMode match {
+      case NoTTL => -1L
+      case ProcessingTimeTTL => System.currentTimeMillis() + ttl.toMillis
+    }
+    val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+      .add("ttl", BinaryType)
+    val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
+    val ttlByteArr = SerializationUtils.serialize(ttlForVal)
+    val valueEncoder = UnsafeProjection.create(schemaForValueRow)
+    val valueRow = valueEncoder(InternalRow(valueByteArr, ttlByteArr))
+    ttlMode match {
+      case ProcessingTimeTTL => addTTL(ttlForVal)
+      case _ =>
+    }
+    valueRow
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
@@ -149,5 +179,18 @@ class ValueStateImpl[S](
   /** Function to remove state for given key */
   override def remove(): Unit = {
     store.remove(encodeKey(), stateName)
+  }
+}
+
+object ValueStateImpl {
+  def apply[S](
+    store: StateStore,
+    stateName: String,
+    keyExprEnc: ExpressionEncoder[Any],
+    ttlMode: TTLMode = TTLMode.NoTTL(),
+    ttl: Duration = Duration.Zero
+  ): ValueStateImpl[S] = {
+    store.createColFamilyIfAbsent ("ttl")
+    new ValueStateImpl[S](store, stateName, keyExprEnc, ttlMode, ttl)
   }
 }
