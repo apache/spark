@@ -29,7 +29,6 @@ import org.apache.spark.sql.streaming.OutputMode.{Complete, Update}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
-
   import testImplicits._
 
   private lazy val hadoopConf = spark.sessionState.newHadoopConf()
@@ -46,6 +45,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     assert(operatorMetadata.operatorInfo == expectedMetadata.operatorInfo &&
       operatorMetadata.stateStoreInfo.sameElements(expectedMetadata.stateStoreInfo))
   }
+
   test("Serialize and deserialize stateful operator metadata") {
     withTempDir { checkpointDir =>
       val statePath = new Path(checkpointDir.toString, "state/0")

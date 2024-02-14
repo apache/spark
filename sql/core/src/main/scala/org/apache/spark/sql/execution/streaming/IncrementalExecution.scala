@@ -84,12 +84,6 @@ class IncrementalExecution(
     .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
     .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
 
-  private def stateCheckpointLocationExists(stateCheckpointLocation: Path): Boolean = {
-    val fileManager =
-      CheckpointFileManager.create(stateCheckpointLocation, hadoopConf)
-    fileManager.exists(stateCheckpointLocation)
-  }
-
   /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
@@ -405,7 +399,10 @@ class IncrementalExecution(
       // A map of all (operatorId -> operatorName) in the state metadata
       val opMapInMetadata: Map[Long, String] = {
         var ret = Map.empty[Long, String]
-        if (stateCheckpointLocationExists(new Path(checkpointLocation))) {
+        val stateCheckpointLocation = new Path(checkpointLocation)
+
+        if (CheckpointFileManager.create(
+          stateCheckpointLocation, hadoopConf).exists(stateCheckpointLocation)) {
           try {
             val reader = new StateMetadataPartitionReader(
               new Path(checkpointLocation).getParent.toString,
