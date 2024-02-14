@@ -2869,6 +2869,10 @@
                   </requireJavaVersion>
                   <bannedDependencies>
                     <excludes>
+                      <exclude>org.apache.hadoop:hadoop-common</exclude>
+                      <exclude>org.apache.hadoop:hadoop-hdfs-client</exclude>
+                      <exclude>org.apache.hadoop:hadoop-mapreduce-client-core</exclude>
+                      <exclude>org.apache.hadoop:hadoop-mapreduce-client-jobclient</exclude>
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
                       <exclude>*:*_2.12</exclude>
