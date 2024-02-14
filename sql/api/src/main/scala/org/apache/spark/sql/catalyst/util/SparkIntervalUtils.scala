@@ -134,7 +134,9 @@ trait SparkIntervalUtils {
     def throwIAE(msg: String, e: Exception = null) = {
       throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3255",
-        messageParameters = Map("input" -> input.toString, "msg" -> msg),
+        messageParameters = Map(
+          "input" -> Option(input).map(_.toString).getOrElse("null"),
+          "msg" -> msg),
         cause = e)
     }
 
