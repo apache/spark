@@ -19,12 +19,13 @@ package org.apache.spark.sql.types
 
 import java.util.Locale
 
-import scala.collection.{mutable, Map}
+import scala.collection.{immutable, mutable, Map}
 import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.json4s.JsonDSL._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
@@ -281,8 +282,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
-      throw new IllegalArgumentException(
-        s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3254",
+        messageParameters = immutable.Map(
+          "name" -> name,
+          "fieldNames" -> fieldNames.mkString(", "))))
   }
 
   /**
@@ -294,9 +298,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
-      throw new IllegalArgumentException(
-        s"${nonExistFields.mkString(", ")} do(es) not exist. " +
-          s"Available: ${fieldNames.mkString(", ")}")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3253",
+        messageParameters = immutable.Map(
+          "nonExistFields" -> nonExistFields.mkString(", "),
+          "fieldNames" -> fieldNames.mkString(", ")))
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -309,8 +315,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
-      throw new IllegalArgumentException(
-        s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3252",
+        messageParameters = immutable.Map(
+          "name" -> name,
+          "fieldNames" -> fieldNames.mkString(", "))))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {
