@@ -90,33 +90,6 @@ class IncrementalExecution(
     fileManager.exists(stateCheckpointLocation)
   }
 
-  // A map of all (operatorId -> operatorName) in the state metadata
-  private lazy val opMapInMetadata: Map[Long, String] = {
-    var ret = Map.empty[Long, String]
-    if (stateCheckpointLocationExists(new Path(checkpointLocation))) {
-      try {
-        val reader = new StateMetadataPartitionReader(
-          new Path(checkpointLocation).getParent.toString,
-          new SerializableConfiguration(hadoopConf))
-        val opMetadataList = reader.allOperatorStateMetadata
-        ret = opMetadataList.map { operatorMetadata =>
-          val metadataInfoV1 = operatorMetadata.asInstanceOf[OperatorStateMetadataV1].operatorInfo
-          metadataInfoV1.operatorId -> metadataInfoV1.operatorName
-        }.toMap
-      } catch {
-        case e: Exception =>
-          // no need to throw fatal error, returns empty map
-          logWarning("Error reading metadata path for stateful operator. " +
-            s"This may due to no prior committed batch, or previously run on lower versions:" +
-            s" ${e.getMessage}")
-      }
-    }
-    ret
-  }
-
-  // A map of all stateful operators in the physical plan
-  private var opMapInPhysicalPlan: Map[Long, String] = Map.empty[Long, String]
-
   /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
@@ -219,20 +192,9 @@ class IncrementalExecution(
     }
   }
 
-  object getOpInCurBatchRule extends SparkPlanPartialRule {
-    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
-      case stateStoreWriter: StateStoreWriter if isFirstBatch =>
-        opMapInPhysicalPlan = opMapInPhysicalPlan ++
-          Map(stateStoreWriter.getStateInfo.operatorId -> stateStoreWriter.shortName)
-        stateStoreWriter
-    }
-  }
-
   object WriteStatefulOperatorMetadataRule extends SparkPlanPartialRule {
     override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       case stateStoreWriter: StateStoreWriter if isFirstBatch =>
-        opMapInPhysicalPlan = opMapInPhysicalPlan ++
-          Map(stateStoreWriter.getStateInfo.operatorId -> stateStoreWriter.shortName)
         val metadata = stateStoreWriter.operatorStateMetadata()
         val metadataWriter = new OperatorStateMetadataWriter(new Path(
           checkpointLocation, stateStoreWriter.getStateInfo.operatorId.toString), hadoopConf)
@@ -433,28 +395,59 @@ class IncrementalExecution(
       rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
-    private def checkOperatorValidWithMetadata(): Unit = {
-     (opMapInMetadata.keySet ++ opMapInPhysicalPlan.keySet).foreach { opId =>
-       val opInMetadata = opMapInMetadata.getOrElse(opId, "not found")
-       val opInCurBatch = opMapInPhysicalPlan.getOrElse(opId, "not found")
-       if (opInMetadata != opInCurBatch) {
-         throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
-           opMapInMetadata.values.toSeq,
-           opMapInPhysicalPlan.values.toSeq
-         )
-       }
+    private def checkOperatorValidWithMetadata(planWithStateOpId: SparkPlan): Unit = {
+      // get stateful operators for current batch
+      val opMapInPhysicalPlan: Map[Long, String] = planWithStateOpId.collect {
+        case stateStoreWriter: StateStoreWriter =>
+          stateStoreWriter.getStateInfo.operatorId -> stateStoreWriter.shortName
+      }.toMap
+
+      // A map of all (operatorId -> operatorName) in the state metadata
+      val opMapInMetadata: Map[Long, String] = {
+        var ret = Map.empty[Long, String]
+        if (stateCheckpointLocationExists(new Path(checkpointLocation))) {
+          try {
+            val reader = new StateMetadataPartitionReader(
+              new Path(checkpointLocation).getParent.toString,
+              new SerializableConfiguration(hadoopConf))
+            val opMetadataList = reader.allOperatorStateMetadata
+            ret = opMetadataList.map { operatorMetadata =>
+              val metadataInfoV1 = operatorMetadata
+                .asInstanceOf[OperatorStateMetadataV1]
+                .operatorInfo
+              metadataInfoV1.operatorId -> metadataInfoV1.operatorName
+            }.toMap
+          } catch {
+            case e: Exception =>
+              // no need to throw fatal error, returns empty map
+              logWarning("Error reading metadata path for stateful operator. " +
+                s"This may due to no prior committed batch, or previously run on lower versions:" +
+                s" ${e.getMessage}")
+          }
+        }
+        ret
+      }
+
+      // If state metadata is empty, skip the check
+      if (!opMapInMetadata.isEmpty) {
+        (opMapInMetadata.keySet ++ opMapInPhysicalPlan.keySet).foreach { opId =>
+          val opInMetadata = opMapInMetadata.getOrElse(opId, "not found")
+          val opInCurBatch = opMapInPhysicalPlan.getOrElse(opId, "not found")
+          if (opInMetadata != opInCurBatch) {
+            throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
+              opMapInMetadata,
+              opMapInPhysicalPlan)
+          }
+        }
       }
     }
 
     override def apply(plan: SparkPlan): SparkPlan = {
       val planWithStateOpId = plan transform composedRule
-      // get stateful operators for current batch
-      planWithStateOpId transform getOpInCurBatchRule.rule
       // Need to check before write to metadata because we need to detect add operator
-      // Only check when streaming is restarting and is first batch,
-      // also metadata path is not empty
-      if (isFirstBatch && currentBatchId != 0 && !opMapInMetadata.isEmpty) {
-        checkOperatorValidWithMetadata()
+      // Only check when streaming is restarting and is first batch
+      if (isFirstBatch && currentBatchId != 0) {
+        checkOperatorValidWithMetadata(planWithStateOpId)
       }
       // The rule doesn't change the plan but cause the side effect that metadata is written
       // in the checkpoint directory of stateful operator.

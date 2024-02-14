@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Column, Row}
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, MemoryStream}
 import org.apache.spark.sql.functions._
@@ -248,84 +247,46 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
     }
   }
 
-  test("Changing operator - " +
-    "replace, add, remove operators will trigger error with debug message") {
-    withTempDir { checkpointDir =>
-      val inputData = MemoryStream[Int]
-      val stream = inputData.toDF().withColumn("eventTime", timestamp_seconds($"value"))
-
-      testStream(stream.dropDuplicates())(
-        StartStream(checkpointLocation = checkpointDir.toString),
-        AddData(inputData, 1),
-        ProcessAllAvailable(),
-        StopStream
-      )
-
-      def checkOpChangeError(OpsInMetadataSeq: Seq[String],
-         OpsInCurBatchSeq: Seq[String],
-         ex: Throwable): Unit = {
-        checkError(ex.asInstanceOf[SparkRuntimeException],
-          "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA", "42K03",
-          Map("OpsInMetadataSeq" -> OpsInMetadataSeq.mkString(", "),
-            "OpsInCurBatchSeq" -> OpsInCurBatchSeq.mkString(", "))
-        )
-      }
-
-      // replace dropDuplicates with dropDuplicatesWithinWatermark
-      testStream(stream.withWatermark("eventTime", "10 seconds")
-        .dropDuplicatesWithinWatermark(), Append)(
-        StartStream(checkpointLocation = checkpointDir.toString),
-        AddData(inputData, 2),
-        ExpectFailure[SparkRuntimeException] {
-          (t: Throwable) => {
-            checkOpChangeError(Seq("dedupe"), Seq("dedupeWithinWatermark"), t)
-          }
-        }
-      )
-
-      // replace operator
-      testStream(stream.groupBy("value").count(), Update)(
-        StartStream(checkpointLocation = checkpointDir.toString),
-        AddData(inputData, 3),
-        ExpectFailure[SparkRuntimeException] {
-          (t: Throwable) => {
-            checkOpChangeError(Seq("dedupe"), Seq("stateStoreSave"), t)
-          }
-        }
-      )
-
-      // add operator
-      testStream(stream.dropDuplicates()
-        .groupBy("value").count(), Update)(
-        StartStream(checkpointLocation = checkpointDir.toString),
-        AddData(inputData, 3),
-        ExpectFailure[SparkRuntimeException] {
-          (t: Throwable) => {
-            checkOpChangeError(Seq("dedupe"), Seq("stateStoreSave", "dedupe"), t)
-          }
-        }
-      )
-
-      // remove operator
-      withTempDir { newCheckpointDir =>
+  Seq("Replace", "Add", "Remove").foreach { operation =>
+    test(s"$operation stateful operator will trigger error with guidance") {
+      withTempDir { checkpointDir =>
         val inputData = MemoryStream[Int]
         val stream = inputData.toDF().withColumn("eventTime", timestamp_seconds($"value"))
 
-        testStream(stream.dropDuplicates().groupBy("value").count(), Update)(
-          StartStream(checkpointLocation = newCheckpointDir.toString),
+        testStream(stream.dropDuplicates())(
+          StartStream(checkpointLocation = checkpointDir.toString),
           AddData(inputData, 1),
           ProcessAllAvailable(),
-          StopStream
-        )
-        testStream(stream.dropDuplicates(), Update)(
-          StartStream(checkpointLocation = newCheckpointDir.toString),
+          StopStream)
+
+        val (opsInMetadataSeq, opsInCurBatchSeq, restartStream) = operation match {
+          case "Add" =>
+            (
+              Map(0L -> "dedupe"),
+              Map(0L -> "stateStoreSave", 1L -> "dedupe"),
+              stream.dropDuplicates().groupBy("value").count())
+          case "Replace" =>
+            (Map(0L -> "dedupe"), Map(0L -> "stateStoreSave"), stream.groupBy("value").count())
+          case "Remove" =>
+            (Map(0L -> "dedupe"), Map.empty[Long, String], stream)
+        }
+
+        testStream(restartStream, Update)(
+          StartStream(checkpointLocation = checkpointDir.toString),
           AddData(inputData, 3),
-          ExpectFailure[SparkRuntimeException] {
-            (t: Throwable) => {
-              checkOpChangeError(Seq("stateStoreSave", "dedupe"), Seq("dedupe"), t)
-            }
+          ExpectFailure[SparkRuntimeException] { t => {
+            def formatPairString(pair: (Long, String)): String =
+              s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+
+            checkError(
+              t.asInstanceOf[SparkRuntimeException],
+              "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA",
+              "42K03",
+              Map(
+                "OpsInMetadataSeq" -> opsInMetadataSeq.map(formatPairString).mkString(", "),
+                "OpsInCurBatchSeq" -> opsInCurBatchSeq.map(formatPairString).mkString(", ")))
           }
-        )
+          })
       }
     }
   }

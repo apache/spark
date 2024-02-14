@@ -1703,15 +1703,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def statefulOperatorNotMatchInStateMetadataError(
-      opsInMetadataSeq: Seq[String],
-      opsInCurBatchSeq: Seq[String]):
-    SparkRuntimeException = {
-      new SparkRuntimeException(
-        errorClass = s"STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA",
-        messageParameters = Map(
-          "OpsInMetadataSeq" -> opsInMetadataSeq.mkString(", "),
-          "OpsInCurBatchSeq" -> opsInCurBatchSeq.mkString(", "))
-      )
+    opsInMetadataSeq: Map[Long, String],
+    opsInCurBatchSeq: Map[Long, String]): SparkRuntimeException = {
+    def formatPairString(pair: (Long, String)): String
+    = s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+    new SparkRuntimeException(
+      errorClass = s"STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA",
+      messageParameters = Map(
+        "OpsInMetadataSeq" -> opsInMetadataSeq.map(formatPairString).mkString(", "),
+        "OpsInCurBatchSeq" -> opsInCurBatchSeq.map(formatPairString).mkString(", "))
+    )
   }
 
   def cannotSetTimeoutDurationError(): SparkUnsupportedOperationException = {
