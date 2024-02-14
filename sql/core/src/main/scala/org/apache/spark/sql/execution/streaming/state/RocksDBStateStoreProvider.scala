@@ -79,8 +79,10 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
-    override def getWithCompositeKey(groupingKey: UnsafeRow,
-                                     userKey: UnsafeRow, colFamilyName: String): UnsafeRow = {
+    override def getWithCompositeKey(
+        groupingKey: UnsafeRow,
+        userKey: UnsafeRow,
+        colFamilyName: String): UnsafeRow = {
       verify(useCompositeKey, "Please setUseCompositeKey first")
       verify(groupingKey != null, "Grouping Key cannot be null")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
@@ -94,7 +96,10 @@ private[sql] class RocksDBStateStoreProvider
       value
     }
 
-    override def putWithCompositeKey(groupingKey: UnsafeRow, userKey: UnsafeRow, value: UnsafeRow,
+    override def putWithCompositeKey(
+        groupingKey: UnsafeRow,
+        userKey: UnsafeRow,
+        value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
       verify(useCompositeKey, "Please setUseCompositeKey first")
       verify(state == UPDATING, "Cannot put after already committed or aborted")
@@ -105,7 +110,9 @@ private[sql] class RocksDBStateStoreProvider
         kvEncoder._2.encodeValue(value), colFamilyName)
     }
 
-    override def removeWithCompositeKey(groupingKey: UnsafeRow, userKey: UnsafeRow,
+    override def removeWithCompositeKey(
+        groupingKey: UnsafeRow,
+        userKey: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
       verify(useCompositeKey, "Please setUseCompositeKey first")
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
@@ -164,7 +171,7 @@ private[sql] class RocksDBStateStoreProvider
         val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
         val rowPair = new UnsafeRowPair()
         rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
+          rowPair.withRows(kvEncoder._1.decodeCompositeKey(kv.key)._2,
             kvEncoder._2.decodeValue(kv.value))
             rowPair
         }

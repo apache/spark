@@ -74,8 +74,10 @@ trait ReadStateStore {
   def get(key: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
-  def getWithCompositeKey(groupingKey: UnsafeRow, userKey: UnsafeRow,
-                          colFamilyName: String): UnsafeRow
+  def getWithCompositeKey(
+      groupingKey: UnsafeRow,
+      userKey: UnsafeRow,
+      colFamilyName: String): UnsafeRow
 
   /**
    * Return an iterator containing all the key-value pairs which are matched with

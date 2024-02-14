@@ -84,8 +84,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       map.iterator()
     }
 
-    override def getWithCompositeKey(key: UnsafeRow, userKey: UnsafeRow,
-       colFamilyName: String): UnsafeRow = {
+    override def getWithCompositeKey(
+        key: UnsafeRow,
+        userKey: UnsafeRow,
+        colFamilyName: String): UnsafeRow = {
       throw new UnsupportedOperationException("Get with composite key is not supported for HDFS")
     }
 
@@ -131,8 +133,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       mapToUpdate.get(key)
     }
 
-    override def getWithCompositeKey(key: UnsafeRow, userKey: UnsafeRow,
-       colFamilyName: String): UnsafeRow = {
+    override def getWithCompositeKey(
+        key: UnsafeRow,
+        userKey: UnsafeRow,
+        colFamilyName: String): UnsafeRow = {
       throw new UnsupportedOperationException("Get with composite key is not supported for HDFS")
     }
 
@@ -145,8 +149,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
     }
 
-    override def putWithCompositeKey(key: UnsafeRow, userKey: UnsafeRow, value: UnsafeRow,
-       colFamilyName: String): Unit = {
+    override def putWithCompositeKey(
+        key: UnsafeRow,
+        userKey: UnsafeRow,
+        value: UnsafeRow,
+        colFamilyName: String): Unit = {
       throw new UnsupportedOperationException("Put with composite key is not supported for HDFS")
     }
 
@@ -158,8 +165,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
     }
 
-    override def removeWithCompositeKey(key: UnsafeRow, userKey: UnsafeRow,
-       colFamilyName: String): Unit = {
+    override def removeWithCompositeKey(
+        key: UnsafeRow,
+        userKey: UnsafeRow,
+        colFamilyName: String): Unit = {
       throw new UnsupportedOperationException("Remove with composite key is not supported for HDFS")
     }
 

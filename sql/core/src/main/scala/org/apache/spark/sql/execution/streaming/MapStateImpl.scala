@@ -20,11 +20,19 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.{StateStore, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
+import org.apache.spark.sql.types.{BinaryType, StructType}
 
-class MapStateImpl[K, V](store: StateStore,
-                         stateName: String,
-                         keyEnc: ExpressionEncoder[Any]) extends MapState[K, V] with Logging {
+class MapStateImpl[K, V](
+    store: StateStore,
+    stateName: String,
+    keyEnc: ExpressionEncoder[Any]) extends MapState[K, V] with Logging {
   store.setUseCompositeKey()
+
+  private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+
+  store.createColFamilyIfAbsent(stateName, schemaForKeyRow, numColsPrefixKey = 0,
+    schemaForValueRow)
 
   /** Whether state exists or not. */
   override def exists(): Boolean = {
@@ -66,6 +74,7 @@ class MapStateImpl[K, V](store: StateStore,
 
   /** Get the map associated with grouping key */
   override def getMap(): Map[K, V] = {
+    assert(store.useCompositeKey == true, "composite key not set")
     val encodedGroupingKey = StateEncoder.encodeKey(stateName, keyEnc)
     store.prefixScan(encodedGroupingKey, stateName)
       .map {

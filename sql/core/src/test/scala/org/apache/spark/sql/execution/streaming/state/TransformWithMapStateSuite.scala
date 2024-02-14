@@ -35,9 +35,10 @@ class TestMapStateProcessor
     _mapState = handle.getMapState("sessionState")
   }
 
-  override def handleInputRows(key: String,
-                               inputRows: Iterator[InputMapRow],
-                               timerValues: TimerValues): Iterator[(String, String, String)] = {
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InputMapRow],
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
 
     var output = List[(String, String, String)]()
 
