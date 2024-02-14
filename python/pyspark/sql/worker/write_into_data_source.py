@@ -156,7 +156,7 @@ def main(infile: IO, outfile: IO) -> None:
         data_source = data_source_cls(options=options)  # type: ignore
 
         # Instantiate the data source writer.
-        writer = data_source.writer(schema, overwrite)
+        writer = data_source.streamWriter(schema, overwrite)
 
         # Create a function that can be used in mapInArrow.
         import pyarrow as pa

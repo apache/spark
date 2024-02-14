@@ -24,6 +24,7 @@ import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -87,6 +88,75 @@ class PythonDataSourceSuite extends QueryTest with SharedSparkSession {
       PythonUtils.additionalTestingPath = None
     } finally {
       super.afterAll()
+    }
+  }
+
+  test("data source stream write - overwrite mode") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |import json
+         |import os
+         |from pyspark import TaskContext
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamWriter, WriterCommitMessage
+         |
+         |class SimpleDataSourceStreamWriter(DataSourceStreamWriter):
+         |    def __init__(self, options, overwrite):
+         |        self.options = options
+         |        self.overwrite = overwrite
+         |
+         |    def write(self, iterator):
+         |        context = TaskContext.get()
+         |        partition_id = context.partitionId()
+         |        path = self.options.get("path")
+         |        assert path is not None
+         |        output_path = os.path.join(path, f"{partition_id}.json")
+         |        cnt = 0
+         |        mode = "w" if self.overwrite else "a"
+         |        with open(output_path, mode) as file:
+         |            for row in iterator:
+         |                file.write(json.dumps(row.asDict()) + "\\n")
+         |                cnt += 1
+         |        return WriterCommitMessage()
+         |
+         |class SimpleDataSource(DataSource):
+         |    def streamWriter(self, schema, overwrite):
+         |        return SimpleDataSourceStreamWriter(self.options, overwrite)
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    import testImplicits._
+    val inputData = MemoryStream[Int]
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      checkpointDir.mkdir()
+      val outputDir = new File(path, "output")
+      outputDir.mkdir()
+
+      val resultDf = spark.read.format("json").schema("id INT")
+        .load(outputDir.getAbsolutePath)
+      val q = inputData.toDF()
+        .writeStream
+        .format(dataSourceName)
+        .outputMode("append")
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .start(outputDir.getAbsolutePath)
+      inputData.addData(1, 2, 3)
+      /*
+      Thread.sleep(3000)
+      checkAnswer(
+        resultDf,
+        Seq(Row(1), Row(2), Row(3)))
+      inputData.addData(4, 5)
+      Thread.sleep(3000)
+      checkAnswer(
+        resultDf,
+        Seq(Row(1), Row(2), Row(3), Row(4), Row(5)))
+       */
+      q.stop()
+      q.awaitTermination()
+      assert(q.exception.isEmpty)
     }
   }
 
