@@ -110,22 +110,23 @@ protected def close(): Unit = {
   }
 }
 
-private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
-  self: BasePythonRunner[Iterator[InternalRow], _] =>
+private[python] trait BasicPythonArrowInput
+  extends PythonArrowInput[Iterator[EvalPythonExec.InputRow]] {
+  self: BasePythonRunner[Iterator[EvalPythonExec.InputRow], _] =>
   private val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
 
   protected def writeNextInputToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
-      inputIterator: Iterator[Iterator[InternalRow]]): Boolean = {
+      inputIterator: Iterator[Iterator[EvalPythonExec.InputRow]]): Boolean = {
 
     if (inputIterator.hasNext) {
       val startData = dataOut.size()
       val nextBatch = inputIterator.next()
 
       while (nextBatch.hasNext) {
-        arrowWriter.write(nextBatch.next())
+        arrowWriter.write(nextBatch.next().asInstanceOf[InternalRow])
       }
 
       arrowWriter.finish()

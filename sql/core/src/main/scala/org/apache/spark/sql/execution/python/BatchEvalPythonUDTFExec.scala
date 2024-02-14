@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.execution.python.EvalPythonExec.{ArgumentMetadata, OutputRowIteratorWithForwardedHiddenValues}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -63,7 +63,9 @@ case class BatchEvalPythonUDTFExec(
     EvaluatePython.registerPicklers()  // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
+    val inputIterator =
+      BatchEvalPythonExec.getInputIterator(
+        iter, schema, udtf.forwardHiddenColumnIndexes)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -76,16 +78,18 @@ case class BatchEvalPythonUDTFExec(
     val resultType = udtf.dataType
     val fromJava = EvaluatePython.makeFromJava(resultType)
 
-    outputIterator.flatMap { pickedResult =>
+    val result = outputIterator.flatMap { pickedResult =>
       val unpickledBatch = unpickle.loads(pickedResult)
       unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
     }.map { results =>
       assert(results.getClass.isArray)
-      val res = results.asInstanceOf[Array[_]]
-      pythonMetrics("pythonNumRowsReceived") += res.length
-      fromJava(results).asInstanceOf[GenericArrayData]
+      val arrayResult = results.asInstanceOf[Array[_]]
+      pythonMetrics("pythonNumRowsReceived") += arrayResult.length
+      val iteratorResult = fromJava(results).asInstanceOf[GenericArrayData]
         .array.map(_.asInstanceOf[InternalRow]).iterator
+      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, inputIterator)
     }
+    result
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =
@@ -127,11 +131,11 @@ object PythonUDTFRunner {
     }
     // Write the zero-based indexes of the projected results of all PARTITION BY expressions within
     // the TABLE argument of the Python UDTF call, if applicable.
-    udtf.pythonUDTFPartitionColumnIndexes match {
+    udtf.partitionColumnIndexes match {
       case Some(partitionColumnIndexes) =>
-        dataOut.writeInt(partitionColumnIndexes.partitionChildIndexes.length)
-        assert(partitionColumnIndexes.partitionChildIndexes.nonEmpty)
-        partitionColumnIndexes.partitionChildIndexes.foreach(dataOut.writeInt)
+        dataOut.writeInt(partitionColumnIndexes.childIndexes.size)
+        assert(partitionColumnIndexes.childIndexes.nonEmpty)
+        partitionColumnIndexes.childIndexes.foreach(dataOut.writeInt)
       case None =>
         dataOut.writeInt(0)
     }

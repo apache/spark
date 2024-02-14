@@ -164,16 +164,18 @@ abstract class UnevaluableGenerator extends Generator {
  *                             metadata returned including the result schema of the function call as
  *                             well as optional other information
  * @param children input arguments to the UDTF call; for scalar arguments these are the expressions
- *                 themeselves, and for TABLE arguments, these are instances of
+ *                 themselves, and for TABLE arguments, these are instances of
  *                 [[FunctionTableSubqueryArgumentExpression]]
  * @param evalType identifies whether this is a scalar or aggregate or table function, using an
  *                 instance of the [[PythonEvalType]] enumeration
  * @param udfDeterministic true if this function is deterministic wherein it returns the same result
  *                         rows for every call with the same input arguments
  * @param resultId unique expression ID for this function invocation
- * @param pythonUDTFPartitionColumnIndexes holds the zero-based indexes of the projected results of
- *                                         all PARTITION BY expressions within the TABLE argument of
- *                                         the Python UDTF call, if applicable
+ * @param partitionColumnIndexes holds the zero-based indexes of the projected results of all
+ *                               PARTITION BY expressions within the TABLE argument of the Python
+ *                               UDTF call, if applicable
+ * @param forwardHiddenColumnIndexes holds the zero-based indexes of hidden pass-through columns
+ *                                   within a TABLE argument of the Python UDTF call, if applicable
  */
 case class PythonUDTF(
     name: String,
@@ -184,7 +186,8 @@ case class PythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
+    partitionColumnIndexes: Option[PythonUDTFColumnIndexes] = None,
+    forwardHiddenColumnIndexes: Option[PythonUDTFColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -195,13 +198,39 @@ case class PythonUDTF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDTF =
     copy(children = newChildren)
+
+  /**
+   * This computes and returns the indexes of the output table columns with the same names as the
+   * columns indexed by the [[forwardedHiddenColumnIndexes]]. With these output table column
+   * indexes, we can assign the same values to the output table columns as the corresponding input
+   * table columns without sending them from the JVM to the Python UDTF's 'eval' method, for
+   * efficiency.
+   */
+  lazy val outputTableForwardedHiddenColumnIndexes: Seq[Int] = {
+    children.collectFirst {
+      case t: FunctionTableSubqueryArgumentExpression
+        if forwardHiddenColumnIndexes.nonEmpty => t
+    }.map { inputTableArgument: FunctionTableSubqueryArgumentExpression =>
+      val inputTableSchema = inputTableArgument.plan.schema
+      val inputColumnNames: Array[String] = inputTableSchema.map(_.name).toArray
+      val forwardedColumnNames: Set[String] =
+        forwardHiddenColumnIndexes.get.childIndexes.map { i: Int =>
+          inputColumnNames(i)
+        }
+      val outputColumnNames: Set[String] = elementSchema.map(_.name).toSet
+      outputColumnNames.zipWithIndex.filter { case (name, _) =>
+        forwardedColumnNames.contains(name)
+      }.map(_._2).toSeq
+    }.getOrElse(Seq.empty)
+  }
 }
 
 /**
- * Holds the indexes of the TABLE argument to a Python UDTF call, if applicable.
- * @param partitionChildIndexes The indexes of the partitioning columns in each TABLE argument.
+ * Holds zero-based indexes of specific columns within a TABLE argument to a Python UDTF call,
+ * if applicable. These can refer to partitioning columns or hidden pass-through columns
+ * @param childIndexes The indexes of the columns within each TABLE argument.
  */
-case class PythonUDTFPartitionColumnIndexes(partitionChildIndexes: Seq[Int])
+case class PythonUDTFColumnIndexes(childIndexes: Set[Int])
 
 /**
  * A placeholder of a polymorphic Python table-valued function.
@@ -329,8 +358,14 @@ case class PythonUDTFAnalyzeResult(
  * @param alias If present, this is the alias for the column or expression as visible from the
  *              UDTF's 'eval' method. This is required if the expression is not a simple column
  *              reference.
+ * @param forwardHidden If true, the UDTF is specifying for Catalyst to pass the column or
+ *                      expression through to the output table without making it visible to the
+ *                      UDTF's 'eval' method.
  */
-case class PythonUDTFSelectedExpression(expression: Expression, alias: Option[String])
+case class PythonUDTFSelectedExpression(
+    expression: Expression,
+    alias: Option[String],
+    forwardHidden: Boolean)
 
 /**
  * A place holder used when printing expressions without debugging information such as the

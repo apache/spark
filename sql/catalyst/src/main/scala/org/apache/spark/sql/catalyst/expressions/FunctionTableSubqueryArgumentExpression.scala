@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Project, Repartition, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -143,11 +145,11 @@ case class FunctionTableSubqueryArgumentExpression(
     // If instructed, add a projection to compute the specified input expressions.
     if (selectedInputExpressions.nonEmpty) {
       val projectList: Seq[NamedExpression] = selectedInputExpressions.map {
-        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String)) =>
+        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String), _) =>
           Alias(expression, alias)()
-        case PythonUDTFSelectedExpression(a: Attribute, None) =>
+        case PythonUDTFSelectedExpression(a: Attribute, None, _) =>
           a
-        case PythonUDTFSelectedExpression(other: Expression, None) =>
+        case PythonUDTFSelectedExpression(other: Expression, None, _) =>
           throw QueryCompilationErrors
             .invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(other.sql)
       } ++ extraProjectedPartitioningExpressions
@@ -166,19 +168,32 @@ case class FunctionTableSubqueryArgumentExpression(
     val extraPartitionByExpressionsToIndexes: Map[Expression, Int] =
       extraProjectedPartitioningExpressions.map(_.child).zipWithIndex.toMap
     partitionByExpressions.map { e =>
-      subqueryOutputs.get(e).getOrElse {
-        extraPartitionByExpressionsToIndexes.get(e).get + plan.output.length
-      }
+      subqueryOutputs.getOrElse(e, plan.output.length + extraPartitionByExpressionsToIndexes(e))
     }
   }
 
-  private lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
+  private lazy val extraProjectedPartitioningExpressions: Set[Alias] = {
     partitionByExpressions.filter { e =>
       !subqueryOutputs.contains(e)
     }.zipWithIndex.map { case (expr, index) =>
       Alias(expr, s"partition_by_$index")()
-    }
+    }.toSet
   }
 
   private lazy val subqueryOutputs: Map[Expression, Int] = plan.output.zipWithIndex.toMap
+
+  /**
+   * These are the indexes of the selected input expressions that the 'analyze' method of the UDTF
+   * marked as 'forwardHidden', which means that the UDTF is specifying for Catalyst to pass the
+   * expression through to the output table without making it visible to the 'eval' method.
+   */
+  lazy val forwardHiddenExpressionIndexes: Seq[Int] = {
+    val results = ArrayBuffer.empty[Int]
+    selectedInputExpressions.zipWithIndex.foreach {
+      case (p: PythonUDTFSelectedExpression, index: Int) if p.forwardHidden =>
+        results.append(plan.output.length + index)
+      case _ =>
+    }
+    results.toSeq
+  }
 }

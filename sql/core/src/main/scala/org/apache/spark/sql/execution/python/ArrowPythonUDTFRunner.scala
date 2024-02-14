@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.python
 import java.io.DataOutputStream
 
 import org.apache.spark.api.python._
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.PythonUDTF
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
@@ -41,7 +40,7 @@ class ArrowPythonUDTFRunner(
     protected override val workerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
+  extends BasePythonRunner[Iterator[EvalPythonExec.InputRow], ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
       jobArtifactUUID)
   with BasicPythonArrowInput

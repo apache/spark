@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
+import scala.collection.mutable
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,6 +32,102 @@ object EvalPythonExec {
    * @param name the name of the argument if it's a `NamedArgumentExpression`
    */
   case class ArgumentMetadata(offset: Int, name: Option[String])
+
+  /**
+   * Represents one row sent as input to a Python UDF.
+   * The [[forwardedHiddenValues]] is an optional array of other values forwarded from the input
+   * row to the output row unchanged.
+   */
+  abstract class InputRow(val forwardedHiddenValues: Array[Any])
+
+  /** Represents one row sent as input to a Python UDF comprising discrete input row values. */
+  case class InternalInputRow(row: InternalRow, override val forwardedHiddenValues: Array[Any])
+    extends InputRow(forwardedHiddenValues)
+
+  /** Represents one row sent as input to a Python UDF comprising serialized input row bytes. */
+  case class SerializedInputRow(bytes: Array[Byte], override val forwardedHiddenValues: Array[Any])
+    extends InputRow(forwardedHiddenValues)
+
+  /**
+   * Convenience method to convert an iterator of iterators of rows to the above [[InputRow]].
+   * No forwarded hidden values are used here, so the second element of the tuple is an empty array.
+   */
+  def toInternalInputRows(iter: Iterator[Iterator[InternalRow]]): Iterator[Iterator[InputRow]] =
+    iter.map { rowIter: Iterator[InternalRow] =>
+      rowIter.map { row: InternalRow =>
+        EvalPythonExec.InternalInputRow(row, Array.empty)
+      }
+    }
+
+  /**
+   * This is a wrapper over an iterator of [[InputRow]] that keeps track of the most recent
+   * forwarded hidden values. This is used to insert these values into the output row iterator to
+   * implement the forwarding feature by skipping sending their values to the Python interpreter.
+   */
+  case class InputRowIteratorWithForwardedHiddenValues(iter: Iterator[InputRow])
+    extends Iterator[InputRow] {
+    override def hasNext: Boolean = iter.hasNext
+    override def next(): InputRow = {
+      val result: InputRow = iter.next()
+      mostRecentValues = result.forwardedHiddenValues
+      result
+    }
+    def forwardedHiddenValues: Array[Any] = mostRecentValues
+    private var mostRecentValues: Array[Any] = Array.empty
+  }
+
+  /**
+   * This is a wrapper over an iterator of [[InternalRow]] that acts as a wrapper over
+   * [[internalRowIterator]], while also assigning the most recent forwarded hidden values from the
+   * provided [[inputIterator]]. By doing so, we implement the forwarding feature by skipping
+   * sending their values to the Python interpreter.
+   */
+  case class OutputRowIteratorWithForwardedHiddenValues(
+      udtf: PythonUDTF,
+      internalRowIterator: Iterator[InternalRow],
+      inputIterator: InputRowIteratorWithForwardedHiddenValues)
+    extends Iterator[InternalRow] {
+    override def hasNext: Boolean = internalRowIterator.hasNext
+    override def next(): InternalRow = {
+      val result: InternalRow = internalRowIterator.next()
+      udtf.outputTableForwardedHiddenColumnIndexes.foreach { index: Int =>
+        result.update(index, inputIterator.forwardedHiddenValues(index))
+      }
+      result
+    }
+  }
+
+  /**
+   * This method looks up values from a row by the child indexes of the [[PythonUDTFColumnIndexes]].
+   * It returns a [[LookupFromRowResult]] containing the indexed values and the remaining values.
+   * This is useful for separating forwarded hidden column values from rows so that we can avoid
+   * sending them to/from the JVM and Python worker, for efficiency.
+   */
+  case class LookupFromRowResult(
+      indexedValues: Array[Any],
+      nonIndexedValues: Array[Any])
+  def lookupIndexedColumnValuesFromRow(
+      indexes: Option[PythonUDTFColumnIndexes],
+      rowValues: Array[Any]): LookupFromRowResult = {
+    indexes.map { p =>
+      val indexedBuffer = mutable.ArrayBuffer.empty[Any]
+      val remainingBuffer = mutable.ArrayBuffer.empty[Any]
+      rowValues.zipWithIndex.foreach { case (value: Any, index: Int) =>
+        if (p.childIndexes.contains(index)) {
+          indexedBuffer += value
+        } else {
+          remainingBuffer += value
+        }
+      }
+      LookupFromRowResult(
+        indexedBuffer.toArray,
+        remainingBuffer.toArray)
+    }.getOrElse {
+      LookupFromRowResult(
+        indexedValues = Array.empty,
+        nonIndexedValues = rowValues)
+    }
+  }
 }
 
 /**

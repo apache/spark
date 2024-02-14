@@ -281,12 +281,14 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     val selectedInputExpressions = ArrayBuffer.empty[PythonUDTFSelectedExpression]
     for (_ <- 0 until numSelectedInputExpressions) {
       val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
-      val parsed: Expression = parser.parseExpression(expressionSql)
-      val alias: String = PythonWorkerUtils.readUTF(dataIn)
+      val expression: Expression = parser.parseExpression(expressionSql)
+      val alias: Option[String] = {
+        val string = PythonWorkerUtils.readUTF(dataIn)
+        if (string.nonEmpty) Some(string) else None
+      }
+      val forwardHidden: Boolean = dataIn.readInt() == 1
       selectedInputExpressions.append(
-        PythonUDTFSelectedExpression(
-          parsed,
-          if (alias.nonEmpty) Some(alias) else None))
+        PythonUDTFSelectedExpression(expression, alias, forwardHidden))
     }
     PythonUDTFAnalyzeResult(
       schema = schema,

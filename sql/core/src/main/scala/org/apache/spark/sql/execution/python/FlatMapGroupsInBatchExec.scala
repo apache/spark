@@ -94,7 +94,7 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
         jobArtifactUUID,
         conf.pythonUDFProfiler)
 
-      executePython(data, output, runner)
+      executePython(EvalPythonExec.toInternalInputRows(data), output, runner)
     }}
   }
 }

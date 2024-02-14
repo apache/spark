@@ -71,7 +71,7 @@ class MapInBatchEvaluatorFactory(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        None).compute(batchIter, context.partitionId(), context)
+        None).compute(EvalPythonExec.toInternalInputRows(batchIter), context.partitionId(), context)
 
       val unsafeProj = UnsafeProjection.create(output, output)
 

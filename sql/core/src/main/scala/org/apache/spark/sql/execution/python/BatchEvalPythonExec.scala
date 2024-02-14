@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
+import org.apache.spark.sql.execution.python.EvalPythonExec.{ArgumentMetadata, InputRowIteratorWithForwardedHiddenValues}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -70,7 +70,8 @@ class BatchEvalPythonEvaluatorFactory(
     EvaluatePython.registerPicklers() // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
+    val inputIterator =
+      BatchEvalPythonExec.getInputIterator(iter, schema, forwardHiddenColumnIndexes = None)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -107,7 +108,9 @@ class BatchEvalPythonEvaluatorFactory(
 object BatchEvalPythonExec {
   def getInputIterator(
       iter: Iterator[InternalRow],
-      schema: StructType): Iterator[Array[Byte]] = {
+      schema: StructType,
+      forwardHiddenColumnIndexes:
+        Option[PythonUDTFColumnIndexes]): InputRowIteratorWithForwardedHiddenValues = {
     val dataTypes = schema.map(_.dataType)
     val needConversion = dataTypes.exists(EvaluatePython.needConversionInPython)
 
@@ -126,7 +129,7 @@ object BatchEvalPythonExec {
       /* valueCompare = */ false)
     // Input iterator to Python: input rows are grouped so we send them in batches to Python.
     // For each row, add it to the queue.
-    iter.map { row =>
+    val result = iter.map { row =>
       if (needConversion) {
         EvaluatePython.toJava(row, schema)
       } else {
@@ -140,6 +143,17 @@ object BatchEvalPythonExec {
         }
         fields
       }
-    }.grouped(100).map(x => pickle.dumps(x.toArray))
+    }.grouped(100).map { x =>
+      // Map the values in the input row to the indexes in [[forwardHiddenColumnIndexes]].
+      val lookupResult: EvalPythonExec.LookupFromRowResult =
+        EvalPythonExec.lookupIndexedColumnValuesFromRow(forwardHiddenColumnIndexes, x.toArray)
+      EvalPythonExec.SerializedInputRow(
+        bytes = pickle.dumps(lookupResult.nonIndexedValues),
+        forwardedHiddenValues = lookupResult.indexedValues)
+    }
+    // Wrap the result in an iterator that returns the input rows while saving any forwarded hidden
+    // column values inside. This is used to insert these values into the output row iterator to
+    // implement the hidden column forwarding feature.
+    InputRowIteratorWithForwardedHiddenValues(result)
   }
 }

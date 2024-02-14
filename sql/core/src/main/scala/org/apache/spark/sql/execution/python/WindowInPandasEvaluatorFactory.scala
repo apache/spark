@@ -370,7 +370,8 @@ class WindowInPandasEvaluatorFactory(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        profiler).compute(pythonInput, context.partitionId(), context)
+        profiler).compute(
+          EvalPythonExec.toInternalInputRows(pythonInput), context.partitionId(), context)
 
       val joined = new JoinedRow
 
