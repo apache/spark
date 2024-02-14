@@ -900,7 +900,7 @@ case class MapFromEntries(child: Expression)
   """,
   group = "map_funcs",
   since = "4.0.0")
-case class SortMap(base: Expression, ascendingOrder: Expression)
+case class MapSort(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with NullIntolerant with QueryErrorsBase {
 
   def this(e: Expression) = this(e, Literal(true))
@@ -1048,10 +1048,10 @@ case class SortMap(base: Expression, ascendingOrder: Expression)
        |""".stripMargin
   }
 
-  override def prettyName: String = "sort_map"
+  override def prettyName: String = "map_sort"
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-    : SortMap = copy(base = newLeft, ascendingOrder = newRight)
+    : MapSort = copy(base = newLeft, ascendingOrder = newRight)
 }
 
 /**

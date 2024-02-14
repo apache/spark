@@ -6986,6 +6986,13 @@ object functions {
   @scala.annotation.varargs
   def map_concat(cols: Column*): Column = Column.fn("map_concat", cols: _*)
 
+  /**
+   * Sorts the input map in ascending order based on the natural order of map keys.
+   * @group map_funcs
+   * @since 4.0.0
+   */
+  def map_sort(e: Column): Column = Column.fn("map_sort", e)
+
   // scalastyle:off line.size.limit
   /**
    * Parses a column containing a CSV string into a `StructType` with the specified schema.
