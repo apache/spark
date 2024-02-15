@@ -49,7 +49,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.status.api.v1.JobData
-import org.apache.spark.tags.ExtendedLevelDBTest
+import org.apache.spark.tags.{ExtendedLevelDBTest, WebBrowserTest}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -561,7 +561,9 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     // app is no longer incomplete
     listApplications(false) should not contain(appId)
 
-    assert(jobcount === getNumJobs("/jobs"))
+    eventually(stdTimeout, stdInterval) {
+      assert(jobcount === getNumJobs("/jobs"))
+    }
 
     // no need to retain the test dir now the tests complete
     ShutdownHookManager.registerShutdownDeleteDir(logDir)
@@ -795,12 +797,14 @@ object FakeAuthFilter {
   val FAKE_HTTP_USER = "HTTP_USER"
 }
 
+@WebBrowserTest
 @ExtendedLevelDBTest
 class LevelDBBackendHistoryServerSuite extends HistoryServerSuite {
   override protected def diskBackend: History.HybridStoreDiskBackend.Value =
     HybridStoreDiskBackend.LEVELDB
 }
 
+@WebBrowserTest
 class RocksDBBackendHistoryServerSuite extends HistoryServerSuite {
   override protected def diskBackend: History.HybridStoreDiskBackend.Value =
     HybridStoreDiskBackend.ROCKSDB

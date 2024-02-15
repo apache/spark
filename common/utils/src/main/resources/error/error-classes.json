@@ -7767,6 +7767,76 @@
       "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
     ]
   },
+  "_LEGACY_ERROR_TEMP_3249" : {
+    "message" : [
+      "Failed to convert value <value> (class of <valueClass>}) with the type of <dataType> to JSON."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3250" : {
+    "message" : [
+      "Failed to convert the JSON string '<other>' to a field."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3251" : {
+    "message" : [
+      "Failed to convert the JSON string '<other>' to a data type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3252" : {
+    "message" : [
+      "<name> does not exist. Available: <fieldNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3253" : {
+    "message" : [
+      "<nonExistFields> do(es) not exist. Available: <fieldNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3254" : {
+    "message" : [
+      "<name> does not exist. Available: <fieldNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3255" : {
+    "message" : [
+      "Error parsing '<input>' to interval, <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3256" : {
+    "message" : [
+      "Unrecognized datetime pattern: <pattern>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3257" : {
+    "message" : [
+      "All week-based patterns are unsupported since Spark 3.0, detected: <c>, Please use the SQL function EXTRACT instead"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3258" : {
+    "message" : [
+      "Illegal pattern character: <c>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3259" : {
+    "message" : [
+      "Too many pattern letters: <style>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3260" : {
+    "message" : [
+      "'<s>' is an invalid timestamp"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3261" : {
+    "message" : [
+      "Unknown output mode <outputMode>. Accepted output modes are 'append', 'complete', 'update'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3262" : {
+    "message" : [
+      "Doesn't support month or year interval: <interval>"
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"

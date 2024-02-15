@@ -622,9 +622,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val segments = goldenOutput.split("-- !query.*\n")
 
       val numSegments = outputs.map(_.numSegments).sum + 1
-      assert(segments.size == numSegments,
-        s"Expected $numSegments blocks in result file but got " +
-          s"${segments.size}. Try regenerate the result files.")
+      assertResult(
+        numSegments,
+        s"blocks in result file '$resultFile'. Try regenerating the result files.") {
+        segments.size
+      }
       var curSegment = 0
 
       outputs.map { output =>

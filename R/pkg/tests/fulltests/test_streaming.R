@@ -257,7 +257,8 @@ test_that("Trigger", {
                "Value for trigger.processingTime must be a non-empty string.")
 
   expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
-               trigger.processingTime = "invalid"), "illegal argument")
+               trigger.processingTime = "invalid"),
+               "Error parsing 'invalid' to interval, unrecognized number 'invalid'")
 
   expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
                trigger.once = ""), "Value for trigger.once must be TRUE.")

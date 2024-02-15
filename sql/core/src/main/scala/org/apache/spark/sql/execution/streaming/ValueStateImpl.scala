@@ -32,13 +32,22 @@ import org.apache.spark.sql.types._
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
  * @param keyEnc - Spark SQL encoder for key
- * @tparam K - data type of key
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any]) extends ValueState[S] with Logging {
+
+  private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  private val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
+  private val keySerializer = keyExprEnc.createSerializer()
+
+  private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+  private val valueEncoder = UnsafeProjection.create(schemaForValueRow)
+
+  store.createColFamilyIfAbsent(stateName, schemaForKeyRow, numColsPrefixKey = 0,
+    schemaForValueRow)
 
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
@@ -48,20 +57,13 @@ class ValueStateImpl[S](
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
 
-    val toRow = keyExprEnc.createSerializer()
-    val keyByteArr = toRow
-      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
-
-    val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-    val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
+    val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
     val keyRow = keyEncoder(InternalRow(keyByteArr))
     keyRow
   }
 
   private def encodeValue(value: S): UnsafeRow = {
-    val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
     val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
-    val valueEncoder = UnsafeProjection.create(schemaForValueRow)
     val valueRow = valueEncoder(InternalRow(valueByteArr))
     valueRow
   }

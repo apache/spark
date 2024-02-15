@@ -81,7 +81,7 @@ object RowEncoder {
     case DoubleType => BoxedDoubleEncoder
     case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
     case BinaryType => BinaryEncoder
-    case StringType => StringEncoder
+    case _: StringType => StringEncoder
     case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
     case TimestampType => TimestampEncoder(lenient)
     case TimestampNTZType => LocalDateTimeEncoder
