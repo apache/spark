@@ -21,13 +21,14 @@ import unittest.mock
 from io import StringIO
 
 from pyspark import SparkConf, SparkContext
-from pyspark.errors import PySparkRuntimeError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.sql import SparkSession, SQLContext, Row
 from pyspark.sql.functions import col
 from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
 )
+from pyspark.sql.profiler import Profile
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkTestCase, PySparkErrorTestUtils
 
@@ -468,6 +469,62 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
             exception=pe2.exception,
             error_class="UNSUPPORTED_LOCAL_CONNECTION_STRING",
             message_parameters={},
+        )
+
+
+class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
+    def setUp(self):
+        self.mock_spark_session = unittest.mock.MagicMock()
+        self.profile = Profile(self.mock_spark_session)
+
+    def test_show_memory_type(self):
+        self.profile.show(type="memory")
+        self.mock_spark_session.showMemoryProfiles.assert_called_once()
+
+    def test_show_perf_type(self):
+        self.profile.show(type="perf")
+        self.mock_spark_session.showPerfProfiles.assert_called_once()
+
+    def test_show_no_type(self):
+        self.profile.show()
+        self.mock_spark_session.showPerfProfiles.assert_called_once()
+        self.mock_spark_session.showMemoryProfiles.assert_called_once()
+
+    def test_show_invalid_type(self):
+        with self.assertRaises(PySparkValueError) as e:
+            self.profile.show(type="invalid")
+        self.check_error(
+            exception=e.exception,
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "type",
+                "allowed_values": str(["perf", "memory"]),
+            },
+        )
+
+    def test_dump_memory_type(self):
+        self.profile.dump("path/to/dump", type="memory")
+        self.mock_spark_session.dumpMemoryProfiles.assert_called_once_with("path/to/dump", None)
+
+    def test_dump_perf_type(self):
+        self.profile.dump("path/to/dump", type="perf")
+        self.mock_spark_session.dumpPerfProfiles.assert_called_once_with("path/to/dump", None)
+
+    def test_dump_no_type(self):
+        self.profile.dump("path/to/dump")
+        self.mock_spark_session.dumpPerfProfiles.assert_called_once_with("path/to/dump", None)
+        self.mock_spark_session.dumpMemoryProfiles.assert_called_once_with("path/to/dump", None)
+
+    def test_dump_invalid_type(self):
+        with self.assertRaises(PySparkValueError) as e:
+            self.profile.dump("path/to/dump", type="invalid")
+        self.check_error(
+            exception=e.exception,
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "type",
+                "allowed_values": str(["perf", "memory"]),
+            },
         )
 
 
