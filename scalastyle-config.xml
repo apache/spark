@@ -467,6 +467,16 @@ This file is divided into 3 sections:
     <customMessage>Avoid using FileBackedOutputStream due to CVE-2023-2976.</customMessage>
   </check>
 
+  <check customId="GuavaAtomicDoubleArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">AtomicDoubleArray</parameter></parameters>
+    <customMessage>Avoid using AtomicDoubleArray due to CVE-2018-10237.</customMessage>
+  </check>
+
+  <check customId="GuavaCompoundOrdering" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">CompoundOrdering</parameter></parameters>
+    <customMessage>Avoid using CompoundOrdering due to CVE-2018-10237.</customMessage>
+  </check>
+
   <check customId="pathfromuri" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">new Path\(new URI\(</parameter></parameters>
     <customMessage><![CDATA[
