@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.master.ui
 
 import jakarta.servlet.http.HttpServletResponse.SC_METHOD_NOT_ALLOWED
-
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}

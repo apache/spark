@@ -25,6 +25,8 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Files}
+import jakarta.servlet._
+import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.JsonAST._
@@ -39,8 +41,6 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatestplus.selenium.WebBrowser
-import jakarta.servlet._
-import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
 import org.apache.spark._
 import org.apache.spark.internal.config._

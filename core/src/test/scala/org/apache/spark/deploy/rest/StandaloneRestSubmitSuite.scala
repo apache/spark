@@ -20,10 +20,10 @@ package org.apache.spark.deploy.rest
 import java.io.DataOutputStream
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
-import jakarta.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 
+import jakarta.servlet.http.HttpServletResponse
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 

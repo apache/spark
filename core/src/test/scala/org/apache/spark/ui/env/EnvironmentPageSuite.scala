@@ -18,7 +18,6 @@
 package org.apache.spark.ui.env
 
 import jakarta.servlet.http.HttpServletRequest
-
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkConf
