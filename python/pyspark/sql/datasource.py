@@ -411,7 +411,7 @@ class DataSourceStreamReader(ABC):
         """
         ...
 
-    def commit(self, end: dict):
+    def commit(self, end: dict) -> None:
         """
         Informs the source that Spark has completed processing all data for offsets less than or
         equal to `end` and will only request offsets greater than `end` in the future.
@@ -423,7 +423,7 @@ class DataSourceStreamReader(ABC):
         """
         ...
 
-    def stop(self):
+    def stop(self) -> None:
         """
         Stop this source and free any resources it has allocated.
         Invoked when the streaming query terminated.

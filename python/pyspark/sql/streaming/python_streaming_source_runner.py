@@ -29,7 +29,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource
+from pyspark.sql.datasource import DataSource, DataSourceStreamReader
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
@@ -51,17 +51,17 @@ partitions_func_id = 886
 commit_func_id = 887
 
 
-def initial_offset_func(reader, outfile):
+def initial_offset_func(reader: IO, outfile: IO):
     offset = reader.initialOffset()
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def latest_offset_func(reader, outfile):
+def latest_offset_func(reader: DataSourceStreamReader, outfile: IO):
     offset = reader.latestOffset()
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def partitions_func(reader, infile, outfile):
+def partitions_func(reader: DataSourceStreamReader, infile: IO, outfile: IO):
     start_offset = json.loads(utf8_deserializer.loads(infile))
     end_offset = json.loads(utf8_deserializer.loads(infile))
     partitions = reader.partitions(start_offset, end_offset)
@@ -71,7 +71,7 @@ def partitions_func(reader, infile, outfile):
         pickleSer._write_with_length(partition, outfile)
 
 
-def commit_func(reader, infile, outfile):
+def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO):
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)
