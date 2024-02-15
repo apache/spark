@@ -326,8 +326,7 @@ private[sql] class RocksDBStateStoreProvider
     val kvEncoder = keyValueEncoderMap.get("ttl")
     rocksDB.iterator("ttl").flatMap { kv =>
       val key = kvEncoder._1.decodeKey(kv.key)
-      val ttl = SerializationUtils.deserialize(
-        key.getBinary(0)).asInstanceOf[Long]
+      val ttl = key.getLong(0)
       if (ttl <= System.currentTimeMillis()) {
         Some(key)
       } else {

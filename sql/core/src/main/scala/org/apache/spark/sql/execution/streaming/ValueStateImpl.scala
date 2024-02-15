@@ -50,11 +50,11 @@ class ValueStateImpl[S](
 
   private val schemaForValueRow: StructType = new StructType()
     .add("value", BinaryType)
-    .add("ttl", BinaryType)
+    .add("ttl", LongType)
   private val valueEncoder = UnsafeProjection.create(schemaForValueRow)
 
   private val schemaForTTLKeyRow: StructType = new StructType()
-    .add("ttl", BinaryType)
+    .add("ttl", LongType)
     .add("stateName", BinaryType)
     .add("groupingKey", BinaryType)
     .add("userKey", BinaryType)
@@ -91,11 +91,11 @@ class ValueStateImpl[S](
   }
 
   private def addTTL(expirationTimestamp: Long): Unit = {
-    val timestampArr = SerializationUtils.serialize(expirationTimestamp.asInstanceOf[Serializable])
     val stateNameArr = SerializationUtils.serialize(stateName.asInstanceOf[Serializable])
     val groupingKeyArr = keyBytes()
 
-    val rowKey = ttlKeyRowEncoder(InternalRow(timestampArr, stateNameArr, groupingKeyArr, null))
+    val rowKey = ttlKeyRowEncoder(
+      InternalRow(expirationTimestamp, stateNameArr, groupingKeyArr, null))
     val rowValue = ttlValueRowEncoder(InternalRow(null))
     store.put(rowKey, rowValue, "ttl")
   }
@@ -106,8 +106,7 @@ class ValueStateImpl[S](
       case ProcessingTimeTTL => System.currentTimeMillis() + ttl.toMillis
     }
     val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
-    val ttlByteArr = SerializationUtils.serialize(ttlForVal.asInstanceOf[Serializable])
-    val valueRow = valueEncoder(InternalRow(valueByteArr, ttlByteArr))
+    val valueRow = valueEncoder(InternalRow(valueByteArr, ttlForVal))
     ttlMode match {
       case ProcessingTimeTTL => addTTL(ttlForVal)
       case _ =>
@@ -131,9 +130,7 @@ class ValueStateImpl[S](
         case NoTTL =>
           Some(resState)
         case ProcessingTimeTTL =>
-          val ttlForVal = SerializationUtils
-            .deserialize(retRow.getBinary(1))
-            .asInstanceOf[Long]
+          val ttlForVal = retRow.getLong(1)
           if (ttlForVal <= System.currentTimeMillis()) {
             logDebug(s"Value is expired for state $stateName")
             store.remove(encodeKey(), stateName)
@@ -158,9 +155,7 @@ class ValueStateImpl[S](
         case NoTTL =>
           resState
         case ProcessingTimeTTL =>
-          val ttlForVal = SerializationUtils
-            .deserialize(retRow.getBinary(1))
-            .asInstanceOf[Long]
+          val ttlForVal = retRow.getLong(1)
           if (ttlForVal <= System.currentTimeMillis()) {
             logDebug(s"Value is expired for state $stateName")
             store.remove(encodeKey(), stateName)
