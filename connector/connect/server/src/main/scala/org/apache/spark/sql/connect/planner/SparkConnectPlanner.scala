@@ -210,9 +210,9 @@ class SparkConnectPlanner(
       // Apply the transformation.
       .map(p => p.transform(extension, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .get()
   }
 
   private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
@@ -1473,9 +1473,9 @@ class SparkConnectPlanner(
       // Apply the transformation.
       .map(p => p.transform(extension, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .get
   }
 
   /**
@@ -2713,8 +2713,7 @@ class SparkConnectPlanner(
       // Apply the transformation.
       .map(p => p.process(extension, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
     executeHolder.eventsManager.postFinished()
   }
