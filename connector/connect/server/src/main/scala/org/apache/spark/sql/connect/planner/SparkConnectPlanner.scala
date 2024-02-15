@@ -208,7 +208,7 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.transform(extension, this))
+      .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
@@ -1471,7 +1471,7 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.transform(extension, this))
+      .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
       .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
@@ -2711,9 +2711,9 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.process(extension, this))
+      .map(p => p.process(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.isPresent)
+      .find(_ == true)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
     executeHolder.eventsManager.postFinished()
   }

@@ -32,5 +32,5 @@ import java.util.Optional;
  * and if necessary traverse it's children.
  */
 public interface RelationPlugin {
-    Optional<LogicalPlan> transform(Any relation, SparkConnectPlanner planner);
+    Optional<LogicalPlan> transform(byte[] relation, SparkConnectPlanner planner);
 }

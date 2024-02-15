@@ -31,5 +31,5 @@ import java.util.Optional;
  * and if necessary traverse it's children.
  */
 public interface ExpressionPlugin {
-    Optional<Expression> transform(Any relation, SparkConnectPlanner planner);
+    Optional<Expression> transform(byte[] relation, SparkConnectPlanner planner);
 }

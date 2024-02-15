@@ -31,5 +31,5 @@ import java.util.Optional;
  * and if necessary traverse it's children.
  */
 public interface CommandPlugin {
-    Optional<Void> process(Any command, SparkConnectPlanner planner);
+    boolean process(byte[] command, SparkConnectPlanner planner);
 }
