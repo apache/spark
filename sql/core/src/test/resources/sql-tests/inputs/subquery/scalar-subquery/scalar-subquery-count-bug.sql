@@ -54,6 +54,7 @@ select *, (select count(*) from r where l.a = r.c having count(*) >= 2) from l;
 
 CREATE TEMPORARY VIEW null_view(a, b) AS SELECT CAST(null AS int), CAST(null as int);
 
+-- SPARK-46743: count bug is still detected on top of the subquery that can be constant folded.
 SELECT
   (
     SELECT
