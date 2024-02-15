@@ -10610,7 +10610,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         elif is_list_like(var_name):
             raise ValueError(f"{var_name=} must be a scalar.")
         else:
-            var_name = [var_name]
+            var_name = [var_name]  # type: ignore[list-item]
 
         pairs = F.explode(
             F.array(
