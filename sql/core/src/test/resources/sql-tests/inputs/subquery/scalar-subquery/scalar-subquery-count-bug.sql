@@ -52,6 +52,21 @@ select *, (select count(*) from r where l.a = r.c having count(*) <= 1) from l;
 select *, (select count(*) from r where l.a = r.c having count(*) >= 2) from l;
 
 
+CREATE TEMPORARY VIEW null_view(a, b) AS SELECT CAST(null AS int), CAST(null as int);
+
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    WHERE
+      null_view.a = l.a
+  )
+FROM
+  l;
+
+
 set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true;
 
 -- With legacy behavior flag set, both cases evaluate to 0
