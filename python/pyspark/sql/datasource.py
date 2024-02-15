@@ -399,7 +399,7 @@ class DataSourceStreamReader(ABC):
 
         Parameters
         ----------
-        partition : object
+        partition : InputPartition
             The partition to read. It must be one of the partition values returned by
             ``partitions()``.
 
