@@ -26,10 +26,12 @@ from pyspark.accumulators import (
     SpecialAccumulatorIds,
     _accumulatorRegistry,
 )
+from pyspark.errors import PySparkValueError
 from pyspark.profiler import CodeMapDict, MemoryProfiler, MemUsageParam, PStatsParam
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ProfileResults
+    from pyspark.sql.session import SparkSession
 
 
 class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
@@ -239,3 +241,72 @@ class AccumulatorProfilerCollector(ProfilerCollector):
         with self._lock:
             value = self._accumulator.value
             return value if value is not None else {}
+
+
+class Profile:
+    """User-facing profile API. This instance can be accessed by
+    :attr:`spark.profile`.
+
+    .. versionadded: 4.0.0
+    """
+
+    def __init__(self, sparkSession: "SparkSession"):
+        self.sparkSession = sparkSession
+
+    def show(self, *, type: Optional[str] = None, id: Optional[int] = None) -> None:
+        """
+        Show the profile results.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        type : str, optional
+            The profiler type, which can be either "perf" or "memory".
+        id : int, optional
+            A UDF ID to be shown. If not specified, all the results will be shown.
+        """
+        if type == "memory":
+            self.sparkSession.showMemoryProfiles(id)
+        elif type == "perf" or type is None:
+            self.sparkSession.showPerfProfiles(id)
+            if type is None:  # Show both perf and memory profiles
+                self.sparkSession.showMemoryProfiles(id)
+        else:
+            raise PySparkValueError(
+                error_class="VALUE_NOT_ALLOWED",
+                message_parameters={
+                    "arg_name": "type",
+                    "allowed_values": str(["perf", "memory"]),
+                },
+            )
+
+    def dump(self, path: str, *, type: Optional[str] = None, id: Optional[int] = None) -> None:
+        """
+        Dump the profile results into directory `path`.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        path: str
+            A directory in which to dump the profile.
+        type : str, optional
+            The profiler type, which can be either "perf" or "memory".
+        id : int, optional
+            A UDF ID to be shown. If not specified, all the results will be shown.
+        """
+        if type == "memory":
+            self.sparkSession.dumpMemoryProfiles(path, id)
+        elif type == "perf" or type is None:
+            self.sparkSession.dumpPerfProfiles(path, id)
+            if type is None:  # Dump both perf and memory profiles
+                self.sparkSession.dumpMemoryProfiles(path, id)
+        else:
+            raise PySparkValueError(
+                error_class="VALUE_NOT_ALLOWED",
+                message_parameters={
+                    "arg_name": "type",
+                    "allowed_values": str(["perf", "memory"]),
+                },
+            )

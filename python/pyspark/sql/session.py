@@ -76,6 +76,7 @@ if TYPE_CHECKING:
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
     from pyspark.sql.datasource import DataSourceRegistration
+    from pyspark.sql.profiler import Profile
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
@@ -905,6 +906,12 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.datasource import DataSourceRegistration
 
         return DataSourceRegistration(self)
+
+    @property
+    def profile(self) -> "Profile":
+        from pyspark.sql.profiler import Profile
+
+        return Profile(self)
 
     def range(
         self,
