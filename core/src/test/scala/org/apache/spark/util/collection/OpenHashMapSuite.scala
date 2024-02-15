@@ -269,6 +269,7 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     spark45599Repro.foreach(map1.changeValue(_, 1, {_ + 1}))
     assert(map1(0.0) == 1)
     assert(map1(-0.0) == 1)
+    assert(map1(Double.NaN) == 3)
 
     val map2 = new OpenHashMap[Double, Int]()
     // Simply changing the order in which the elements are added to the map should not change the
@@ -276,5 +277,6 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     spark45599Repro.reverse.foreach(map2.changeValue(_, 1, {_ + 1}))
     assert(map2(0.0) == 1)
     assert(map2(-0.0) == 1)
+    assert(map2(Double.NaN) == 3)
   }
 }
