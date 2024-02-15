@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.connect.plugin;
 
-import com.google.protobuf.Any;
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner;
-
-import java.util.Optional;
 
 /**
  * Behavior trait for supporting extension mechanisms for the Spark Connect planner.

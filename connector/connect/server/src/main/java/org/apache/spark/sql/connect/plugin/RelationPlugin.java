@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.plugin;
 
-import com.google.protobuf.Any;
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner;
 
