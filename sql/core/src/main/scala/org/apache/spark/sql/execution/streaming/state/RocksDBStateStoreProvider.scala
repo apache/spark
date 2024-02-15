@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 private[sql] class RocksDBStateStoreProvider
@@ -341,9 +341,8 @@ private[sql] class RocksDBStateStoreProvider
     logError("in doTTL")
     expiredKeyStateNames.foreach { keyStateName =>
       logError("in doTTL expired keys loop")
-      val stateName = SerializationUtils
-        .deserialize(keyStateName.getBinary(1))
-        .asInstanceOf[String]
+      val stateName = SerializationUtils.deserialize(
+        keyStateName.getBinary(1)).asInstanceOf[String]
       rocksDB.remove(keyStateName.getBinary(2), stateName)
     }
   }

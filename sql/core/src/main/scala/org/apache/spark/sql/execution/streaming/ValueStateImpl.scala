@@ -54,8 +54,8 @@ class ValueStateImpl[S](
   private val valueEncoder = UnsafeProjection.create(schemaForValueRow)
 
   private val schemaForTTLKeyRow: StructType = new StructType()
-    .add("ttl", LongType)
-    .add("stateName", StringType)
+    .add("ttl", BinaryType)
+    .add("stateName", BinaryType)
     .add("groupingKey", BinaryType)
     .add("userKey", BinaryType)
   private val ttlKeyRowEncoder = UnsafeProjection.create(schemaForTTLKeyRow)

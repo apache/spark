@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming._
