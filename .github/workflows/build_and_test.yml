@@ -850,7 +850,7 @@ jobs:
 
   apple-silicon:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).java-other-versions == 'true'
+    if: fromJson(needs.precondition.outputs.required).build == 'true'
     name: Apple Silicon build with Maven
     strategy:
       fail-fast: false
