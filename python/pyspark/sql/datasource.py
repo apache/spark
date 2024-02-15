@@ -386,7 +386,7 @@ class DataSourceStreamReader(ABC):
         )
 
     @abstractmethod
-    def read(self, partition) -> Iterator[Union[Tuple, Row]]:
+    def read(self, partition: InputPartition) -> Iterator[Union[Tuple, Row]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 

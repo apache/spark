@@ -51,17 +51,17 @@ partitions_func_id = 886
 commit_func_id = 887
 
 
-def initial_offset_func(reader: IO, outfile: IO):
+def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     offset = reader.initialOffset()
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def latest_offset_func(reader: DataSourceStreamReader, outfile: IO):
+def latest_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
     offset = reader.latestOffset()
     write_with_length(json.dumps(offset).encode("utf-8"), outfile)
 
 
-def partitions_func(reader: DataSourceStreamReader, infile: IO, outfile: IO):
+def partitions_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
     start_offset = json.loads(utf8_deserializer.loads(infile))
     end_offset = json.loads(utf8_deserializer.loads(infile))
     partitions = reader.partitions(start_offset, end_offset)
@@ -71,7 +71,7 @@ def partitions_func(reader: DataSourceStreamReader, infile: IO, outfile: IO):
         pickleSer._write_with_length(partition, outfile)
 
 
-def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO):
+def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)
