@@ -243,7 +243,8 @@ class RocksDB(
 
   private def verifyColFamilyExists(colFamilyName: String): Unit = {
     if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
-      throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+      throw new RuntimeException(s"Column family with name=$colFamilyName" +
+        s" does not exist for partition ${TaskContext.getPartitionId()}")
     }
   }
 
@@ -259,6 +260,8 @@ class RocksDB(
 
     if (!checkColFamilyExists(colFamilyName)) {
       assert(db != null)
+      logError(s"Creating column family $colFamilyName" +
+        s" for partition ${TaskContext.getPartitionId()}")
       val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)
       val handle = db.createColumnFamily(descriptor)
       colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
@@ -327,6 +330,7 @@ class RocksDB(
     if (conf.trackTotalNumberOfRows) {
       val value = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
       if (value != null) {
+        logError(s"Removing key $key from partition ${TaskContext.getPartitionId()}")
         numKeysOnWritingVersion -= 1
       }
     }

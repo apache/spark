@@ -340,7 +340,16 @@ private[sql] class RocksDBStateStoreProvider
     expiredKeyStateNames.foreach { keyStateName =>
       val stateName = SerializationUtils.deserialize(
         keyStateName.getBinary(1)).asInstanceOf[String]
-      rocksDB.remove(keyStateName.getBinary(2), stateName)
+      val kvEncoder = keyValueEncoderMap.get(stateName)
+      val row = rocksDB.get(keyStateName.getBinary(2), stateName)
+      val value = kvEncoder._2.decodeValue(row)
+      if (value != null) {
+        val ttl = value.getLong(1)
+        if (ttl <= System.currentTimeMillis()) {
+          logError(s"Value is expired for state $stateName")
+          rocksDB.remove(keyStateName.getBinary(2), stateName)
+        }
+      }
     }
   }
 }

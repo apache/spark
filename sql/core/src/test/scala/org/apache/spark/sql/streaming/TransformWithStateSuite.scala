@@ -309,7 +309,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
-      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "1000") {
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100") {
       val inputData = MemoryStream[String]
 
       val result = inputData.toDS()
