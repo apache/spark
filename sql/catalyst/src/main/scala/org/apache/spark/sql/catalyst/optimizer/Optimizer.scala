@@ -328,6 +328,30 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // Do not optimize DPP subquery, as it was created from optimized plan and we should not
       // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
       case d: DynamicPruningSubquery => d
+      case s@ScalarSubquery(a@Aggregate(group, _, child), _, _, _, _, mayHaveCountBug)
+        if mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
+        // This is a subquery with an aggregate that may suffer from a COUNT bug.
+        // Detailed COUNT bug detection is done at a later stage (e.g. in
+        // RewriteCorrelatedScalarSubquery).
+        // Make sure that the output plan always has the same aggregate node
+        // (i.e., it is not being constant folded).
+        // Note that this does not limit optimization opportunities for the subquery: after
+        // decorrelation is done, the subquery's body becomes part of the main plan and all
+        // optimization rules are applied again.
+        val groupRefs = group.flatMap(x => x.references)
+        val projectOverSubqueryBody = Project(groupRefs ++ a.references.toSeq, child)
+        val optimizedPlan = Optimizer.this.execute(Subquery.fromExpression(
+          s.withNewPlan(projectOverSubqueryBody)))
+        assert(optimizedPlan.isInstanceOf[Subquery])
+        val optimizedInput = optimizedPlan.asInstanceOf[Subquery].child
+
+        assert(optimizedInput.output.size == projectOverSubqueryBody.output.size)
+        val updatedProjectList = projectOverSubqueryBody.output.zip(optimizedInput.output).map {
+          case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
+        }
+
+        val res = s.withNewPlan(a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput))))
+        res
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
