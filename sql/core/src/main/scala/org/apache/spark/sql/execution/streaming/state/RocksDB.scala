@@ -327,7 +327,6 @@ class RocksDB(
     if (conf.trackTotalNumberOfRows) {
       val value = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
       if (value != null) {
-        logError(s"Removing key $key from version $loadedVersion")
         numKeysOnWritingVersion -= 1
       }
     }

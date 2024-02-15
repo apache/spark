@@ -338,9 +338,7 @@ private[sql] class RocksDBStateStoreProvider
 
   override def doTTL(): Unit = {
     val expiredKeyStateNames = findExpiredKeys()
-    logError("in doTTL")
     expiredKeyStateNames.foreach { keyStateName =>
-      logError("in doTTL expired keys loop")
       val stateName = SerializationUtils.deserialize(
         keyStateName.getBinary(1)).asInstanceOf[String]
       rocksDB.remove(keyStateName.getBinary(2), stateName)
