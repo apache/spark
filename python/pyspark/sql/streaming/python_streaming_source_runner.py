@@ -130,9 +130,6 @@ def main(infile: IO, outfile: IO) -> None:
                 elif func_id == commit_func_id:
                     commit_func(reader, infile, outfile)
                 outfile.flush()
-
-        except NotImplementedError as e:
-            raise e
         except Exception as e:
             raise PySparkRuntimeError(
                 error_class="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
