@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1164,10 +1165,12 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     catalog.createNamespace(testNs, emptyProps)
 
     CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.foreach { p =>
-      val exc = intercept[UnsupportedOperationException] {
-        catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
-      }
-      assert(exc.getMessage.contains(s"Cannot remove reserved property: $p"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          catalog.alterNamespace(testNs, NamespaceChange.removeProperty(p))
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_2069",
+        parameters = Map("property" -> p))
 
     }
     catalog.dropNamespace(testNs, cascade = false)

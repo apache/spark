@@ -28,7 +28,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkException}
+import org.apache.spark.{AccumulatorSuite, SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkNumberFormatException, SparkRuntimeException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Hex}
@@ -2731,10 +2731,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         parameters = Map(
           "tableOrdinalNumber" -> "second",
           "columnOrdinalNumber" -> "first",
-          "dataType2" -> "\"STRUCT<a: INT>\"",
+          "dataType2" -> "\"STRUCT<a: INT NOT NULL>\"",
           "operator" -> "EXCEPT",
           "hint" -> "",
-          "dataType1" -> "\"STRUCT<A: INT>\""),
+          "dataType1" -> "\"STRUCT<A: INT NOT NULL>\""),
         context = ExpectedContext(
           fragment = "SELECT struct(1 a) EXCEPT (SELECT struct(2 A))",
           start = 0,
@@ -4466,7 +4466,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           "select -i - j from t",
           "select i * j from t",
           "select i / (j - 10) from t").foreach { query =>
-          val msg = intercept[SparkException] {
+          val msg = intercept[SparkArithmeticException] {
             sql(query).collect()
           }.getMessage
           assert(msg.contains(query))
@@ -4490,10 +4490,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           "select cast(s as date) from t",
           "select cast(s as timestamp) from t",
           "select cast(s as boolean) from t").foreach { query =>
-          val msg = intercept[SparkException] {
+          val ex = intercept[Exception] {
             sql(query).collect()
-          }.getMessage
-          assert(msg.contains(query))
+          }
+          assert(ex.isInstanceOf[SparkNumberFormatException] ||
+            ex.isInstanceOf[SparkDateTimeException] ||
+            ex.isInstanceOf[SparkRuntimeException])
+          assert(ex.getMessage.contains(query))
         }
       }
     }
@@ -4510,7 +4513,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           "select d / 0.1 from t",
           "select sum(d) from t",
           "select avg(d) from t").foreach { query =>
-          val msg = intercept[SparkException] {
+          val msg = intercept[SparkArithmeticException] {
             sql(query).collect()
           }.getMessage
           assert(msg.contains(query))
@@ -4641,9 +4644,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       withTable("dt") {
         sql("create table dt using parquet as select 9000000000BD as d")
-        val msg = intercept[SparkException] {
+        val msg = intercept[SparkArithmeticException] {
           sql("select cast(cast(d as int) as long) from dt").collect()
-        }.getCause.getMessage
+        }.getMessage
         assert(msg.contains("[CAST_OVERFLOW]"))
       }
     }

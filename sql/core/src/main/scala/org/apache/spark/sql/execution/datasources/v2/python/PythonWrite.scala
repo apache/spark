@@ -26,15 +26,32 @@ class PythonWrite(
     shortName: String,
     info: LogicalWriteInfo,
     isTruncate: Boolean
-  ) extends Write with BatchWrite {
-  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  ) extends Write {
+
+  override def toString: String = shortName
+
+  override def toBatch: BatchWrite = new PythonBatchWrite(ds, shortName, info, isTruncate)
+
+  override def description: String = "(Python)"
+
+  override def supportedCustomMetrics(): Array[CustomMetric] =
+    ds.source.createPythonMetrics()
+}
+
+class PythonBatchWrite(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    info: LogicalWriteInfo,
+    isTruncate: Boolean
+  ) extends BatchWrite {
 
   // Store the pickled data source writer instance.
   private var pythonDataSourceWriter: Array[Byte] = _
 
-  override def createBatchWriterFactory(
-      physicalInfo: PhysicalWriteInfo): DataWriterFactory = {
+  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
+  override def createBatchWriterFactory(physicalInfo: PhysicalWriteInfo): DataWriterFactory =
+  {
     val writeInfo = ds.source.createWriteInfoInPython(
       shortName,
       info.schema(),
@@ -53,13 +70,4 @@ class PythonWrite(
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
     ds.source.commitWriteInPython(pythonDataSourceWriter, messages, abort = true)
   }
-
-  override def toString: String = shortName
-
-  override def toBatch: BatchWrite = this
-
-  override def description: String = "(Python)"
-
-  override def supportedCustomMetrics(): Array[CustomMetric] =
-    ds.source.createPythonMetrics()
 }

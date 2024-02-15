@@ -564,7 +564,7 @@ object PartitioningUtils extends SQLConfHelper {
 
     partitionColumnsSchema(schema, partitionColumns).foreach {
       field => field.dataType match {
-        case _: AtomicType => // OK
+        case a: AtomicType if !a.isInstanceOf[VariantType] => // OK
         case _ => throw QueryCompilationErrors.cannotUseDataTypeForPartitionColumnError(field)
       }
     }

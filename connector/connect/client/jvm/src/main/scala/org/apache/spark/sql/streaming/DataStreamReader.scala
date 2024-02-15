@@ -159,7 +159,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
    * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
-   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
+   * sets the maximum number of new files to be considered in every trigger.</li>
+   * <li>`maxBytesPerTrigger` (default: no max limit): sets the maximum total size of new files to
+   * be considered in every trigger.</li> </ul>
    *
    * You can find the JSON-specific options for reading JSON file stream in <a
    * href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
@@ -179,7 +181,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
    * specify the schema explicitly using `schema`.
    *
    * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
-   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
+   * sets the maximum number of new files to be considered in every trigger.</li>
+   * <li>`maxBytesPerTrigger` (default: no max limit): sets the maximum total size of new files to
+   * be considered in every trigger.</li> </ul>
    *
    * You can find the CSV-specific options for reading CSV file stream in <a
    * href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
@@ -197,7 +201,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
    * specify the schema explicitly using `schema`.
    *
    * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
-   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
+   * sets the maximum number of new files to be considered in every trigger.</li>
+   * <li>`maxBytesPerTrigger` (default: no max limit): sets the maximum total size of new files to
+   * be considered in every trigger.</li> </ul>
    *
    * You can find the XML-specific options for reading XML file stream in <a
    * href="https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
@@ -211,7 +217,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
    * Loads a ORC file stream, returning the result as a `DataFrame`.
    *
    * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
-   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
+   * sets the maximum number of new files to be considered in every trigger.</li>
+   * <li>`maxBytesPerTrigger` (default: no max limit): sets the maximum total size of new files to
+   * be considered in every trigger.</li> </ul>
    *
    * ORC-specific option(s) for reading ORC file stream can be found in <a href=
    * "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option"> Data
@@ -225,7 +233,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
    * Loads a Parquet file stream, returning the result as a `DataFrame`.
    *
    * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
-   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
+   * sets the maximum number of new files to be considered in every trigger.</li>
+   * <li>`maxBytesPerTrigger` (default: no max limit): sets the maximum total size of new files to
+   * be considered in every trigger.</li> </ul>
    *
    * Parquet-specific option(s) for reading Parquet file stream can be found in <a href=
    * "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option"> Data
@@ -268,7 +278,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
    * }}}
    *
    * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
-   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
+   * sets the maximum number of new files to be considered in every trigger.</li>
+   * <li>`maxBytesPerTrigger` (default: no max limit): sets the maximum total size of new files to
+   * be considered in every trigger.</li> </ul>
    *
    * You can find the text-specific options for reading text files in <a
    * href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">

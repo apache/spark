@@ -196,10 +196,11 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
             val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
             df.write.parquet(file.getCanonicalPath)
             withAllParquetReaders {
-              val msg = intercept[SparkException] {
+              val e = intercept[SparkException] {
                 spark.read.schema(providedSchema).parquet(file.getCanonicalPath).collect()
-              }.getMessage
-              assert(msg.contains(
+              }
+              assert(e.getErrorClass == "FAILED_READ_FILE")
+              assert(e.getCause.getMessage.contains(
                 "Unable to create Parquet converter for data type \"timestamp_ntz\""))
             }
           }
@@ -373,11 +374,11 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
           val exception = intercept[SparkException] {
             testIgnoreCorruptFiles(options)
-          }
+          }.getCause
           assert(exception.getMessage().contains("is not a Parquet file"))
           val exception2 = intercept[SparkException] {
             testIgnoreCorruptFilesWithoutSchemaInfer(options)
-          }
+          }.getCause
           assert(exception2.getMessage().contains("is not a Parquet file"))
         }
       }
@@ -1037,8 +1038,10 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       withAllParquetReaders {
         // We can read the decimal parquet field with a larger precision, if scale is the same.
-        val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
-        checkAnswer(readParquet(schema, path), df)
+        val schema1 = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema1, path), df)
+        val schema2 = "a DECIMAL(18, 1), b DECIMAL(38, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema2, path), df)
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
@@ -1054,7 +1057,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         Seq("a DECIMAL(3, 0)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
           val e = intercept[SparkException] {
             readParquet(schema, path).collect()
-          }.getCause.getCause
+          }.getCause
           assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
         }
       }
@@ -1067,21 +1070,24 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("a DECIMAL(11, 2)", path), sql("SELECT 1.00"))
         checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
         checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
         checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
         checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        checkAnswer(readParquet("c DECIMAL(22, 0)", path), df.select("c"))
         val e = intercept[SparkException] {
           readParquet("d DECIMAL(3, 2)", path).collect()
-        }.getCause
-        assert(e.getMessage.contains("Please read this column/field as Spark BINARY type"))
+        }
+        assert(e.getErrorClass == "FAILED_READ_FILE")
+        assert(e.getCause.getMessage.contains("Please read this column/field as Spark BINARY type"))
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
         Seq("a DECIMAL(3, 2)", "c DECIMAL(18, 1)", "d DECIMAL(37, 1)").foreach { schema =>
           val e = intercept[SparkException] {
             readParquet(schema, path).collect()
-          }.getCause.getCause
+          }.getCause
           assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
         }
       }

@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.parquet.column.ParquetProperties
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
-import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
@@ -56,8 +55,6 @@ object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
 
     spark.conf.set(SQLConf.PARQUET_COMPRESSION.key,
       ParquetCompressionCodec.SNAPPY.lowerCaseName())
-    spark.conf.set(SQLConf.ORC_COMPRESSION.key,
-      OrcCompressionCodec.SNAPPY.lowerCaseName())
 
     formats.foreach { format =>
       runBenchmark(s"$format writer benchmark") {

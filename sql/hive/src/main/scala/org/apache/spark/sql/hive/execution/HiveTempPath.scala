@@ -19,7 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.IOException
 import java.net.URI
-import java.text.SimpleDateFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, Random}
 
 import scala.util.control.NonFatal
@@ -40,6 +41,11 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
   private var stagingDirForCreating: Option[Path] = None
 
   lazy val externalTempPath: Path = getExternalTmpPath(path)
+
+  private lazy val dateTimeFormatter =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   private def getExternalTmpPath(path: Path): Path = {
     import org.apache.spark.sql.hive.client.hive._
@@ -117,8 +123,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
 
   private def executionId: String = {
     val rand: Random = new Random
-    val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
-    "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
+    "hive_" + dateTimeFormatter.format(new Date().toInstant) + "_" + Math.abs(rand.nextLong)
   }
 
   def deleteTmpPath() : Unit = {

@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
-import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
@@ -71,9 +70,9 @@ class QueryExecutionErrorsSuite
   test("CONVERSION_INVALID_INPUT: to_binary conversion function base64") {
     for (codegenMode <- Seq(CODEGEN_ONLY, NO_CODEGEN)) {
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
-        val exception = intercept[SparkException] {
+        val exception = intercept[SparkIllegalArgumentException] {
           Seq(("???")).toDF("a").selectExpr("to_binary(a, 'base64')").collect()
-        }.getCause.asInstanceOf[SparkIllegalArgumentException]
+        }
         checkError(
           exception,
           errorClass = "CONVERSION_INVALID_INPUT",
@@ -89,9 +88,9 @@ class QueryExecutionErrorsSuite
   test("CONVERSION_INVALID_INPUT: to_binary conversion function hex") {
     for (codegenMode <- Seq(CODEGEN_ONLY, NO_CODEGEN)) {
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode.toString) {
-        val exception = intercept[SparkException] {
+        val exception = intercept[SparkIllegalArgumentException] {
           Seq(("???")).toDF("a").selectExpr("to_binary(a, 'hex')").collect()
-        }.getCause.asInstanceOf[SparkIllegalArgumentException]
+        }
         checkError(
           exception,
           errorClass = "CONVERSION_INVALID_INPUT",
@@ -125,9 +124,9 @@ class QueryExecutionErrorsSuite
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame, inputBytes: Int): Unit = {
       checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[SparkRuntimeException] {
           df.collect()
-        }.getCause.asInstanceOf[SparkRuntimeException],
+        },
         errorClass = "INVALID_PARAMETER_VALUE.AES_KEY_LENGTH",
         parameters = Map(
           "parameter" -> "`key`",
@@ -162,9 +161,9 @@ class QueryExecutionErrorsSuite
       ("value24", "123456781234567812345678"),
       ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
       checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[SparkRuntimeException] {
           df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect()
-        }.getCause.asInstanceOf[SparkRuntimeException],
+        },
         errorClass = "INVALID_PARAMETER_VALUE.AES_CRYPTO_ERROR",
         parameters = Map("parameter" -> "`expr`, `key`",
           "functionName" -> "`aes_encrypt`/`aes_decrypt`",
@@ -180,9 +179,9 @@ class QueryExecutionErrorsSuite
     val (df1, df2) = getAesInputs()
     def checkUnsupportedMode(df: => DataFrame, mode: String, padding: String): Unit = {
       checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[SparkRuntimeException] {
           df.collect()
-        }.getCause.asInstanceOf[SparkRuntimeException],
+        },
         errorClass = "UNSUPPORTED_FEATURE.AES_MODE",
         parameters = Map("mode" -> mode,
         "padding" -> padding,
@@ -271,9 +270,9 @@ class QueryExecutionErrorsSuite
     withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
       val fileName = "before_1582_date_v2_4_5.snappy.parquet"
       val filePath = getResourceParquetFilePath("test-data/" + fileName)
-      val e = intercept[SparkException] {
+      val e = intercept[SparkUpgradeException] {
         spark.read.parquet(filePath).collect()
-      }.getCause.asInstanceOf[SparkUpgradeException]
+      }
 
       val format = "Parquet"
       val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_READ.key + "\""
@@ -290,12 +289,13 @@ class QueryExecutionErrorsSuite
         val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
-        }.getCause.getCause.asInstanceOf[SparkUpgradeException]
+        }
+        assert(e.getErrorClass == "TASK_WRITE_FAILED")
 
         val format = "Parquet"
         val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
         checkError(
-          exception = e,
+          exception = e.getCause.asInstanceOf[SparkUpgradeException],
           errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.WRITE_ANCIENT_DATETIME",
           parameters = Map("format" -> format, "config" -> config))
       }
@@ -306,10 +306,12 @@ class QueryExecutionErrorsSuite
     withTempPath { file =>
       sql("select timestamp_ltz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
+        val ex = intercept[SparkException] {
+          spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
+        }
+        assert(ex.getErrorClass == "FAILED_READ_FILE")
         checkError(
-          exception = intercept[SparkException] {
-            spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
-          }.getCause.asInstanceOf[SparkUnsupportedOperationException],
+          exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
           parameters = Map("orcType" -> "\"TIMESTAMP\"",
             "toType" -> "\"TIMESTAMP_NTZ\""),
@@ -326,10 +328,12 @@ class QueryExecutionErrorsSuite
     withTempPath { file =>
       sql("select timestamp_ntz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
+        val ex = intercept[SparkException] {
+          spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
+        }
+        assert(ex.getErrorClass == "FAILED_READ_FILE")
         checkError(
-          exception = intercept[SparkException] {
-            spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
-          }.getCause.asInstanceOf[SparkUnsupportedOperationException],
+          exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
           parameters = Map("orcType" -> "\"TIMESTAMP_NTZ\"",
             "toType" -> "\"TIMESTAMP\""),
@@ -373,19 +377,12 @@ class QueryExecutionErrorsSuite
           .load(path.getAbsolutePath).select($"money").collect()
       }
     }
-    assert(e1.getCause.isInstanceOf[SparkException])
 
     val e2 = e1.getCause.asInstanceOf[SparkException]
-    assert(e2.getCause.isInstanceOf[SparkException])
-
-    val e3 = e2.getCause.asInstanceOf[SparkException]
-    assert(e3.getCause.isInstanceOf[BadRecordException])
-
-    val e4 = e3.getCause.asInstanceOf[BadRecordException]
-    assert(e4.getCause.isInstanceOf[SparkRuntimeException])
+    assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
 
     checkError(
-      exception = e4.getCause.asInstanceOf[SparkRuntimeException],
+      exception = e2.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "CANNOT_PARSE_DECIMAL",
       parameters = Map[String, String](),
       sqlState = "22018")
@@ -412,13 +409,6 @@ class QueryExecutionErrorsSuite
     }}
     spark.udf.register("luckyCharOfWord", luckyCharOfWord)
 
-    val e = intercept[SparkException] {
-      Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6))
-        .toDF("word", "index")
-        .createOrReplaceTempView("words")
-      spark.sql("select luckyCharOfWord(word, index) from words").collect()
-    }
-    assert(e.getCause.isInstanceOf[SparkException])
     val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
       "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda/\\w+\\)`"
     } else {
@@ -431,7 +421,12 @@ class QueryExecutionErrorsSuite
     }
 
     checkError(
-      exception = e.getCause.asInstanceOf[SparkException],
+      exception = intercept[SparkException] {
+        Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6))
+          .toDF("word", "index")
+          .createOrReplaceTempView("words")
+        spark.sql("select luckyCharOfWord(word, index) from words").collect()
+      },
       errorClass = "FAILED_EXECUTE_UDF",
       parameters = Map(
         "functionName" -> functionNameRegex,
@@ -445,11 +440,6 @@ class QueryExecutionErrorsSuite
     val luckyCharOfWord = udf { (word: String, index: Int) => {
       word.substring(index, index + 1)
     }}
-    val e = intercept[SparkException] {
-      val words = Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6)).toDF("word", "index")
-      words.select(luckyCharOfWord($"word", $"index")).collect()
-    }
-    assert(e.getCause.isInstanceOf[SparkException])
     val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
       "`QueryExecutionErrorsSuite\\$\\$Lambda/\\w+`"
     } else {
@@ -462,7 +452,10 @@ class QueryExecutionErrorsSuite
     }
 
     checkError(
-      exception = e.getCause.asInstanceOf[SparkException],
+      exception = intercept[SparkException] {
+        val words = Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6)).toDF("word", "index")
+        words.select(luckyCharOfWord($"word", $"index")).collect()
+      },
       errorClass = "FAILED_EXECUTE_UDF",
       parameters = Map("functionName" -> functionNameRegex,
         "signature" -> "string, int",
@@ -1033,11 +1026,10 @@ class QueryExecutionErrorsSuite
   }
 
   test("INVALID_BITMAP_POSITION: position out of bounds") {
-    val e = intercept[SparkException] {
-      sql("select bitmap_construct_agg(col) from values (32768) as tab(col)").collect()
-    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
     checkError(
-      exception = e,
+      exception = intercept[SparkArrayIndexOutOfBoundsException] {
+        sql("select bitmap_construct_agg(col) from values (32768) as tab(col)").collect()
+      },
       errorClass = "INVALID_BITMAP_POSITION",
       parameters = Map(
         "bitPosition" -> "32768",
@@ -1047,11 +1039,10 @@ class QueryExecutionErrorsSuite
   }
 
   test("INVALID_BITMAP_POSITION: negative position") {
-    val e = intercept[SparkException] {
-      sql("select bitmap_construct_agg(col) from values (-1) as tab(col)").collect()
-    }.getCause.asInstanceOf[SparkArrayIndexOutOfBoundsException]
     checkError(
-      exception = e,
+      exception = intercept[SparkArrayIndexOutOfBoundsException] {
+        sql("select bitmap_construct_agg(col) from values (-1) as tab(col)").collect()
+      },
       errorClass = "INVALID_BITMAP_POSITION",
       parameters = Map(
         "bitPosition" -> "-1",

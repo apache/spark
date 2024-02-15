@@ -72,7 +72,7 @@ WARNING: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
 [^1]: To learn more about the benefits and background of system optimised natives, you may wish to
-    watch Sam Halliday's ScalaX talk on [High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/).
+    watch Sam Halliday's ScalaX talk on [High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/).
 
 # Highlights in 3.0
 
@@ -103,4 +103,3 @@ release of Spark:
 # Migration Guide
 
 The migration guide is now archived [on this page](ml-migration-guide.html).
-

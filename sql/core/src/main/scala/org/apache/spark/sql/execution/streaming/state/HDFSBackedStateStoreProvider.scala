@@ -31,7 +31,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -78,9 +78,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
-    override def get(key: UnsafeRow): UnsafeRow = map.get(key)
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
-    override def iterator(): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
       map.iterator()
     }
 
@@ -90,7 +90,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"HDFSReadStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
       map.prefixScan(prefixKey)
     }
   }
@@ -113,11 +114,19 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
-    override def get(key: UnsafeRow): UnsafeRow = {
+    override def createColFamilyIfAbsent(
+        colFamilyName: String,
+        keySchema: StructType,
+        numColsPrefixKey: Int,
+        valueSchema: StructType): Unit = {
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3193")
+    }
+
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
       mapToUpdate.get(key)
     }
 
-    override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
+    override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       require(value != null, "Cannot put a null value")
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       val keyCopy = key.copy()
@@ -126,7 +135,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
     }
 
-    override def remove(key: UnsafeRow): Unit = {
+    override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
@@ -165,9 +174,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(): Iterator[UnsafeRowPair] = mapToUpdate.iterator()
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = mapToUpdate.iterator()
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
       mapToUpdate.prefixScan(prefixKey)
     }
 
@@ -193,6 +203,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
+    }
+
+    override def removeColFamilyIfExists(colFamilyName: String): Unit = {
+      throw StateStoreErrors.removingColumnFamiliesNotSupported(
+        "HDFSBackedStateStoreProvider")
+
     }
   }
 
@@ -237,6 +253,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       keySchema: StructType,
       valueSchema: StructType,
       numColsPrefixKey: Int,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): Unit = {
     this.stateStoreId_ = stateStoreId
@@ -245,6 +262,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
     this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
+
+    // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
+    if (useColumnFamilies) {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported("HDFSStateStoreProvider")
+    }
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||
       (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +

@@ -29,11 +29,16 @@ from pyspark.sql.datasource import (
     CaseInsensitiveDict,
 )
 from pyspark.sql.types import Row, StructType
+from pyspark.testing.sqlutils import (
+    have_pyarrow,
+    pyarrow_requirement_message,
+)
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import SPARK_HOME
 
 
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonDataSourceTestsMixin:
     def test_basic_data_source_class(self):
         class MyDataSource(DataSource):

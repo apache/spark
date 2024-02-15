@@ -20,20 +20,34 @@ package org.apache.spark.sql.execution.streaming.state
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.types.StructType
 
 class MemoryStateStore extends StateStore() {
   import scala.jdk.CollectionConverters._
   private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  override def iterator(): Iterator[UnsafeRowPair] = {
+  override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
     map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
   }
 
-  override def get(key: UnsafeRow): UnsafeRow = map.get(key)
+  override def createColFamilyIfAbsent(
+      colFamilyName: String,
+      keySchema: StructType,
+      numColsPrefixKey: Int,
+      valueSchema: StructType): Unit = {
+    throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
+  }
 
-  override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = map.put(key.copy(), newValue.copy())
+  override def removeColFamilyIfExists(colFamilyName: String): Unit = {
+    throw StateStoreErrors.removingColumnFamiliesNotSupported("MemoryStateStoreProvider")
+  }
 
-  override def remove(key: UnsafeRow): Unit = map.remove(key)
+  override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
+
+  override def put(key: UnsafeRow, newValue: UnsafeRow, colFamilyName: String): Unit =
+    map.put(key.copy(), newValue.copy())
+
+  override def remove(key: UnsafeRow, colFamilyName: String): Unit = map.remove(key)
 
   override def commit(): Long = version + 1
 
@@ -47,7 +61,7 @@ class MemoryStateStore extends StateStore() {
 
   override def hasCommitted: Boolean = true
 
-  override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+  override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String): Iterator[UnsafeRowPair] = {
     throw new UnsupportedOperationException("Doesn't support prefix scan!")
   }
 }
