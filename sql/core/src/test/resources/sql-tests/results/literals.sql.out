@@ -780,16 +780,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-select -0
+select -0, -0.0
 -- !query schema
-struct<0:int>
+struct<0:int,0.0:decimal(1,1)>
 -- !query output
-0
-
-
--- !query
-select -0.0
--- !query schema
-struct<0.0:decimal(1,1)>
--- !query output
-0.0
+0	0.0

@@ -702,14 +702,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-select -0
+select -0, -0.0
 -- !query analysis
-Project [0 AS 0#x]
-+- OneRowRelation
-
-
--- !query
-select -0.0
--- !query analysis
-Project [0.0 AS 0.0#x]
+Project [0 AS 0#x, 0.0 AS 0.0#x]
 +- OneRowRelation

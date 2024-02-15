@@ -120,5 +120,4 @@ select -timestamp '1999-01-01';
 select -x'2379ACFe';
 
 -- normalize -0 and -0.0
-select -0;
-select -0.0;
+select -0, -0.0;
