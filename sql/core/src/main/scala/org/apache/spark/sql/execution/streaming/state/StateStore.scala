@@ -325,6 +325,8 @@ trait StateStoreProvider {
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
 
+  def doTTL(): Unit = { }
+
   /**
    * Optional custom metrics that the implementation may want to report.
    * @note The StateStore objects created by this provider must report the same custom metrics
@@ -737,6 +739,7 @@ object StateStore extends Logging {
         maintenanceThreadPool.execute(() => {
           val startTime = System.currentTimeMillis()
           try {
+            provider.doTTL()
             provider.doMaintenance()
             if (!verifyIfStoreInstanceActive(id)) {
               unload(id)

@@ -27,6 +27,37 @@ object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
 }
 
+class RunningCountStatefulProcessorZeroTTL
+  extends StatefulProcessor[String, String, (String, String)]
+    with Logging {
+  @transient private var _countState: ValueState[Long] = _
+  @transient var _processorHandle: StatefulProcessorHandle = _
+
+  override def init(
+   handle: StatefulProcessorHandle,
+   outputMode: OutputMode) : Unit = {
+    _processorHandle = handle
+    assert(handle.getQueryInfo().getBatchId >= 0)
+    _countState = _processorHandle.getValueState[Long]("countState",
+      TTLMode.ProcessingTimeTTL(), Duration.Zero)
+  }
+
+  override def handleInputRows(
+                                key: String,
+                                inputRows: Iterator[String],
+                                timerValues: TimerValues): Iterator[(String, String)] = {
+    val count = _countState.getOption().getOrElse(0L) + 1
+    if (count == 3) {
+      _countState.remove()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+
+  override def close(): Unit = {}
+}
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
   @transient private var _countState: ValueState[Long] = _
@@ -241,6 +272,35 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
       }
+    }
+  }
+
+
+  test("transformWithState - maintenance task should clean up expired state") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "1000") {
+      val inputData = MemoryStream[String]
+
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorZeroTTL(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update())
+
+      // State should expire immediately, meaning each answer is independent
+      // of previous counts
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        CheckNewAnswer(("a", "1")),
+        AddData(inputData, "a", "b"),
+        CheckNewAnswer(("a", "1"), ("b", "1")),
+        AddData(inputData, "a", "b"),
+        CheckNewAnswer(("a", "1"), ("b", "1")),
+        StopStream
+      )
     }
   }
 

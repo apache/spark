@@ -21,13 +21,14 @@ import java.io._
 
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BinaryType, StructType}
 import org.apache.spark.util.Utils
 
 private[sql] class RocksDBStateStoreProvider
@@ -319,6 +320,32 @@ private[sql] class RocksDBStateStoreProvider
 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) { throw new IllegalStateException(msg) }
+  }
+
+  def findExpiredKeys(): Iterator[UnsafeRow] = {
+    val kvEncoder = keyValueEncoderMap.get("ttl")
+    rocksDB.iterator("ttl").flatMap { kv =>
+      val key = kvEncoder._1.decodeKey(kv.key)
+      val ttl = SerializationUtils.deserialize(
+        key.getBinary(0)).asInstanceOf[Long]
+      if (ttl <= System.currentTimeMillis()) {
+        Some(key)
+      } else {
+        None
+      }
+    }
+  }
+
+  override def doTTL(): Unit = {
+    val expiredKeyStateNames = findExpiredKeys()
+    logError("in doTTL")
+    expiredKeyStateNames.foreach { keyStateName =>
+      logError("in doTTL expired keys loop")
+      val stateName = SerializationUtils
+        .deserialize(keyStateName.getBinary(1))
+        .asInstanceOf[String]
+      rocksDB.remove(keyStateName.getBinary(2), stateName)
+    }
   }
 }
 
