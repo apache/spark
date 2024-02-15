@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.streaming
 
 import java.util.Locale
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.streaming.OutputMode
 
 class InternalOutputModesSuite extends SparkFunSuite {
@@ -40,7 +40,7 @@ class InternalOutputModesSuite extends SparkFunSuite {
   test("unsupported strings") {
     def testMode(outputMode: String): Unit = {
       val acceptedModes = Seq("append", "update", "complete")
-      val e = intercept[IllegalArgumentException](InternalOutputModes(outputMode))
+      val e = intercept[SparkIllegalArgumentException](InternalOutputModes(outputMode))
       (Seq("output mode", "unknown", outputMode) ++ acceptedModes).foreach { s =>
         assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
       }
