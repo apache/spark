@@ -181,6 +181,10 @@
                 Use org.apache.spark.network.util.JavaUtils.createTempDir() instead." />
         </module>
         <module name="RegexpSinglelineJava">
+            <property name="format" value="FileBackedOutputStream"/>
+            <property name="message" value="Avoid using FileBackedOutputStream due to CVE-2023-2976." />
+        </module>
+        <module name="RegexpSinglelineJava">
             <property name="format" value="@Test\(expected"/>
             <property name="message" value="Please use the `assertThrows` method to test for exceptions." />
         </module>
