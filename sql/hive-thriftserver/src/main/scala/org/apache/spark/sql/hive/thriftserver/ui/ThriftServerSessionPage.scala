@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-
 import scala.xml.Node
 
 import jakarta.servlet.http.HttpServletRequest
