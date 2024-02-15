@@ -31,7 +31,6 @@ Pandas API on Spark follows the API specifications of latest pandas release.
    pyspark.pandas/index
    pyspark.ss/index
    pyspark.ml
-   pyspark.ml.connect
    pyspark.streaming
    pyspark.mllib
    pyspark
