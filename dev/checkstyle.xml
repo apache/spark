@@ -182,7 +182,7 @@
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="FileBackedOutputStream"/>
-            <property name="message" value="Avoid using FileBackedOutputStream due to the insecure use of temporary directory." />
+            <property name="message" value="Avoid using FileBackedOutputStream due to CVE-2023-2976." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="@Test\(expected"/>
