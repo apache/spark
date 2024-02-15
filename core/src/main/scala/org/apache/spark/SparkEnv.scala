@@ -418,9 +418,6 @@ object SparkEnv extends Logging {
       new NettyBlockTransferService(conf, securityManager, serializerManager, bindAddress,
         advertiseAddress, blockManagerPort, numUsableCores, blockManagerMaster.driverEndpoint)
 
-    val maxOnHeapMemory = UnifiedMemoryManager.getMaxMemory(conf)
-    val maxOffHeapMemory = conf.get(MEMORY_OFFHEAP_SIZE)
-
     // NB: blockManager is not valid until initialize() is called later.
     //     SPARK-45762 introduces a change where the ShuffleManager is initialized later
     //     in the SparkContext and Executor, to allow for custom ShuffleManagers defined
@@ -437,9 +434,7 @@ object SparkEnv extends Logging {
       _shuffleManager = null,
       blockTransferService,
       securityManager,
-      externalShuffleClient,
-      maxOnHeapMemory,
-      maxOffHeapMemory)
+      externalShuffleClient)
 
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.

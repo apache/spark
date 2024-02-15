@@ -210,7 +210,7 @@ object UnifiedMemoryManager {
   /**
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
-  private[spark] def getMaxMemory(conf: SparkConf): Long = {
+  private def getMaxMemory(conf: SparkConf): Long = {
     val systemMemory = conf.get(TEST_MEMORY)
     val reservedMemory = conf.getLong(TEST_RESERVED_MEMORY.key,
       if (conf.contains(IS_TESTING)) 0 else RESERVED_SYSTEM_MEMORY_BYTES)

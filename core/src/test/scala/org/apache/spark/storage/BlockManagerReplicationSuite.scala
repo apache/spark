@@ -80,7 +80,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val transfer = new NettyBlockTransferService(
       conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
     val memManager = memoryManager.getOrElse(UnifiedMemoryManager(conf, numCores = 1))
-    val store = BlockManager(name, rpcEnv, master, serializerManager, conf,
+    val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(store.memoryStore)
     store.initialize("app-id")
@@ -242,7 +242,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     conf.set(TEST_MEMORY, 10000L)
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
-    val failableStore = BlockManager("failable-store", rpcEnv, master, serializerManager, conf,
+    val failableStore = new BlockManager("failable-store", rpcEnv, master, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, None)
     memManager.setMemoryStore(failableStore.memoryStore)
     failableStore.initialize("app-id")

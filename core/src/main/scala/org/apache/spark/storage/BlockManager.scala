@@ -190,9 +190,7 @@ private[spark] class BlockManager(
     private val _shuffleManager: ShuffleManager,
     val blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
-    externalBlockStoreClient: Option[ExternalBlockStoreClient],
-    val maxOnHeapMemory: Long,
-    val maxOffHeapMemory: Long)
+    externalBlockStoreClient: Option[ExternalBlockStoreClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
@@ -237,6 +235,13 @@ private[spark] class BlockManager(
     store
   }
   private[spark] val diskStore = new DiskStore(conf, diskBlockManager, securityManager)
+
+  // Note: depending on the memory manager, `maxMemory` may actually vary over time.
+  // However, since we use this only for reporting and logging, what we actually want here is
+  // the absolute maximum value that `maxMemory` can ever possibly reach. We may need
+  // to revisit whether reporting this value as the "max" is intuitive to the user.
+  private lazy val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
+  private lazy val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
   private[spark] val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
 
@@ -2152,25 +2157,6 @@ private[spark] class BlockManager(
 
 
 private[spark] object BlockManager {
-  // scalastyle:off argcount
-  def apply(
-    executorId: String,
-    rpcEnv: RpcEnv,
-    master: BlockManagerMaster,
-    serializerManager: SerializerManager,
-    conf: SparkConf,
-    memoryManager: MemoryManager,
-    mapOutputTracker: MapOutputTracker,
-    shuffleManager: ShuffleManager,
-    blockTransferService: BlockTransferService,
-    securityManager: SecurityManager,
-    externalBlockStoreClient: Option[ExternalBlockStoreClient]): BlockManager =
-  new BlockManager(executorId, rpcEnv, master, serializerManager, conf, memoryManager,
-      mapOutputTracker, shuffleManager, blockTransferService, securityManager,
-      externalBlockStoreClient, memoryManager.maxOnHeapStorageMemory,
-      memoryManager.maxOffHeapStorageMemory)
-  // scalastyle:on argcount
-
   private val ID_GENERATOR = new IdGenerator
 
   def blockIdsToLocations(
