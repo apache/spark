@@ -249,7 +249,7 @@ FROM aggr
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`percentile_cont`"
   },
@@ -271,7 +271,7 @@ FROM aggr
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.DISTINCT_UNSUPPORTED",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`percentile_cont`"
   },
@@ -343,7 +343,7 @@ FROM aggr
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`percentile_cont`"
   },
@@ -365,7 +365,7 @@ FROM aggr
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WITHIN_GROUP_MISSING",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "funcName" : "`percentile_cont`"
   },
@@ -387,7 +387,7 @@ FROM aggr
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_INVERSE_DISTRIBUTION_FUNCTION.WRONG_NUM_ORDERINGS",
-  "sqlState" : "ID001",
+  "sqlState" : "42K0K",
   "messageParameters" : {
     "actualNum" : "2",
     "expectedNum" : "1",

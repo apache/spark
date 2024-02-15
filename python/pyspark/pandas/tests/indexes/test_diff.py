@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class IndexesDiffMixin:
@@ -108,7 +108,7 @@ class IndexesDiffMixin:
 
 class IndexesDiffTests(
     IndexesDiffMixin,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     TestUtils,
 ):
     pass

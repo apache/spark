@@ -14,8 +14,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
-# This is used to generate PySpark coverage results. Seems there's no way to
-# add a configuration when SPARK_TESTING environment variable is set because
-# we will directly execute modules by python -m.
-spark.python.daemon.module coverage_daemon
+from pyspark.pandas.tests.frame.test_asfreq import AsFreqMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+
+
+class AsFreqParityTests(
+    AsFreqMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
+    pass
+
+
+if __name__ == "__main__":
+    from pyspark.pandas.tests.connect.frame.test_parity_asfreq import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore[import]
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
@@ -209,6 +209,17 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Returns the three-letter abbreviated day name for the given number of days since 1970-01-01.
+   */
+  def getDayName(days: Int): UTF8String = {
+    val dayName = DayOfWeek
+      .of(getWeekDay(days) + 1)
+      .getDisplayName(TextStyle.SHORT, DateFormatter.defaultLocale)
+
+    UTF8String.fromString(dayName)
+  }
+
+  /**
    * Adds months to a timestamp at the given time zone. It converts the input timestamp to a local
    * timestamp at the given time zone, adds months, and converts the resulted local timestamp
    * back to a timestamp, expressed in microseconds since 1970-01-01 00:00:00Z.
@@ -364,7 +375,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   /**
    * Returns day of week from String. Starting from Thursday, marked as 0.
    * (Because 1970-01-01 is Thursday).
-   * @throws IllegalArgumentException if the input is not a valid day of week.
+   * @throws SparkIllegalArgumentException if the input is not a valid day of week.
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
     val dowString = string.toString.toUpperCase(Locale.ROOT)
@@ -377,7 +388,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case "FR" | "FRI" | "FRIDAY" => FRIDAY
       case "SA" | "SAT" | "SATURDAY" => SATURDAY
       case _ =>
-        throw new IllegalArgumentException(s"""Illegal input for day of week: $string""")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3209",
+          messageParameters = Map("string" -> string.toString))
     }
   }
 

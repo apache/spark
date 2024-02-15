@@ -140,7 +140,7 @@ FROM   (SELECT t2a,
                   t2b) t2;
 
 -- TC 01.09
-SELECT Count(DISTINCT( * ))
+SELECT Count(DISTINCT * )
 FROM   t1
 WHERE  t1b IN (SELECT Min(t2b)
                FROM   t2

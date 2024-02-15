@@ -24,6 +24,7 @@ import test.org.apache.spark.sql.connector.catalog.functions.JavaLongAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaRandomAdd._
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
@@ -321,7 +322,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("scalar function: bad magic method") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenBadMagic))
-    intercept[UnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
+    intercept[SparkUnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
   }
 
   test("scalar function: bad magic method with default impl") {
@@ -333,7 +334,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   test("scalar function: no implementation found") {
     catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
     addFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenNoImpl))
-    intercept[UnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
+    intercept[SparkUnsupportedOperationException](sql("SELECT testcat.ns.strlen('abc')").collect())
   }
 
   test("scalar function: invalid parameter type or length") {
@@ -807,7 +808,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     override def description(): String = name()
 
     override def bind(inputType: StructType): BoundFunction = {
-      throw new UnsupportedOperationException(s"Not implemented")
+      throw SparkUnsupportedOperationException()
     }
   }
 }

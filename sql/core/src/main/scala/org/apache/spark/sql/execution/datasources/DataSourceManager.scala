@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -93,15 +92,13 @@ object DataSourceManager extends Logging {
   // Visible for testing
   private[spark] var dataSourceBuilders: Option[Map[String, UserDefinedPythonDataSource]] = None
   private lazy val shouldLoadPythonDataSources: Boolean = {
-    Utils.checkCommandAvailable(PythonUtils.defaultPythonExec) &&
-      // Make sure PySpark zipped files also exist.
-      PythonUtils.sparkPythonPaths.forall(new File(_).exists())
+    Utils.checkCommandAvailable(PythonUtils.defaultPythonExec)
   }
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
   private def initialStaticDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
-    if (Utils.isTesting || shouldLoadPythonDataSources) this.synchronized {
+    if (shouldLoadPythonDataSources) this.synchronized {
       if (dataSourceBuilders.isEmpty) {
         val maybeResult = try {
           Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())

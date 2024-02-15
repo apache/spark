@@ -19,38 +19,22 @@ license: |
   limitations under the License.
 ---
 
-### Description
-
 A table consists of a set of rows and each row contains a set of columns.
 A column is associated with a data type and represents
 a specific attribute of an entity (for example, `age` is a column of an
 entity called `person`). Sometimes, the value of a column
 specific to a row is not known at the time the row comes into existence.
-In `SQL`, such values are represented as `NULL`. This section details the
+In SQL, such values are represented as `NULL`. This section details the
 semantics of `NULL` values handling in various operators, expressions and
-other `SQL` constructs.
+other SQL constructs.
 
-1. [Null handling in comparison operators](#comp-operators)
-2. [Null handling in Logical operators](#logical-operators)
-3. [Null handling in Expressions](#expressions)
-      1. [Null handling in null-intolerant expressions](#null-intolerant)
-      2. [Null handling Expressions that can process null value operands](#can-process-null)
-      3. [Null handling in built-in aggregate expressions](#built-in-aggregate)
-4. [Null handling in WHERE, HAVING and JOIN conditions](#condition-expressions)
-5. [Null handling in GROUP BY and DISTINCT](#aggregate-operator)
-6. [Null handling in ORDER BY](#order-by)
-7. [Null handling in UNION, INTERSECT, EXCEPT](#set-operators)
-8. [Null handling in EXISTS and NOT EXISTS subquery](#exists-not-exists)
-9. [Null handling in IN and NOT IN subquery](#in-not-in)
-
-<style type="text/css">
-.tsclass {font-size:12px;color:#333333;width:40%;border-width: 2px;border-color: #729ea5;border-collapse: collapse;}
-.tsclass th {text-align: left;}
-</style>
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
 The following illustrates the schema layout and data of a table named `person`. The data contains `NULL` values in
-the `age` column and this table will be used in various examples in the sections below.<br/>
-**<u>TABLE: person</u>**
+the `age` column and this table will be used in various examples in the sections below.
+
+**TABLE: person**
 
 |Id |Name|Age|
 |---|----|---|
@@ -62,12 +46,12 @@ the `age` column and this table will be used in various examples in the sections
 |600|Michelle|30|
 |700|Dan|50|
 
-### Comparison Operators <a name="comp-operators"></a>
+### Comparison Operators
 
-Apache spark supports the standard comparison operators such as '>', '>=', '=', '<' and '<='.
+Apache spark supports the standard comparison operators such as `>`, `>=`, `=`, `<` and `<=`.
 The result of these operators is unknown or `NULL` when one of the operands or both the operands are
 unknown or `NULL`. In order to compare the `NULL` values for equality, Spark provides a null-safe
-equal operator ('<=>'), which returns `False` when one of the operand is `NULL` and returns 'True` when
+equal operator (`<=>`), which returns `False` when one of the operand is `NULL` and returns `True` when
 both the operands are `NULL`. The following table illustrates the behaviour of comparison operators when
 one or both operands are `NULL`:
 
@@ -77,7 +61,8 @@ one or both operands are `NULL`:
 |Any value|NULL|NULL|NULL|NULL|NULL|NULL|False|
 |NULL|NULL|NULL|NULL|NULL|NULL|NULL|True|
 
-### Examples
+
+**Examples**
 
 ```sql
 -- Normal comparison operators return `NULL` when one of the operand is `NULL`.
@@ -113,7 +98,7 @@ SELECT NULL <=> NULL;
 +-----------------+
 ```
 
-### Logical Operators <a name="logical-operators"></a>
+### Logical Operators
 
 Spark supports standard logical operators such as `AND`, `OR` and `NOT`. These operators take `Boolean` expressions
 as the arguments and return a `Boolean` value.  
@@ -132,7 +117,7 @@ The following tables illustrate the behavior of logical operators when one or bo
 |-------|---|
 |NULL|NULL|
 
-### Examples
+**Examples**
 
 ```sql
 -- Normal comparison operators return `NULL` when one of the operands is `NULL`.
@@ -160,7 +145,7 @@ SELECT NOT(null) AS expression_output;
 +-----------------+
 ```
 
-### Expressions <a name="expressions"></a>
+### Expressions
 
 The comparison operators and logical operators are treated as expressions in
 Spark. Other than these two kinds of expressions, Spark supports other form of
@@ -170,12 +155,12 @@ in Spark can be broadly classified as :
 - Expressions that can process `NULL` value operands
   - The result of these expressions depends on the expression itself.
 
-#### Null Intolerant Expressions <a name="null-intolerant"></a>
+#### Null Intolerant Expressions
 
 Null intolerant expressions return `NULL` when one or more arguments of 
 expression are `NULL` and most of the expressions fall in this category.
 
-##### Examples
+**Examples**
 
 ```sql
 SELECT concat('John', null) AS expression_output;
@@ -200,7 +185,7 @@ SELECT to_date(null) AS expression_output;
 +-----------------+
 ```
 
-#### Expressions That Can Process Null Value Operands <a name="can-process-null"></a>
+#### Expressions That Can Process Null Value Operands
 
 This class of expressions are designed to handle `NULL` values. The result of the 
 expressions depends on the expression itself. As an example, function expression `isnull`
@@ -219,7 +204,7 @@ returns the first non `NULL` value in its list of operands. However, `coalesce` 
   - ATLEASTNNONNULLS 
   - IN
 
-##### Examples
+**Examples**
 
 ```sql
 SELECT isnull(null) AS expression_output;
@@ -253,7 +238,7 @@ SELECT isnan(null) AS expression_output;
 +-----------------+
 ```
 
-#### Builtin Aggregate Expressions <a name="built-in-aggregate"></a>
+#### Builtin Aggregate Expressions
 
 Aggregate functions compute a single result by processing a set of input rows. Below are
 the rules of how `NULL` values are handled by aggregate functions.
@@ -269,7 +254,7 @@ the rules of how `NULL` values are handled by aggregate functions.
   - ANY
   - SOME
    
-#### Examples
+**Examples**
 
 ```sql
 -- `count(*)` does not skip `NULL` values.
@@ -314,14 +299,14 @@ SELECT max(age) FROM person where 1 = 0;
 +--------+
 ```
 
-### Condition Expressions in WHERE, HAVING and JOIN Clauses <a name="condition-expressions"></a>
+### Condition Expressions in WHERE, HAVING and JOIN Clauses
 
 `WHERE`, `HAVING` operators filter rows based on the user specified condition.
 A `JOIN` operator is used to combine rows from two tables based on a join condition.
 For all the three operators, a condition expression is a boolean expression and can return
- <code>True, False or Unknown (NULL)</code>. They are "satisfied" if the result of the condition is `True`.
+ `True`, `False`, or Unknown (`NULL`). They are "satisfied" if the result of the condition is `True`.
 
-#### Examples
+**Examples**
 
 ```sql
 -- Persons whose age is unknown (`NULL`) are filtered out from the result set.
@@ -393,14 +378,14 @@ SELECT * FROM person p1, person p2
 +--------+----+--------+----+
 ```
 
-### Aggregate Operator (GROUP BY, DISTINCT) <a name="aggregate-operator"></a>
+### Aggregate Operator (GROUP BY, DISTINCT)
 
 As discussed in the previous section [comparison operator](sql-ref-null-semantics.html#comparison-operators),
 two `NULL` values are not equal. However, for the purpose of grouping and distinct processing, the two or more
 values with `NULL data`are grouped together into the same bucket. This behaviour is conformant with SQL
 standard and with other enterprise database management systems.
 
-#### Examples
+**Examples**
 
 ```sql
 -- `NULL` values are put in one bucket in `GROUP BY` processing.
@@ -426,13 +411,13 @@ SELECT DISTINCT age FROM person;
 +----+
 ```
 
-### Sort Operator (ORDER BY Clause) <a name="order-by"></a>
+### Sort Operator (ORDER BY Clause)
 
 Spark SQL supports null ordering specification in `ORDER BY` clause. Spark processes the `ORDER BY` clause by
 placing all the `NULL` values at first or at last depending on the null ordering specification. By default, all
 the `NULL` values are placed at first.
 
-#### Examples
+**Examples**
 
 ```sql
 -- `NULL` values are shown at first and other values
@@ -481,13 +466,13 @@ SELECT age, name FROM person ORDER BY age DESC NULLS LAST;
 +----+--------+
 ```
 
-### Set Operators (UNION, INTERSECT, EXCEPT) <a name="set-operators"></a>
+### Set Operators (UNION, INTERSECT, EXCEPT)
 
 `NULL` values are compared in a null-safe manner for equality in the context of
 set operations. That means when comparing rows, two `NULL` values are considered 
 equal unlike the regular `EqualTo`(`=`) operator.
 
-#### Examples
+**Examples**
 
 ```sql
 CREATE VIEW unknown_age SELECT * FROM person WHERE age IS NULL;
@@ -539,7 +524,7 @@ SELECT name, age FROM person
 +--------+----+
 ```
 
-### EXISTS/NOT EXISTS Subquery <a name="exists-not-exists"></a>
+### EXISTS/NOT EXISTS Subquery
 
 In Spark, EXISTS and NOT EXISTS expressions are allowed inside a WHERE clause. 
 These are boolean expressions which return either `TRUE` or
@@ -552,7 +537,7 @@ These two expressions are not affected by presence of NULL in the result of
 the subquery. They are normally faster because they can be converted to
 semijoins / anti-semijoins without special provisions for null awareness.
 
-#### Examples
+**Examples**
 
 ```sql
 -- Even if subquery produces rows with `NULL` values, the `EXISTS` expression
@@ -593,7 +578,7 @@ SELECT * FROM person WHERE NOT EXISTS (SELECT 1 WHERE 1 = 0);
 +--------+----+
 ```
 
-### IN/NOT IN Subquery <a name="in-not-in"></a>
+### IN/NOT IN Subquery
 
 In Spark, `IN` and `NOT IN` expressions are allowed inside a WHERE clause of
 a query. Unlike the `EXISTS` expression, `IN` expression can return a `TRUE`,
@@ -615,7 +600,7 @@ NOT IN always returns UNKNOWN when the list contains `NULL`, regardless of the i
 This is because IN returns UNKNOWN if the value is not in the list containing `NULL`,
 and because NOT UNKNOWN is again UNKNOWN.
  
-#### Examples
+**Examples**
 
 ```sql
 -- The subquery has only `NULL` value in its result set. Therefore,

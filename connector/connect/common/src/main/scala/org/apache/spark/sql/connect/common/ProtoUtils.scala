@@ -42,9 +42,17 @@ private[connect] object ProtoUtils {
         val size = string.length
         val threshold = thresholds.getOrElse(STRING, MAX_STRING_SIZE)
         if (size > threshold) {
-          builder.setField(field, createString(string.take(threshold), size))
-        } else {
-          builder.setField(field, string)
+          builder.setField(field, truncateString(string, threshold))
+        }
+
+      case (field: FieldDescriptor, strings: java.lang.Iterable[_])
+          if field.getJavaType == FieldDescriptor.JavaType.STRING && field.isRepeated
+            && strings != null =>
+        val threshold = thresholds.getOrElse(STRING, MAX_STRING_SIZE)
+        strings.iterator().asScala.zipWithIndex.foreach {
+          case (string: String, i) if string != null && string.length > threshold =>
+            builder.setRepeatedField(field, i, truncateString(string, threshold))
+          case _ =>
         }
 
       case (field: FieldDescriptor, byteString: ByteString)
@@ -57,8 +65,6 @@ private[connect] object ProtoUtils {
             byteString
               .substring(0, threshold)
               .concat(createTruncatedByteString(size)))
-        } else {
-          builder.setField(field, byteString)
         }
 
       case (field: FieldDescriptor, byteArray: Array[Byte])
@@ -71,27 +77,35 @@ private[connect] object ProtoUtils {
             ByteString
               .copyFrom(byteArray, 0, threshold)
               .concat(createTruncatedByteString(size)))
-        } else {
-          builder.setField(field, byteArray)
         }
 
-      // TODO(SPARK-43117): should also support 1, repeated msg; 2, map<xxx, msg>
+      // TODO(SPARK-46988): should support map<xxx, msg>
       case (field: FieldDescriptor, msg: Message)
-          if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && msg != null =>
+          if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && !field.isRepeated
+            && msg != null =>
         builder.setField(field, abbreviate(msg, thresholds))
 
-      case (field: FieldDescriptor, value: Any) => builder.setField(field, value)
+      case (field: FieldDescriptor, msgs: java.lang.Iterable[_])
+          if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && field.isRepeated
+            && msgs != null =>
+        msgs.iterator().asScala.zipWithIndex.foreach {
+          case (msg: Message, i) if msg != null =>
+            builder.setRepeatedField(field, i, abbreviate(msg, thresholds))
+          case _ =>
+        }
+
+      case _ =>
     }
 
     builder.build()
   }
 
-  private def createTruncatedByteString(size: Int): ByteString = {
-    ByteString.copyFromUtf8(s"[truncated(size=${format.format(size)})]")
+  private def truncateString(string: String, threshold: Int): String = {
+    s"${string.take(threshold)}[truncated(size=${format.format(string.length)})]"
   }
 
-  private def createString(prefix: String, size: Int): String = {
-    s"$prefix[truncated(size=${format.format(size)})]"
+  private def createTruncatedByteString(size: Int): ByteString = {
+    ByteString.copyFromUtf8(s"[truncated(size=${format.format(size)})]")
   }
 
   // Because Spark Connect operation tags are also set as SparkContext Job tags, they cannot contain
