@@ -287,6 +287,8 @@ object SparkEnv extends Logging {
       numCores,
       ioEncryptionKey
     )
+    // Set the memory manager since it needs to be initialized explicitly
+    env.initializeMemoryManager(numCores)
     SparkEnv.set(env)
     env
   }
