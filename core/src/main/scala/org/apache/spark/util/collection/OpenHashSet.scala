@@ -119,7 +119,6 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
    */
   @annotation.nowarn("cat=other-non-cooperative-equals")
   private def keyExistsAtPos(k: T, pos: Int) =
-    // _data(pos) == k
     _data(pos) equals k
 
   /**
