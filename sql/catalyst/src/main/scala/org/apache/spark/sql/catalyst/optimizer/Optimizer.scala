@@ -1827,9 +1827,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         if (e1c.semanticEquals(e2c)) {
           true
         } else if (e1c.isInstanceOf[NamedExpression] && e2c.isInstanceOf[NamedExpression]) {
-          if (e1c.asInstanceOf[NamedExpression].exprId == e2c.asInstanceOf[NamedExpression]) {
-            throw new Exception("sadness")
-            false
+          val named1 = e1c.asInstanceOf[NamedExpression]
+          val named2 = e2c.asInstanceOf[NamedExpression]
+          if (named1.exprId == named2.exprId) {
+            true
           } else {
             false
           }
@@ -1838,7 +1839,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
       }
       def eligibleForPushdown(e: Expression): Boolean = {
-        e.deterministic && output.exists(e2 => semanticOrRefEqual(e, e2))
+        e.deterministic && e.references.forall { ref =>
+          output.exists(e2 => semanticOrRefEqual(ref, e2))
+        }
       }
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(eligibleForPushdown)
 
