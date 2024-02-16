@@ -24,7 +24,7 @@ import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
@@ -66,7 +66,7 @@ class RowTest extends AnyFunSpec with Matchers {
     }
 
     it("Accessing non existent field throws an exception") {
-      intercept[IllegalArgumentException] {
+      intercept[SparkIllegalArgumentException] {
         sampleRow.getAs[String]("non_existent")
       }
     }
