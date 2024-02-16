@@ -259,13 +259,13 @@ GROUP BY t1.t1a;
 -- In-subquery with CASE statement inside an aggregate function, and a top-level aggregation
 SELECT
   SUM(CASE
-    WHEN t1.t1a IN (SELECT t2a FROM t2) THEN 10
+    WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
     ELSE -10
   END) AS v1,
   CASE
-    WHEN t1.t1a + 10 IN (SELECT t2a + 1 FROM t2) THEN 10
+    WHEN t1.t1c + 10 IN (SELECT t2c + 2 FROM t2) THEN 10
     ELSE 20
   END AS v2,
-  count(t1.t1a) as ct
+  count(t1.t1c) as ct
 FROM t1
-GROUP BY t1.t1a;
+GROUP BY t1.t1c;

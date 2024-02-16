@@ -391,21 +391,20 @@ struct<v1:int>
 -- !query
 SELECT
   SUM(CASE
-    WHEN t1.t1a IN (SELECT t2a FROM t2) THEN 10
+    WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
     ELSE -10
   END) AS v1,
   CASE
-    WHEN t1.t1a + 10 IN (SELECT t2a + 1 FROM t2) THEN 10
+    WHEN t1.t1c + 10 IN (SELECT t2c + 2 FROM t2) THEN 10
     ELSE 20
   END AS v2,
-  count(t1.t1a) as ct
+  count(t1.t1c) as ct
 FROM t1
-GROUP BY t1.t1a
+GROUP BY t1.t1c
 -- !query schema
 struct<v1:bigint,v2:int,ct:bigint>
 -- !query output
--30	20	3
--40	20	4
-10	20	1
-10	20	1
-30	20	3
+-20	10	2
+-40	20	0
+20	20	2
+40	20	4

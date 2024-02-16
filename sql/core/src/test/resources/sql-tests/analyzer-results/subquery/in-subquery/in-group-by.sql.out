@@ -704,26 +704,26 @@ Aggregate [t1a#x], [CASE WHEN t1a#x IN (list#x []) THEN 10 ELSE -10 END AS v1#x]
 -- !query
 SELECT
   SUM(CASE
-    WHEN t1.t1a IN (SELECT t2a FROM t2) THEN 10
+    WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
     ELSE -10
   END) AS v1,
   CASE
-    WHEN t1.t1a + 10 IN (SELECT t2a + 1 FROM t2) THEN 10
+    WHEN t1.t1c + 10 IN (SELECT t2c + 2 FROM t2) THEN 10
     ELSE 20
   END AS v2,
-  count(t1.t1a) as ct
+  count(t1.t1c) as ct
 FROM t1
-GROUP BY t1.t1a
+GROUP BY t1.t1c
 -- !query analysis
-Aggregate [t1a#x], [sum(CASE WHEN t1a#x IN (list#x []) THEN 10 ELSE -10 END) AS v1#xL, CASE WHEN (cast(t1a#x as double) + cast(10 as double)) IN (list#x []) THEN 10 ELSE 20 END AS v2#x, count(t1a#x) AS ct#xL]
-:  :- Project [t2a#x]
+Aggregate [t1c#x], [sum(CASE WHEN t1c#x IN (list#x []) THEN 10 ELSE -10 END) AS v1#xL, CASE WHEN (t1c#x + 10) IN (list#x []) THEN 10 ELSE 20 END AS v2#x, count(t1c#x) AS ct#xL]
+:  :- Project [t2c#x]
 :  :  +- SubqueryAlias t2
 :  :     +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :  :        +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :  :           +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :  :              +- SubqueryAlias t2
 :  :                 +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
-:  +- Project [(cast(t2a#x as double) + cast(1 as double)) AS (t2a + 1)#x]
+:  +- Project [(t2c#x + 2) AS (t2c + 2)#x]
 :     +- SubqueryAlias t2
 :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
