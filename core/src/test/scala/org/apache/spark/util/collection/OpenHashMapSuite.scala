@@ -250,7 +250,7 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     assert(map.get(null) === Some(null))
   }
 
-  test("SPARK-45599: 0.0 and -0.0 should count distinctly") {
+  test("SPARK-45599: 0.0 and -0.0 should count distinctly; NaNs should count together") {
     // Exactly these elements provided in roughly this order trigger a condition where lookups of
     // 0.0 and -0.0 in the bitset happen to collide, causing their counts to be merged incorrectly
     // and inconsistently if `==` is used to check for key equality.
