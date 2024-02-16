@@ -1817,26 +1817,54 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
+      // We should also only push down filters which are equal (either ref or semantic) to an
+      // output of the union. We check referential equality since semantic equality of a named field
+      // may be false as the data type may have changed to include nullable during the union.
+      val output = union.output
+      def semanticOrRefEqual(e1: Expression, e2: Expression): Boolean = {
+        val e1c = e1.canonicalized
+        val e2c = e2.canonicalized
+        if (e1c.semanticEquals(e2c)) {
+          true
+        } else if (e1c.isInstanceOf[NamedExpression] && e2c.isInstanceOf[NamedExpression]) {
+          if (e1c.asInstanceOf[NamedExpression].exprId == e2c.asInstanceOf[NamedExpression]) {
+            throw new Exception("sadness")
+            false
+          } else {
+            false
+          }
+        } else {
+          false
+        }
+      }
+      def eligibleForPushdown(e: Expression): Boolean = {
+        e.deterministic && output.exists(e2 => semanticOrRefEqual(e, e2))
+      }
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(eligibleForPushdown)
 
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
-        val output = union.output
+        // The union is the child of the filter so it's children are grandchildren.
+        // Moves filters down to the grandchild if there is an element in the grand child's
+        // output which is semantically equal to the filter being evaluated.
         val newGrandChildren = union.children.map { grandchild =>
           val newCond = pushDownCond transform {
-            case e if output.exists(_.semanticEquals(e)) =>
-              grandchild.output(output.indexWhere(_.semanticEquals(e)))
+            case e if output.exists(semanticOrRefEqual(_, e)) =>
+              grandchild.output(output.indexWhere(semanticOrRefEqual(_, e)))
           }
           assert(newCond.references.subsetOf(grandchild.outputSet))
           Filter(newCond, grandchild)
         }
         val newUnion = union.withNewChildren(newGrandChildren)
         if (stayUp.nonEmpty) {
+          // If there is any filter we can't push evaluate them post union
           Filter(stayUp.reduceLeft(And), newUnion)
         } else {
+          // If we pushed all filters then just return the new union.
           newUnion
         }
       } else {
+        // If we can't push anything just return the initial filter.
         filter
       }
 

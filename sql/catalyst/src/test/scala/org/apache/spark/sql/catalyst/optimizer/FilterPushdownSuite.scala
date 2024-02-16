@@ -882,6 +882,25 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("union part 2 electric razor idk") {
+    val nullableArray = StructFiled("c", ArrayType(IntegerType, true))
+    val testRelationNonNull = LocalRelation($"a".array(IntegerType), $"b".int)
+    val testRelationNull = LocalRelation(nullableArray, $"d".int)
+
+
+    val originalQuery = Union(Seq(testRelationNonNull, testRelationNull))
+      .where(IsNotNull($"a"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = Union(Seq(
+      testRelation.where(IsNotNull($"a")),
+      testRelation2.where(IsNotNull($"c"))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("expand") {
     val agg = testRelation
       .groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", sum($"c"))
