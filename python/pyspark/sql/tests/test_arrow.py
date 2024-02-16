@@ -831,6 +831,16 @@ class ArrowTestsMixin:
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
         self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
 
+    def test_negative_and_zero_batch_size(self):
+        # SPARK-47068: Negative and zero value should work as unlimited batch size.
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 0}):
+            pdf = pd.DataFrame({"a": [123]})
+            assert_frame_equal(pdf, self.spark.createDataFrame(pdf).toPandas())
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": -1}):
+            pdf = pd.DataFrame({"a": [123]})
+            assert_frame_equal(pdf, self.spark.createDataFrame(pdf).toPandas())
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
