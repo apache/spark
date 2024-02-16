@@ -89,11 +89,13 @@ object EvalPythonExec {
     extends Iterator[InternalRow] {
     override def hasNext: Boolean = internalRowIterator.hasNext
     override def next(): InternalRow = {
-      val result: InternalRow = internalRowIterator.next()
-      udtf.outputTableForwardedHiddenColumnIndexes.foreach { index: Int =>
-        result.update(index, inputIterator.forwardedHiddenValues(index))
+      val inputRow: InternalRow = internalRowIterator.next()
+      if (inputIterator.forwardedHiddenValues.isEmpty) {
+        inputRow
+      } else {
+        val forwarded = new GenericInternalRow(inputIterator.forwardedHiddenValues)
+        new JoinedRow(inputRow, forwarded)
       }
-      result
     }
   }
 

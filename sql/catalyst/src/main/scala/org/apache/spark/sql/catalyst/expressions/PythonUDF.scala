@@ -199,32 +199,6 @@ case class PythonUDTF(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDTF =
     copy(children = newChildren)
 
-  /**
-   * This computes and returns the indexes of the output table columns with the same names as the
-   * columns indexed by the [[forwardedHiddenColumnIndexes]]. With these output table column
-   * indexes, we can assign the same values to the output table columns as the corresponding input
-   * table columns without sending them from the JVM to the Python UDTF's 'eval' method, for
-   * efficiency.
-   */
-  lazy val outputTableForwardedHiddenColumnIndexes: Seq[Int] = {
-    children.collectFirst {
-      case t: FunctionTableSubqueryArgumentExpression
-        if forwardHiddenColumnIndexes.nonEmpty => t
-    }.map { inputTableArgument: FunctionTableSubqueryArgumentExpression =>
-      val inputTableSchema = inputTableArgument.plan.schema
-      val inputColumnNames: Array[String] = inputTableSchema.map(_.name).toArray
-      val forwardedColumnNames: Set[String] =
-        forwardHiddenColumnIndexes.get.childIndexes.map { i: Int =>
-          inputColumnNames(i)
-        }
-      val outputColumnNames: Set[String] = elementSchema.map(_.name).toSet
-      outputColumnNames.zipWithIndex.filter { case (name, _) =>
-        forwardedColumnNames.contains(name)
-      }.map(_._2).toSeq
-    }.getOrElse(Seq.empty)
-  }
-}
-
 /**
  * Holds zero-based indexes of specific columns within a TABLE argument to a Python UDTF call,
  * if applicable. These can refer to partitioning columns or hidden pass-through columns
