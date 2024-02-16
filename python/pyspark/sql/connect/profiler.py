@@ -16,7 +16,7 @@
 #
 from typing import TYPE_CHECKING
 
-from pyspark.sql.profiler import ProfilerCollector, ProfileResultsParam
+from pyspark.sql.profiler import Profile, ProfilerCollector, ProfileResultsParam
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ProfileResults
@@ -39,3 +39,14 @@ class ConnectProfilerCollector(ProfilerCollector):
     def _update(self, update: "ProfileResults") -> None:
         with self._lock:
             self._value = ProfileResultsParam.addInPlace(self._profile_results, update)
+
+
+class ConnectProfile(Profile):
+    """User-facing profile API for Spark Connect. This instance can be accessed by
+    :attr:`spark.profile`.
+
+    .. versionadded: 4.0.0
+    """
+
+    def __init__(self, profiler_collector: ConnectProfilerCollector):
+        self.profiler_collector = profiler_collector
