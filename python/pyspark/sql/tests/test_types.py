@@ -56,6 +56,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    VariantType,
 )
 from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
@@ -874,6 +875,7 @@ class TypesTestsMixin:
             StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
             _parse_datatype_string("a INT, c DOUBLE"),
         )
+        self.assertEqual(VariantType(), _parse_datatype_string("variant"))
 
     def test_metadata_null(self):
         schema = StructType(
@@ -1210,6 +1212,7 @@ class TypesTestsMixin:
             MapType(StringType(), IntegerType()),
             StructField("f1", StringType(), True),
             StructType([StructField("f1", StringType(), True)]),
+            VariantType(),
         ]
         for instance in instances:
             self.assertEqual(eval(repr(instance)), instance)
@@ -1374,6 +1377,10 @@ class TypesTestsMixin:
         self.assertEqual(
             DataType.fromDDL("a int, b string"),
             StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a int, v variant"),
+            StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
         )
 
 
