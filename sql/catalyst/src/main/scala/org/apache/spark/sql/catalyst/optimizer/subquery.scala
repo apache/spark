@@ -248,24 +248,63 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     case u: UnaryNode if u.expressions.exists(
         SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
       var newChild = u.child
-      u.mapExpressions(expr => {
-        val (newExpr, p) = rewriteExistentialExpr(Seq(expr), newChild)
+      var introducedAttrs = Seq.empty[Attribute]
+      val updatedNode = u.mapExpressions(expr => {
+        val (newExpr, p, newAttrs) = rewriteExistentialExprWithAttrs(Seq(expr), newChild)
         newChild = p
+        introducedAttrs ++= newAttrs
         // The newExpr can not be None
         newExpr.get
       }).withNewChildren(Seq(newChild))
+      updatedNode match {
+        case a: Aggregate =>
+          // If we have introduced new `exists`-attributes that:
+          // 1) are referenced by aggregateExpressions within a non-aggregateFunction expression
+          // 2) are not referenced by groupingExpressions
+          // we need to add them to the groupingExpressions.
+          val aggFunctionReferences = a.aggregateExpressions.
+            flatMap(extractAggregateExpressions).
+            flatMap(_.aggregateFunction.references).toSet
+          val nonAggFuncReferences =
+            a.aggregateExpressions.flatMap(_.references).filterNot(aggFunctionReferences.contains)
+          val groupingReferences = a.groupingExpressions.flatMap(_.references)
+          val newGroupingExprs = introducedAttrs
+            .filter(nonAggFuncReferences.contains)
+            .filterNot(groupingReferences.contains)
+          a.copy(groupingExpressions = a.groupingExpressions ++ newGroupingExprs)
+        case _ => updatedNode
+      }
+  }
+
+  /**
+   * Extract all aggregate expressions from the expression tree routed at `expr`.
+   */
+  private def extractAggregateExpressions(expr: Expression): Seq[AggregateExpression] = {
+    expr match {
+      case a: AggregateExpression => Seq(a)
+      case e: Expression => e.children.flatMap(extractAggregateExpressions)
+    }
   }
 
   /**
    * Given a predicate expression and an input plan, it rewrites any embedded existential sub-query
-   * into an existential join. It returns the rewritten expression together with the updated plan.
+   * into an existential join. It returns the rewritten expression together with the updated plan,
+   * as well as the newly introduced attributes.
    * Currently, it does not support NOT IN nested inside a NOT expression. This case is blocked in
    * the Analyzer.
    */
   private def rewriteExistentialExpr(
-      exprs: Seq[Expression],
-      plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    exprs: Seq[Expression],
+    plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    val (newExpr, newPlan, _) = rewriteExistentialExprWithAttrs(exprs, plan)
+    (newExpr, newPlan)
+  }
+
+  private def rewriteExistentialExprWithAttrs(
+    exprs: Seq[Expression],
+    plan: LogicalPlan): (Option[Expression], LogicalPlan, Seq[Attribute]) = {
     var newPlan = plan
+    val introducedAttrs = ArrayBuffer.empty[Attribute]
     val newExprs = exprs.map { e =>
       e.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
         case Exists(sub, _, _, conditions, subHint) =>
@@ -275,6 +314,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan =
             buildJoin(newPlan, rewriteDomainJoinsIfPresent(newPlan, sub, newCondition),
               existenceJoin, newCondition, subHint)
+          introducedAttrs += exists
           exists
         case Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
@@ -299,6 +339,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan = Join(newPlan,
             rewriteDomainJoinsIfPresent(newPlan, newSub, Some(finalJoinCond)),
             ExistenceJoin(exists), Some(finalJoinCond), joinHint)
+          introducedAttrs += exists
           Not(exists)
         case InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
@@ -309,10 +350,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val joinHint = JoinHint(None, subHint)
           newPlan = Join(newPlan, rewriteDomainJoinsIfPresent(newPlan, newSub, newConditions),
             ExistenceJoin(exists), newConditions, joinHint)
+          introducedAttrs += exists
           exists
       }
     }
-    (newExprs.reduceOption(And), newPlan)
+    (newExprs.reduceOption(And), newPlan, introducedAttrs)
   }
 }
 

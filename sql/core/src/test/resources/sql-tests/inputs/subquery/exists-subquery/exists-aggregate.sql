@@ -135,3 +135,26 @@ WHERE EXISTS (
   from EMP as tt2
   where tt1.emp_name is null
 );
+
+-- In-subquery with CASE statement and a top-level aggregation
+SELECT
+  CASE
+    WHEN t1.id IN (SELECT id FROM t2) THEN 10
+    ELSE -10
+  END AS v1
+FROM t1
+GROUP BY t1.id;
+
+-- In-subquery with CASE statement inside an aggregate function, and a top-level aggregation
+SELECT
+  SUM(CASE
+    WHEN t1.id IN (SELECT id FROM t2) THEN 10
+    ELSE -10
+  END) AS v1,
+  CASE
+    WHEN t1.id + 10 IN (SELECT id + 1 FROM t2) THEN 10
+    ELSE 20
+  END AS v2,
+  count(t1.id) as ct
+FROM t1
+GROUP BY t1.id;
