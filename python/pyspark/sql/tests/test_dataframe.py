@@ -2123,9 +2123,6 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
-    def test_toDF_with_schema_string(self):
-        super().test_toDF_with_schema_string()
-
     pass
 
 

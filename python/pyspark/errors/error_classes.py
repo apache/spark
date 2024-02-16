@@ -288,20 +288,40 @@ ERROR_CLASSES_JSON = '''
   },
   "FIELD_DATA_TYPE_UNACCEPTABLE": {
     "message": [
+      "<data_type> can not accept object <obj> in type <obj_type>."
+    ]
+  },
+  "FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME": {
+    "message": [
       "<field_name>: <data_type> can not accept object <obj> in type <obj_type>."
     ]
   },
   "FIELD_NOT_NULLABLE": {
+    "message": [
+      "Field is not nullable, but got None."
+    ]
+  },
+  "FIELD_NOT_NULLABLE_WITH_NAME": {
     "message": [
       "<field_name>: This field is not nullable, but got None."
     ]
   },
   "FIELD_STRUCT_LENGTH_MISMATCH": {
     "message": [
+      "Length of object (<object_length>) does not match with length of fields (<field_length>)."
+    ]
+  },
+  "FIELD_STRUCT_LENGTH_MISMATCH_WITH_NAME": {
+    "message": [
       "<field_name>: Length of object (<object_length>) does not match with length of fields (<field_length>)."
     ]
   },
   "FIELD_TYPE_MISMATCH": {
+    "message": [
+      "<obj> is not an instance of type <data_type>."
+    ]
+  },
+  "FIELD_TYPE_MISMATCH_WITH_NAME": {
     "message": [
       "<field_name>: <obj> is not an instance of type <data_type>."
     ]
@@ -309,6 +329,11 @@ ERROR_CLASSES_JSON = '''
   "FIELD_VALUE_OUT_OF_RANGE": {
     "message": [
       "<field_name>: object of <data_type> out of range, got: <obj>."
+    ]
+  },
+  "FIELD_VALUE_OUT_OF_RANGE_WITH_NAME": {
+    "message": [
+      "Object of <data_type> out of range, got: <obj>."
     ]
   },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": {

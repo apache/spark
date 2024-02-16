@@ -2196,11 +2196,16 @@ def _make_type_verifier(
             if nullable:
                 return True
             else:
+                if name is not None:
+                    raise PySparkValueError(
+                        error_class="FIELD_NOT_NULLABLE_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                        },
+                    )
                 raise PySparkValueError(
                     error_class="FIELD_NOT_NULLABLE",
-                    message_parameters={
-                        "field_name": name if name is not None else "",
-                    },
+                    message_parameters={},
                 )
         else:
             return False
@@ -2215,10 +2220,19 @@ def _make_type_verifier(
     def verify_acceptable_types(obj: Any) -> None:
         # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
+            if name is not None:
+                raise PySparkTypeError(
+                    error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+                    message_parameters={
+                        "field_name": str(name),
+                        "data_type": str(dataType),
+                        "obj": repr(obj),
+                        "obj_type": str(type(obj)),
+                    },
+                )
             raise PySparkTypeError(
                 error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
                 message_parameters={
-                    "field_name": name if name is not None else "",
                     "data_type": str(dataType),
                     "obj": repr(obj),
                     "obj_type": str(type(obj)),
@@ -2235,10 +2249,18 @@ def _make_type_verifier(
 
         def verify_udf(obj: Any) -> None:
             if not (hasattr(obj, "__UDT__") and obj.__UDT__ == dataType):
+                if name is not None:
+                    raise PySparkValueError(
+                        error_class="FIELD_TYPE_MISMATCH_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                            "obj": str(obj),
+                            "data_type": str(dataType),
+                        },
+                    )
                 raise PySparkValueError(
                     error_class="FIELD_TYPE_MISMATCH",
                     message_parameters={
-                        "field_name": name if name is not None else "",
                         "obj": str(obj),
                         "data_type": str(dataType),
                     },
@@ -2253,10 +2275,18 @@ def _make_type_verifier(
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -128 or obj > 127:
+                if name is not None:
+                    raise PySparkValueError(
+                        error_class="FIELD_VALUE_OUT_OF_RANGE_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                            "data_type": "ByteType",
+                            "obj": str(obj),
+                        },
+                    )
                 raise PySparkValueError(
                     error_class="FIELD_VALUE_OUT_OF_RANGE",
                     message_parameters={
-                        "field_name": name if name is not None else "",
                         "data_type": "ByteType",
                         "obj": str(obj),
                     },
@@ -2270,10 +2300,18 @@ def _make_type_verifier(
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -32768 or obj > 32767:
+                if name is not None:
+                    raise PySparkValueError(
+                        error_class="FIELD_VALUE_OUT_OF_RANGE_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                            "data_type": "ShortType",
+                            "obj": str(obj),
+                        },
+                    )
                 raise PySparkValueError(
                     error_class="FIELD_VALUE_OUT_OF_RANGE",
                     message_parameters={
-                        "field_name": name if name is not None else "",
                         "data_type": "ShortType",
                         "obj": str(obj),
                     },
@@ -2287,10 +2325,18 @@ def _make_type_verifier(
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -2147483648 or obj > 2147483647:
+                if name is not None:
+                    raise PySparkValueError(
+                        error_class="FIELD_VALUE_OUT_OF_RANGE_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                            "data_type": "IntegerType",
+                            "obj": str(obj),
+                        },
+                    )
                 raise PySparkValueError(
                     error_class="FIELD_VALUE_OUT_OF_RANGE",
                     message_parameters={
-                        "field_name": name if name is not None else "",
                         "data_type": "IntegerType",
                         "obj": str(obj),
                     },
@@ -2304,10 +2350,18 @@ def _make_type_verifier(
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
             if obj < -9223372036854775808 or obj > 9223372036854775807:
+                if name is not None:
+                    raise PySparkValueError(
+                        error_class="FIELD_VALUE_OUT_OF_RANGE_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                            "data_type": "LongType",
+                            "obj": str(obj),
+                        },
+                    )
                 raise PySparkValueError(
                     error_class="FIELD_VALUE_OUT_OF_RANGE",
                     message_parameters={
-                        "field_name": name if name is not None else "",
                         "data_type": "LongType",
                         "obj": str(obj),
                     },
@@ -2357,10 +2411,18 @@ def _make_type_verifier(
                     verifier(obj.get(f))
             elif isinstance(obj, (tuple, list)):
                 if len(obj) != len(verifiers):
+                    if name is not None:
+                        raise PySparkValueError(
+                            error_class="FIELD_STRUCT_LENGTH_MISMATCH_WITH_NAME",
+                            message_parameters={
+                                "field_name": str(name),
+                                "object_length": str(len(obj)),
+                                "field_length": str(len(verifiers)),
+                            },
+                        )
                     raise PySparkValueError(
                         error_class="FIELD_STRUCT_LENGTH_MISMATCH",
                         message_parameters={
-                            "field_name": name if name is not None else "",
                             "object_length": str(len(obj)),
                             "field_length": str(len(verifiers)),
                         },
@@ -2372,10 +2434,19 @@ def _make_type_verifier(
                 for f, verifier in verifiers:
                     verifier(d.get(f))
             else:
+                if name is not None:
+                    raise PySparkTypeError(
+                        error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                            "data_type": str(dataType),
+                            "obj": repr(obj),
+                            "obj_type": str(type(obj)),
+                        },
+                    )
                 raise PySparkTypeError(
                     error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
                     message_parameters={
-                        "field_name": name if name is not None else "",
                         "data_type": str(dataType),
                         "obj": repr(obj),
                         "obj_type": str(type(obj)),
