@@ -911,7 +911,7 @@ class SparkSession(SparkConversionMixin):
     def profile(self) -> "Profile":
         from pyspark.sql.profiler import Profile
 
-        return Profile(self)
+        return Profile(self._profiler_collector)
 
     def range(
         self,
@@ -2134,33 +2134,6 @@ class SparkSession(SparkConversionMixin):
             error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
             message_parameters={"feature": "SparkSession.clearTags"},
         )
-
-    def showPerfProfiles(self, id: Optional[int] = None) -> None:
-        self._profiler_collector.show_perf_profiles(id)
-
-    showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
-
-    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
-        if has_memory_profiler:
-            self._profiler_collector.show_memory_profiles(id)
-        else:
-            warnings.warn(
-                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
-                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
-                UserWarning,
-            )
-
-    showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
-
-    def dumpPerfProfiles(self, path: str, id: Optional[int] = None) -> None:
-        self._profiler_collector.dump_perf_profiles(path, id)
-
-    dumpPerfProfiles.__doc__ = ProfilerCollector.dump_perf_profiles.__doc__
-
-    def dumpMemoryProfiles(self, path: str, id: Optional[int] = None) -> None:
-        self._profiler_collector.dump_memory_profiles(path, id)
-
-    dumpMemoryProfiles.__doc__ = ProfilerCollector.dump_memory_profiles.__doc__
 
 
 def _test() -> None:

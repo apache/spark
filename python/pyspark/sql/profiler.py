@@ -250,10 +250,10 @@ class Profile:
     .. versionadded: 4.0.0
     """
 
-    def __init__(self, sparkSession: "SparkSession"):
-        self.sparkSession = sparkSession
+    def __init__(self, profiler_collector: "ProfilerCollector"):
+        self.profiler_collector = profiler_collector
 
-    def show(self, *, type: Optional[str] = None, id: Optional[int] = None) -> None:
+    def show(self, id: Optional[int] = None, *, type: Optional[str] = None) -> None:
         """
         Show the profile results.
 
@@ -261,17 +261,17 @@ class Profile:
 
         Parameters
         ----------
-        type : str, optional
-            The profiler type, which can be either "perf" or "memory".
         id : int, optional
             A UDF ID to be shown. If not specified, all the results will be shown.
+        type : str, optional
+            The profiler type, which can be either "perf" or "memory".
         """
         if type == "memory":
-            self.sparkSession.showMemoryProfiles(id)
+            self.profiler_collector.show_memory_profiles(id)
         elif type == "perf" or type is None:
-            self.sparkSession.showPerfProfiles(id)
+            self.profiler_collector.show_perf_profiles(id)
             if type is None:  # Show both perf and memory profiles
-                self.sparkSession.showMemoryProfiles(id)
+                self.profiler_collector.show_memory_profiles(id)
         else:
             raise PySparkValueError(
                 error_class="VALUE_NOT_ALLOWED",
@@ -281,7 +281,7 @@ class Profile:
                 },
             )
 
-    def dump(self, path: str, *, type: Optional[str] = None, id: Optional[int] = None) -> None:
+    def dump(self, path: str, id: Optional[int] = None, *, type: Optional[str] = None) -> None:
         """
         Dump the profile results into directory `path`.
 
@@ -291,17 +291,17 @@ class Profile:
         ----------
         path: str
             A directory in which to dump the profile.
-        type : str, optional
-            The profiler type, which can be either "perf" or "memory".
         id : int, optional
             A UDF ID to be shown. If not specified, all the results will be shown.
+        type : str, optional
+            The profiler type, which can be either "perf" or "memory".
         """
         if type == "memory":
-            self.sparkSession.dumpMemoryProfiles(path, id)
+            self.profiler_collector.dump_memory_profiles(path, id)
         elif type == "perf" or type is None:
-            self.sparkSession.dumpPerfProfiles(path, id)
+            self.profiler_collector.dump_perf_profiles(path, id)
             if type is None:  # Dump both perf and memory profiles
-                self.sparkSession.dumpMemoryProfiles(path, id)
+                self.profiler_collector.dump_memory_profiles(path, id)
         else:
             raise PySparkValueError(
                 error_class="VALUE_NOT_ALLOWED",
