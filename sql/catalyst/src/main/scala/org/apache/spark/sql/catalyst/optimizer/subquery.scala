@@ -354,7 +354,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           exists
       }
     }
-    (newExprs.reduceOption(And), newPlan, introducedAttrs)
+    (newExprs.reduceOption(And), newPlan, introducedAttrs.toSeq)
   }
 }
 
