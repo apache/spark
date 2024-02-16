@@ -1181,7 +1181,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           "fallBackNotice" -> "",
           "typeName" -> "interval year to month",
           "intervalStr" -> "year-month",
-          "supportedFormat" -> "`[+|-]d h`, `INTERVAL [+|-]'[+|-]d h' DAY TO HOUR`",
+          "supportedFormat" -> "`[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`",
           "input" -> interval)
       )
     }
@@ -1204,7 +1204,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
             "typeName" -> dataType.typeName,
             "intervalStr" -> "year-month",
             "supportedFormat" ->
-              IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              IntervalUtils.supportedFormat(("year-month", dataType.startField, dataType.endField))
                 .map(format => s"`$format`").mkString(", "),
             "input" -> interval))
       }
@@ -1329,7 +1329,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
             "typeName" -> dataType.typeName,
             "input" -> interval,
             "supportedFormat" ->
-              IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
                 .map(format => s"`$format`").mkString(", "))
         )
       }
@@ -1355,7 +1355,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
             "typeName" -> dataType.typeName,
             "input" -> interval,
             "supportedFormat" ->
-              IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
                 .map(format => s"`$format`").mkString(", ")))
       }
   }
