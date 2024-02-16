@@ -26,9 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkContext, TaskContext}
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker._
@@ -55,12 +53,6 @@ case class BasicWritePartitionTaskStats(
     numBytes: Long,
     numRows: Long)
   extends PartitionTaskStats
-
-
-@DeveloperApi
-case class SparkListenerPartitionTaskEvent(stats: Map[String, PartitionTaskStats])
-  extends SparkListenerEvent
-
 
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
@@ -236,13 +228,16 @@ class BasicWriteTaskStatsTracker(
 class BasicWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
     @transient val driverSideMetrics: Map[String, SQLMetric],
+    @transient val driverSidePartitionMetrics: mutable.Map[String, PartitionTaskStats],
     taskCommitTimeMetric: SQLMetric)
   extends WriteJobStatsTracker {
 
   def this(
       serializableHadoopConf: SerializableConfiguration,
-      metrics: Map[String, SQLMetric]) = {
-    this(serializableHadoopConf, metrics - TASK_COMMIT_TIME, metrics(TASK_COMMIT_TIME))
+      metrics: Map[String, SQLMetric],
+      partitionMetrics: mutable.Map[String, PartitionTaskStats]) = {
+    this(serializableHadoopConf, metrics - TASK_COMMIT_TIME, partitionMetrics,
+      metrics(TASK_COMMIT_TIME))
   }
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
@@ -256,8 +251,6 @@ class BasicWriteJobStatsTracker(
     var numFiles: Long = 0L
     var totalNumBytes: Long = 0L
     var totalNumOutput: Long = 0L
-    val partitionsStats: mutable.Map[String, BasicWritePartitionTaskStats]
-          = mutable.Map.empty.withDefaultValue(BasicWritePartitionTaskStats(0, 0L, 0L))
 
     val basicStats = stats.map(_.asInstanceOf[BasicWriteTaskStats])
 
@@ -269,8 +262,8 @@ class BasicWriteJobStatsTracker(
 
       summary.partitionsStats.foreach(s => {
         val path = partitionsMap.getOrElse(s._1, "")
-        val current = partitionsStats(path)
-        partitionsStats(path) = BasicWritePartitionTaskStats(
+        val current = partitionMetrics(path)
+        driverSidePartitionMetrics(path) = BasicWritePartitionTaskStats(
           current.numFiles + s._2.numFiles,
           current.numBytes + s._2.numBytes,
           current.numRows + s._2.numRows
@@ -283,8 +276,6 @@ class BasicWriteJobStatsTracker(
     driverSideMetrics(NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
     driverSideMetrics(NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
     driverSideMetrics(NUM_PARTS_KEY).add(partitionsSet.size)
-
-    sparkContext.listenerBus.post(SparkListenerPartitionTaskEvent(partitionsStats.toMap))
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverSideMetrics.values.toList)
@@ -312,4 +303,7 @@ object BasicWriteJobStatsTracker {
       JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time")
     )
   }
+
+  def partitionMetrics: mutable.Map[String, PartitionTaskStats] =
+    mutable.Map.empty.withDefaultValue(BasicWritePartitionTaskStats(0, 0L, 0L))
 }

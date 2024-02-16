@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
+import scala.collection.mutable
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, LogicalPlan, UnaryCommand}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, PartitionTaskStats}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableConfiguration
@@ -53,10 +55,12 @@ trait DataWritingCommand extends UnaryCommand with CTEInChildren {
     DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
 
   lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
+  lazy val partitionMetrics: mutable.Map[String, PartitionTaskStats] =
+    BasicWriteJobStatsTracker.partitionMetrics
 
   def basicWriteJobStatsTracker(hadoopConf: Configuration): BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
+    new BasicWriteJobStatsTracker(serializableHadoopConf, metrics, partitionMetrics)
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
