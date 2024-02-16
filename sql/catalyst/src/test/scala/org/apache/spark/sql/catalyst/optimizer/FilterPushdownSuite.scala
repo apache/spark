@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class FilterPushdownSuite extends PlanTest {
@@ -883,19 +883,24 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("union part 2 electric razor idk") {
-    val nullableArray = StructFiled("c", ArrayType(IntegerType, true))
-    val testRelationNonNull = LocalRelation($"a".array(IntegerType), $"b".int)
-    val testRelationNull = LocalRelation(nullableArray, $"d".int)
+    val nonNullableArray = StructField("a", ArrayType(IntegerType, false))
+    val bField = StructField("b", IntegerType)
+    val testRelationNonNull = LocalRelation(nonNullableArray, bField)
+    val testRelationNull = LocalRelation($"c".array(IntegerType), $"d".int)
+
+    val nonNullArrayRef = AttributeReference("a", ArrayType(IntegerType, false))(
+      testRelationNonNull.output(0).exprId, List())
 
 
     val originalQuery = Union(Seq(testRelationNonNull, testRelationNull))
-      .where(IsNotNull($"a"))
+      .where(IsNotNull(nonNullArrayRef))
+
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = Union(Seq(
-      testRelation.where(IsNotNull($"a")),
-      testRelation2.where(IsNotNull($"c"))
+      testRelationNonNull.where(IsNotNull($"a")),
+      testRelationNull.where(IsNotNull($"c"))))
       .analyze
 
     comparePlans(optimized, correctAnswer)
