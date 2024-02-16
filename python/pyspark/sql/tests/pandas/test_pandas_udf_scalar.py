@@ -25,7 +25,7 @@ from decimal import Decimal
 from typing import cast
 
 from pyspark import TaskContext
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import (

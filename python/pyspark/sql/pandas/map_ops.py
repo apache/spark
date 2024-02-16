@@ -17,7 +17,7 @@
 import sys
 from typing import Union, TYPE_CHECKING
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:

@@ -49,14 +49,17 @@ Public classes:
 from functools import wraps
 from typing import cast, Any, Callable, TypeVar, Union
 
-from pyspark.conf import SparkConf
-from pyspark.rdd import RDD, RDDBarrier
-from pyspark.files import SparkFiles
-from pyspark.status import StatusTracker, SparkJobInfo, SparkStageInfo
+try:
+    from pyspark.core.conf import SparkConf
+    from pyspark.core.rdd import RDD, RDDBarrier
+    from pyspark.core.files import SparkFiles
+    from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo
+    from pyspark.core.broadcast import Broadcast
+except ImportError:
+    pass
 from pyspark.util import InheritableThread, inheritable_thread_target
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
-from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, CPickleSerializer
 from pyspark.taskcontext import TaskContext, BarrierTaskContext, BarrierTaskInfo
 from pyspark.profiler import Profiler, BasicProfiler
@@ -106,7 +109,10 @@ def keyword_only(func: _F) -> _F:
 
 
 # To avoid circular dependencies
-from pyspark.context import SparkContext
+try:
+    from pyspark.core.context import SparkContext
+except ImportError:
+    pass
 
 # for back compatibility
 from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401

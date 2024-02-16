@@ -20,8 +20,6 @@ import typing
 from typing import Any, Optional, List, Tuple, Sequence, Mapping
 import uuid
 
-from py4j.java_gateway import is_instance_of
-
 if typing.TYPE_CHECKING:
     from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import lit
@@ -47,6 +45,8 @@ class SQLStringFormatter(string.Formatter):
         """
         Converts the given value into a SQL string.
         """
+        from py4j.java_gateway import is_instance_of
+
         from pyspark import SparkContext
         from pyspark.sql import Column, DataFrame
 

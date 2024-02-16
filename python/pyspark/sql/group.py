@@ -19,14 +19,13 @@ import sys
 
 from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
 
-from py4j.java_gateway import JavaObject
-
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.session import SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import LiteralType
 
 __all__ = ["GroupedData"]
@@ -65,7 +64,7 @@ class GroupedData(PandasGroupedOpsMixin):
         Supports Spark Connect.
     """
 
-    def __init__(self, jgd: JavaObject, df: DataFrame):
+    def __init__(self, jgd: "JavaObject", df: DataFrame):
         self._jgd = jgd
         self._df = df
         self.session: SparkSession = df.sparkSession

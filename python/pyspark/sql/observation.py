@@ -15,15 +15,17 @@
 # limitations under the License.
 #
 import os
-from typing import Any, Dict, Optional
-
-from py4j.java_gateway import JavaObject, JVMView
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkAssertionError
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.utils import is_remote
+
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject, JVMView
+
 
 __all__ = ["Observation"]
 
@@ -97,7 +99,7 @@ class Observation:
                 )
         self._name = name
         self._jvm: Optional[JVMView] = None
-        self._jo: Optional[JavaObject] = None
+        self._jo: Optional["JavaObject"] = None
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         """Attaches this observation to the given :class:`DataFrame` to observe aggregations.
@@ -149,7 +151,7 @@ class Observation:
 def _test() -> None:
     import doctest
     import sys
-    from pyspark.context import SparkContext
+    from pyspark.core.context import SparkContext
     from pyspark.sql import SparkSession
     import pyspark.sql.observation
 

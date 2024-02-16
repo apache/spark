@@ -22,8 +22,6 @@ A collections of builtin protobuf functions
 
 from typing import Dict, Optional, TYPE_CHECKING, cast
 
-from py4j.java_gateway import JVMView
-
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.utils import get_active_spark_context, try_remote_protobuf_functions
 from pyspark.util import _print_missing_jar
@@ -140,6 +138,7 @@ def from_protobuf(
     |{1668035962, 2020}|
     +------------------+
     """
+    from py4j.java_gateway import JVMView
 
     sc = get_active_spark_context()
     try:
@@ -260,6 +259,7 @@ def to_protobuf(
     |[08 FA EA B0 9B 06 10 E4 0F]|
     +----------------------------+
     """
+    from py4j.java_gateway import JVMView
 
     sc = get_active_spark_context()
     try:

@@ -60,11 +60,11 @@ class SparkConf:
 
     Examples
     --------
-    >>> from pyspark.conf import SparkConf
-    >>> from pyspark.context import SparkContext
+    >>> from pyspark.core.conf import SparkConf
+    >>> from pyspark.core.context import SparkContext
     >>> conf = SparkConf()
     >>> conf.setMaster("local").setAppName("My app")
-    <pyspark.conf.SparkConf object at ...>
+    <pyspark.core.conf.SparkConf object at ...>
     >>> conf.get("spark.master")
     'local'
     >>> conf.get("spark.app.name")
@@ -79,13 +79,13 @@ class SparkConf:
 
     >>> conf = SparkConf(loadDefaults=False)
     >>> conf.setSparkHome("/path")
-    <pyspark.conf.SparkConf object at ...>
+    <pyspark.core.conf.SparkConf object at ...>
     >>> conf.get("spark.home")
     '/path'
     >>> conf.setExecutorEnv("VAR1", "value1")
-    <pyspark.conf.SparkConf object at ...>
+    <pyspark.core.conf.SparkConf object at ...>
     >>> conf.setExecutorEnv(pairs = [("VAR3", "value3"), ("VAR4", "value4")])
-    <pyspark.conf.SparkConf object at ...>
+    <pyspark.core.conf.SparkConf object at ...>
     >>> conf.get("spark.executorEnv.VAR1")
     'value1'
     >>> print(conf.toDebugString())
@@ -124,7 +124,7 @@ class SparkConf:
         if _jconf:
             self._jconf = _jconf
         else:
-            from pyspark.context import SparkContext
+            from pyspark.core.context import SparkContext
 
             _jvm = _jvm or SparkContext._jvm
 
