@@ -97,7 +97,7 @@ if TYPE_CHECKING:
 
 
 try:
-    import memory_profiler  # type: ignore # noqa: F401
+    import memory_profiler  # noqa: F401
 
     has_memory_profiler = True
 except Exception:
