@@ -368,3 +368,44 @@ t1d
 t1e
 t1e
 t1e
+
+
+-- !query
+SELECT
+  CASE
+    WHEN t1.t1a IN (SELECT t2a FROM t2) THEN 10
+    ELSE -10
+  END AS v1
+FROM t1
+GROUP BY t1.t1a
+-- !query schema
+struct<v1:int>
+-- !query output
+-10
+-10
+10
+10
+10
+
+
+-- !query
+SELECT
+  SUM(CASE
+    WHEN t1.t1a IN (SELECT t2a FROM t2) THEN 10
+    ELSE -10
+  END) AS v1,
+  CASE
+    WHEN t1.t1a + 10 IN (SELECT t2a + 1 FROM t2) THEN 10
+    ELSE 20
+  END AS v2,
+  count(t1.t1a) as ct
+FROM t1
+GROUP BY t1.t1a
+-- !query schema
+struct<v1:bigint,v2:int,ct:bigint>
+-- !query output
+-30	20	3
+-40	20	4
+10	20	1
+10	20	1
+30	20	3
