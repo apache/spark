@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 class DateTimeFormatterHelperSuite extends SparkFunSuite {
@@ -38,29 +38,42 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
       === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
     weekBasedLetters.foreach { l =>
-      val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
-      assert(e.getMessage.contains("week-based"))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          convertIncompatiblePattern(s"yyyy-MM-dd $l G")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_3257",
+        parameters = Map("c" -> l.toString))
     }
     unsupportedLetters.foreach { l =>
-      val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
-      assert(e.getMessage === s"Illegal pattern character: $l")
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          convertIncompatiblePattern(s"yyyy-MM-dd $l G")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_3258",
+        parameters = Map("c" -> l.toString))
     }
     unsupportedLettersForParsing.foreach { l =>
-      val e = intercept[IllegalArgumentException] {
-        DateTimeFormatterHelper.convertIncompatiblePattern(s"$l", isParsing = true)
-      }
-      assert(e.getMessage === s"Illegal pattern character: $l")
-      assert(convertIncompatiblePattern(s"$l").nonEmpty)
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          DateTimeFormatterHelper.convertIncompatiblePattern(s"$l", isParsing = true)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_3258",
+        parameters = Map("c" -> l.toString))
     }
     unsupportedPatternLengths.foreach { style =>
-      val e1 = intercept[IllegalArgumentException] {
-        convertIncompatiblePattern(s"yyyy-MM-dd $style")
-      }
-      assert(e1.getMessage === s"Too many pattern letters: ${style.head}")
-      val e2 = intercept[IllegalArgumentException] {
-        convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
-      }
-      assert(e2.getMessage === s"Too many pattern letters: ${style.head}")
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          convertIncompatiblePattern(s"yyyy-MM-dd $style")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_3259",
+        parameters = Map("style" -> style.head.toString))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_3259",
+        parameters = Map("style" -> style.head.toString))
     }
     assert(convertIncompatiblePattern("yyyy-MM-dd EEEE") === "uuuu-MM-dd EEEE")
     assert(convertIncompatiblePattern("yyyy-MM-dd'e'HH:mm:ss") === "uuuu-MM-dd'e'HH:mm:ss")

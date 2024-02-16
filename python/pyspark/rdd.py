@@ -1534,7 +1534,7 @@ class RDD(Generic[T_co]):
             if ascending:
                 return p
             else:
-                return numPartitions - 1 - p  # type: ignore[operator]
+                return numPartitions - 1 - p
 
         return self.partitionBy(numPartitions, rangePartitioner).mapPartitions(sortPartition, True)
 
@@ -2233,7 +2233,7 @@ class RDD(Generic[T_co]):
         """
         if key is None:
             return self.reduce(max)  # type: ignore[arg-type]
-        return self.reduce(lambda a, b: max(a, b, key=key))  # type: ignore[arg-type]
+        return self.reduce(lambda a, b: max(a, b, key=key))
 
     @overload
     def min(self: "RDD[S]") -> "S":
@@ -2273,7 +2273,7 @@ class RDD(Generic[T_co]):
         """
         if key is None:
             return self.reduce(min)  # type: ignore[arg-type]
-        return self.reduce(lambda a, b: min(a, b, key=key))  # type: ignore[arg-type]
+        return self.reduce(lambda a, b: min(a, b, key=key))
 
     def sum(self: "RDD[NumberOrArray]") -> "NumberOrArray":
         """
@@ -2486,14 +2486,14 @@ class RDD(Generic[T_co]):
             raise TypeError("buckets should be a list or tuple or number(int or long)")
 
         def histogram(iterator: Iterable["S"]) -> Iterable[List[int]]:
-            counters = [0] * len(buckets)  # type: ignore[arg-type]
+            counters = [0] * len(buckets)
             for i in iterator:
                 if i is None or (isinstance(i, float) and isnan(i)) or i > maxv or i < minv:
                     continue
                 t = (
                     int((i - minv) / inc)  # type: ignore[operator]
                     if even
-                    else bisect.bisect_right(buckets, i) - 1  # type: ignore[arg-type]
+                    else bisect.bisect_right(buckets, i) - 1
                 )
                 counters[t] += 1
             # add last two together
@@ -3851,8 +3851,10 @@ class RDD(Generic[T_co]):
         0
         """
         if numPartitions is None:
-            numPartitions = self._defaultReducePartitions()
-        partitioner = Partitioner(numPartitions, partitionFunc)
+            num_partitions = self._defaultReducePartitions()
+        else:
+            num_partitions = numPartitions
+        partitioner = Partitioner(num_partitions, partitionFunc)
         if self.partitioner == partitioner:
             return self
 
@@ -3868,10 +3870,10 @@ class RDD(Generic[T_co]):
 
         def add_shuffle_key(split: int, iterator: Iterable[Tuple[K, V]]) -> Iterable[bytes]:
             buckets = defaultdict(list)
-            c, batch = 0, min(10 * numPartitions, 1000)  # type: ignore[operator]
+            c, batch = 0, min(10 * num_partitions, 1000)
 
             for k, v in iterator:
-                buckets[partitionFunc(k) % numPartitions].append((k, v))  # type: ignore[operator]
+                buckets[partitionFunc(k) % num_partitions].append((k, v))
                 c += 1
 
                 # check used memory and avg size of chunk of objects
@@ -3902,7 +3904,7 @@ class RDD(Generic[T_co]):
 
         with SCCallSiteSync(self.context):
             pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
-            jpartitioner = self.ctx._jvm.PythonPartitioner(numPartitions, id(partitionFunc))
+            jpartitioner = self.ctx._jvm.PythonPartitioner(num_partitions, id(partitionFunc))
         jrdd = self.ctx._jvm.PythonRDD.valueOfPair(pairRDD.partitionBy(jpartitioner))
         rdd: "RDD[Tuple[K, V]]" = RDD(jrdd, self.ctx, BatchedSerializer(outputSerializer))
         rdd.partitioner = partitioner

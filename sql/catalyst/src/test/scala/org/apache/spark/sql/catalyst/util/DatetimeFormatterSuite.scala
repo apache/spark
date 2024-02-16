@@ -21,7 +21,7 @@ import java.time.DateTimeException
 
 import org.scalatest.matchers.must.Matchers
 
-import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{date, UTC}
 
@@ -78,7 +78,7 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
       // not support by the legacy one too
       val unsupportedBoth = Seq("QQQQQ", "qqqqq", "eeeee", "A", "B", "c", "n", "N", "p", "e")
       unsupportedBoth.foreach { pattern =>
-        intercept[IllegalArgumentException](checkFormatterCreation(pattern, isParsing))
+        intercept[SparkIllegalArgumentException](checkFormatterCreation(pattern, isParsing))
       }
       // supported by the legacy one, then we will suggest users with SparkUpgradeException
       ((weekBasedLetters ++ unsupportedLetters).map(_.toString)
@@ -90,7 +90,7 @@ trait DatetimeFormatterSuite extends SparkFunSuite with SQLHelper with Matchers 
     // not support by the legacy one too
     val unsupportedBoth = Seq("q", "Q")
     unsupportedBoth.foreach { pattern =>
-      intercept[IllegalArgumentException](checkFormatterCreation(pattern, true))
+      intercept[SparkIllegalArgumentException](checkFormatterCreation(pattern, true))
     }
     // supported by the legacy one, then we will suggest users with SparkUpgradeException
     (unsupportedLettersForParsing.map(_.toString) -- unsupportedBoth).foreach {
