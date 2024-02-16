@@ -129,7 +129,6 @@ class PandasConversionMixin:
 
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
                     batches = self._collect_as_arrow(split_batches=self_destruct)
-                    print(batches)
                     if len(batches) > 0:
                         table = pa.Table.from_batches(batches)
                         # Ensure only the table has a reference to the batches, so that
