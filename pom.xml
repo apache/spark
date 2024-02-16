@@ -266,6 +266,7 @@
       during compilation if the dependency is transitive (e.g. "graphx/" depending on "core/" and
       needing Hadoop classes in the classpath to compile).
     -->
+    <derby.deps.scope>compile</derby.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>2.8.1</hive.storage.version>
@@ -936,11 +937,13 @@
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
         <version>${derby.version}</version>
+        <scope>${derby.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derbytools</artifactId>
         <version>${derby.version}</version>
+        <scope>${derby.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
@@ -3758,6 +3761,9 @@
       <properties>
         <spark.yarn.isHadoopProvided>true</spark.yarn.isHadoopProvided>
       </properties>
+    </profile>
+    <profile>
+      <id>derby-provided</id>
     </profile>
     <profile>
       <id>hive-provided</id>
