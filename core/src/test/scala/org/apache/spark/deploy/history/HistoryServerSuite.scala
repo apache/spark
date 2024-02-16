@@ -390,6 +390,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     // a new conf is used with the background thread set and running at its fastest
     // allowed refresh rate (1Hz)
     stop()
+    // Like 'init()', we need to clear the store directory of previously stopped server.
     Utils.deleteRecursively(storeDir)
     assert(storeDir.mkdir())
     val myConf = new SparkConf()
