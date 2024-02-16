@@ -474,21 +474,23 @@ class SparkSessionBuilderTests(unittest.TestCase, PySparkErrorTestUtils):
 
 class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
     def setUp(self):
-        self.mock_spark_session = unittest.mock.MagicMock()
-        self.profile = Profile(self.mock_spark_session)
+        self.profiler_collector_mock = unittest.mock.Mock()
+        self.profile = Profile(self.profiler_collector_mock)
 
     def test_show_memory_type(self):
         self.profile.show(type="memory")
-        self.mock_spark_session.showMemoryProfiles.assert_called_once()
+        self.profiler_collector_mock.show_memory_profiles.assert_called_with(None)
+        self.profiler_collector_mock.show_perf_profiles.assert_not_called()
 
     def test_show_perf_type(self):
         self.profile.show(type="perf")
-        self.mock_spark_session.showPerfProfiles.assert_called_once()
+        self.profiler_collector_mock.show_perf_profiles.assert_called_with(None)
+        self.profiler_collector_mock.show_memory_profiles.assert_not_called()
 
     def test_show_no_type(self):
         self.profile.show()
-        self.mock_spark_session.showPerfProfiles.assert_called_once()
-        self.mock_spark_session.showMemoryProfiles.assert_called_once()
+        self.profiler_collector_mock.show_perf_profiles.assert_called_with(None)
+        self.profiler_collector_mock.show_memory_profiles.assert_called_with(None)
 
     def test_show_invalid_type(self):
         with self.assertRaises(PySparkValueError) as e:
@@ -504,16 +506,18 @@ class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
 
     def test_dump_memory_type(self):
         self.profile.dump("path/to/dump", type="memory")
-        self.mock_spark_session.dumpMemoryProfiles.assert_called_once_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_memory_profiles.assert_called_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_perf_profiles.assert_not_called()
 
     def test_dump_perf_type(self):
         self.profile.dump("path/to/dump", type="perf")
-        self.mock_spark_session.dumpPerfProfiles.assert_called_once_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_perf_profiles.assert_called_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_memory_profiles.assert_not_called()
 
     def test_dump_no_type(self):
         self.profile.dump("path/to/dump")
-        self.mock_spark_session.dumpPerfProfiles.assert_called_once_with("path/to/dump", None)
-        self.mock_spark_session.dumpMemoryProfiles.assert_called_once_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_perf_profiles.assert_called_with("path/to/dump", None)
+        self.profiler_collector_mock.dump_memory_profiles.assert_called_with("path/to/dump", None)
 
     def test_dump_invalid_type(self):
         with self.assertRaises(PySparkValueError) as e:
