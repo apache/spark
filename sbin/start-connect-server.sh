@@ -42,7 +42,4 @@ if [ "$1" == "--wait" ]; then
   shift
   export SPARK_NO_DAEMONIZE=1
 fi
-  exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Spark Connect server" "$@"
-
-
-
+exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Spark Connect server" "$@"
