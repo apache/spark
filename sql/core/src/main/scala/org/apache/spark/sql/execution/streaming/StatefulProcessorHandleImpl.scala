@@ -115,7 +115,6 @@ class StatefulProcessorHandleImpl(
   override def getValueState[T](stateName: String): ValueState[T] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
-    store.createColFamilyIfAbsent(stateName)
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder)
     resultState
   }

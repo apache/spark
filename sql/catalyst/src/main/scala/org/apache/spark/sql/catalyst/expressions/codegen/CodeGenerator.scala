@@ -349,7 +349,7 @@ class CodegenContext extends Logging {
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
     val code = UserDefinedType.sqlType(dataType) match {
-      case StringType => code"$value = $initCode.clone();"
+      case _: StringType => code"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"
       case _ => code"$value = $initCode;"
     }
@@ -622,6 +622,8 @@ class CodegenContext extends Logging {
       s"((java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2)"
     case DoubleType =>
       s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
+    case st: StringType if st.isDefaultCollation => s"$c1.binaryEquals($c2)"
+    case st: StringType => s"$c1.semanticEquals($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
@@ -650,7 +652,8 @@ class CodegenContext extends Logging {
     case FloatType =>
       val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
       s"$clsName.compareFloats($c1, $c2)"
-    // use c1 - c2 may overflow
+    case st: StringType if st.isDefaultCollation => s"$c1.binaryCompare($c2)"
+    case st: StringType => s"$c1.semanticCompare($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
     case CalendarIntervalType => s"$c1.compareTo($c2)"
@@ -1716,7 +1719,7 @@ object CodeGenerator extends Logging {
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
       // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
-      case StringType | _: StructType | _: ArrayType | _: MapType =>
+      case _: StringType | _: StructType | _: ArrayType | _: MapType =>
         s"$row.update($ordinal, $value.copy())"
       case _ => s"$row.update($ordinal, $value)"
     }
@@ -1769,7 +1772,7 @@ object CodeGenerator extends Logging {
         s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
       case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
       case CalendarIntervalType => s"$vector.putInterval($rowId, $value);"
-      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
+      case _: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new SparkIllegalArgumentException(
           errorClass = "_LEGACY_ERROR_TEMP_3233",
@@ -1951,7 +1954,7 @@ object CodeGenerator extends Logging {
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]
     case BinaryType => classOf[Array[Byte]]
-    case StringType => classOf[UTF8String]
+    case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]

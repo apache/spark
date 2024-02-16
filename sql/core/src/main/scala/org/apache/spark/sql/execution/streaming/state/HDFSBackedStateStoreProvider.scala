@@ -114,7 +114,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
-    override def createColFamilyIfAbsent(colFamilyName: String): Unit = {
+    override def createColFamilyIfAbsent(
+        colFamilyName: String,
+        keySchema: StructType,
+        numColsPrefixKey: Int,
+        valueSchema: StructType): Unit = {
       throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3193")
     }
 

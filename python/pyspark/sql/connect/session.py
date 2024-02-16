@@ -958,6 +958,16 @@ class SparkSession:
 
     showMemoryProfiles.__doc__ = PySparkSession.showMemoryProfiles.__doc__
 
+    def dumpPerfProfiles(self, path: str, id: Optional[int] = None) -> None:
+        self._profiler_collector.dump_perf_profiles(path, id)
+
+    dumpPerfProfiles.__doc__ = PySparkSession.dumpPerfProfiles.__doc__
+
+    def dumpMemoryProfiles(self, path: str, id: Optional[int] = None) -> None:
+        self._profiler_collector.dump_memory_profiles(path, id)
+
+    dumpMemoryProfiles.__doc__ = PySparkSession.dumpMemoryProfiles.__doc__
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 

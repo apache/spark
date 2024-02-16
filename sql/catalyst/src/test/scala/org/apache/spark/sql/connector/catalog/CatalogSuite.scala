@@ -22,7 +22,7 @@ import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -659,7 +659,7 @@ class CatalogSuite extends SparkFunSuite {
 
   test("purgeTable") {
     val catalog = newCatalog()
-    intercept[UnsupportedOperationException](catalog.purgeTable(testIdent))
+    intercept[SparkUnsupportedOperationException](catalog.purgeTable(testIdent))
   }
 
   test("renameTable") {
