@@ -29,12 +29,10 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.{IsolationLevel, TopicPartition}
 import org.apache.kafka.common.requests.OffsetFetchResponse
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
-import org.apache.spark.util.ArrayImplicits._
+import ArrayImplicits._
 
 /**
  * This class uses Kafka's own [[Admin]] API to read data offsets from Kafka.
@@ -103,7 +101,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
   private val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
 
-  private def userSpecifiedLocationPreferences(executors: Array[String])
+  private def userSpecifiedLocationPreferences(executors: Array[ExecutorDescription])
       : Map[TopicPartition, Array[String]] = {
     val partitionDescrs = consumerStrategy.assignedPartitionDescriptions(admin)
       .toArray
@@ -111,7 +109,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
     partitionLocationAssigner.getLocationPreferences(partitionDescrs, executors)
       .map {
-        case (descr, executors) => (descr.toTopicPartition -> executors)
+        case (descr, executors) => (descr.toTopicPartition -> executors.map(_.id))
       }
   }
 
@@ -438,25 +436,9 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       val execs = getSortedExecutorList
       rangeCalculator.getLocatedRanges(
         offsetRangesBase,
-        execs,
+        execs.map(_.id),
         userSpecifiedLocationPreferences(execs))
     }
-  }
-
-  protected def getSortedExecutorList: Array[String] = {
-    def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
-      if (a.host == b.host) {
-        a.executorId > b.executorId
-      } else {
-        a.host > b.host
-      }
-    }
-
-    val bm = SparkEnv.get.blockManager
-    bm.master.getPeers(bm.blockManagerId).toArray
-      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
-      .sortWith(compare)
-      .map(_.toString)
   }
 
   override def getOffsetRangesFromResolvedOffsets(
@@ -508,7 +490,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
     val execs = getSortedExecutorList
-    rangeCalculator.getRanges(ranges, execs, userSpecifiedLocationPreferences(execs))
+    rangeCalculator.getRanges(ranges, execs.map(_.id), userSpecifiedLocationPreferences(execs))
   }
 
   private def partitionsAssignedToAdmin(

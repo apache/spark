@@ -25,6 +25,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
+import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.SparkEnv
+
 
 /**
  * Base trait to fetch offsets from Kafka. The implementations are
@@ -148,6 +151,22 @@ private[kafka010] trait KafkaOffsetReader {
       fromPartitionOffsets: PartitionOffsetMap,
       untilPartitionOffsets: PartitionOffsetMap,
       reportDataLoss: String => Unit): Seq[KafkaOffsetRange]
+
+  protected def getSortedExecutorList: Array[ExecutorDescription] = {
+    def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
+      if (a.host == b.host) {
+        a.executorId > b.executorId
+      } else {
+        a.host > b.host
+      }
+    }
+
+    val bm = SparkEnv.get.blockManager
+    bm.master.getPeers(bm.blockManagerId).toArray
+      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
+      .sortWith(compare)
+      .map(x => ExecutorDescription(x.executorId, x.host))
+  }
 }
 
 private[kafka010] object KafkaOffsetReader extends Logging {

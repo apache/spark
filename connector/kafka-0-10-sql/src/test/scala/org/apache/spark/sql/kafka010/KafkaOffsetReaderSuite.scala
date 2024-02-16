@@ -245,7 +245,8 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
           UUID.randomUUID().toString,
           TestKPLAssigner) {
 
-          override def getSortedExecutorList: Array[String] = execs
+          override protected def getSortedExecutorList: Array[ExecutorDescription] =
+            execs.map(e => ExecutorDescription(e, e))
         }
       }
       func(readerMaker)
@@ -262,7 +263,8 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
           UUID.randomUUID().toString,
           TestKPLAssigner) {
 
-          override def getSortedExecutorList: Array[String] = execs
+          override protected def getSortedExecutorList: Array[ExecutorDescription] = 
+            execs.map(e => ExecutorDescription(e, e))
         }
       }
       func(readerMaker)
@@ -284,10 +286,10 @@ class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with Kafk
 object TestKPLAssigner extends KafkaPartitionLocationAssigner {
   def getLocationPreferences(
     partDescrs: Array[PartitionDescription],
-    knownExecutors: Array[String]): Map[PartitionDescription, Array[String]] = {
+    knownExecutors: Array[ExecutorDescription]): Map[PartitionDescription, Array[ExecutorDescription]] = {
     partDescrs.map { partitionDescription =>
       val execs = knownExecutors
-        .filter(exec => exec.contains(partitionDescription.partition.toString))
+        .filter(exec => exec.id.contains(partitionDescription.partition.toString))
       (partitionDescription -> execs)
     }.toMap
   }

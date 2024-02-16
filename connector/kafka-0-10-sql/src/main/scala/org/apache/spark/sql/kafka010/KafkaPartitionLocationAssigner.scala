@@ -23,6 +23,8 @@ import org.apache.kafka.common.{ Node, PartitionInfo, TopicPartition, TopicParti
 
 import org.apache.spark.util.Utils
 
+case class ExecutorDescription(id: String, host: String)
+
 case class PartitionDescription(
   topic: String,
   partition: Int,
@@ -80,7 +82,8 @@ trait KafkaPartitionLocationAssigner {
   */
   def getLocationPreferences(
     partDescrs: Array[PartitionDescription],
-    knownExecutors: Array[String]): Map[PartitionDescription, Array[String]]
+    knownExecutors: Array[ExecutorDescription]): 
+    Map[PartitionDescription, Array[ExecutorDescription]]
 }
 
 object KafkaPartitionLocationAssigner {
@@ -95,7 +98,8 @@ object KafkaPartitionLocationAssigner {
 object DefaultKafkaPartitionLocationAssigner extends KafkaPartitionLocationAssigner {
   def getLocationPreferences(
     partDescrs: Array[PartitionDescription],
-    knownExecutors: Array[String]): Map[PartitionDescription, Array[String]] =
+    knownExecutors: Array[ExecutorDescription]): 
+    Map[PartitionDescription, Array[ExecutorDescription]] =
     Map.empty
 }
 

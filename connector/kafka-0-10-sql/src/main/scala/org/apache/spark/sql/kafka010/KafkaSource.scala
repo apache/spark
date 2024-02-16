@@ -21,10 +21,8 @@ import java.{util => ju}
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
-import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -34,7 +32,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Clock, SystemClock, Utils}
-import org.apache.spark.util.ArrayImplicits._
+import ArrayImplicits._
 
 /**
  * A [[Source]] that reads data from Kafka using the following design.
@@ -402,20 +400,4 @@ private[kafka010] class KafkaSource(
   override def prepareForTriggerAvailableNow(): Unit = {
     allDataForTriggerAvailableNow = kafkaReader.fetchLatestOffsets(Some(initialPartitionOffsets))
   }
-}
-
-/** Companion object for the [[KafkaSource]]. */
-private[kafka010] object KafkaSource {
-  def getSortedExecutorList(sc: SparkContext): Array[String] = {
-    val bm = sc.env.blockManager
-    bm.master.getPeers(bm.blockManagerId).toArray
-      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
-      .sortWith(compare)
-      .map(_.toString)
-  }
-
-  private def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
-    if (a.host == b.host) { a.executorId > b.executorId } else { a.host > b.host }
-  }
-
 }
