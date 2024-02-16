@@ -2117,8 +2117,22 @@ _acceptable_types = {
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),
-    VariantType: (bool, int, float, decimal.Decimal, str, bytearray, bytes, datetime.date,
-                  datetime.datetime, datetime.timedelta, tuple, list, dict, array),
+    VariantType: (
+        bool,
+        int,
+        float,
+        decimal.Decimal,
+        str,
+        bytearray,
+        bytes,
+        datetime.date,
+        datetime.datetime,
+        datetime.timedelta,
+        tuple,
+        list,
+        dict,
+        array,
+    ),
 }
 
 
@@ -2394,6 +2408,7 @@ def _make_type_verifier(
         verify_value = verify_struct
 
     elif isinstance(dataType, VariantType):
+
         def verify_variant(obj: Any) -> None:
             # The variant data type can take in any type.
             pass
