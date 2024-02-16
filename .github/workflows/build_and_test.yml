@@ -133,8 +133,6 @@ jobs:
           - ${{ inputs.hadoop }}
         hive:
           - hive2.3
-        # TODO(SPARK-32246): We don't test 'streaming-kinesis-asl' for now.
-        # Kinesis tests depends on external Amazon kinesis service.
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
@@ -213,7 +211,7 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
       with:
@@ -396,7 +394,7 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
       with:
@@ -514,7 +512,7 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
       with:
@@ -634,7 +632,7 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
       with:
