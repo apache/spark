@@ -792,7 +792,7 @@ jobs:
   java-other-versions:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).java-other-versions == 'true'
-    name: Java ${{ matrix.java }} build with Maven
+    name: Java ${{ matrix.java }} build with Maven (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
