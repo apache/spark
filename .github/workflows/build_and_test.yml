@@ -801,7 +801,7 @@ jobs:
             os: ubuntu-22.04 
           - java: 21
             os: ubuntu-22.04 
-          - java: 17
+          - java: 21
             os: macos-14 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 300
