@@ -47,7 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
-from pyspark.sql.profiler import AccumulatorProfilerCollector, ProfilerCollector
+from pyspark.sql.profiler import AccumulatorProfilerCollector
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader

@@ -31,7 +31,6 @@ from pyspark.profiler import CodeMapDict, MemoryProfiler, MemUsageParam, PStatsP
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ProfileResults
-    from pyspark.sql.session import SparkSession
 
 
 class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
