@@ -2,27 +2,27 @@
 Benchmark of kryo asIterator on deserialization stream
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.8+7-LTS on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+AMD EPYC 7763 64-Core Processor
 Benchmark of kryo asIterator on deserialization stream:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------------------
-Colletion of int with 1 elements, useIterator: true                       17             18           1          0.6        1654.5       1.0X
-Colletion of int with 10 elements, useIterator: true                      30             31           1          0.3        2980.7       0.6X
-Colletion of int with 100 elements, useIterator: true                    146            155           4          0.1       14625.6       0.1X
-Colletion of string with 1 elements, useIterator: true                    18             19           1          0.5        1822.4       0.9X
-Colletion of string with 10 elements, useIterator: true                   40             42           2          0.2        4041.3       0.4X
-Colletion of string with 100 elements, useIterator: true                 249            252           3          0.0       24919.2       0.1X
-Colletion of Array[int] with 1 elements, useIterator: true                18             19           0          0.6        1784.9       0.9X
-Colletion of Array[int] with 10 elements, useIterator: true               38             38           0          0.3        3782.9       0.4X
-Colletion of Array[int] with 100 elements, useIterator: true             237            244           7          0.0       23719.6       0.1X
-Colletion of int with 1 elements, useIterator: false                      16             17           0          0.6        1626.2       1.0X
-Colletion of int with 10 elements, useIterator: false                     28             28           0          0.4        2791.2       0.6X
-Colletion of int with 100 elements, useIterator: false                   133            133           0          0.1       13275.9       0.1X
-Colletion of string with 1 elements, useIterator: false                   17             18           1          0.6        1748.7       0.9X
-Colletion of string with 10 elements, useIterator: false                  39             40           1          0.3        3943.0       0.4X
-Colletion of string with 100 elements, useIterator: false                242            243           1          0.0       24158.8       0.1X
-Colletion of Array[int] with 1 elements, useIterator: false               17             18           1          0.6        1737.7       1.0X
-Colletion of Array[int] with 10 elements, useIterator: false              37             37           0          0.3        3688.4       0.4X
-Colletion of Array[int] with 100 elements, useIterator: false            219            220           1          0.0       21916.1       0.1X
+Colletion of int with 1 elements, useIterator: true                        6              6           0          1.6         611.7       1.0X
+Colletion of int with 10 elements, useIterator: true                      14             14           0          0.7        1408.8       0.4X
+Colletion of int with 100 elements, useIterator: true                     91             92           0          0.1        9125.7       0.1X
+Colletion of string with 1 elements, useIterator: true                     7              8           0          1.4         733.4       0.8X
+Colletion of string with 10 elements, useIterator: true                   21             21           0          0.5        2111.7       0.3X
+Colletion of string with 100 elements, useIterator: true                 157            158           1          0.1       15703.3       0.0X
+Colletion of Array[int] with 1 elements, useIterator: true                 7              7           0          1.4         716.1       0.9X
+Colletion of Array[int] with 10 elements, useIterator: true               19             19           0          0.5        1903.7       0.3X
+Colletion of Array[int] with 100 elements, useIterator: true             142            144           1          0.1       14220.9       0.0X
+Colletion of int with 1 elements, useIterator: false                       6              6           0          1.6         607.6       1.0X
+Colletion of int with 10 elements, useIterator: false                     13             14           0          0.8        1332.7       0.5X
+Colletion of int with 100 elements, useIterator: false                    83             83           0          0.1        8267.0       0.1X
+Colletion of string with 1 elements, useIterator: false                    7              7           0          1.4         724.9       0.8X
+Colletion of string with 10 elements, useIterator: false                  21             22           0          0.5        2148.2       0.3X
+Colletion of string with 100 elements, useIterator: false                158            159           1          0.1       15811.7       0.0X
+Colletion of Array[int] with 1 elements, useIterator: false                7              7           0          1.5         689.5       0.9X
+Colletion of Array[int] with 10 elements, useIterator: false              19             19           0          0.5        1850.8       0.3X
+Colletion of Array[int] with 100 elements, useIterator: false            136            139           5          0.1       13642.9       0.0X
 
 

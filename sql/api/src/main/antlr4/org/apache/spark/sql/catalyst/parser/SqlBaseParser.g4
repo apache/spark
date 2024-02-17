@@ -72,6 +72,7 @@ singleTableSchema
 
 statement
     : query                                                            #statementDefault
+    | executeImmediate                                                 #visitExecuteImmediate
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
@@ -228,6 +229,28 @@ statement
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? identifierReference #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    ;
+
+executeImmediate
+    : EXECUTE IMMEDIATE queryParam=executeImmediateQueryParam (INTO targetVariable=multipartIdentifierList)? executeImmediateUsing?
+    ;
+
+executeImmediateUsing
+    : USING LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN
+    | USING params=namedExpressionSeq
+    ;
+
+executeImmediateQueryParam
+    : stringLit
+    | multipartIdentifier
+    ;
+
+executeImmediateArgument
+    : (constant|multipartIdentifier) (AS name=errorCapturingIdentifier)?
+    ;
+
+executeImmediateArgumentSeq
+    : executeImmediateArgument (COMMA executeImmediateArgument)*
     ;
 
 timezone
@@ -966,6 +989,7 @@ primaryExpression
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
+    | primaryExpression COLLATE stringLit                                                      #collate
     | primaryExpression DOUBLE_COLON dataType                                                  #castByColon
     | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
     | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
@@ -1394,6 +1418,7 @@ ansiNonReserved
     | IDENTIFIER_KW
     | IF
     | IGNORE
+    | IMMEDIATE
     | IMPORT
     | INCLUDE
     | INDEX
@@ -1685,6 +1710,7 @@ nonReserved
     | ESCAPED
     | EXCHANGE
     | EXCLUDE
+    | EXECUTE
     | EXISTS
     | EXPLAIN
     | EXPORT
@@ -1717,6 +1743,7 @@ nonReserved
     | IDENTIFIER_KW
     | IF
     | IGNORE
+    | IMMEDIATE
     | IMPORT
     | IN
     | INCLUDE

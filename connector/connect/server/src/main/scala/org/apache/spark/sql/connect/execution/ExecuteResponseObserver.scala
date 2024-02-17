@@ -102,7 +102,7 @@ private[connect] class ExecuteResponseObserver[T <: Message](val executeHolder: 
    * value greater than 0 will buffer the response from getResponse.
    */
   private val retryBufferSize = if (executeHolder.reattachable) {
-    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE).toLong
+    SparkEnv.get.conf.get(CONNECT_EXECUTE_REATTACHABLE_OBSERVER_RETRY_BUFFER_SIZE)
   } else {
     0
   }

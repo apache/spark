@@ -197,3 +197,25 @@ emp 3	300.0
 emp 4	100.0
 emp 5	1000.0
 emp 6 - no dept	500.0
+
+
+-- !query
+SELECT tt1.emp_name
+FROM EMP as tt1
+WHERE EXISTS (
+  select max(tt2.id)
+  from EMP as tt2
+  where tt1.emp_name is null
+)
+-- !query schema
+struct<emp_name:string>
+-- !query output
+emp 1
+emp 1
+emp 2
+emp 3
+emp 4
+emp 5
+emp 6 - no dept
+emp 7
+emp 8

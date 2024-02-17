@@ -305,11 +305,8 @@ class DataFrameSetOperationsSuite extends QueryTest
     // When generating expected results at here, we need to follow the implementation of
     // Rand expression.
     def expected(df: DataFrame): Seq[Row] =
-      df.rdd.collectPartitions().zipWithIndex.flatMap {
-        case (data, index) =>
-          val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
-          data.filter(_.getInt(0) < rng.nextDouble() * 10)
-      }.toSeq
+      df.select($"i", rand(7) * 10).as[(Long, Double)].collect()
+        .filter(r => r._1 < r._2).map(r => Row(r._1)).toImmutableArraySeq
 
     val union = df1.union(df2)
     checkAnswer(
@@ -374,11 +371,7 @@ class DataFrameSetOperationsSuite extends QueryTest
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
       parameters = Map(
         "colName" -> "`m`",
-        "dataType" -> "\"MAP<STRING, BIGINT>\""),
-      context = ExpectedContext(
-        fragment = "distinct",
-        callSitePattern = getCurrentClassCallSitePattern)
-    )
+        "dataType" -> "\"MAP<STRING, BIGINT>\""))
     withTempView("v") {
       df.createOrReplaceTempView("v")
       checkError(
@@ -1043,7 +1036,8 @@ class DataFrameSetOperationsSuite extends QueryTest
       parameters = Map(
         "tableOrdinalNumber" -> "second",
         "columnOrdinalNumber" -> "third",
-        "dataType2" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT>>\"",
+        "dataType2" ->
+          "\"STRUCT<c1: INT NOT NULL, c2: INT NOT NULL, c3: STRUCT<c3: INT NOT NULL>>\"",
         "operator" -> "UNION",
         "hint" -> "",
         "dataType1" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT, c5: INT>>\"")

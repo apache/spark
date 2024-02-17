@@ -19,8 +19,11 @@ package org.apache.spark.sql.connector.util;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.StringJoiner;
 
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Extract;
@@ -144,8 +147,16 @@ public class V2ExpressionSQLBuilder {
       return visitAggregateFunction("AVG", avg.isDistinct(),
         expressionsToStringArray(avg.children()));
     } else if (expr instanceof GeneralAggregateFunc f) {
-      return visitAggregateFunction(f.name(), f.isDistinct(),
-        expressionsToStringArray(f.children()));
+      if (f.orderingWithinGroups().length == 0) {
+        return visitAggregateFunction(f.name(), f.isDistinct(),
+          expressionsToStringArray(f.children()));
+      } else {
+        return visitInverseDistributionFunction(
+          f.name(),
+          f.isDistinct(),
+          expressionsToStringArray(f.children()),
+          expressionsToStringArray(f.orderingWithinGroups()));
+      }
     } else if (expr instanceof UserDefinedScalarFunc f) {
       return visitUserDefinedScalarFunction(f.name(), f.canonicalName(),
         expressionsToStringArray(f.children()));
@@ -271,20 +282,32 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
+  protected String visitInverseDistributionFunction(
+      String funcName, boolean isDistinct, String[] inputs, String[] orderingWithinGroups) {
+    assert(isDistinct == false);
+    String withinGroup =
+      joinArrayToString(orderingWithinGroups, ", ", "WITHIN GROUP (ORDER BY ", ")");
+    String functionCall = joinArrayToString(inputs, ", ", funcName + "(", ")");
+    return functionCall + " " + withinGroup;
+  }
+
   protected String visitUserDefinedScalarFunction(
       String funcName, String canonicalName, String[] inputs) {
-    throw new UnsupportedOperationException(
-      this.getClass().getSimpleName() + " does not support user defined function: " + funcName);
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3141",
+      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
   }
 
   protected String visitUserDefinedAggregateFunction(
       String funcName, String canonicalName, boolean isDistinct, String[] inputs) {
-    throw new UnsupportedOperationException(this.getClass().getSimpleName() +
-      " does not support user defined aggregate function: " + funcName);
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3142",
+      Map.of("class", this.getClass().getSimpleName(), "funcName", funcName));
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
-    throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
+    throw new SparkIllegalArgumentException(
+      "_LEGACY_ERROR_TEMP_3207", Map.of("expr", String.valueOf(expr)));
   }
 
   protected String visitOverlay(String[] inputs) {

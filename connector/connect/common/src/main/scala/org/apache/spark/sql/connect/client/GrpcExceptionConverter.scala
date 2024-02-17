@@ -196,21 +196,12 @@ private[client] object GrpcExceptionConverter {
         errorClass = params.errorClass.orNull,
         messageParameters = params.messageParameters,
         queryContext = params.queryContext)),
-    errorConstructor(params => {
-      if (params.errorClass.isEmpty) {
-        new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3100",
-          messageParameters = Map("message" -> params.message),
-          cause = params.cause,
-          context = params.queryContext)
-      } else {
-        new AnalysisException(
-          errorClass = params.errorClass.get,
-          messageParameters = params.messageParameters,
-          cause = params.cause,
-          context = params.queryContext)
-      }
-    }),
+    errorConstructor(params =>
+      new AnalysisException(
+        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3100"),
+        messageParameters = errorParamsToMessageParameters(params),
+        cause = params.cause,
+        context = params.queryContext)),
     errorConstructor(params =>
       new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
     errorConstructor(params =>
@@ -232,53 +223,46 @@ private[client] object GrpcExceptionConverter {
       new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
-        params.message,
-        params.errorClass,
-        params.messageParameters,
+        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3104"),
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[IllegalArgumentException](params =>
       new SparkIllegalArgumentException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters,
-        params.queryContext)),
+        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3105"),
+        messageParameters = errorParamsToMessageParameters(params),
+        params.queryContext,
+        summary = "",
+        cause = params.cause.orNull)),
     errorConstructor[ArithmeticException](params =>
       new SparkArithmeticException(
-        params.message,
-        params.errorClass,
-        params.messageParameters,
+        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3106"),
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[UnsupportedOperationException](params =>
       new SparkUnsupportedOperationException(
-        params.message,
-        params.errorClass,
-        params.messageParameters)),
+        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3107"),
+        messageParameters = errorParamsToMessageParameters(params))),
     errorConstructor[ArrayIndexOutOfBoundsException](params =>
       new SparkArrayIndexOutOfBoundsException(
-        params.message,
-        params.errorClass,
-        params.messageParameters,
+        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3108"),
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor[DateTimeException](params =>
       new SparkDateTimeException(
-        params.message,
-        params.errorClass,
-        params.messageParameters,
+        errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3109"),
+        messageParameters = errorParamsToMessageParameters(params),
         params.queryContext)),
     errorConstructor(params =>
       new SparkRuntimeException(
-        params.message,
-        params.cause,
-        params.errorClass,
+        params.errorClass.orNull,
         params.messageParameters,
+        params.cause.orNull,
         params.queryContext)),
     errorConstructor(params =>
       new SparkUpgradeException(
-        params.message,
-        params.cause,
-        params.errorClass,
-        params.messageParameters)),
+        params.errorClass.orNull,
+        params.messageParameters,
+        params.cause.orNull)),
     errorConstructor(params =>
       new SparkException(
         message = params.message,
@@ -372,13 +356,34 @@ private[client] object GrpcExceptionConverter {
       .addAllErrorTypeHierarchy(classes.toImmutableArraySeq.asJava)
 
     if (errorClass != null) {
+      val messageParameters = JsonMethods
+        .parse(info.getMetadataOrDefault("messageParameters", "{}"))
+        .extract[Map[String, String]]
       builder.setSparkThrowable(
         FetchErrorDetailsResponse.SparkThrowable
           .newBuilder()
           .setErrorClass(errorClass)
+          .putAllMessageParameters(messageParameters.asJava)
           .build())
     }
 
     errorsToThrowable(0, Seq(builder.build()))
   }
+
+  /**
+   * This method is used to convert error parameters to message parameters.
+   *
+   * @param params
+   *   The error parameters to be converted.
+   * @return
+   *   A Map of message parameters. If the error class is defined in the params, it returns the
+   *   message parameters from the params. If the error class is not defined, it returns a new Map
+   *   with a single entry where the key is "message" and the value is the message from the
+   *   params.
+   */
+  private def errorParamsToMessageParameters(params: ErrorParams): Map[String, String] =
+    params.errorClass match {
+      case Some(_) => params.messageParameters
+      case None => Map("message" -> params.message)
+    }
 }

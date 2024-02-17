@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
 
 from pyspark.errors.utils import ErrorClassesReader
 from pickle import PicklingError
@@ -34,12 +35,10 @@ class PySparkException(Exception):
         message: Optional[str] = None,
         error_class: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
+        query_contexts: Optional[List["QueryContext"]] = None,
     ):
-        # `message` vs `error_class` & `message_parameters` are mutually exclusive.
-        assert (message is not None and (error_class is None and message_parameters is None)) or (
-            message is None and (error_class is not None and message_parameters is not None)
-        )
-
+        if query_contexts is None:
+            query_contexts = []
         self._error_reader = ErrorClassesReader()
 
         if message is None:
@@ -51,6 +50,7 @@ class PySparkException(Exception):
 
         self._error_class = error_class
         self._message_parameters = message_parameters
+        self._query_contexts = query_contexts
 
     def getErrorClass(self) -> Optional[str]:
         """
@@ -62,6 +62,7 @@ class PySparkException(Exception):
         --------
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
         return self._error_class
@@ -76,6 +77,7 @@ class PySparkException(Exception):
         --------
         :meth:`PySparkException.getErrorClass`
         :meth:`PySparkException.getMessage`
+        :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
         return self._message_parameters
@@ -93,6 +95,7 @@ class PySparkException(Exception):
         :meth:`PySparkException.getErrorClass`
         :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
         """
         return None
 
@@ -106,9 +109,25 @@ class PySparkException(Exception):
         --------
         :meth:`PySparkException.getErrorClass`
         :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
         return f"[{self.getErrorClass()}] {self._message}"
+
+    def getQueryContext(self) -> List["QueryContext"]:
+        """
+        Returns :class:`QueryContext`.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getMessage`
+        :meth:`PySparkException.getSqlState`
+        """
+        return self._query_contexts
 
     def __str__(self) -> str:
         if self.getErrorClass() is not None:
@@ -294,3 +313,83 @@ class PySparkImportError(PySparkException, ImportError):
     """
     Wrapper class for ImportError to support error classes.
     """
+
+
+class QueryContextType(Enum):
+    """
+    The type of :class:`QueryContext`.
+
+    .. versionadded:: 4.0.0
+    """
+
+    SQL = 0
+    DataFrame = 1
+
+
+class QueryContext(ABC):
+    """
+    Query context of a :class:`PySparkException`. It helps users understand
+    where error occur while executing queries.
+
+    .. versionadded:: 4.0.0
+    """
+
+    @abstractmethod
+    def contextType(self) -> QueryContextType:
+        """
+        The type of this query context.
+        """
+        ...
+
+    @abstractmethod
+    def objectType(self) -> str:
+        """
+        The object type of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
+        """
+        ...
+
+    @abstractmethod
+    def objectName(self) -> str:
+        """
+        The object name of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the object name. For example, a view name "V1".
+        """
+        ...
+
+    @abstractmethod
+    def startIndex(self) -> int:
+        """
+        The starting index in the query text which throws the exception. The index starts from 0.
+        """
+        ...
+
+    @abstractmethod
+    def stopIndex(self) -> int:
+        """
+        The stopping index in the query which throws the exception. The index starts from 0.
+        """
+        ...
+
+    @abstractmethod
+    def fragment(self) -> str:
+        """
+        The corresponding fragment of the query which throws the exception.
+        """
+        ...
+
+    @abstractmethod
+    def callSite(self) -> str:
+        """
+        The user code (call site of the API) that caused throwing the exception.
+        """
+        ...
+
+    @abstractmethod
+    def summary(self) -> str:
+        """
+        Summary of the exception cause.
+        """
+        ...

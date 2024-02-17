@@ -18,11 +18,13 @@ import unittest
 
 from pyspark.pandas.tests.indexes.test_datetime_property import DatetimeIndexPropertyTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class DatetimeIndexParityTests(
-    DatetimeIndexPropertyTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
+    DatetimeIndexPropertyTestsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 

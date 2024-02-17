@@ -66,22 +66,22 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       // query1 and query2 could get either an:
       // OPERATION_CANCELED if it happens fast - when closing the session interrupted the queries,
       // and that error got pushed to the client buffers before the client got disconnected.
-      // OPERATION_ABANDONED if it happens slow - when closing the session interrupted the client
-      // RPCs before it pushed out the error above. The client would then get an
+      // INVALID_HANDLE.SESSION_CLOSED if it happens slow - when closing the session interrupted the
+      // client RPCs before it pushed out the error above. The client would then get an
       // INVALID_CURSOR.DISCONNECTED, which it will retry with a ReattachExecute, and then get an
-      // INVALID_HANDLE.OPERATION_ABANDONED.
+      // INVALID_HANDLE.SESSION_CLOSED.
       val query1Error = intercept[SparkException] {
         while (query1.hasNext) query1.next()
       }
       assert(
         query1Error.getMessage.contains("OPERATION_CANCELED") ||
-          query1Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+          query1Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
       val query2Error = intercept[SparkException] {
         while (query2.hasNext) query2.next()
       }
       assert(
         query2Error.getMessage.contains("OPERATION_CANCELED") ||
-          query2Error.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+          query2Error.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
 
       // No other requests should be allowed in the session, failing with SESSION_CLOSED
       val requestError = intercept[SparkException] {
@@ -115,7 +115,7 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
         }
         assert(
           queryAError.getMessage.contains("OPERATION_CANCELED") ||
-            queryAError.getMessage.contains("INVALID_HANDLE.OPERATION_ABANDONED"))
+            queryAError.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))
 
         // B's query can run.
         while (queryB.hasNext) queryB.next()

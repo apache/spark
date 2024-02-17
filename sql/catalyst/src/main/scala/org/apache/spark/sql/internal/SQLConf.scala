@@ -31,7 +31,7 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -47,7 +47,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, VersionUtils}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -182,7 +182,7 @@ object SQLConf {
 
   // Make sure SqlApiConf is always in sync with SQLConf. SqlApiConf will always try to
   // load SqlConf to make sure both classes are in sync from the get go.
-  SqlApiConf.setConfGetter(() => SQLConf.get)
+  SqlApiConfHelper.setConfGetter(() => SQLConf.get)
 
   /**
    * Returns the active config object within the current scope. If there is an active SparkSession,
@@ -564,14 +564,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED =
-    buildConf("spark.sql.unwrapCastInJoinCondition.enabled")
-      .doc("When true, unwrap the cast in the join condition to reduce shuffle if they are " +
-        "integral types.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(true)
-
   val MAX_SINGLE_PARTITION_BYTES = buildConf("spark.sql.maxSinglePartitionBytes")
     .doc("The maximum number of bytes allowed for a single partition. Otherwise, The planner " +
       "will introduce shuffle to improve parallelism.")
@@ -721,8 +713,9 @@ object SQLConf {
         "shuffle partitions, but adaptively calculate the target size according to the default " +
         "parallelism of the Spark cluster. The calculated size is usually smaller than the " +
         "configured target size. This is to maximize the parallelism and avoid performance " +
-        "regression when enabling adaptive query execution. It's recommended to set this config " +
-        "to false and respect the configured target size.")
+        "regressions when enabling adaptive query execution. It's recommended to set this " +
+        "config to true on a busy cluster to make resource utilization more efficient (not many " +
+        "small tasks).")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
@@ -915,7 +908,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val CASE_SENSITIVE = buildConf(SqlApiConf.CASE_SENSITIVE_KEY)
+  val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
       "Default to case insensitive. It is highly discouraged to turn on case sensitive mode.")
@@ -1211,7 +1204,7 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd", "lz4"))
-    .createWithDefault("snappy")
+    .createWithDefault("zstd")
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
     .doc("When native, use the native version of ORC support instead of the ORC library in Hive. " +
@@ -1568,11 +1561,11 @@ object SQLConf {
       .doc("Whether to forcibly enable some optimization rules that can change the output " +
         "partitioning of a cached query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
-        "enabled by default. The optimization rules enabled by this configuration " +
-        s"are ${ADAPTIVE_EXECUTION_ENABLED.key} and ${AUTO_BUCKETED_SCAN_ENABLED.key}.")
+        "disabled by default. The optimization rule enabled by this configuration " +
+        s"is ${ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS.key}.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val DEFAULT_CACHE_STORAGE_LEVEL = buildConf("spark.sql.defaultCacheStorageLevel")
     .doc("The default storage level of `dataset.cache()`, `catalog.cacheTable()` and " +
@@ -2346,7 +2339,8 @@ object SQLConf {
       .doc("When false, the `strfmt` in `format_string(strfmt, obj, ...)` and " +
         "`printf(strfmt, obj, ...)` will no longer support to use \"0$\" to specify the first " +
         "argument, the first argument should always reference by \"1$\" when use argument index " +
-        "to indicating the position of the argument in the argument list.")
+        "to indicating the position of the argument in the argument list. " +
+        "This config will be removed in the future releases.")
       .version("3.3")
       .booleanConf
       .createWithDefault(false)
@@ -2757,7 +2751,7 @@ object SQLConf {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
 
-  val SESSION_LOCAL_TIMEZONE = buildConf(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
+  val SESSION_LOCAL_TIMEZONE = buildConf(SqlApiConfHelper.SESSION_LOCAL_TIMEZONE_KEY)
     .doc("The ID of session local timezone in the format of either region-based zone IDs or " +
       "zone offsets. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. " +
       "Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm' or '(+|-)HH:mm:ss', e.g '-08', " +
@@ -2926,6 +2920,17 @@ object SQLConf {
       .booleanConf
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(Utils.isTesting)
+
+  val PYTHON_UDF_PROFILER =
+    buildConf("spark.sql.pyspark.udf.profiler")
+      .doc("Configure the Python/Pandas UDF profiler by enabling or disabling it " +
+        "with the option to choose between \"perf\" and \"memory\" types, " +
+        "or unsetting the config disables the profiler. This is disabled by default.")
+      .version("4.0.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("perf", "memory"))
+      .createOptional
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
@@ -3281,7 +3286,7 @@ object SQLConf {
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
 
-  val ANSI_ENABLED = buildConf(SqlApiConf.ANSI_ENABLED_KEY)
+  val ANSI_ENABLED = buildConf(SqlApiConfHelper.ANSI_ENABLED_KEY)
     .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
       "For example, Spark will throw an exception at runtime instead of returning null results " +
       "when the inputs to a SQL operator/function are invalid." +
@@ -3455,6 +3460,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_LIMIT_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateLimit.enabled")
+      .internal()
+      .doc("Decorrelate subqueries with correlation under LIMIT.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DECORRELATE_OFFSET_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateOffset.enabled")
+      .internal()
+      .doc("Decorrelate subqueries with correlation under LIMIT with OFFSET.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false) // Disabled for now, see SPARK-46446
+
   val DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled")
       .internal()
@@ -3598,7 +3619,29 @@ object SQLConf {
     .version("2.4.0")
     .intConf
     .checkValues((1 to 9).toSet + Deflater.DEFAULT_COMPRESSION)
-    .createWithDefault(Deflater.DEFAULT_COMPRESSION)
+    .createOptional
+
+  val AVRO_XZ_LEVEL = buildConf("spark.sql.avro.zx.level")
+    .doc("Compression level for the xz codec used in writing of AVRO files. " +
+      "Valid value must be in the range of from 1 to 9 inclusive " +
+      "The default value is 6.")
+    .version("4.0.0")
+    .intConf
+    .checkValue(v => v > 0 && v <= 9, "The value must be in the range of from 1 to 9 inclusive.")
+    .createOptional
+
+  val AVRO_ZSTANDARD_LEVEL = buildConf("spark.sql.avro.zstandard.level")
+    .doc("Compression level for the zstandard codec used in writing of AVRO files. " +
+      "The default value is 3.")
+    .version("4.0.0")
+    .intConf
+    .createOptional
+
+  val AVRO_ZSTANDARD_BUFFER_POOL_ENABLED = buildConf("spark.sql.avro.zstandard.bufferPool.enabled")
+    .doc("If true, enable buffer pool of ZSTD JNI library when writing of AVRO files")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val LEGACY_SIZE_OF_NULL = buildConf("spark.sql.legacy.sizeOfNull")
     .internal()
@@ -3898,7 +3941,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConf.LEGACY_TIME_PARSER_POLICY_KEY)
+  val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
       "dates/timestamps in a locale-sensitive manner, which is the approach before Spark 3.0. " +
@@ -4065,11 +4108,10 @@ object SQLConf {
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees ancient " +
         "timestamps that are ambiguous between the two calendars.")
       .version("3.1.0")
-      .withAlternative("spark.sql.legacy.parquet.int96RebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val PARQUET_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.parquet.datetimeRebaseModeInWrite")
@@ -4083,11 +4125,10 @@ object SQLConf {
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
-      .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val PARQUET_INT96_REBASE_MODE_IN_READ =
     buildConf("spark.sql.parquet.int96RebaseModeInRead")
@@ -4099,11 +4140,10 @@ object SQLConf {
         "timestamps that are ambiguous between the two calendars. This config is only effective " +
         "if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
-      .withAlternative("spark.sql.legacy.parquet.int96RebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val PARQUET_REBASE_MODE_IN_READ =
     buildConf("spark.sql.parquet.datetimeRebaseModeInRead")
@@ -4122,7 +4162,7 @@ object SQLConf {
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val AVRO_REBASE_MODE_IN_WRITE =
     buildConf("spark.sql.avro.datetimeRebaseModeInWrite")
@@ -4133,11 +4173,10 @@ object SQLConf {
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
-      .withAlternative("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val AVRO_REBASE_MODE_IN_READ =
     buildConf("spark.sql.avro.datetimeRebaseModeInRead")
@@ -4149,11 +4188,10 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
-      .withAlternative("spark.sql.legacy.avro.datetimeRebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-      .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+      .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val SCRIPT_TRANSFORMATION_EXIT_TIMEOUT =
     buildConf("spark.sql.scriptTransformation.exitTimeoutInSeconds")
@@ -4483,7 +4521,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LOCAL_RELATION_CACHE_THRESHOLD =
-    buildConf(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY)
+    buildConf(SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY)
       .doc("The threshold for the size in bytes of local relations to be cached at " +
         "the driver side after serialization.")
       .version("3.5.0")
@@ -4516,6 +4554,15 @@ object SQLConf {
       .doc("When true, optimize uncorrelated IN subqueries in join predicates by rewriting them " +
         s"to joins. This interacts with ${LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key} because it " +
         "can rewrite IN predicates.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES =
+    buildConf("spark.sql.optimizer.excludeSubqueryRefsFromRemoveRedundantAliases.enabled")
+      .internal()
+      .doc("When true, exclude the references from the subquery expressions (in, exists, etc.) " +
+        s"while removing redundant aliases.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -4619,6 +4666,28 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_EVAL_CURRENT_TIME = buildConf("spark.sql.legacy.earlyEvalCurrentTime")
+    .internal()
+    .doc("When set to true, evaluation and constant folding will happen for now() and " +
+      "current_timestamp() expressions before finish analysis phase. " +
+      "This flag will allow a bit more liberal syntax but it will sacrifice correctness - " +
+      "Results of now() and current_timestamp() can be different for different operations " +
+      "in a single query."
+    )
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_IGNORE_PARENTHESES_AROUND_STAR =
+    buildConf("spark.sql.legacy.ignoreParenthesesAroundStar")
+    .internal()
+    .doc("When set to true, SELECT (*) equals SELECT * FROM T instead of SELECT struct(*)." +
+      "SELECT (*) was never documented as defined behavior."
+    )
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4659,26 +4728,18 @@ object SQLConf {
         s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead."),
       DeprecatedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2",
         s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead."),
-      DeprecatedConfig(PARQUET_INT96_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
-        s"Use '${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}' instead."),
-      DeprecatedConfig(PARQUET_INT96_REBASE_MODE_IN_READ.alternatives.head, "3.2",
-        s"Use '${PARQUET_INT96_REBASE_MODE_IN_READ.key}' instead."),
-      DeprecatedConfig(PARQUET_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
-        s"Use '${PARQUET_REBASE_MODE_IN_WRITE.key}' instead."),
-      DeprecatedConfig(PARQUET_REBASE_MODE_IN_READ.alternatives.head, "3.2",
-        s"Use '${PARQUET_REBASE_MODE_IN_READ.key}' instead."),
-      DeprecatedConfig(AVRO_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
-        s"Use '${AVRO_REBASE_MODE_IN_WRITE.key}' instead."),
-      DeprecatedConfig(AVRO_REBASE_MODE_IN_READ.alternatives.head, "3.2",
-        s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead."),
       DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
         """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead."""),
       DeprecatedConfig(COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3.2",
         s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead."),
+      DeprecatedConfig(PARQUET_REBASE_MODE_IN_READ.alternatives.head, "3.2",
+        s"Use '${PARQUET_REBASE_MODE_IN_READ.key}' instead."),
       DeprecatedConfig(ESCAPED_STRING_LITERALS.key, "4.0",
         "Use raw string literals with the `r` prefix instead. "),
       DeprecatedConfig("spark.connect.copyFromLocalToFs.allowDestLocal", "4.0",
-        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead.")
+        s"Use '${ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL.key}' instead."),
+      DeprecatedConfig(ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key, "4.0", "Increase indexes by 1 " +
+        "in `strfmt` of the `format_string` function. Refer to the first argument by \"1$\".")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -4693,7 +4754,12 @@ object SQLConf {
    *                     users that they set non-default value to an already removed config.
    * @param comment Additional info regarding to the removed config.
    */
-  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
+  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String) {
+    if (VersionUtils.majorMinorPatchVersion(version).isEmpty) {
+      throw SparkException.internalError(
+        s"The removed SQL config $key has the wrong Spark version: $version")
+    }
+  }
 
   /**
    * The map contains info about removed SQL configs. Keys are SQL config names,
@@ -4731,8 +4797,23 @@ object SQLConf {
           "for more details."),
       RemovedConfig("spark.sql.hive.verifyPartitionPath", "4.0.0", "false",
         s"This config was replaced by '${IGNORE_MISSING_FILES.key}'."),
-      RemovedConfig("spark.sql.optimizer.runtimeFilter.semiJoinReduction.enabled", "false", "4.0",
-        "This optimizer config is useless as runtime filter cannot be an IN subquery now.")
+      RemovedConfig("spark.sql.optimizer.runtimeFilter.semiJoinReduction.enabled", "4.0.0", "false",
+        "This optimizer config is useless as runtime filter cannot be an IN subquery now."),
+      RemovedConfig("spark.sql.legacy.parquet.int96RebaseModeInWrite", "4.0.0",
+        LegacyBehaviorPolicy.CORRECTED.toString,
+        s"Use '${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}' instead."),
+      RemovedConfig("spark.sql.legacy.parquet.int96RebaseModeInRead", "4.0.0",
+        LegacyBehaviorPolicy.CORRECTED.toString,
+        s"Use '${PARQUET_INT96_REBASE_MODE_IN_READ.key}' instead."),
+      RemovedConfig("spark.sql.legacy.parquet.datetimeRebaseModeInWrite", "4.0.0",
+        LegacyBehaviorPolicy.CORRECTED.toString,
+        s"Use '${PARQUET_REBASE_MODE_IN_WRITE.key}' instead."),
+      RemovedConfig("spark.sql.legacy.avro.datetimeRebaseModeInWrite", "4.0.0",
+        LegacyBehaviorPolicy.CORRECTED.toString,
+        s"Use '${AVRO_REBASE_MODE_IN_WRITE.key}' instead."),
+      RemovedConfig("spark.sql.legacy.avro.datetimeRebaseModeInRead", "4.0.0",
+        LegacyBehaviorPolicy.CORRECTED.toString,
+        s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -5069,8 +5150,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
-  def unwrapCastInJoinConditionEnabled: Boolean = getConf(UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED)
-
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
@@ -5272,6 +5351,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
+  def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
+
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
@@ -5383,8 +5464,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def replEagerEvalTruncate: Int = getConf(SQLConf.REPL_EAGER_EVAL_TRUNCATE)
 
   def avroCompressionCodec: String = getConf(SQLConf.AVRO_COMPRESSION_CODEC)
-
-  def avroDeflateLevel: Int = getConf(SQLConf.AVRO_DEFLATE_LEVEL)
 
   def replaceDatabricksSparkAvroEnabled: Boolean =
     getConf(SQLConf.LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED)
@@ -5513,6 +5592,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyJavaCharsets: Boolean = getConf(SQLConf.LEGACY_JAVA_CHARSETS)
 
+  def legacyEvalCurrentTime: Boolean = getConf(SQLConf.LEGACY_EVAL_CURRENT_TIME)
+
+  def legacyIgnoreParenthesesAroundStar: Boolean =
+    getConf(SQLConf.LEGACY_IGNORE_PARENTHESES_AROUND_STAR)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -5635,7 +5719,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def getAllDefinedConfs: Seq[(String, String, String, String)] = {
     loadDefinedConfs()
     getConfigEntries().asScala.filter(_.isPublic).map { entry =>
-      val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
+      val displayValue =
+        // We get the display value in this way rather than call getConfString(entry.key)
+        // because we want the default _definition_ and not the computed value.
+        //   e.g. `<undefined>` instead of `null`
+        //   e.g. `<value of spark.buffer.size>` instead of `65536`
+        Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)
     }.toSeq
   }

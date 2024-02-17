@@ -88,7 +88,10 @@ class ValueCountsTestsMixin:
         )
 
 
-class ValueCountsTests(ValueCountsTestsMixin, PandasOnSparkTestCase):
+class ValueCountsTests(
+    ValueCountsTestsMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 

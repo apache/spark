@@ -31,10 +31,10 @@ Spark SQL can cache tables using an in-memory columnar format by calling `spark.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
 memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableName")` or `dataFrame.unpersist()` to remove the table from memory.
 
-Configuration of in-memory caching can be done using the `setConf` method on `SparkSession` or by running
+Configuration of in-memory caching can be done via `spark.conf.set` or by running
 `SET key=value` commands using SQL.
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.sql.inMemoryColumnarStorage.compressed</code></td>
@@ -62,7 +62,7 @@ Configuration of in-memory caching can be done using the `setConf` method on `Sp
 The following options can also be used to tune the performance of query execution. It is possible
 that these options will be deprecated in future release as more optimizations are performed automatically.
 
-<table>
+<table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.files.maxPartitionBytes</code></td>
@@ -253,7 +253,7 @@ Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that ma
 
 ### Coalescing Post Shuffle Partitions
 This feature coalesces the post shuffle partitions based on the map output statistics when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.coalescePartitions.enabled` configurations are true. This feature simplifies the tuning of shuffle partition number when running queries. You do not need to set a proper shuffle partition number to fit your dataset. Spark can pick the proper shuffle partition number at runtime once you set a large enough initial number of shuffle partitions via `spark.sql.adaptive.coalescePartitions.initialPartitionNum` configuration.
- <table>
+ <table class="spark-config">
    <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
    <tr>
      <td><code>spark.sql.adaptive.coalescePartitions.enabled</code></td>
@@ -267,7 +267,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.coalescePartitions.parallelismFirst</code></td>
      <td>true</td>
      <td>
-       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respect the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regression when enabling adaptive query execution. It's recommended to set this config to false and respect the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
+       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respect the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regressions when enabling adaptive query execution. It's recommended to set this config to true on a busy cluster to make resource utilization more efficient (not many small tasks).
      </td>
      <td>3.2.0</td>
    </tr>
@@ -297,8 +297,8 @@ This feature coalesces the post shuffle partitions based on the map output stati
    </tr>
  </table>
 
-### Spliting skewed shuffle partitions
- <table>
+### Splitting skewed shuffle partitions
+ <table class="spark-config">
    <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
    <tr>
      <td><code>spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled</code></td>
@@ -320,7 +320,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
 
 ### Converting sort-merge join to broadcast join
 AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side is smaller than the adaptive broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than keep doing the sort-merge join, as we can save the sorting of both the join sides, and read shuffle files locally to save network traffic(if `spark.sql.adaptive.localShuffleReader.enabled` is true)
-  <table>
+  <table class="spark-config">
      <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
      <tr>
        <td><code>spark.sql.adaptive.autoBroadcastJoinThreshold</code></td>
@@ -342,7 +342,7 @@ AQE converts sort-merge join to broadcast hash join when the runtime statistics 
 
 ### Converting sort-merge join to shuffled hash join
 AQE converts sort-merge join to shuffled hash join when all post shuffle partitions are smaller than a threshold, the max threshold can see the config `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
-  <table>
+  <table class="spark-config">
      <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
      <tr>
        <td><code>spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold</code></td>
@@ -356,7 +356,7 @@ AQE converts sort-merge join to shuffled hash join when all post shuffle partiti
 
 ### Optimizing Skew Join
 Data skew can severely downgrade the performance of join queries. This feature dynamically handles skew in sort-merge join by splitting (and replicating if needed) skewed tasks into roughly evenly sized tasks. It takes effect when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.skewJoin.enabled` configurations are enabled.
-  <table>
+  <table class="spark-config">
      <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
      <tr>
        <td><code>spark.sql.adaptive.skewJoin.enabled</code></td>
@@ -393,7 +393,7 @@ Data skew can severely downgrade the performance of join queries. This feature d
    </table>
 
 ### Misc
-  <table>
+  <table class="spark-config">
     <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
     <tr>
       <td><code>spark.sql.adaptive.optimizer.excludedRules</code></td>

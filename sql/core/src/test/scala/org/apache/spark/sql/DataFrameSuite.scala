@@ -36,10 +36,10 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, Uuid}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -57,7 +57,6 @@ import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.random.XORShiftRandom
 
 @SlowSQLTest
 class DataFrameSuite extends QueryTest
@@ -210,12 +209,11 @@ class DataFrameSuite extends QueryTest
     if (!ansiEnabled) {
       checkAnswer(df, expectedAnswer)
     } else {
-      val e = intercept[SparkException] {
+      val e = intercept[ArithmeticException] {
         df.collect()
       }
-      assert(e.getCause.isInstanceOf[ArithmeticException])
-      assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
-        e.getCause.getMessage.contains("Overflow in sum of decimals"))
+      assert(e.getMessage.contains("cannot be represented as Decimal") ||
+        e.getMessage.contains("Overflow in sum of decimals"))
     }
   }
 
@@ -1922,8 +1920,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-9083: sort with non-deterministic expressions") {
     val seed = 33
     val df = (1 to 100).map(Tuple1.apply).toDF("i").repartition(1)
-    val random = new XORShiftRandom(seed)
-    val expected = (1 to 100).map(_ -> random.nextDouble()).sortBy(_._2).map(_._1)
+    val expected = df.select($"i", rand(seed)).as[(Long, Double)].collect().sortBy(_._2).map(_._1)
     val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
     assert(expected === actual)
   }
@@ -2277,6 +2274,20 @@ class DataFrameSuite extends QueryTest
     val newConstraints = newLogicalRDD.constraints
     val newExpectedConstraints = buildExpectedConstraints(newLogicalRDD.output)
     assert(newConstraints === newExpectedConstraints)
+  }
+
+  test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
+    withTempDir { checkpointDir =>
+      val subquery =
+        new Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
+      val df = spark.range(1000).filter($"id" === subquery)
+      assert(df.logicalPlan.constraints.exists(_.exists(_.isInstanceOf[ScalarSubquery])))
+
+      spark.sparkContext.setCheckpointDir(checkpointDir.getAbsolutePath)
+      val checkpointedDf = df.checkpoint()
+      assert(!checkpointedDf.logicalPlan.constraints
+        .exists(_.exists(_.isInstanceOf[ScalarSubquery])))
+    }
   }
 
   test("SPARK-10656: completely support special chars") {
@@ -3709,6 +3720,61 @@ class DataFrameSuite extends QueryTest
         errorClass = "_LEGACY_ERROR_TEMP_1321",
         parameters = Map("viewName" -> "AUTHORIZATION"))
     }
+  }
+
+  test("SPARK-46502: Unwrap timestamp cast on timestamp_ntz column") {
+    def getQueryResult(ruleEnabled: Boolean): Seq[Row] = {
+      val ruleName = if (ruleEnabled) {
+        ""
+      } else {
+        "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison"
+      }
+
+      var result: Seq[Row] = Seq.empty
+
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
+        withTable("table_timestamp") {
+          sql(
+            """
+              |CREATE TABLE table_timestamp (
+              |  batch TIMESTAMP_NTZ)
+              |USING parquet;
+              |""".stripMargin)
+          sql("INSERT INTO table_timestamp SELECT CAST('2023-12-21 09:00:00' AS TIMESTAMP)")
+          sql("INSERT INTO table_timestamp SELECT CAST('2023-12-21 10:00:00' AS TIMESTAMP)")
+          sql("INSERT INTO table_timestamp SELECT CAST('2023-12-21 12:00:00' AS TIMESTAMP)")
+
+          sql("CREATE OR REPLACE VIEW timestamp_view AS " +
+            "SELECT CAST(batch AS TIMESTAMP) FROM table_timestamp")
+          val df = sql("SELECT * from timestamp_view where batch >= '2023-12-21 10:00:00'")
+
+          val filter = df.queryExecution.optimizedPlan.collect {
+            case f: Filter => f
+          }
+          assert(filter.size == 1)
+
+          val filterCondition = filter.head.condition
+          val castExpr = filterCondition.collect {
+            case c: Cast => c
+          }
+
+          if (ruleEnabled) {
+            assert(castExpr.isEmpty)
+          } else {
+            assert(castExpr.size == 1)
+          }
+
+          result = df.collect().toSeq
+
+          sql("DROP VIEW timestamp_view")
+        }
+      }
+      result
+    }
+
+    val actual = getQueryResult(true).map(_.getTimestamp(0).toString).sorted
+    val expected = getQueryResult(false).map(_.getTimestamp(0).toString).sorted
+    assert(actual == expected)
   }
 }
 

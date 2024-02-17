@@ -47,6 +47,8 @@ Classes
     PySparkImportError
     PySparkIndexError
     PythonException
+    QueryContext
+    QueryContextType
     QueryExecutionException
     RetriesExceeded
     SessionNotSameException
@@ -68,5 +70,7 @@ Methods
     :toctree: api/
 
     PySparkException.getErrorClass
+    PySparkException.getMessage
     PySparkException.getMessageParameters
+    PySparkException.getQueryContext
     PySparkException.getSqlState

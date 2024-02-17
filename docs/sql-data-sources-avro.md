@@ -233,8 +233,8 @@ Data source options of Avro can be set via:
  * the `.option` method on `DataFrameReader` or `DataFrameWriter`.
  * the `options` parameter in function `from_avro`.
 
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th><th><b>Since Version</b></th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Scope</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
@@ -274,7 +274,7 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>ignoreExtension</code></td>
     <td>true</td>
-    <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.<br> The option has been deprecated, and it will be removed in the future releases. Please use the general data source option <a href="./sql-data-sources-generic-options.html#path-global-filter">pathGlobFilter</a> for filtering file names.</td>
+    <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.<br> The option has been deprecated, and it will be removed in the future releases. Please use the general data source option <a href="./sql-data-sources-generic-options.html#path-glob-filter">pathGlobFilter</a> for filtering file names.</td>
     <td>read</td>
     <td>2.4.0</td>
   </tr>
@@ -327,12 +327,20 @@ Data source options of Avro can be set via:
     <td>If it is set to true, Avro schema is deserialized into Spark SQL schema, and the Avro Union type is transformed into a structure where the field names remain consistent with their respective types. The resulting field names are converted to lowercase, e.g. member_int or member_string. If two user-defined type names or a user-defined type name and a built-in type name are identical regardless of case, an exception will be raised. However, in other cases, the field names can be uniquely identified.</td>
     <td>read</td>
     <td>3.5.0</td>
-  </tr></table>
+  </tr>
+  <tr>
+    <td><code>stableIdentifierPrefixForUnionType</code></td>
+    <td>member_</td>
+    <td>When `enableStableIdentifiersForUnionType` is enabled, the option allows to configure the prefix for fields of Avro Union type.</td>
+    <td>read</td>
+    <td>4.0.0</td>
+  </tr>
+</table>
 
 ## Configuration
-Configuration of Avro can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
-<table>
-  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
+Configuration of Avro can be done via `spark.conf.set` or by running `SET key=value` commands using SQL.
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
     <td>true</td>
@@ -348,7 +356,7 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
     <td>snappy</td>
     <td>
       Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate,
-      snappy, bzip2 and xz. Default codec is snappy.
+      snappy, bzip2, xz and zstandard. Default codec is snappy.
     </td>
     <td>2.4.0</td>
   </tr>
@@ -361,6 +369,32 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
       in the current implementation.
     </td>
     <td>2.4.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.xz.level</td>
+    <td>6</td>
+    <td>
+      Compression level for the xz codec used in writing of AVRO files. Valid value must be in
+      the range of from 1 to 9 inclusive. The default value is 6 in the current implementation.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.zstandard.level</td>
+    <td>3</td>
+    <td>
+      Compression level for the zstandard codec used in writing of AVRO files.
+      The default value is 3 in the current implementation.
+    </td>
+    <td>4.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.zstandard.bufferPool.enabled</td>
+    <td>false</td>
+    <td>
+      If true, enable buffer pool of ZSTD JNI library when writing of AVRO files.
+    </td>
+    <td>4.0.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.datetimeRebaseModeInRead</td>
@@ -412,9 +446,10 @@ built-in but external module, both implicit classes are removed. Please use `.fo
 
 If you prefer using your own build of `spark-avro` jar file, you can simply disable the configuration
 `spark.sql.legacy.replaceDatabricksSparkAvro.enabled`, and use the option `--jars` on deploying your
-applications. Read the [Advanced Dependency Management](https://spark.apache
-.org/docs/latest/submitting-applications.html#advanced-dependency-management) section in Application
+applications. Read the [Advanced Dependency Management][adm] section in the Application
 Submission Guide for more details.
+
+[adm]: submitting-applications.html#advanced-dependency-management
 
 ## Supported types for Avro -> Spark SQL conversion
 Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.3/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.3/specification/#complex-types) under records of Avro.

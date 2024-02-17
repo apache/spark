@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -455,7 +455,11 @@ class FrameMissingDataMixin:
         self.assert_eq(pdf, psdf)
 
 
-class FrameMissingDataTests(FrameMissingDataMixin, ComparisonTestBase, SQLTestUtils):
+class FrameMissingDataTests(
+    FrameMissingDataMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

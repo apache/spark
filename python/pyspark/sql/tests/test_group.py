@@ -14,14 +14,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 
 
 class GroupTestsMixin:
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
+    def test_agg_func(self):
+        data = [Row(key=1, value=10), Row(key=1, value=20), Row(key=1, value=30)]
+        df = self.spark.createDataFrame(data)
+        g = df.groupBy("key")
+        self.assertEqual(g.max("value").collect(), [Row(**{"key": 1, "max(value)": 30})])
+        self.assertEqual(g.min("value").collect(), [Row(**{"key": 1, "min(value)": 10})])
+        self.assertEqual(g.sum("value").collect(), [Row(**{"key": 1, "sum(value)": 60})])
+        self.assertEqual(g.count().collect(), [Row(key=1, count=3)])
+        self.assertEqual(g.mean("value").collect(), [Row(**{"key": 1, "avg(value)": 20.0})])
+
+        data = [
+            Row(electronic="Smartphone", year=2018, sales=150000),
+            Row(electronic="Tablet", year=2018, sales=120000),
+            Row(electronic="Smartphone", year=2019, sales=180000),
+            Row(electronic="Tablet", year=2019, sales=50000),
+        ]
+
+        df_pivot = self.spark.createDataFrame(data)
+        assertDataFrameEqual(
+            df_pivot.groupBy("year").pivot("electronic", ["Smartphone", "Tablet"]).sum("sales"),
+            df_pivot.groupBy("year").pivot("electronic").sum("sales"),
+        )
+
     def test_aggregator(self):
         df = self.df
         g = df.groupBy()
@@ -37,6 +69,8 @@ class GroupTestsMixin:
         # test deprecated countDistinct
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
     def test_group_by_ordinal(self):
         spark = self.spark
         df = spark.createDataFrame(
@@ -96,6 +130,8 @@ class GroupTestsMixin:
             with self.assertRaises(IndexError):
                 df.groupBy(10).agg(sf.sum("b"))
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
     def test_order_by_ordinal(self):
         spark = self.spark
         df = spark.createDataFrame(

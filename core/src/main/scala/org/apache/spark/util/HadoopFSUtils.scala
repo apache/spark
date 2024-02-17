@@ -349,6 +349,7 @@ private[spark] object HadoopFSUtils extends Logging {
   private val underscoreEnd: Regex = "/_[^=/]*$".r
 
   /** Checks if we should filter out this path. */
+  @scala.annotation.tailrec
   def shouldFilterOutPath(path: String): Boolean = {
     if (path.contains("/.") || path.endsWith("._COPYING_")) return true
     underscoreEnd.findFirstIn(path) match {

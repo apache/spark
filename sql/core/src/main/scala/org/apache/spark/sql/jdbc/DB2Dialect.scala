@@ -22,6 +22,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -49,8 +50,11 @@ private object DB2Dialect extends JdbcDialect {
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
-        throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
-          s"support aggregate function: $funcName with DISTINCT");
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3184",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
@@ -144,15 +148,23 @@ private object DB2Dialect extends JdbcDialect {
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS ''"
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.ibm.com/docs/en/db2/11.5?topic=messages-sqlstate
-          case "42893" => throw NonEmptyNamespaceException(message, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case "42893" =>
+            throw NonEmptyNamespaceException(
+              namespace = messageParameters.get("namespace").toArray,
+              details = sqlException.getMessage,
+              cause = Some(e))
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

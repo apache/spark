@@ -481,8 +481,8 @@ class DayTimeIntervalType(AnsiIntervalType):
                 error_class="INVALID_INTERVAL_CASTING",
                 message_parameters={"start_field": str(startField), "end_field": str(endField)},
             )
-        self.startField = cast(int, startField)
-        self.endField = cast(int, endField)
+        self.startField = startField
+        self.endField = endField
 
     def _str_repr(self) -> str:
         fields = DayTimeIntervalType._fields
@@ -539,8 +539,8 @@ class YearMonthIntervalType(AnsiIntervalType):
                 error_class="INVALID_INTERVAL_CASTING",
                 message_parameters={"start_field": str(startField), "end_field": str(endField)},
             )
-        self.startField = cast(int, startField)
-        self.endField = cast(int, endField)
+        self.startField = startField
+        self.endField = endField
 
     def _str_repr(self) -> str:
         fields = YearMonthIntervalType._fields
@@ -1863,9 +1863,9 @@ def _infer_schema(
 
     elif isinstance(row, (tuple, list)):
         if hasattr(row, "__fields__"):  # Row
-            items = zip(row.__fields__, tuple(row))  # type: ignore[union-attr]
+            items = zip(row.__fields__, tuple(row))
         elif hasattr(row, "_fields"):  # namedtuple
-            items = zip(row._fields, tuple(row))  # type: ignore[union-attr]
+            items = zip(row._fields, tuple(row))
         else:
             if names is None:
                 names = ["_%d" % i for i in range(1, len(row) + 1)]
@@ -2236,7 +2236,7 @@ def _make_type_verifier(
                     error_class="NOT_INSTANCE_OF",
                     message_parameters={
                         "value": str(obj),
-                        "data_type": str(dataType),
+                        "type": str(dataType),
                     },
                 )
             verifier(dataType.toInternal(obj))

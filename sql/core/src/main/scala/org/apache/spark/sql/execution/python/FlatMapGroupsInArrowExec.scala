@@ -46,7 +46,7 @@ case class FlatMapGroupsInArrowExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends FlatMapGroupsInPythonExec {
+  extends FlatMapGroupsInBatchExec {
 
   protected val pythonEvalType: Int = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
 

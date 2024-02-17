@@ -205,7 +205,7 @@ SELECT '' AS `54`, d1 as `timestamp`,
     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01'
 -- !query analysis
 Project [ AS 54#x, d1#x AS timestamp#x, date_part(year, d1#x) AS year#x, date_part(month, d1#x) AS month#x, date_part(day, d1#x) AS day#x, date_part(hour, d1#x) AS hour#x, date_part(minute, d1#x) AS minute#x, date_part(second, d1#x) AS second#x]
-+- Filter ((d1#x >= cast(1902-01-01 as timestamp)) AND (d1#x <= cast(2038-01-01 as timestamp)))
++- Filter between(d1#x, 1902-01-01, 2038-01-01)
    +- SubqueryAlias spark_catalog.default.timestamp_tbl
       +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
 

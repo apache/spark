@@ -24,65 +24,88 @@ import com.google.protobuf.Descriptors.FieldDescriptor
 
 private[connect] object ProtoUtils {
   private val format = java.text.NumberFormat.getInstance()
+  private val BYTES = "BYTES"
+  private val STRING = "STRING"
   private val MAX_BYTES_SIZE = 8
   private val MAX_STRING_SIZE = 1024
 
   def abbreviate(message: Message, maxStringSize: Int = MAX_STRING_SIZE): Message = {
+    abbreviate(message, Map(STRING -> maxStringSize))
+  }
+
+  def abbreviate(message: Message, thresholds: Map[String, Int]): Message = {
     val builder = message.toBuilder
 
     message.getAllFields.asScala.iterator.foreach {
       case (field: FieldDescriptor, string: String)
           if field.getJavaType == FieldDescriptor.JavaType.STRING && string != null =>
         val size = string.length
-        if (size > maxStringSize) {
-          builder.setField(field, createString(string.take(maxStringSize), size))
-        } else {
-          builder.setField(field, string)
+        val threshold = thresholds.getOrElse(STRING, MAX_STRING_SIZE)
+        if (size > threshold) {
+          builder.setField(field, truncateString(string, threshold))
+        }
+
+      case (field: FieldDescriptor, strings: java.lang.Iterable[_])
+          if field.getJavaType == FieldDescriptor.JavaType.STRING && field.isRepeated
+            && strings != null =>
+        val threshold = thresholds.getOrElse(STRING, MAX_STRING_SIZE)
+        strings.iterator().asScala.zipWithIndex.foreach {
+          case (string: String, i) if string != null && string.length > threshold =>
+            builder.setRepeatedField(field, i, truncateString(string, threshold))
+          case _ =>
         }
 
       case (field: FieldDescriptor, byteString: ByteString)
           if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteString != null =>
         val size = byteString.size
-        if (size > MAX_BYTES_SIZE) {
+        val threshold = thresholds.getOrElse(BYTES, MAX_BYTES_SIZE)
+        if (size > threshold) {
           builder.setField(
             field,
             byteString
-              .substring(0, MAX_BYTES_SIZE)
+              .substring(0, threshold)
               .concat(createTruncatedByteString(size)))
-        } else {
-          builder.setField(field, byteString)
         }
 
       case (field: FieldDescriptor, byteArray: Array[Byte])
           if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteArray != null =>
         val size = byteArray.length
-        if (size > MAX_BYTES_SIZE) {
+        val threshold = thresholds.getOrElse(BYTES, MAX_BYTES_SIZE)
+        if (size > threshold) {
           builder.setField(
             field,
             ByteString
-              .copyFrom(byteArray, 0, MAX_BYTES_SIZE)
+              .copyFrom(byteArray, 0, threshold)
               .concat(createTruncatedByteString(size)))
-        } else {
-          builder.setField(field, byteArray)
         }
 
-      // TODO(SPARK-43117): should also support 1, repeated msg; 2, map<xxx, msg>
+      // TODO(SPARK-46988): should support map<xxx, msg>
       case (field: FieldDescriptor, msg: Message)
-          if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && msg != null =>
-        builder.setField(field, abbreviate(msg, maxStringSize))
+          if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && !field.isRepeated
+            && msg != null =>
+        builder.setField(field, abbreviate(msg, thresholds))
 
-      case (field: FieldDescriptor, value: Any) => builder.setField(field, value)
+      case (field: FieldDescriptor, msgs: java.lang.Iterable[_])
+          if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && field.isRepeated
+            && msgs != null =>
+        msgs.iterator().asScala.zipWithIndex.foreach {
+          case (msg: Message, i) if msg != null =>
+            builder.setRepeatedField(field, i, abbreviate(msg, thresholds))
+          case _ =>
+        }
+
+      case _ =>
     }
 
     builder.build()
   }
 
-  private def createTruncatedByteString(size: Int): ByteString = {
-    ByteString.copyFromUtf8(s"[truncated(size=${format.format(size)})]")
+  private def truncateString(string: String, threshold: Int): String = {
+    s"${string.take(threshold)}[truncated(size=${format.format(string.length)})]"
   }
 
-  private def createString(prefix: String, size: Int): String = {
-    s"$prefix[truncated(size=${format.format(size)})]"
+  private def createTruncatedByteString(size: Int): ByteString = {
+    ByteString.copyFromUtf8(s"[truncated(size=${format.format(size)})]")
   }
 
   // Because Spark Connect operation tags are also set as SparkContext Job tags, they cannot contain

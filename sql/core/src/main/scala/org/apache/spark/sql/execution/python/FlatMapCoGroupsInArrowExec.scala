@@ -48,7 +48,7 @@ case class FlatMapCoGroupsInArrowExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends FlatMapCoGroupsInPythonExec {
+  extends FlatMapCoGroupsInBatchExec {
 
   protected val pythonEvalType: Int = PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF
 

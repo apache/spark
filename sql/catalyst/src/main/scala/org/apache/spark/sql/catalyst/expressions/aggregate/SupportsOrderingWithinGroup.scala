@@ -23,5 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
  * The trait used to set the [[SortOrder]] after inverse distribution functions parsed.
  */
 trait SupportsOrderingWithinGroup { self: AggregateFunction =>
+  def orderingFilled: Boolean = false
   def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction
 }

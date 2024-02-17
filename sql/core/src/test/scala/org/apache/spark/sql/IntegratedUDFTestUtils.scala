@@ -30,7 +30,8 @@ import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunct
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.execution.python.{UserDefinedPythonDataSource, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
+import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
+import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -585,10 +586,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   abstract class TestPythonUDTFPartitionByOrderByBase(
       partitionBy: String,
-      orderBy: String) extends TestUDTF {
+      orderBy: String,
+      select: String) extends TestUDTF {
     val pythonScript: String =
       s"""
         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, PartitioningColumn
+        |from pyspark.sql.functions import SelectedColumn
         |from pyspark.sql.types import IntegerType, Row, StructType
         |class $name:
         |    def __init__(self):
@@ -606,10 +609,13 @@ object IntegratedUDFTestUtils extends SQLHelper {
         |                .add("total", IntegerType())
         |                .add("last", IntegerType()),
         |            partitionBy=[
-        |                PartitioningColumn("$partitionBy")
+        |                $partitionBy
         |            ],
         |            orderBy=[
-        |                OrderingColumn("$orderBy")
+        |                $orderBy
+        |            ],
+        |            select=[
+        |                $select
         |            ])
         |
         |    def eval(self, row: Row):
@@ -625,23 +631,70 @@ object IntegratedUDFTestUtils extends SQLHelper {
 
   object UDTFPartitionByOrderBy
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "partition_col",
-      orderBy = "input")
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "OrderingColumn(\"input\")",
+      select = "")
 
   object UDTFPartitionByOrderByComplexExpr
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "partition_col + 1",
-      orderBy = "RANDOM(42)")
+      partitionBy = "PartitioningColumn(\"partition_col + 1\")",
+      orderBy = "OrderingColumn(\"RANDOM(42)\")",
+      select = "")
+
+  object UDTFPartitionByOrderBySelectExpr
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "OrderingColumn(\"input\")",
+      select = "SelectedColumn(\"partition_col\"), SelectedColumn(\"input\")")
+
+  object UDTFPartitionByOrderBySelectComplexExpr
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "PartitioningColumn(\"partition_col + 1\")",
+      orderBy = "OrderingColumn(\"RANDOM(42)\")",
+      select = "SelectedColumn(\"partition_col\"), " +
+        "SelectedColumn(name=\"input + 1\", alias=\"input\")")
+
+  object UDTFPartitionByOrderBySelectExprOnlyPartitionColumn
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "OrderingColumn(\"input\")",
+      select = "SelectedColumn(\"partition_col\")")
 
   object UDTFInvalidPartitionByOrderByParseError
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "unparsable",
-      orderBy = "input")
+      partitionBy = "PartitioningColumn(\"unparsable\")",
+      orderBy = "OrderingColumn(\"input\")",
+      select = "")
 
   object UDTFInvalidOrderByAscKeyword
     extends TestPythonUDTFPartitionByOrderByBase(
-      partitionBy = "partition_col",
-      orderBy = "partition_col ASC")
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "OrderingColumn(\"partition_col ASC\")",
+      select = "")
+
+  object UDTFInvalidSelectExprParseError
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "OrderingColumn(\"input\")",
+      select = "SelectedColumn(\"unparsable\")")
+
+  object UDTFInvalidSelectExprStringValue
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "OrderingColumn(\"input\")",
+      select = "\"partition_cll\"")
+
+  object UDTFInvalidComplexSelectExprMissingAlias
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "PartitioningColumn(\"partition_col + 1\")",
+      orderBy = "OrderingColumn(\"RANDOM(42)\")",
+      select = "SelectedColumn(name=\"input + 1\")")
+
+  object UDTFInvalidOrderByStringList
+    extends TestPythonUDTFPartitionByOrderByBase(
+      partitionBy = "PartitioningColumn(\"partition_col\")",
+      orderBy = "\"partition_col\"",
+      select = "")
 
   object UDTFInvalidPartitionByAndWithSinglePartition extends TestUDTF {
     val pythonScript: String =
@@ -1150,12 +1203,19 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFWithSinglePartition,
     UDTFPartitionByOrderBy,
     UDTFInvalidOrderByAscKeyword,
+    UDTFInvalidOrderByStringList,
+    UDTFInvalidSelectExprParseError,
+    UDTFInvalidSelectExprStringValue,
+    UDTFInvalidComplexSelectExprMissingAlias,
     UDTFInvalidPartitionByAndWithSinglePartition,
     UDTFInvalidPartitionByOrderByParseError,
     UDTFInvalidOrderByWithoutPartitionBy,
     UDTFForwardStateFromAnalyze,
     UDTFForwardStateFromAnalyzeWithKwargs,
     UDTFPartitionByOrderByComplexExpr,
+    UDTFPartitionByOrderBySelectExpr,
+    UDTFPartitionByOrderBySelectComplexExpr,
+    UDTFPartitionByOrderBySelectExprOnlyPartitionColumn,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,

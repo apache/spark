@@ -131,7 +131,7 @@ class CompressionCodecSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         CompressionCodec.createCodec(conf, "foobar")
       },
-      errorClass = "CODEC_NOT_AVAILABLE",
+      errorClass = "CODEC_NOT_AVAILABLE.WITH_CONF_SUGGESTION",
       parameters = Map(
         "codecName" -> "foobar",
         "configKey" -> "\"spark.io.compression.codec\"",

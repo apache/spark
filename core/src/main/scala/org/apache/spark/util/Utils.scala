@@ -50,7 +50,7 @@ import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
-import org.apache.commons.lang3.SystemUtils
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
@@ -67,7 +67,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -769,7 +769,6 @@ private[spark] object Utils
    * logic of locating the local directories according to deployment mode.
    */
   def getConfiguredLocalDirs(conf: SparkConf): Array[String] = {
-    val shuffleServiceEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED)
     if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
       // to what Yarn on this system said was available. Note this assumes that Yarn has
@@ -1774,8 +1773,7 @@ private[spark] object Utils
   /**
    * Whether the underlying Java version is at least 21.
    */
-  val isJavaVersionAtLeast21 =
-    System.getProperty("java.version").split("[+.\\-]+", 3)(0).toInt >= 21
+  val isJavaVersionAtLeast21 = SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_21)
 
   /**
    * Whether the underlying operating system is Mac OS X and processor is Apple Silicon.
@@ -1886,17 +1884,6 @@ private[spark] object Utils
     }
   }
 
-  /** Check whether a path is an absolute URI. */
-  def isAbsoluteURI(path: String): Boolean = {
-    try {
-      val uri = new URI(path: String)
-      uri.isAbsolute
-    } catch {
-      case _: URISyntaxException =>
-        false
-    }
-  }
-
   /** Return all non-local paths from a comma-separated list of paths. */
   def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
     val windows = isWindows || testWindows
@@ -1931,20 +1918,6 @@ private[spark] object Utils
       }
     }
     path
-  }
-
-  /**
-   * Updates Spark config with properties from a set of Properties.
-   * Provided properties have the highest priority.
-   */
-  def updateSparkConfigFromProperties(
-      conf: SparkConf,
-      properties: Map[String, String]) : Unit = {
-    properties.filter { case (k, v) =>
-      k.startsWith("spark.")
-    }.foreach { case (k, v) =>
-      conf.set(k, v)
-    }
   }
 
   /**
@@ -2853,7 +2826,7 @@ private[spark] object Utils
     else {
       // The last char is a dollar sign
       // Find last non-dollar char
-      val lastNonDollarChar = s.reverse.find(_ != '$')
+      val lastNonDollarChar = s.findLast(_ != '$')
       lastNonDollarChar match {
         case None => s
         case Some(c) =>
@@ -3027,6 +3000,23 @@ private[spark] object Utils
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
       case _ => math.max(sortedSize(len / 2), 1)
     }
+  }
+
+  /**
+   * Check if a command is available.
+   */
+  def checkCommandAvailable(command: String): Boolean = {
+    // To avoid conflicts with java.lang.Process
+    import scala.sys.process.{Process, ProcessLogger}
+
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq(
+        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
+    } else {
+      Try(Process(Seq(
+        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
+    }
+    attempt.isSuccess && attempt.get == 0
   }
 
   /**

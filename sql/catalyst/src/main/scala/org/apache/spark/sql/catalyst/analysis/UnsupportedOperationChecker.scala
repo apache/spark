@@ -101,6 +101,7 @@ object UnsupportedOperationChecker extends Logging {
     case f: FlatMapGroupsInPandasWithState if f.isStreaming => true
     case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
     case d: DeduplicateWithinWatermark if d.isStreaming => true
+    case t: TransformWithState if t.isStreaming => true
     case _ => false
   }
 
@@ -552,7 +553,10 @@ object UnsupportedOperationChecker extends Logging {
 
   private def throwError(msg: String)(implicit operator: LogicalPlan): Nothing = {
     throw new ExtendedAnalysisException(
-      msg, operator.origin.line, operator.origin.startPosition, Some(operator))
+      new AnalysisException(
+        errorClass = "_LEGACY_ERROR_TEMP_3102",
+        messageParameters = Map("msg" -> msg)),
+      plan = operator)
   }
 
   private def checkForStreamStreamJoinWatermark(join: Join): Unit = {
