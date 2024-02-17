@@ -1105,7 +1105,7 @@ ERROR_CLASSES_JSON = '''
   },
   "VALUE_OUT_OF_BOUNDS": {
     "message": [
-      "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
+      "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": {
