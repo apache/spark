@@ -76,7 +76,7 @@ object UnboundBucketFunction extends UnboundFunction {
   override def name(): String = "bucket"
 }
 
-object BucketFunction extends ScalarFunction[Int] {
+object BucketFunction extends ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "bucket"
@@ -85,6 +85,23 @@ object BucketFunction extends ScalarFunction[Int] {
   override def produceResult(input: InternalRow): Int = {
     (input.getLong(1) % input.getInt(0)).toInt
   }
+
+  override def reducer(func: ReducibleFunction[_, _],
+                       thisNumBuckets: Option[_],
+                       otherNumBuckets: Option[_]): Option[Reducer[Int]] = {
+    (thisNumBuckets, otherNumBuckets) match {
+      case (Some(thisNumBucketsVal: Int), Some(otherNumBucketsVal: Int))
+        if func.isInstanceOf[ReducibleFunction[_, _]] &&
+          ((thisNumBucketsVal > otherNumBucketsVal) &&
+            (thisNumBucketsVal % otherNumBucketsVal == 0)) =>
+        Some(BucketReducer(thisNumBucketsVal, otherNumBucketsVal))
+      case _ => None
+    }
+  }
+}
+
+case class BucketReducer(thisNumBuckets: Int, otherNumBuckets: Int) extends Reducer[Int] {
+  override def reduce(bucket: Int): Int = bucket % otherNumBuckets
 }
 
 object UnboundStringSelfFunction extends UnboundFunction {

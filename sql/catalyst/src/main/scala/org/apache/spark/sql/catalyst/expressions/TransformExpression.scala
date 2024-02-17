@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.connector.catalog.functions.BoundFunction
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ReducibleFunction}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -52,6 +52,31 @@ case class TransformExpression(
         numBucketsOpt == otherNumBucketsOpt
     case _ =>
       false
+  }
+
+  /**
+   * Whether this [[TransformExpression]]'s function is compatible with the `other`
+   * [[TransformExpression]]'s function.
+   *
+   * This is true if both are instances of [[ReducibleFunction]] and there exists a [[Reducer]] r(x)
+   * such that r(t1(x)) = t2(x), or r(t2(x)) = t1(x), for all input x.
+   *
+   * @param other the transform expression to compare to
+   * @return true if compatible, false if not
+   */
+  def isCompatible(other: TransformExpression): Boolean = {
+    if (isSameFunction(other)) {
+      true
+    } else {
+      (function, other.function) match {
+        case (f: ReducibleFunction[Any, Any] @unchecked,
+          o: ReducibleFunction[Any, Any] @unchecked) =>
+          val reducer = f.reducer(o, numBucketsOpt, other.numBucketsOpt)
+          val otherReducer = o.reducer(f, other.numBucketsOpt, numBucketsOpt)
+          reducer.isDefined || otherReducer.isDefined
+        case _ => false
+      }
+    }
   }
 
   override def dataType: DataType = function.resultType()
