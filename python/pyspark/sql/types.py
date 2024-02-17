@@ -1444,6 +1444,7 @@ _atomic_types: List[Type[DataType]] = [
     TimestampType,
     TimestampNTZType,
     NullType,
+    VariantType,
 ]
 _all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
 
