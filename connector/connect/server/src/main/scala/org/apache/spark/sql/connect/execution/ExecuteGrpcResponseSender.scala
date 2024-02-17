@@ -133,17 +133,18 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   /**
-   * This method is called repeatedly during the query execution to enqueue a new message to be send
-   * to the client about the current query progress. The message is not directly send to the client,
-   * but rather enqueued to in the response observer.
+   * This method is called repeatedly during the query execution to enqueue a new message to be
+   * send to the client about the current query progress. The message is not directly send to the
+   * client, but rather enqueued to in the response observer.
    */
   private def enqueueProgressMessage(): Unit = {
     SparkConnectService.executionListener.foreach { listener =>
       if (listener.trackedTags.contains(executeHolder.jobTag)) {
         val tracker = listener.trackedTags(executeHolder.jobTag)
         // Only send progress message if there is something new to report.
-        tracker.yieldWhenDirty { (tasks, tasksCompleted, stages, stagesCompleted, inputBytesRead) =>
-          val response = ExecutePlanResponse
+        tracker.yieldWhenDirty {
+          (tasks, tasksCompleted, stages, stagesCompleted, inputBytesRead) =>
+            val response = ExecutePlanResponse
               .newBuilder()
               .setExecutionProgress(
                 ExecutePlanResponse.ExecutionProgress
@@ -152,13 +153,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
                   .setNumTasks(tasks)
                   .setNumCompletedTasks(tasksCompleted)
                   .setNumCompletedStages(stagesCompleted)
-                  .setNumStages(stages)
-              )
-            .build()
-          // There is a special case when the response observer has alreaady determined
-          // that the final message is send (and the stream will be closed) but we might want
-          // to send the progress message. In this case we ignore the result of the `onNext` call.
-          executeHolder.responseObserver.tryOnNext(response)
+                  .setNumStages(stages))
+              .build()
+            // There is a special case when the response observer has alreaady determined
+            // that the final message is send (and the stream will be closed) but we might want
+            // to send the progress message. In this case we ignore the result of the `onNext` call.
+            executeHolder.responseObserver.tryOnNext(response)
         }
       }
     }

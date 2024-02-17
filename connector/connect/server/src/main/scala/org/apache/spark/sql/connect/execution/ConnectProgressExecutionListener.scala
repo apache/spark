@@ -21,16 +21,17 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd}
 
 /**
- * A listener that tracks the execution of jobs and stages for a given set of tags.
- * This is used to track the progress of a job that is being executed through the connect API.
+ * A listener that tracks the execution of jobs and stages for a given set of tags. This is used
+ * to track the progress of a job that is being executed through the connect API.
  *
  * The listener is instantiated once for the SparkConnectService and then used to track all the
  * current query executions.
  */
 private[connect] class ConnectProgressExecutionListener extends SparkListener with Logging {
+
   /**
-   * A tracker for a given tag. This is used to track the progress of an operation is being executed
-   * through the connect API.
+   * A tracker for a given tag. This is used to track the progress of an operation is being
+   * executed through the connect API.
    */
   class ExecutionTracker(var tag: String) {
     private[ConnectProgressExecutionListener] var jobs: Set[Int] = Set()
@@ -45,15 +46,15 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
     @volatile private[ConnectProgressExecutionListener] var dirty = false
 
     /**
-     * Yield the current state of the tracker if it is dirty. A consumer of the tracker can provide
-     * a callback that will be called with the current state of the tracker if the tracker has new
-     * progress to report.
+     * Yield the current state of the tracker if it is dirty. A consumer of the tracker can
+     * provide a callback that will be called with the current state of the tracker if the tracker
+     * has new progress to report.
      *
      * If the tracker was marked as dirty, the state is reset after.
      */
     def yieldWhenDirty(thunk: (Int, Int, Int, Int, Long) => Unit): Unit = {
       if (dirty) {
-        thunk(totalTasks, completedTasks, stages.size, totalTasks, inputBytesRead)
+        thunk(totalTasks, completedTasks, stages.size, completedStages, inputBytesRead)
         dirty = false
       }
     }
@@ -65,6 +66,15 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
       jobs = jobs + job.jobId
       stages = stages ++ job.stageIds
       totalTasks += job.stageInfos.map(_.numTasks).sum
+      dirty = true
+    }
+
+    def jobCount(): Int = {
+      jobs.size
+    }
+
+    def stageCount(): Int = {
+      stages.size
     }
   }
 
@@ -97,6 +107,7 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
     trackedTags.foreach({ case (tag, tracker) =>
       if (tracker.stages.contains(stageCompleted.stageInfo.stageId)) {
         tracker.completedStages += 1
+        tracker.dirty = true
       }
     })
   }
@@ -105,6 +116,7 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
     trackedTags.foreach({ case (tag, tracker) =>
       if (tracker.jobs.contains(jobEnd.jobId)) {
         tracker.jobs -= jobEnd.jobId
+        tracker.dirty = true
       }
     })
   }

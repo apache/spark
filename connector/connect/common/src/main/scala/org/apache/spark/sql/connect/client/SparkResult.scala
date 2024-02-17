@@ -43,12 +43,12 @@ private[sql] class SparkResult[T](
   /**
    * Progress of the query execution. This information can be accessed from the iterator.
    */
-  case class Progress (
-    totalTasks: Long = 0,
-    completedTasks: Long = 0,
-    totalStages: Long = 0,
-    completedStages: Long = 0,
-    inputBytesRead: Long = 0)
+  case class Progress(
+      totalTasks: Long = 0,
+      completedTasks: Long = 0,
+      totalStages: Long = 0,
+      completedStages: Long = 0,
+      inputBytesRead: Long = 0)
 
   var progress: Progress = new Progress()
   private[this] var opId: String = _
