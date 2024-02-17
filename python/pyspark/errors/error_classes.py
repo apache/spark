@@ -1103,7 +1103,7 @@ ERROR_CLASSES_JSON = '''
       "Value for `<arg_name>` must be True, got '<arg_value>'."
     ]
   },
-  "VALUE_OUT_OF_BOUND": {
+  "VALUE_OUT_OF_BOUNDS": {
     "message": [
       "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
     ]

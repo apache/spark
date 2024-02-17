@@ -2250,7 +2250,7 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -128 or obj > 127:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
                         "lower_bound": "127",
@@ -2268,7 +2268,7 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -32768 or obj > 32767:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
                         "lower_bound": "32767",
@@ -2286,7 +2286,7 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -2147483648 or obj > 2147483647:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
                         "lower_bound": "2147483647",
@@ -2304,7 +2304,7 @@ def _make_type_verifier(
             verify_acceptable_types(obj)
             if obj < -9223372036854775808 or obj > 9223372036854775807:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
                         "lower_bound": "9223372036854775807",
