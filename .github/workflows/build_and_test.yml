@@ -285,7 +285,6 @@ jobs:
   infra-image:
     name: "Base image build"
     needs: precondition
-    # Currently, enable docker build from cache for `master` and branch (since 3.4) jobs
     if: >-
       fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
