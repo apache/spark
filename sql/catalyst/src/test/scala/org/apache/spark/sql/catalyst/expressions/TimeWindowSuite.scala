@@ -188,7 +188,7 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
           "interval 1 year 2 month",
           "interval '1' year '2' month",
           "\tinterval '1-2' year to month").foreach { interval =>
-          intercept[IllegalArgumentException] {
+          intercept[SparkIllegalArgumentException] {
             TimeWindow(Literal(10L, TimestampType), interval, interval, interval)
           }
         }

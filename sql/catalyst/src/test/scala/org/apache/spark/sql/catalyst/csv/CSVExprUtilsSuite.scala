@@ -76,7 +76,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
     // backslash, then tab
     ("""\\t""", Some("""\t"""), None),
     // invalid special character (dot)
-    ("""\.""", None, Some("Unsupported special character for delimiter")),
+    ("""\.""", None, Some("_LEGACY_ERROR_TEMP_3236")),
     // backslash, then dot
     ("""\\.""", Some("""\."""), None),
     // nothing special, just straight conversion
@@ -90,17 +90,16 @@ class CSVExprUtilsSuite extends SparkFunSuite {
   )
 
   test("should correctly produce separator strings, or exceptions, from input") {
-    forAll(testCases) { (input, separatorStr, expectedErrorMsg) =>
+    forAll(testCases) { (input, separatorStr, expectedErrorClass) =>
       try {
         val separator = CSVExprUtils.toDelimiterStr(input)
         assert(separatorStr.isDefined)
-        assert(expectedErrorMsg.isEmpty)
+        assert(expectedErrorClass.isEmpty)
         assert(separator.equals(separatorStr.get))
       } catch {
-        case e: IllegalArgumentException =>
+        case e: SparkIllegalArgumentException =>
           assert(separatorStr.isEmpty)
-          assert(expectedErrorMsg.isDefined)
-          assert(e.getMessage.contains(expectedErrorMsg.get))
+          assert(e.getErrorClass === expectedErrorClass.get)
       }
     }
   }

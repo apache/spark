@@ -1144,6 +1144,16 @@ class ArrowTestsMixin:
             df = self.spark.createDataFrame([MyInheritedTuple(1, 2, MyInheritedTuple(1, 2, 3))])
             self.assertEqual(df.first(), Row(a=1, b=2, c=Row(a=1, b=2, c=3)))
 
+    def test_negative_and_zero_batch_size(self):
+        # SPARK-47068: Negative and zero value should work as unlimited batch size.
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 0}):
+            pdf = pd.DataFrame({"a": [123]})
+            assert_frame_equal(pdf, self.spark.createDataFrame(pdf).toPandas())
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": -1}):
+            pdf = pd.DataFrame({"a": [123]})
+            assert_frame_equal(pdf, self.spark.createDataFrame(pdf).toPandas())
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,

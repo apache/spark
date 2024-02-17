@@ -2637,7 +2637,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def alterTableChangeColumnNotSupportedForColumnTypeError(
       tableName: String,
       originColumn: StructField,
-      newColumn: StructField): Throwable = {
+      newColumn: StructField,
+      origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       messageParameters = Map(
@@ -2645,7 +2646,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "originName" -> toSQLId(originColumn.name),
         "originType" -> toSQLType(originColumn.dataType),
         "newName" -> toSQLId(newColumn.name),
-        "newType"-> toSQLType(newColumn.dataType)))
+        "newType"-> toSQLType(newColumn.dataType)),
+      origin = origin
+    )
   }
 
   def cannotAlterPartitionColumn(

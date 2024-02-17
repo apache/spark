@@ -1300,7 +1300,7 @@ class DataStreamWriter:
             # row.
             def func_without_process(_: Any, iterator: Iterator) -> Iterator:
                 for x in iterator:
-                    f(x)  # type: ignore[operator]
+                    f(x)
                 return iter([])
 
             return func_without_process
@@ -1349,19 +1349,21 @@ class DataStreamWriter:
                 # Check if the data should be processed
                 should_process = True
                 if open_exists:
-                    should_process = f.open(partition_id, int_epoch_id)  # type: ignore[union-attr]
+                    should_process = f.open(  # type: ignore[attr-defined]
+                        partition_id, int_epoch_id
+                    )
 
                 error = None
 
                 try:
                     if should_process:
                         for x in iterator:
-                            cast("SupportsProcess", f).process(x)
+                            f.process(x)
                 except Exception as ex:
                     error = ex
                 finally:
                     if close_exists:
-                        f.close(error)  # type: ignore[union-attr]
+                        f.close(error)  # type: ignore[attr-defined]
                     if error:
                         raise error
 
