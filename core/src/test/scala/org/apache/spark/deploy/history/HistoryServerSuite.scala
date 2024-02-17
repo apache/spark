@@ -544,7 +544,6 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     eventually(stdTimeout, stdInterval) {
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
-    val jobcount = getNumJobs("/jobs")
     assert(!isApplicationCompleted(provider.getListing().next()))
 
     listApplications(false) should contain(appId)
@@ -565,7 +564,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     listApplications(false) should not contain(appId)
 
     eventually(stdTimeout, stdInterval) {
-      assert(jobcount === getNumJobs("/jobs"))
+      assert(4 === getNumJobsRestful())
     }
 
     // no need to retain the test dir now the tests complete
