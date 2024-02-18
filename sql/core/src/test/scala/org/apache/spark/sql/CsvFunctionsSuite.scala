@@ -604,7 +604,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row(Row(1, "2\n2")))
   }
 
-  test("SPARK-46654: to_csv can display array type data") {
+  test("SPARK-46654: to_csv does not support array type data") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", Array(100L, 200L, null, 300L))))
 
@@ -619,11 +619,17 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     ))
 
     val df = spark.createDataFrame(rows, schema)
-    val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"[100, 200, null, 300]\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_csv($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.TO_CSV_COMPLEX_TYPE",
+      parameters = Map("sqlExpr" -> "\"to_csv(value)\""),
+      context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
+    )
   }
 
-  test("SPARK-46654: to_csv can display map type data") {
+  test("SPARK-46654: to_csv does not support map type data") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice",
       Map("math" -> 100L, "english" -> 200L, "science" -> null))))
@@ -639,11 +645,17 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     ))
 
     val df = spark.createDataFrame(rows, schema)
-    val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"{math -> 100, english -> 200, science -> null}\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_csv($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.TO_CSV_COMPLEX_TYPE",
+      parameters = Map("sqlExpr" -> "\"to_csv(value)\""),
+      context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
+    )
   }
 
-  test("SPARK-46654: to_csv can display struct type data") {
+  test("SPARK-46654: to_csv does not support struct type data") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", Row(100L, 200L, null))))
 
@@ -661,7 +673,13 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     ))
 
     val df = spark.createDataFrame(rows, schema)
-    val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"{100, 200, null}\""))
+     checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_csv($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.TO_CSV_COMPLEX_TYPE",
+      parameters = Map("sqlExpr" -> "\"to_csv(value)\""),
+      context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
+    )
   }
 }
