@@ -176,7 +176,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
-        df.select(from_csv(to_csv($"value"), schema, options)).collect()
+        df.select(from_csv(lit("any value"), schema, options)).collect()
       },
       errorClass = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> toSQLType(valueType))
@@ -294,10 +294,19 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("to_csv with option (nullValue)") {
-    val df = Seq(Tuple1(Tuple1(null))).toDF("a")
-    val options = Map("nullValue" -> "-").asJava
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", null)))
 
-    checkAnswer(df.select(to_csv($"a", options)), Row("-") :: Nil)
+    val valueType = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("score", IntegerType)))
+
+    val schema = StructType(Seq(StructField("key", LongType), StructField("value", valueType)))
+    val df = spark.createDataFrame(rows, schema)
+
+    val options = Map("nullValue" -> "-").asJava
+    checkAnswer(df.select(to_csv($"value", options)), Row("2,Alice,-") :: Nil)
   }
 
   test("to_csv with option (dateFormat)") {
