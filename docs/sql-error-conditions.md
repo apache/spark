@@ -1080,6 +1080,14 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
 
+### [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-value-error-class.html)
+
+[SQLSTATE: 22022](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The value '`<confValue>`' in the config "`<confName>`" is invalid.
+
+For more details see [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-value-error-class.html)
+
 ### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
 [SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
