@@ -139,8 +139,10 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    */
   private def enqueueProgressMessage(): Unit = {
     SparkConnectService.executionListener.foreach { listener =>
-      if (listener.trackedTags.contains(executeHolder.jobTag)) {
-        val tracker = listener.trackedTags(executeHolder.jobTag)
+      // It is possible, that the tracker is no longer available and in this
+      // case we simply ignore it and do not send any progress message. This avoids
+      // having to synchronize on the listener.
+      listener.tryGetTracker(executeHolder.jobTag).foreach { tracker =>
         // Only send progress message if there is something new to report.
         tracker.yieldWhenDirty {
           (tasks, tasksCompleted, stages, stagesCompleted, inputBytesRead) =>

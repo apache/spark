@@ -121,6 +121,10 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
     })
   }
 
+  def tryGetTracker(tag: String): Option[ExecutionTracker] = {
+    trackedTags.get(tag)
+  }
+
   def registerJobTag(tag: String): Unit = {
     trackedTags += tag -> new ExecutionTracker(tag)
   }
