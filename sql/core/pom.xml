@@ -180,6 +180,10 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.microsoft.sqlserver</groupId>
       <artifactId>mssql-jdbc</artifactId>
       <scope>test</scope>
@@ -221,7 +225,7 @@
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>htmlunit-driver</artifactId>
+      <artifactId>htmlunit3-driver</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

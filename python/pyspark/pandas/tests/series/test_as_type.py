@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -160,7 +160,11 @@ class SeriesAsTypeMixin:
         self.assert_eq(psser, pser)
 
 
-class SeriesAsTypeTests(SeriesAsTypeMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesAsTypeTests(
+    SeriesAsTypeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

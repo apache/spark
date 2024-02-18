@@ -22,7 +22,7 @@ import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -335,12 +335,12 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.addColumn(Array("data", "ts"), TimestampType))
-    }
-
-    assert(exc.getMessage.contains("Not a struct"))
-    assert(exc.getMessage.contains("data"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent, TableChange.addColumn(Array("data", "ts"), TimestampType))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3229",
+      parameters = Map("name" -> "data"))
 
     // the table has not changed
     assert(catalog.loadTable(testIdent).schema == schema)
@@ -353,13 +353,13 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent,
-        TableChange.addColumn(Array("missing_col", "new_field"), StringType))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent,
+          TableChange.addColumn(Array("missing_col", "new_field"), StringType))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3227",
+      parameters = Map("fieldName" -> "missing_col"))
   }
 
   test("alterTable: update column data type") {
@@ -399,13 +399,13 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent,
-        TableChange.updateColumnType(Array("missing_col"), LongType))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent,
+          TableChange.updateColumnType(Array("missing_col"), LongType))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3227",
+      parameters = Map("fieldName" -> "missing_col"))
   }
 
   test("alterTable: add comment") {
@@ -450,13 +450,13 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent,
-        TableChange.updateColumnComment(Array("missing_col"), "comment"))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent,
+          TableChange.updateColumnComment(Array("missing_col"), "comment"))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3227",
+      parameters = Map("fieldName" -> "missing_col"))
   }
 
   test("alterTable: rename top-level column") {
@@ -518,13 +518,13 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent,
-        TableChange.renameColumn(Array("missing_col"), "new_name"))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent,
+          TableChange.renameColumn(Array("missing_col"), "new_name"))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3227",
+      parameters = Map("fieldName" -> "missing_col"))
   }
 
   test("alterTable: multiple changes") {
@@ -587,12 +587,12 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.schema == schema)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), false))
-    }
-
-    assert(exc.getMessage.contains("missing_col"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), false))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3227",
+      parameters = Map("fieldName" -> "missing_col"))
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), true))
@@ -609,12 +609,12 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(table.schema == tableSchema)
 
-    val exc = intercept[IllegalArgumentException] {
-      catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), false))
-    }
-
-    assert(exc.getMessage.contains("z"))
-    assert(exc.getMessage.contains("Cannot find"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), false))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3227",
+      parameters = Map("fieldName" -> "z"))
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), true))
@@ -659,7 +659,7 @@ class CatalogSuite extends SparkFunSuite {
 
   test("purgeTable") {
     val catalog = newCatalog()
-    intercept[UnsupportedOperationException](catalog.purgeTable(testIdent))
+    intercept[SparkUnsupportedOperationException](catalog.purgeTable(testIdent))
   }
 
   test("renameTable") {

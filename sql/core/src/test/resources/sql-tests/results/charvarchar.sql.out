@@ -268,7 +268,14 @@ org.apache.spark.sql.AnalysisException
     "originName" : "`c`",
     "originType" : "\"CHAR(5)\"",
     "table" : "`spark_catalog`.`default`.`char_tbl1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 50,
+    "fragment" : "alter table char_tbl1 change column c type char(6)"
+  } ]
 }
 
 

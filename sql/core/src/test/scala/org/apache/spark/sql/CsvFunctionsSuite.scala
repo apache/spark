@@ -23,7 +23,8 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -102,9 +103,9 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
-      val msg = intercept[SparkException] {
+      val msg = intercept[SparkUpgradeException] {
         df2.collect()
-      }.getCause.getMessage
+      }.getMessage
       assert(msg.contains("Fail to parse"))
     }
   }
@@ -157,6 +158,29 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(from_csv($"value", schema, options)),
       Row(Row(null)))
+  }
+
+  test("from_csv with invalid datatype") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", Array(100L, 200L, null, 300L))))
+
+    val valueType = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("scores", ArrayType(LongType))))
+
+    val schema = StructType(Seq(StructField("key", LongType), StructField("value", valueType)))
+
+    val options = Map.empty[String, String]
+    val df = spark.createDataFrame(rows, schema)
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        df.select(from_csv(to_csv($"value"), schema, options)).collect()
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> toSQLType(valueType))
+    )
   }
 
   test("from_csv with option (nanValue)") {
@@ -303,16 +327,15 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(from_csv($"value", schema, Map("mode" -> "PERMISSIVE"))),
         Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
 
-      val exception1 = intercept[SparkException] {
-        df.select(from_csv($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }.getCause
       checkError(
-        exception = exception1.asInstanceOf[SparkException],
+        exception = intercept[SparkException] {
+          df.select(from_csv($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+        },
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> "[null,null,\"]", "failFastMode" -> "FAILFAST")
       )
 
-      val exception2 = intercept[SparkException] {
+      val exception2 = intercept[AnalysisException] {
         df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED")))
           .collect()
       }.getMessage
