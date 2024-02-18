@@ -139,7 +139,6 @@
       <groupId>javax.servlet</groupId>
       <artifactId>javax.servlet-api</artifactId>
       <version>${javaxservlet.version}</version>
-      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>commons-codec</groupId>
