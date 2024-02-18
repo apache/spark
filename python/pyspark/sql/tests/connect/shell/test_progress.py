@@ -64,6 +64,7 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         p.finish()
         self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
 
+
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.shell.test_progress import *  # noqa: F401
 

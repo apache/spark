@@ -20,7 +20,14 @@
 import os, time
 import sys
 
-from IPython.utils.terminal import get_terminal_size
+try:
+    from IPython.utils.terminal import get_terminal_size
+except ImportError:
+
+    def get_terminal_size():
+        return (80, 25)
+
+
 from pyspark.sql.connect.shell import progress_bar_enabled
 
 
