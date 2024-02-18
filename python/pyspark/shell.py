@@ -57,15 +57,16 @@ if is_remote():
             os.environ[PROGRESS_BAR_ENABLED] = "1"
         else:
             val = os.getenv(PROGRESS_BAR_ENABLED)
-            if val.lower().strip() == 'false':
+            if val.lower().strip() == "false":
                 os.environ[PROGRESS_BAR_ENABLED] = "0"
-            elif val.lower().strip() == 'true':
+            elif val.lower().strip() == "true":
                 os.environ[PROGRESS_BAR_ENABLED] = "1"
 
         val = os.environ[PROGRESS_BAR_ENABLED]
-        if not val in ('1', '0'):
+        if not val in ("1", "0"):
             raise ValueError(
-                f"Environment variable '{PROGRESS_BAR_ENABLED}' must be set to either 1 or 0, found: {val}")
+                f"Environment variable '{PROGRESS_BAR_ENABLED}' must be set to either 1 or 0, found: {val}"
+            )
 
     except Exception:
         import sys
