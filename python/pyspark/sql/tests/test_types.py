@@ -1458,7 +1458,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="FIELD_NOT_NULLABLE",
+            error_class="FIELD_NOT_NULLABLE_WITH_NAME",
             message_parameters={
                 "field_name": "test_name",
             },
@@ -1470,7 +1470,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
+            error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
             message_parameters={
                 "data_type": "IntegerType()",
                 "field_name": "field b in field a",

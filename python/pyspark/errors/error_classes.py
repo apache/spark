@@ -326,16 +326,6 @@ ERROR_CLASSES_JSON = '''
       "<field_name>: <obj> is not an instance of type <data_type>."
     ]
   },
-  "FIELD_VALUE_OUT_OF_RANGE": {
-    "message": [
-      "<field_name>: object of <data_type> out of range, got: <obj>."
-    ]
-  },
-  "FIELD_VALUE_OUT_OF_RANGE_WITH_NAME": {
-    "message": [
-      "Object of <data_type> out of range, got: <obj>."
-    ]
-  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": {
     "message": [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -1146,6 +1136,11 @@ ERROR_CLASSES_JSON = '''
   "VALUE_NOT_TRUE": {
     "message": [
       "Value for `<arg_name>` must be True, got '<arg_value>'."
+    ]
+  },
+  "VALUE_OUT_OF_BOUNDS": {
+    "message": [
+      "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": {

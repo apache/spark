@@ -6426,7 +6426,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
 
             def op(psser: ps.Series) -> ps.Series:
-                return psser.replace(to_replace=to_replace, value=value, regex=regex)
+                return psser.replace(
+                    to_replace=to_replace, value=value, regex=regex  # type: ignore[arg-type]
+                )
 
         psdf = self._apply_series_op(op)
         if inplace:
@@ -12273,7 +12275,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 # hack to use pandas' info as is.
                 object.__setattr__(self, "_data", self)
                 count_func = self.count
-                self.count = (  # type: ignore[assignment]
+                self.count = (  # type: ignore[method-assign]
                     lambda: count_func()._to_pandas()  # type: ignore[assignment, misc, union-attr]
                 )
                 return pd.DataFrame.info(
@@ -12286,7 +12288,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
             finally:
                 del self._data
-                self.count = count_func  # type: ignore[assignment]
+                self.count = count_func  # type: ignore[method-assign]
 
     # TODO: fix parameter 'axis' and 'numeric_only' to work same as pandas'
     def quantile(
