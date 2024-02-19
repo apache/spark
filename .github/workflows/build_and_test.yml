@@ -790,7 +790,8 @@ jobs:
 
   maven-build:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).maven-build == 'true'
+    # Skipped in branch-3.4, see SPARK-47090.
+    if: fromJson(needs.precondition.outputs.required).maven-build == 'true' && inputs.branch != 'branch-3.4'
     name: Java ${{ matrix.java }} build with Maven (${{ matrix.os }})
     strategy:
       fail-fast: false
