@@ -36,6 +36,11 @@ on:
         required: false
         type: string
         default: hadoop3
+      os:
+        description: OS to run this build.
+        required: false
+        type: string
+        default: ubuntu-22.04
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -45,7 +50,7 @@ jobs:
   # Build: build Spark and run the tests for specified modules using maven
   build:
     name: "Build modules using Maven: ${{ matrix.modules }} ${{ matrix.comment }}"
-    runs-on: ubuntu-22.04
+    runs-on: ${{ inputs.os }}
     strategy:
       fail-fast: false
       matrix:
