@@ -52,23 +52,17 @@ object RowSetUtils {
       rows: Seq[Row],
       schema: Array[DataType],
       timeFormatters: TimeFormatters): TRowSet = {
-    var i = 0
-    val rowSize = rows.length
-    val tRows = new java.util.ArrayList[TRow](rowSize)
-    while (i < rowSize) {
-      val row = rows(i)
+    val tRows = rows.map { row =>
+      val tRow = new TRow()
       var j = 0
       val columnSize = row.length
-      val tColumnValues = new java.util.ArrayList[TColumnValue](columnSize)
       while (j < columnSize) {
         val columnValue = toTColumnValue(j, row, schema(j), timeFormatters)
-        tColumnValues.add(columnValue)
+        tRow.addToColVals(columnValue)
         j += 1
       }
-      i += 1
-      val tRow = new TRow(tColumnValues)
-      tRows.add(tRow)
-    }
+      tRow
+    }.asJava
     new TRowSet(startRowOffSet, tRows)
   }
 
@@ -81,13 +75,11 @@ object RowSetUtils {
     val tRowSet = new TRowSet(startRowOffSet, new java.util.ArrayList[TRow](rowSize))
     var i = 0
     val columnSize = schema.length
-    val tColumns = new java.util.ArrayList[TColumn](columnSize)
     while (i < columnSize) {
       val tColumn = toTColumn(rows, i, schema(i), timeFormatters)
-      tColumns.add(tColumn)
+      tRowSet.addToColumns(tColumn)
       i += 1
     }
-    tRowSet.setColumns(tColumns)
     tRowSet
   }
 
@@ -162,8 +154,7 @@ object RowSetUtils {
     val size = rows.length
     val ret = new java.util.ArrayList[T](size)
     var idx = 0
-    while (idx < size) {
-      val row = rows(idx)
+    rows.foreach { row =>
       if (row.isNullAt(ordinal)) {
         nulls.set(idx, true)
         ret.add(idx, defaultVal)
