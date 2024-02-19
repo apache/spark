@@ -32,6 +32,7 @@ import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
+import javax.ws.rs.core.UriBuilder
 
 import scala.annotation.tailrec
 import scala.collection.Map
@@ -2883,6 +2884,20 @@ private[spark] object Utils
   /** Returns whether the URI is a "local:" URI. */
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
+  }
+
+  /** Create a UriBuilder from URI object. */
+  def getUriBuilder(uri: URI): UriBuilder = {
+    // scalastyle:off uribuilder
+    UriBuilder.fromUri(uri)
+    // scalastyle:on uribuilder
+  }
+
+  /** Create a UriBuilder from URI string. */
+  def getUriBuilder(uri: String): UriBuilder = {
+    // scalastyle:off uribuilder
+    UriBuilder.fromUri(uri)
+    // scalastyle:on uribuilder
   }
 
   /** Check whether the file of the path is splittable. */
