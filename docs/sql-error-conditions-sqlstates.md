@@ -41,7 +41,7 @@ Spark SQL uses the following `SQLSTATE` classes:
 </tr>
 <tr>
   <td></td>
-  <td><a href="sql-error-conditions.html#invalid_pandas_udf_placement">INVALID_PANDAS_UDF_PLACEMENT</a>, <a href="sql-error-conditions.html#star_group_by_pos">STAR_GROUP_BY_POS</a>, <a href="sql-error-conditions.html#unsupported_arrowtype">UNSUPPORTED_ARROWTYPE</a>, <a href="sql-error-conditions.html#unsupported_datatype">UNSUPPORTED_DATATYPE</a>, <a href="unsupported-deserializer-error-class.md">UNSUPPORTED_DESERIALIZER</a>, <a href="sql-error-conditions.html#unsupported_encoder">UNSUPPORTED_ENCODER</a>, <a href="unsupported-feature-error-class.md">UNSUPPORTED_FEATURE</a>, <a href="unsupported-generator-error-class.md">UNSUPPORTED_GENERATOR</a>, <a href="unsupported-subquery-expression-category-error-class.md">UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY</a>, <a href="sql-error-conditions.html#unsupported_typed_literal">UNSUPPORTED_TYPED_LITERAL</a>
+  <td><a href="sql-error-conditions.html#invalid_pandas_udf_placement">INVALID_PANDAS_UDF_PLACEMENT</a>, <a href="sql-error-conditions.html#star_group_by_pos">STAR_GROUP_BY_POS</a>, <a href="sql-error-conditions.html#unsupported_arrowtype">UNSUPPORTED_ARROWTYPE</a>, <a href="sql-error-conditions.html#unsupported_datatype">UNSUPPORTED_DATATYPE</a>, <a href="unsupported-deserializer-error-class.md">UNSUPPORTED_DESERIALIZER</a>, <a href="unsupported-feature-error-class.md">UNSUPPORTED_FEATURE</a>, <a href="unsupported-generator-error-class.md">UNSUPPORTED_GENERATOR</a>, <a href="unsupported-subquery-expression-category-error-class.md">UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY</a>, <a href="sql-error-conditions.html#unsupported_typed_literal">UNSUPPORTED_TYPED_LITERAL</a>
   </td>
 </tr>
 

@@ -3780,12 +3780,6 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_ENCODER" : {
-    "message" : [
-      "Found unsupported encoder. Try switching to expression encoder."
-    ],
-    "sqlState" : "0A000"
-  },
   "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
     "message" : [
       "Cannot create generated column <fieldName> with generation expression <expressionStr> because <reason>."

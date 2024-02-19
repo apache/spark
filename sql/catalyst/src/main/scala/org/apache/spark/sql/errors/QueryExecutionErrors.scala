@@ -459,10 +459,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("attr" -> attr.toString()))
   }
 
-  def unsupportedEncoderError(): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "UNSUPPORTED_ENCODER",
-      messageParameters = Map.empty)
+  def unsupportedEncoderError(): Throwable = {
+    SparkException.internalError(
+      "Found unsupported encoder. Try switching to expression encoder.")
   }
 
   def notOverrideExpectedMethodsError(
