@@ -19,7 +19,6 @@ from io import StringIO
 import unittest
 
 from pyspark.testing.connectutils import (
-    PlanOnlyTestFixture,
     should_test_connect,
     connect_requirement_message,
 )

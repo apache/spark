@@ -17,7 +17,7 @@
 
 """Implementation of a progress bar that is displayed while a query is running."""
 
-import os, time
+import time
 import sys
 
 try:
@@ -32,16 +32,18 @@ from pyspark.sql.connect.shell import progress_bar_enabled
 
 
 class Progress:
-    """This is a small helper class to visualize a textual progress bar. The interface is very simple and assumes
-    that nothing else prints to the standard output."""
+    """This is a small helper class to visualize a textual progress bar.
+    he interface is very simple and assumes that nothing else prints to the
+    standard output."""
 
     SI_BYTE_SIZES = (1 << 60, 1 << 50, 1 << 40, 1 << 30, 1 << 20, 1 << 10, 1)
     SI_BYTE_SUFFIXES = ("EiB", "PiB", "TiB", "GiB", "MiB", "KiB", "B")
 
     def __init__(self, char="*", min_width=80, output=sys.stdout, enabled=False):
         """
-        Constructs a new Progress bar. The progress bar is typically used in the blocking query execution path
-        to process the execution progress methods from the server.
+        Constructs a new Progress bar. The progress bar is typically used in
+        the blocking query execution path to process the execution progress
+        methods from the server.
         Parameters
         ----------
         char str the Default character to be used for printing the bar.

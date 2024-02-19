@@ -1310,8 +1310,9 @@ class SparkConnectClient(object):
             logger.debug(f"Interrupt request received for operation={req.operation_id}")
             try:
                 self.interrupt_operation(req.operation_id)
-            except:
+            except Exception as e:
                 # Swallow all errors if aborted.
+                logger.debug(f"Caught an error during interrupt handling, silenced: {e}")
                 pass
             if not progress is None:
                 progress.finish()

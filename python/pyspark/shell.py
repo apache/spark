@@ -53,7 +53,7 @@ if is_remote():
         from pyspark.sql.connect.shell import PROGRESS_BAR_ENABLED
 
         # Check if th eprogress bar needs to be disabled.
-        if not PROGRESS_BAR_ENABLED in os.environ:
+        if PROGRESS_BAR_ENABLED not in os.environ:
             os.environ[PROGRESS_BAR_ENABLED] = "1"
         else:
             val = os.getenv(PROGRESS_BAR_ENABLED)
@@ -63,9 +63,10 @@ if is_remote():
                 os.environ[PROGRESS_BAR_ENABLED] = "1"
 
         val = os.environ[PROGRESS_BAR_ENABLED]
-        if not val in ("1", "0"):
+        if val not in ("1", "0"):
             raise ValueError(
-                f"Environment variable '{PROGRESS_BAR_ENABLED}' must be set to either 1 or 0, found: {val}"
+                f"Environment variable '{PROGRESS_BAR_ENABLED}' must "
+                f"be set to either 1 or 0, found: {val}"
             )
 
     except Exception:

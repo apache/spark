@@ -19,8 +19,6 @@
 
 import os
 
-from pyspark.sql.connect.dataframe import DataFrame
-
 PROGRESS_BAR_ENABLED = "SPARK_CONNECT_PROGRESS_BAR_ENABLED"
 
 
