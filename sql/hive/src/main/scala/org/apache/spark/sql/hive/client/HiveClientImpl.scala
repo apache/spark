@@ -1062,7 +1062,11 @@ private[hive] object HiveClientImpl extends Logging {
     // in `FieldSchema`, while the original form of the 2nd one, which from user API, is
     // struct<x:int,`y.z`:int>. Because  we use `CatalystSqlParser.parseDataType` to verify the
     // type, we need to covert the unquoted element names to quoted ones.
-    val typeStr = hc.getType.replaceAll("(?<=[<,])([^,:]+)(?=:)", "`$1`")
+    // Examples:
+    //   struct<x:int,y.z:int> -> struct<`x`:int,`y.z`:int>
+    //   array<struct<x:int,y.z:int>> -> array<struct<`x`:int,`y.z`:int>>
+    //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
+    val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
     try {
       CatalystSqlParser.parseDataType(typeStr)
     } catch {

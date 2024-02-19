@@ -184,7 +184,7 @@ class HiveDDLSuite
     withTable("t") {
       sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
       assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
-        "q STRUCT<`$A`:INT, COL2:STRING>"))
+        "q STRUCT<`$a`:INT, col2:STRING>, i1 INT"))
     }
 
     withView("v") {
