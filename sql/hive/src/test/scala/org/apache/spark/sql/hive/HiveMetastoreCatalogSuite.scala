@@ -422,7 +422,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
         "a struct<" +
           "`a.a`:int," +
           "`a.b`:struct<" +
-          "  `a^b.b`:array<string>," +
+          "  `a b b`:array<string>," +
           "  `a b c`:map<int, string>" +
           "  >" +
           ">"
