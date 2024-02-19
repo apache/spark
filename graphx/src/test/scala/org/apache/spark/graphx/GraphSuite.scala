@@ -194,7 +194,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val starWithEdgeAttrs = star.mapEdges(e => e.dstId)
 
       val edges = starWithEdgeAttrs.edges.collect()
-      assert(edges.size === n)
+      assert(edges.length === n)
       assert(edges.toSet === (1 to n).map(x => Edge(0, x, x)).toSet)
     }
   }

@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.api.python.PythonFunction
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -49,6 +48,29 @@ case class FlatMapGroupsInPandas(
 }
 
 /**
+ * FlatMap groups using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch).
+ * This is used by DataFrame.groupby().applyInArrow().
+ */
+case class FlatMapGroupsInArrow(
+    groupingAttributes: Seq[Attribute],
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
+  /**
+   * This is needed because output attributes are considered `references` when
+   * passed through the constructor.
+   *
+   * Without this, catalyst will complain that output attributes are missing
+   * from the input.
+   */
+  override val producedAttributes = AttributeSet(output)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsInArrow =
+    copy(child = newChild)
+}
+
+/**
  * Map partitions using a udf: iter(pandas.Dataframe) -> iter(pandas.DataFrame).
  * This is used by DataFrame.mapInPandas()
  */
@@ -56,7 +78,8 @@ case class MapInPandas(
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan,
-    isBarrier: Boolean) extends UnaryNode {
+    isBarrier: Boolean,
+    profile: Option[ResourceProfile]) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
 
@@ -68,52 +91,17 @@ case class MapInPandas(
  * Map partitions using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch).
  * This is used by DataFrame.mapInArrow() in PySpark
  */
-case class PythonMapInArrow(
+case class MapInArrow(
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan,
-    isBarrier: Boolean) extends UnaryNode {
+    isBarrier: Boolean,
+    profile: Option[ResourceProfile]) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): PythonMapInArrow =
+  override protected def withNewChildInternal(newChild: LogicalPlan): MapInArrow =
     copy(child = newChild)
-}
-
-/**
- * Represents a Python data source.
- */
-case class PythonDataSource(
-    dataSource: PythonFunction,
-    outputSchema: StructType,
-    override val output: Seq[Attribute]) extends LeafNode {
-  require(output.forall(_.resolved),
-    "Unresolved attributes found when constructing PythonDataSource.")
-  override protected def stringArgs: Iterator[Any] = {
-    Iterator(output)
-  }
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_DATA_SOURCE)
-}
-
-/**
- * Represents a list of Python data source partitions.
- */
-case class PythonDataSourcePartitions(
-    output: Seq[Attribute],
-    partitions: Seq[Array[Byte]]) extends LeafNode {
-  override protected def stringArgs: Iterator[Any] = {
-    if (partitions.isEmpty) {
-      Iterator("<empty>", output)
-    } else {
-      Iterator(output)
-    }
-  }
-}
-
-object PythonDataSourcePartitions {
-  def getOutputAttrs: Seq[Attribute] = {
-    toAttributes(new StructType().add("partition", BinaryType))
-  }
 }
 
 /**
@@ -171,6 +159,31 @@ case class FlatMapGroupsInPandasWithState(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): FlatMapGroupsInPandasWithState = copy(child = newChild)
+}
+
+/**
+ * Flatmap cogroups using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch)
+ * This is used by DataFrame.groupby().cogroup().applyInArrow().
+ */
+case class FlatMapCoGroupsInArrow(
+    leftGroupingLen: Int,
+    rightGroupingLen: Int,
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    left: LogicalPlan,
+    right: LogicalPlan) extends BinaryNode {
+
+  override val producedAttributes = AttributeSet(output)
+  override lazy val references: AttributeSet =
+    AttributeSet(leftAttributes ++ rightAttributes ++ functionExpr.references) -- producedAttributes
+
+  def leftAttributes: Seq[Attribute] = left.output.take(leftGroupingLen)
+
+  def rightAttributes: Seq[Attribute] = right.output.take(rightGroupingLen)
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapCoGroupsInArrow =
+    copy(left = newLeft, right = newRight)
 }
 
 trait BaseEvalPython extends UnaryNode {

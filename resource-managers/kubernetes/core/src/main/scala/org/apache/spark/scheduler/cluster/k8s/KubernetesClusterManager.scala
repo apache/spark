@@ -63,7 +63,10 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       }
       logInfo(s"Running Spark with ${sc.conf.get(KUBERNETES_DRIVER_MASTER_URL)}")
       val schedulerImpl = scheduler.asInstanceOf[TaskSchedulerImpl]
-      val backend = new LocalSchedulerBackend(sc.conf, schedulerImpl, threadCount)
+      // KubernetesClusterSchedulerBackend respects `spark.app.id` while LocalSchedulerBackend
+      // does not. Propagate `spark.app.id` via `spark.test.appId` to match the behavior.
+      val conf = sc.conf.getOption("spark.app.id").map(sc.conf.set("spark.test.appId", _))
+      val backend = new LocalSchedulerBackend(conf.getOrElse(sc.conf), schedulerImpl, threadCount)
       schedulerImpl.initialize(backend)
       return backend
     }

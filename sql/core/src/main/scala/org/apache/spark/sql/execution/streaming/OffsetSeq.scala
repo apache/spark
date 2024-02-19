@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
@@ -89,7 +89,7 @@ case class OffsetSeqMetadata(
 }
 
 object OffsetSeqMetadata extends Logging {
-  private implicit val format = Serialization.formats(NoTypeHints)
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
   /**
    * These configs are related to streaming query execution and should not be changed across
    * batches of a streaming query. The values of these configs are persisted into the offset

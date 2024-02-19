@@ -66,9 +66,8 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
-    if (dataframe.queryExecution.observedMetrics.nonEmpty) {
-      responseObserver.onNext(createObservedMetricsResponse(request.getSessionId, dataframe))
-    }
+    createObservedMetricsResponse(request.getSessionId, dataframe).foreach(
+      responseObserver.onNext)
   }
 
   type Batch = (Array[Byte], Long)
@@ -245,15 +244,33 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
   private def createObservedMetricsResponse(
       sessionId: String,
-      dataframe: DataFrame): ExecutePlanResponse = {
-    val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
-      val cols = (0 until row.length).map(i => toLiteralProto(row(i)))
+      dataframe: DataFrame): Option[ExecutePlanResponse] = {
+    val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
+      case (name, row) if !executeHolder.observations.contains(name) =>
+        val values = (0 until row.length).map { i =>
+          (if (row.schema != null) Some(row.schema.fieldNames(i)) else None, row(i))
+        }
+        name -> values
+    }
+    if (observedMetrics.nonEmpty) {
+      Some(SparkConnectPlanExecution
+        .createObservedMetricsResponse(sessionId, sessionHolder.serverSessionId, observedMetrics))
+    } else None
+  }
+}
+
+object SparkConnectPlanExecution {
+  def createObservedMetricsResponse(
+      sessionId: String,
+      serverSessionId: String,
+      metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
+    val observedMetrics = metrics.map { case (name, values) =>
       val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-        .addAllValues(cols.asJava)
-      if (row.schema != null) {
-        metrics.addAllKeys(row.schema.fieldNames.toList.asJava)
+      values.foreach { case (key, value) =>
+        metrics.addValues(toLiteralProto(value))
+        key.foreach(metrics.addKeys)
       }
       metrics.build()
     }
@@ -261,7 +278,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     ExecutePlanResponse
       .newBuilder()
       .setSessionId(sessionId)
-      .setServerSideSessionId(sessionHolder.serverSessionId)
+      .setServerSideSessionId(serverSessionId)
       .addAllObservedMetrics(observedMetrics.asJava)
       .build()
   }

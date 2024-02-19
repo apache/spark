@@ -23,17 +23,19 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A catalog for looking up user defined functions, used by an [[Analyzer]].
@@ -123,7 +125,8 @@ object FunctionRegistryBase {
       runtimeClass.getConstructors
     }
     // See if we can find a constructor that accepts Seq[Expression]
-    val varargCtor = constructors.find(_.getParameterTypes.toSeq == Seq(classOf[Seq[_]]))
+    val varargCtor =
+      constructors.find(_.getParameterTypes.toImmutableArraySeq == Seq(classOf[Seq[_]]))
     val builder = (expressions: Seq[Expression]) => {
       if (varargCtor.isDefined) {
         // If there is an apply method that accepts Seq[Expression], use that one.
@@ -137,12 +140,12 @@ object FunctionRegistryBase {
       } else {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
+        val f = constructors.find(_.getParameterTypes.toImmutableArraySeq == params).getOrElse {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
           throw QueryCompilationErrors.wrongNumArgsError(
-            name, validParametersCount, params.length)
+            name, validParametersCount.toImmutableArraySeq, params.length)
         }
         try {
           f.newInstance(expressions : _*).asInstanceOf[T]
@@ -263,31 +266,31 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
 trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
   override def registerFunction(
       name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def listFunction(): Seq[FunctionIdentifier] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def clear(): Unit = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }
 
@@ -476,6 +479,8 @@ object FunctionRegistry {
     expression[Min]("min"),
     expression[MinBy]("min_by"),
     expression[Percentile]("percentile"),
+    expressionBuilder("percentile_cont", PercentileContBuilder),
+    expressionBuilder("percentile_disc", PercentileDiscBuilder),
     expression[Median]("median"),
     expression[Skewness]("skewness"),
     expression[ApproximatePercentile]("percentile_approx"),
@@ -507,7 +512,7 @@ object FunctionRegistry {
     expression[RegrSYY]("regr_syy"),
     expression[RegrSlope]("regr_slope"),
     expression[RegrIntercept]("regr_intercept"),
-    expression[Mode]("mode"),
+    expressionBuilder("mode", ModeBuilder),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
 
@@ -515,6 +520,8 @@ object FunctionRegistry {
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
     expression[Chr]("chr"),
+    expressionBuilder("collate", CollateExpressionBuilder),
+    expression[Collation]("collation"),
     expressionBuilder("contains", ContainsExpressionBuilder),
     expressionBuilder("startswith", StartsWithExpressionBuilder),
     expressionBuilder("endswith", EndsWithExpressionBuilder),
@@ -637,6 +644,7 @@ object FunctionRegistry {
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),
     expression[WeekDay]("weekday"),
+    expression[DayName]("dayname"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
@@ -644,6 +652,7 @@ object FunctionRegistry {
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
     expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
@@ -721,7 +730,7 @@ object FunctionRegistry {
 
     // misc functions
     expression[AssertTrue]("assert_true"),
-    expression[RaiseError]("raise_error"),
+    expressionBuilder("raise_error", RaiseErrorExpressionBuilder),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),
@@ -767,6 +776,7 @@ object FunctionRegistry {
     expression[PercentRank]("percent_rank"),
 
     // predicates
+    expression[Between]("between"),
     expression[And]("and"),
     expression[In]("in"),
     expression[Not]("not"),
@@ -807,6 +817,9 @@ object FunctionRegistry {
     expression[SchemaOfJson]("schema_of_json"),
     expression[LengthOfJsonArray]("json_array_length"),
     expression[JsonObjectKeys]("json_object_keys"),
+
+    // Variant
+    expression[ParseJson]("parse_json"),
 
     // cast
     expression[Cast]("cast"),
@@ -869,9 +882,6 @@ object FunctionRegistry {
       "expr1 <> expr2 - Returns true if `expr1` is not equal to `expr2`."),
     "!=" -> makeExprInfoForVirtualOperator("!=",
       "expr1 != expr2 - Returns true if `expr1` is not equal to `expr2`."),
-    "between" -> makeExprInfoForVirtualOperator("between",
-      "expr1 [NOT] BETWEEN expr2 AND expr3 - " +
-        "evaluate if `expr1` is [not] in between `expr2` and `expr3`."),
     "case" -> makeExprInfoForVirtualOperator("case",
       "CASE expr1 WHEN expr2 THEN expr3 [WHEN expr4 THEN expr5]* [ELSE expr6] END " +
         "- When `expr1` = `expr2`, returns `expr3`; when `expr1` = `expr4`, return `expr5`; " +

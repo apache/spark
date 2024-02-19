@@ -153,6 +153,84 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(jobB.get() === 100)
   }
 
+  test("if cancel job group and future jobs, skip running jobs in the same job group") {
+    sc = new SparkContext("local[2]", "test")
+
+    val sem = new Semaphore(0)
+    sc.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        sem.release()
+      }
+    })
+
+    // run a job, cancel the job group and its future jobs
+    val jobGroupName = "job-group"
+    val job = Future {
+      sc.setJobGroup(jobGroupName, "")
+      sc.parallelize(1 to 1000).map { i => Thread.sleep (100); i}.count()
+    }
+    // block until job starts
+    sem.acquire(1)
+    // cancel the job group and future jobs
+    sc.cancelJobGroupAndFutureJobs(jobGroupName)
+    ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
+      checkError(
+        exception = e,
+        errorClass = "SPARK_JOB_CANCELLED",
+        sqlState = "XXKDA",
+        parameters = scala.collection.immutable.Map(
+          "jobId" -> "0",
+          "reason" -> s"part of cancelled job group $jobGroupName")
+      )
+    }
+
+    // job in the same job group will not run
+    checkError(
+      exception = intercept[SparkException] {
+        sc.setJobGroup(jobGroupName, "")
+        sc.parallelize(1 to 100).count()
+      },
+      errorClass = "SPARK_JOB_CANCELLED",
+      sqlState = "XXKDA",
+      parameters = scala.collection.immutable.Map(
+        "jobId" -> "1",
+        "reason" -> s"part of cancelled job group $jobGroupName")
+    )
+
+    // job in a different job group should run
+    sc.setJobGroup("another-job-group", "")
+    assert(sc.parallelize(1 to 100).count() == 100)
+  }
+
+  test("only keeps limited number of cancelled job groups") {
+    val conf = new SparkConf()
+      .set(NUM_CANCELLED_JOB_GROUPS_TO_TRACK, 5)
+    sc = new SparkContext("local[2]", "test", conf)
+    val setSize = sc.getConf.get(NUM_CANCELLED_JOB_GROUPS_TO_TRACK)
+    // call cancelJobGroup with cancelFutureJobs = true on (setSize + 1) job groups, the first one
+    // should have been evicted from the cancelledJobGroups set
+    (0 to setSize).foreach { idx =>
+      val sem = new Semaphore(0)
+      sc.addSparkListener(new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          sem.release()
+        }
+      })
+      val job = Future {
+        sc.setJobGroup(s"job-group-$idx", "")
+        sc.parallelize(1 to 1000).map { i => Thread.sleep (100); i}.count()
+      }
+      sem.acquire(1)
+      sc.cancelJobGroupAndFutureJobs(s"job-group-$idx")
+      ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
+        assert(e.getErrorClass == "SPARK_JOB_CANCELLED")
+      }
+    }
+    // submit a job with the 0 job group that was evicted from cancelledJobGroups set, it should run
+    sc.setJobGroup("job-group-0", "")
+    assert(sc.parallelize(1 to 100).count() == 100)
+  }
+
   test("job tags") {
     sc = new SparkContext("local[2]", "test")
 
@@ -469,7 +547,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
     sc.addSparkListener(new SparkListener {
       override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
-        // release taskCancelledSemaphore when cancelTasks event has been posted
+        // release taskCancelledSemaphore when killAllTaskAttempts event has been posted
         if (stageCompleted.stageInfo.stageId == 1) {
           taskCancelledSemaphore.release(numElements)
         }

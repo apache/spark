@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.util.Properties
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -31,7 +31,7 @@ import org.apache.spark.util.ThreadUtils
 
 class BlockInfoManagerSuite extends SparkFunSuite {
 
-  private implicit val ec = ExecutionContext.global
+  private implicit val ec: ExecutionContextExecutor = ExecutionContext.global
   private var blockInfoManager: BlockInfoManager = _
 
   override protected def beforeEach(): Unit = {

@@ -119,10 +119,10 @@ from pyspark.sql.types import *
 
 |Data type|Value type in Python|API to access or create a data type|
 |---------|--------------------|-----------------------------------|
-|**ByteType**|int or long<br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
-|**ShortType**|int or long<br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
-|**IntegerType**|int or long|IntegerType()|
-|**LongType**|long<br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
+|**ByteType**|int<br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
+|**ShortType**|int<br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
+|**IntegerType**|int|IntegerType()|
+|**LongType**|int<br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
 |**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
 |**DoubleType**|float|DoubleType()|
 |**DecimalType**|decimal.Decimal|DecimalType()|
@@ -353,19 +353,24 @@ SELECT double('inf') = double('infinity') AS col;
 +----+
 
 CREATE TABLE test (c1 int, c2 double);
-INSERT INTO test VALUES (1, double('infinity'));
-INSERT INTO test VALUES (2, double('infinity'));
-INSERT INTO test VALUES (3, double('inf'));
-INSERT INTO test VALUES (4, double('-inf'));
-INSERT INTO test VALUES (5, double('NaN'));
-INSERT INTO test VALUES (6, double('NaN'));
-INSERT INTO test VALUES (7, double('-infinity'));
-SELECT COUNT(*), c2 FROM test GROUP BY c2;
+INSERT INTO test VALUES
+  (1, double('infinity')),
+  (2, double('infinity')),
+  (3, double('inf')),
+  (4, double('-inf')),
+  (5, double('NaN')),
+  (6, double('NaN')),
+  (7, double('-infinity'))
+;
+SELECT COUNT(*), c2
+FROM test
+GROUP BY c2
+ORDER BY c2;
 +---------+---------+
 | count(1)|       c2|
 +---------+---------+
-|        2|      NaN|
 |        2|-Infinity|
 |        3| Infinity|
+|        2|      NaN|
 +---------+---------+
 ```

@@ -19,8 +19,8 @@ package org.apache.spark.streaming.kafka010.mocks
 
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
-import kafka.utils.Scheduler
 import org.apache.kafka.common.utils.Time
+import org.apache.kafka.server.util.Scheduler
 import org.jmock.lib.concurrent.DeterministicScheduler
 
 /**
@@ -42,8 +42,6 @@ private[kafka010] class MockScheduler(val time: Time) extends Scheduler {
 
   val scheduler = new DeterministicScheduler()
 
-  def isStarted: Boolean = true
-
   def startup(): Unit = {}
 
   def shutdown(): Unit = synchronized {
@@ -56,17 +54,18 @@ private[kafka010] class MockScheduler(val time: Time) extends Scheduler {
 
   def schedule(
       name: String,
-      fun: () => Unit,
-      delay: Long = 0,
-      period: Long = -1,
-      unit: TimeUnit = TimeUnit.MILLISECONDS): ScheduledFuture[_] = synchronized {
-    val runnable = new Runnable {
-      override def run(): Unit = fun()
-    }
-    if (period >= 0) {
-      scheduler.scheduleAtFixedRate(runnable, delay, period, unit)
+      task: Runnable,
+      delayMs: Long = 0,
+      periodMs: Long = -1): ScheduledFuture[_] = synchronized {
+    if (periodMs >= 0) {
+      scheduler.scheduleAtFixedRate(task, delayMs, periodMs, TimeUnit.MILLISECONDS)
     } else {
-      scheduler.schedule(runnable, delay, unit)
+      scheduler.schedule(task, delayMs, TimeUnit.MILLISECONDS)
     }
   }
+
+  override def resizeThreadPool(i: Int): Unit = {
+
+  }
+
 }

@@ -40,6 +40,7 @@ import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
@@ -87,8 +88,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "append" => mode(SaveMode.Append)
       case "ignore" => mode(SaveMode.Ignore)
       case "error" | "errorifexists" | "default" => mode(SaveMode.ErrorIfExists)
-      case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. Accepted " +
-        "save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists', 'default'.")
+      case _ => throw QueryCompilationErrors.invalidSaveModeError(saveMode)
     }
   }
 
@@ -262,7 +262,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       val optionsWithPath = getOptionsWithPath(path)
 
-      val finalOptions = sessionOptions.view.filterKeys(!optionsWithPath.contains(_)).toMap ++
+      val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
         optionsWithPath.originalMap
       val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
 
@@ -337,7 +337,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 external = false)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
-                  UnresolvedIdentifier(catalog.name +: ident.namespace.toSeq :+ ident.name),
+                  UnresolvedIdentifier(
+                    catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
                   partitioningAsV2,
                   df.queryExecution.analyzed,
                   tableSpec,
@@ -461,7 +462,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
-        val dynamicPartitionOverwrite = table.table.partitioning.size > 0 &&
+        val dynamicPartitionOverwrite = table.table.partitioning.length > 0 &&
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {

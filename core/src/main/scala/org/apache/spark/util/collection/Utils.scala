@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import com.google.common.collect.{Iterators => GuavaIterators, Ordering => GuavaOrdering}
 
-import org.apache.spark.sql.catalyst.util.SparkCollectionUtils
+import org.apache.spark.util.SparkCollectionUtils
 
 /**
  * Utility functions for collections.

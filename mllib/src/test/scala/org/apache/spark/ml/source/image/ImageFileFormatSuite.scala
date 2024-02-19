@@ -95,7 +95,8 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
       .select(substring_index(col("image.origin"), "/", -1).as("origin"), col("cls"), col("date"))
       .collect()
 
-    assert(Set(result: _*) === Set(
+    import org.apache.spark.util.ArrayImplicits._
+    assert(Set(result.toImmutableArraySeq: _*) === Set(
       Row("29.5.a_b_EGDP022204.jpg", "kittens", "2018-01"),
       Row("54893.jpg", "kittens", "2018-02"),
       Row("DP153539.jpg", "kittens", "2018-02"),

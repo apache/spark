@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -225,7 +226,7 @@ object DataTypeProtoConverter {
           .build()
 
       case StructType(fields: Array[StructField]) =>
-        val protoFields = fields.toSeq.map {
+        val protoFields = fields.toImmutableArraySeq.map {
           case StructField(
                 name: String,
                 dataType: DataType,

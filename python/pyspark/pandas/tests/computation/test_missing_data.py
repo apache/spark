@@ -21,26 +21,13 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Missing data handling'
 # https://spark.apache.org/docs/latest/api/python/reference/pyspark.pandas/frame.html#missing-data-handling
 class FrameMissingDataMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_backfill(self):
         pdf = pd.DataFrame(
             {
@@ -468,7 +455,11 @@ class FrameMissingDataMixin:
         self.assert_eq(pdf, psdf)
 
 
-class FrameMissingDataTests(FrameMissingDataMixin, ComparisonTestBase, SQLTestUtils):
+class FrameMissingDataTests(
+    FrameMissingDataMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

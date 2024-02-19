@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from itertools import chain
 from typing import cast, Any, Union
 
 import pandas as pd
@@ -134,7 +135,7 @@ def _to_cat(index_ops: IndexOpsLike) -> IndexOpsLike:
     if len(categories) == 0:
         scol = F.lit(None)
     else:
-        scol = F.lit(None)
-        for code, category in reversed(list(enumerate(categories))):
-            scol = F.when(index_ops.spark.column == F.lit(code), F.lit(category)).otherwise(scol)
+        kvs = chain(*[(F.lit(code), F.lit(category)) for code, category in enumerate(categories)])
+        map_scol = F.create_map(*kvs)
+        scol = map_scol[index_ops.spark.column]
     return index_ops._with_new_scol(scol)

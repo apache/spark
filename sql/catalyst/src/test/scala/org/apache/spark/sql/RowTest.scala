@@ -24,10 +24,11 @@ import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 class RowTest extends AnyFunSpec with Matchers {
 
@@ -44,10 +45,10 @@ class RowTest extends AnyFunSpec with Matchers {
 
   describe("Row (without schema)") {
     it("throws an exception when accessing by fieldName") {
-      intercept[UnsupportedOperationException] {
+      intercept[SparkUnsupportedOperationException] {
         noSchemaRow.fieldIndex("col1")
       }
-      intercept[UnsupportedOperationException] {
+      intercept[SparkUnsupportedOperationException] {
         noSchemaRow.getAs("col1")
       }
     }
@@ -65,7 +66,7 @@ class RowTest extends AnyFunSpec with Matchers {
     }
 
     it("Accessing non existent field throws an exception") {
-      intercept[IllegalArgumentException] {
+      intercept[SparkIllegalArgumentException] {
         sampleRow.getAs[String]("non_existent")
       }
     }
@@ -128,7 +129,7 @@ class RowTest extends AnyFunSpec with Matchers {
     def modifyValues(values: Seq[Any]): Seq[Any] = {
       val array = values.toArray
       array(2) = "42"
-      array
+      array.toImmutableArraySeq
     }
 
     it("copy should return same ref for external rows") {

@@ -422,10 +422,10 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
-      val sourceTable = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
+      val sourceTable = DataSource.lookupDataSource(read, spark.sessionState.conf).getConstructor()
         .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
 
-      val sinkTable = DataSource.lookupDataSource(write, spark.sqlContext.conf).getConstructor()
+      val sinkTable = DataSource.lookupDataSource(write, spark.sessionState.conf).getConstructor()
         .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._

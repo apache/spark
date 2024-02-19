@@ -56,7 +56,7 @@ object EventLogTestHelper {
       eventStr: String,
       desiredSize: Long): Seq[String] = {
     val stringLen = eventStr.getBytes(StandardCharsets.UTF_8).length
-    val repeatCount = Math.floor(desiredSize / stringLen).toInt
+    val repeatCount = (desiredSize / stringLen).toInt
     (0 until repeatCount).map { _ =>
       writer.writeEvent(eventStr, flushLogger = true)
       eventStr

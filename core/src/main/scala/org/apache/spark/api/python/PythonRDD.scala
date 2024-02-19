@@ -34,6 +34,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat 
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.internal.Logging
@@ -43,6 +44,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFuncServer}
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 
 
 private[spark] class PythonRDD(
@@ -82,7 +84,11 @@ private[spark] trait PythonFunction {
   def pythonExec: String
   def pythonVer: String
   def broadcastVars: JList[Broadcast[PythonBroadcast]]
-  def accumulator: PythonAccumulatorV2
+  def accumulator: PythonAccumulator
+}
+
+private[spark] object PythonFunction {
+  type PythonAccumulator = CollectionAccumulator[Array[Byte]]
 }
 
 /**
@@ -95,7 +101,7 @@ private[spark] case class SimplePythonFunction(
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: PythonAccumulatorV2) extends PythonFunction {
+    accumulator: PythonAccumulator) extends PythonFunction {
 
   def this(
       command: Array[Byte],
@@ -104,8 +110,9 @@ private[spark] case class SimplePythonFunction(
       pythonExec: String,
       pythonVer: String,
       broadcastVars: JList[Broadcast[PythonBroadcast]],
-      accumulator: PythonAccumulatorV2) = {
-    this(command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
+      accumulator: PythonAccumulator) = {
+    this(command.toImmutableArraySeq,
+      envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
   }
 }
 
@@ -179,7 +186,7 @@ private[spark] object PythonRDD extends Logging {
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
       sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala.toSeq)
-    val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
+    val flattenedPartition: UnrolledPartition = Array.concat(allPartitions.toImmutableArraySeq: _*)
     serveIterator(flattenedPartition.iterator,
       s"serve RDD ${rdd.id} with partitions ${partitions.asScala.mkString(",")}")
   }

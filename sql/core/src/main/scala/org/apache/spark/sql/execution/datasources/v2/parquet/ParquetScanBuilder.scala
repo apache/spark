@@ -30,6 +30,7 @@ import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 case class ParquetScanBuilder(
     sparkSession: SparkSession,
@@ -73,7 +74,7 @@ case class ParquetScanBuilder(
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
         RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
-      parquetFilters.convertibleFilters(dataFilters).toArray
+      parquetFilters.convertibleFilters(dataFilters.toImmutableArraySeq).toArray
     } else {
       Array.empty[Filter]
     }

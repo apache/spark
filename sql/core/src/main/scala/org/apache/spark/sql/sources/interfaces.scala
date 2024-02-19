@@ -206,7 +206,7 @@ abstract class BaseRelation {
    *
    * @since 1.3.0
    */
-  def sizeInBytes: Long = sqlContext.conf.defaultSizeInBytes
+  def sizeInBytes: Long = sqlContext.sparkSession.sessionState.conf.defaultSizeInBytes
 
   /**
    * Whether does it need to convert the objects in Row to internal representation, for example:

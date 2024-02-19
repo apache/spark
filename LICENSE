@@ -223,7 +223,6 @@ Python Software Foundation License
 ----------------------------------
 
 python/pyspark/loose_version.py
-python/docs/source/_static/copybutton.js
 
 BSD 3-Clause
 ------------

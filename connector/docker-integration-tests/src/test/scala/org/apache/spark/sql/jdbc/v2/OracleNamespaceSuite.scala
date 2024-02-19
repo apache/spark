@@ -21,7 +21,7 @@ import java.sql.Connection
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.{DockerJDBCIntegrationSuite, OracleDatabaseOnDocker}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
@@ -49,7 +49,7 @@ import org.apache.spark.tags.DockerTest
  *  $ ./buildContainerImage.sh -v 23.2.0 -f
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
  *
- * This procedure has been validated with Oracle Databae Free version 23.2.0,
+ * This procedure has been validated with Oracle Database Free version 23.2.0,
  * and with Oracle Express Edition versions 18.4.0 and 21.3.0
  */
 @DockerTest
@@ -57,19 +57,7 @@ class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespa
 
   override def excluded: Seq[String] = Seq("listNamespaces: basic behavior", "Drop namespace")
 
-  override val db = new DatabaseOnDocker {
-    lazy override val imageName =
-      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.3")
-    val oracle_password = "Th1s1sThe0racle#Pass"
-    override val env = Map(
-      "ORACLE_PWD" -> oracle_password,      // oracle images uses this
-      "ORACLE_PASSWORD" -> oracle_password  // gvenzl/oracle-free uses this
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 1521
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
-  }
+  override val db = new OracleDatabaseOnDocker
 
   val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),

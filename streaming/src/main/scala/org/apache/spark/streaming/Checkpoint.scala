@@ -21,6 +21,8 @@ import java.io._
 import java.util.concurrent.{ArrayBlockingQueue, RejectedExecutionException,
   ThreadPoolExecutor, TimeUnit}
 
+import scala.concurrent.duration.FiniteDuration
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -30,7 +32,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[streaming]
 class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
@@ -136,7 +139,7 @@ object Checkpoint extends Logging {
       if (statuses != null) {
         val paths = statuses.filterNot(_.isDirectory).map(_.getPath)
         val filtered = paths.filter(p => REGEX.findFirstIn(p.getName).nonEmpty)
-        filtered.sortWith(sortFunc)
+        filtered.sortWith(sortFunc).toImmutableArraySeq
       } else {
         logWarning(s"Listing $path returned null")
         Seq.empty
@@ -306,13 +309,9 @@ class CheckpointWriter(
   def stop(): Unit = synchronized {
     if (stopped) return
 
-    executor.shutdown()
     val startTimeNs = System.nanoTime()
-    val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
-    if (!terminated) {
-      executor.shutdownNow()
-    }
-    logInfo(s"CheckpointWriter executor terminated? $terminated," +
+    ThreadUtils.shutdown(executor, FiniteDuration(10, TimeUnit.SECONDS))
+    logInfo(s"CheckpointWriter executor terminated? ${executor.isTerminated}," +
       s" waited for ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms.")
     stopped = true
   }

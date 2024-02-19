@@ -85,9 +85,9 @@ class HiveOptions(@transient private val parameters: CaseInsensitiveMap[String])
       s"line delimiter, but given: $lineDelim.")
   }
 
-  def serdeProperties: Map[String, String] = parameters.view.filterKeys {
-    k => !lowerCasedOptionNames.contains(k.toLowerCase(Locale.ROOT))
-  }.map { case (k, v) => delimiterOptions.getOrElse(k, k) -> v }.toMap
+  def serdeProperties: Map[String, String] = parameters.filter {
+    case (k, _) => !lowerCasedOptionNames.contains(k.toLowerCase(Locale.ROOT))
+  }.map { case (k, v) => delimiterOptions.getOrElse(k, k) -> v }
 }
 
 object HiveOptions {

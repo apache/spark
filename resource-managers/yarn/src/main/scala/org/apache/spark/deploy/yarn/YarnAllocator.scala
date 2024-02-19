@@ -344,7 +344,7 @@ private[yarn] class YarnAllocator(
         val gpuResource = sparkConf.get(YARN_GPU_DEVICE)
         val fpgaResource = sparkConf.get(YARN_FPGA_DEVICE)
         getYarnResourcesAndAmounts(sparkConf, config.YARN_EXECUTOR_RESOURCE_TYPES_PREFIX) ++
-          customSparkResources.view.filterKeys { r =>
+          customSparkResources.filter { case (r, _) =>
             (r == gpuResource || r == fpgaResource)
           }
       } else {
@@ -384,19 +384,28 @@ private[yarn] class YarnAllocator(
     this.numLocalityAwareTasksPerResourceProfileId = numLocalityAwareTasksPerResourceProfileId
     this.hostToLocalTaskCountPerResourceProfileId = hostToLocalTaskCountPerResourceProfileId
 
-    val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
-      createYarnResourceForResourceProfile(rp)
-      if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
-        logInfo(s"Driver requested a total number of $numExecs executor(s) " +
-          s"for resource profile id: ${rp.id}.")
-        targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
-        allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
-        true
-      } else {
-        false
+    if (resourceProfileToTotalExecs.isEmpty) {
+      // Set target executor number to 0 to cancel pending allocate request.
+      targetNumExecutorsPerResourceProfileId.keys.foreach { rp =>
+        targetNumExecutorsPerResourceProfileId(rp) = 0
       }
+      allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
+      true
+    } else {
+      val res = resourceProfileToTotalExecs.map { case (rp, numExecs) =>
+        createYarnResourceForResourceProfile(rp)
+        if (numExecs != getOrUpdateTargetNumExecutorsForRPId(rp.id)) {
+          logInfo(s"Driver requested a total number of $numExecs executor(s) " +
+            s"for resource profile id: ${rp.id}.")
+          targetNumExecutorsPerResourceProfileId(rp.id) = numExecs
+          allocatorNodeHealthTracker.setSchedulerExcludedNodes(excludedNodes)
+          true
+        } else {
+          false
+        }
+      }
+      res.exists(_ == true)
     }
-    res.exists(_ == true)
   }
 
   /**
@@ -842,9 +851,6 @@ private[yarn] class YarnAllocator(
           onHostStr,
           completedContainer.getState,
           completedContainer.getExitStatus))
-        // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
-        // there are some exit status' we shouldn't necessarily count against us, but for
-        // now I think its ok as none of the containers are expected to exit.
         val exitStatus = completedContainer.getExitStatus
         val (exitCausedByApp, containerExitReason) = exitStatus match {
           case _ if shutdown =>
@@ -858,7 +864,7 @@ private[yarn] class YarnAllocator(
             // just as easily finish on any other executor. See SPARK-8167.
             (false, s"Container ${containerId}${onHostStr} was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
-          case VMEM_EXCEEDED_EXIT_CODE =>
+          case ContainerExitStatus.KILLED_EXCEEDED_VMEM =>
             val vmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX virtual memory used".r
             val diag = vmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
@@ -867,7 +873,7 @@ private[yarn] class YarnAllocator(
               s"${YarnConfiguration.NM_VMEM_PMEM_RATIO} or disabling " +
               s"${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714."
             (true, message)
-          case PMEM_EXCEEDED_EXIT_CODE =>
+          case ContainerExitStatus.KILLED_EXCEEDED_PMEM =>
             val pmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
             val diag = pmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
@@ -1016,8 +1022,6 @@ private[yarn] class YarnAllocator(
 
 private object YarnAllocator {
   val MEM_REGEX = "[0-9.]+ [KMG]B"
-  val VMEM_EXCEEDED_EXIT_CODE = -103
-  val PMEM_EXCEEDED_EXIT_CODE = -104
   val DECOMMISSIONING_NODES_CACHE_SIZE = 200
 
   val NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS = Set(

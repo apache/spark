@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 case class JsonScan(
@@ -80,7 +81,8 @@ case class JsonScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     JsonPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, parsedOptions, pushedFilters)
+      dataSchema, readDataSchema, readPartitionSchema, parsedOptions,
+      pushedFilters.toImmutableArraySeq)
   }
 
   override def equals(obj: Any): Boolean = obj match {

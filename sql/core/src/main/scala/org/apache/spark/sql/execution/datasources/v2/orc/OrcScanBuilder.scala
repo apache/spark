@@ -29,6 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 case class OrcScanBuilder(
     sparkSession: SparkSession,
@@ -67,7 +68,7 @@ case class OrcScanBuilder(
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       val dataTypeMap = OrcFilters.getSearchableTypeMap(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
-      OrcFilters.convertibleFilters(dataTypeMap, dataFilters).toArray
+      OrcFilters.convertibleFilters(dataTypeMap, dataFilters.toImmutableArraySeq).toArray
     } else {
       Array.empty[Filter]
     }

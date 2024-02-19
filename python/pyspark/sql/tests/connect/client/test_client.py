@@ -27,12 +27,13 @@ if should_test_connect:
     import grpc
     import pandas as pd
     import pyarrow as pa
-    from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
-    from pyspark.sql.connect.client.core import Retrying
-    from pyspark.sql.connect.client.reattach import (
-        RetryException,
-        ExecutePlanResponseReattachableIterator,
+    from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
+    from pyspark.sql.connect.client.retries import (
+        Retrying,
+        DefaultPolicy,
     )
+    from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
+    from pyspark.errors import RetriesExceeded
     import pyspark.sql.connect.proto as proto
 
 
@@ -71,7 +72,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIsNone(client.token)
 
     def test_channel_builder(self):
-        class CustomChannelBuilder(ChannelBuilder):
+        class CustomChannelBuilder(DefaultChannelBuilder):
             @property
             def userId(self) -> Optional[str]:
                 return "abc"
@@ -107,36 +108,49 @@ class SparkConnectClientTestCase(unittest.TestCase):
             total_sleep += t
 
         try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, sleep=sleep, **client._retry_policy
-            ):
+            for attempt in Retrying(client._retry_policies, sleep=sleep):
                 with attempt:
-                    raise RetryException()
-        except RetryException:
+                    raise TestException("Retryable error", grpc.StatusCode.UNAVAILABLE)
+        except RetriesExceeded:
             pass
 
         # tolerated at least 10 mins of fails
         self.assertGreaterEqual(total_sleep, 600)
 
+    def test_retry_client_unit(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+
+        policyA = TestPolicy()
+        policyB = DefaultPolicy()
+
+        client.set_retry_policies([policyA, policyB])
+
+        self.assertEqual(client.get_retry_policies(), [policyA, policyB])
+
     def test_channel_builder_with_session(self):
         dummy = str(uuid.uuid4())
-        chan = ChannelBuilder(f"sc://foo/;session_id={dummy}")
+        chan = DefaultChannelBuilder(f"sc://foo/;session_id={dummy}")
         client = SparkConnectClient(chan)
         self.assertEqual(client._session_id, chan.session_id)
+
+
+class TestPolicy(DefaultPolicy):
+    def __init__(self):
+        super().__init__(
+            max_retries=3,
+            backoff_multiplier=4.0,
+            initial_backoff=10,
+            max_backoff=10,
+            jitter=10,
+            min_jitter_threshold=10,
+        )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectClientReattachTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.request = proto.ExecutePlanRequest()
-        self.policy = {
-            "max_retries": 3,
-            "backoff_multiplier": 4.0,
-            "initial_backoff": 10,
-            "max_backoff": 10,
-            "jitter": 10,
-            "min_jitter_threshold": 10,
-        }
+        self.retrying = lambda: Retrying(TestPolicy())
         self.response = proto.ExecutePlanResponse(
             response_id="1",
         )
@@ -153,7 +167,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
     def test_basic_flow(self):
         stub = self._stub_with([self.response, self.finished])
-        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
         for b in ite:
             pass
 
@@ -171,7 +185,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         stub = self._stub_with([self.response, fatal])
         with self.assertRaises(TestException):
-            ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
+            ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
             for b in ite:
                 pass
 
@@ -190,7 +204,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         stub = self._stub_with(
             [self.response, non_fatal], [self.response, self.response, self.finished]
         )
-        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
         for b in ite:
             pass
 
@@ -216,7 +230,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         stub = self._stub_with(
             [self.response, non_fatal], [self.response, non_fatal, self.response, self.finished]
         )
-        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.policy, [])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
         for b in ite:
             pass
 

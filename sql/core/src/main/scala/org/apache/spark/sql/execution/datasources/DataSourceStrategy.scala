@@ -88,7 +88,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         targetAttributes, sourceAttributes, staticPartitions.size)
     }
 
-    if (providedPartitions.size != targetPartitionSchema.fields.size) {
+    if (providedPartitions.size != targetPartitionSchema.fields.length) {
       throw QueryCompilationErrors.insertMismatchedPartitionNumberError(
         targetPartitionSchema, providedPartitions.size)
     }
@@ -126,9 +126,9 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
     assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
     val projectList =
-      sourceAttributes.take(targetAttributes.size - targetPartitionSchema.fields.size) ++
+      sourceAttributes.take(targetAttributes.size - targetPartitionSchema.fields.length) ++
         partitionList.take(staticPartitions.size).map(_.get) ++
-        sourceAttributes.takeRight(targetPartitionSchema.fields.size - staticPartitions.size)
+        sourceAttributes.takeRight(targetPartitionSchema.fields.length - staticPartitions.size)
 
     projectList
   }

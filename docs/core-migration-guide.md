@@ -28,9 +28,19 @@ license: |
 
 - Since Spark 4.0, Spark will compress event logs. To restore the behavior before Spark 4.0, you can set `spark.eventLog.compress` to `false`.
 
+- Since Spark 4.0, Spark workers will clean up worker and stopped application directories periodically. To restore the behavior before Spark 4.0, you can set `spark.worker.cleanup.enabled` to `false`.
+
 - Since Spark 4.0, `spark.shuffle.service.db.backend` is set to `ROCKSDB` by default which means Spark will use RocksDB store for shuffle service. To restore the behavior before Spark 4.0, you can set `spark.shuffle.service.db.backend` to `LEVELDB`.
 
 - In Spark 4.0, support for Apache Mesos as a resource manager was removed.
+
+- Since Spark 4.0, Spark uses `ReadWriteOncePod` instead of `ReadWriteOnce` access mode in persistence volume claims. To restore the legacy behavior, you can set `spark.kubernetes.legacy.useReadWriteOnceAccessMode` to `true`.
+
+## Upgrading from Core 3.4 to 3.5
+
+- Since Spark 3.5, `spark.yarn.executor.failuresValidityInterval` is deprecated. Use `spark.executor.failuresValidityInterval` instead.
+
+- Since Spark 3.5, `spark.yarn.max.executor.failures` is deprecated. Use `spark.executor.maxNumFailures` instead.
 
 ## Upgrading from Core 3.3 to 3.4
 

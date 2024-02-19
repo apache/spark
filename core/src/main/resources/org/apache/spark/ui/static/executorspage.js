@@ -15,9 +15,16 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
-/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells, getStandAloneAppId, */
-/* global jQuery, setDataTableDefaults */
+/* global $, Mustache */
+
+import {
+  createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
+  formatBytes, formatDate, formatDuration, formatLogsCells,
+  getStandAloneAppId,
+  setDataTableDefaults
+} from './utils.js';
+
+export { setHeapHistogramEnabled, setThreadDumpEnabled };
 
 var threadDumpEnabled = false;
 var heapHistogramEnabled = false;
@@ -81,7 +88,7 @@ function formatResourceCells(resources) {
   return result
 }
 
-jQuery.extend(jQuery.fn.dataTableExt.oSort, {
+$.extend($.fn.dataTableExt.oSort, {
   "title-numeric-pre": function (a) {
     var x = a.match(/title="*(-?[0-9.]+)/)[1];
     return parseFloat(x);
@@ -96,7 +103,7 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
   }
 });
 
-jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+$.extend($.fn.dataTableExt.oSort, {
   "executor-id-asc": function ( a, b ) {
     if ($.isNumeric(a) && $.isNumeric(b)) {
       return parseFloat(a) - parseFloat(b);
@@ -580,14 +587,16 @@ $(document).ready(function () {
             {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
             {
               name: 'threadDumpCol',
-              data: 'id', render: function (data, type) {
-                return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
+              data: function (row) { return row.isActive ? row.id : '' },
+              render: function (data, type) {
+                return data != '' && type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
               }
             },
             {
               name: 'heapHistogramCol',
-              data: 'id', render: function (data, type) {
-                return type === 'display' ? ("<a href='heapHistogram/?executorId=" + data + "'>Heap Histogram</a>") : data;
+              data: function (row) { return row.isActive ? row.id : '' },
+              render: function (data, type) {
+                return data != '' && type === 'display' ? ("<a href='heapHistogram/?executorId=" + data + "'>Heap Histogram</a>") : data;
               }
             },
             {

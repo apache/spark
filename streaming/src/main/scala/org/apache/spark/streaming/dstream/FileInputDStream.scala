@@ -30,6 +30,7 @@ import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamInputInfo
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
@@ -149,7 +150,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       batchTimeToSelectedFiles += ((validTime, newFiles))
     }
     recentlySelectedFiles ++= newFiles
-    val rdds = Some(filesToRDD(newFiles))
+    val rdds = Some(filesToRDD(newFiles.toImmutableArraySeq))
     // Copy newFiles to immutable.List to prevent from being modified by the user
     val metadata = Map(
       "files" -> newFiles.toList,
@@ -343,7 +344,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
             f.mkString("[", ", ", "]") )
           batchTimeToSelectedFiles.synchronized { batchTimeToSelectedFiles += ((t, f)) }
           recentlySelectedFiles ++= f
-          generatedRDDs += ((t, filesToRDD(f)))
+          generatedRDDs += ((t, filesToRDD(f.toImmutableArraySeq)))
       }
     }
 

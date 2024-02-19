@@ -162,7 +162,7 @@ class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <:
       val useBinary = rel.isEmpty
       val labSet = lab.toSet
       val relMap = Utils.toMap(lab, rel)
-      if (!useBinary && lab.size != rel.size) {
+      if (!useBinary && lab.length != rel.length) {
         logWarning(
           "# of ground truth set and # of relevance value set should be equal, " +
             "check input data")

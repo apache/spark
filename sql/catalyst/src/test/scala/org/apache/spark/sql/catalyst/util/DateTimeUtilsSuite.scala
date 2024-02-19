@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -128,8 +128,25 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("SPARK-32559: string to date trim Control Characters") {
-    assert(toDate("MIDDLE\u0003") === None)
+    val expected = days(2015, 3, 18)
+    permuteWithWhitespaceAndControl(
+      "2015-03-18", "2015-03-18T123321", " 2015-03-18 123321", "+2015-03-18"
+    ).foreach { s =>
+      assert(toDate(s).get === expected)
+    }
+
+    permuteWithWhitespaceAndControl(
+      "INVALID_INPUT", " ", "1999-08-", "2015-03-18\u0003123321", "2015-03-18Q123321"
+    ).foreach { s =>
+      assert(toDate(s).isEmpty)
+    }
   }
+
+  private def permuteWithWhitespaceAndControl(values: String*): Seq[String] =
+    values.flatMap { input =>
+      Seq(input, "\u0003", "\u0003", " ", " ")
+        .permutations.map(_.mkString)
+    }
 
   test("string to date") {
     assert(toDate("2015-01-28").get === days(2015, 1, 28))
@@ -154,6 +171,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999-08-").isEmpty)
     assert(toDate("").isEmpty)
     assert(toDate("   ").isEmpty)
+    assert(toDate("+").isEmpty)
+    assert(toDate("-").isEmpty)
+    assert(toDate("xxx2015-01-28").isEmpty)
+    assert(toDate("--2015-01-28").isEmpty)
   }
 
   test("SPARK-35780: support full range of date string") {
@@ -319,6 +340,20 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       zoneId = getZoneId("Europe/Moscow")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
       checkStringToTimestamp("2015-03-18T12:03:17.123456 Europe/Moscow", expected)
+
+      // Check whitespace and control character permutations
+      expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zid))
+      permuteWithWhitespaceAndControl(
+        "2015-03-18 12:03:17", "2015-03-18T12:03:17"
+      ).foreach { s =>
+        checkStringToTimestamp(s, expected)
+      }
+
+      permuteWithWhitespaceAndControl(
+        "INVALID_INPUT", "\t", "", "2015-03-18\u000312:03:17", "2015-03-18 12:", "2015-03-18 123"
+      ).foreach { s =>
+        checkStringToTimestamp(s, None)
+      }
     }
   }
 
@@ -504,7 +539,13 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(dateAddInterval(input, new CalendarInterval(36, 0, 0)) === days(2000, 2, 28))
     assert(dateAddInterval(input, new CalendarInterval(36, 47, 0)) === days(2000, 4, 15))
     assert(dateAddInterval(input, new CalendarInterval(-13, 0, 0)) === days(1996, 1, 28))
-    intercept[IllegalArgumentException](dateAddInterval(input, new CalendarInterval(36, 47, 1)))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](
+        dateAddInterval(input, new CalendarInterval(36, 47, 1))),
+      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      parameters = Map(
+        "message" -> "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
+        "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }
 
   test("timestamp add interval") {
@@ -851,8 +892,18 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("parsing day of week") {
     assert(getDayOfWeekFromString(UTF8String.fromString("THU")) == 0)
     assert(getDayOfWeekFromString(UTF8String.fromString("MONDAY")) == 4)
-    intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("xx")))
-    intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("\"quote")))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        getDayOfWeekFromString(UTF8String.fromString("xx"))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3209",
+      parameters = Map("string" -> "xx"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        getDayOfWeekFromString(UTF8String.fromString("\"quote"))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3209",
+      parameters = Map("string" -> "\"quote"))
   }
 
   test("SPARK-34761: timestamp add day-time interval") {
@@ -988,10 +1039,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         date(1, 1, 1, 0, 0, 0, 1, zid))
     }
 
-    val e = intercept[IllegalStateException] {
-      timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
-    }
-    assert(e.getMessage === "Got the unexpected unit 'SECS'.")
+    checkError(
+      exception = intercept[SparkException] {
+        timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
   }
 
   test("SPARK-38284: difference between two timestamps in units") {
@@ -1038,13 +1091,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         zid) === -9998)
     }
 
-    val e = intercept[IllegalStateException] {
-      timestampDiff(
-        "SECS",
-        date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
-        date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
-        getZoneId("UTC"))
-    }
-    assert(e.getMessage === "Got the unexpected unit 'SECS'.")
+    checkError(
+      exception = intercept[SparkException] {
+        timestampDiff(
+          "SECS",
+          date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
+          date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
+          getZoneId("UTC"))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Got the unexpected unit 'SECS'."))
   }
 }

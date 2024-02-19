@@ -1,4 +1,5 @@
 -- Test that correlated EXISTS subqueries in join conditions are supported.
+--ONLY_IF spark
 
 -- Permutations of the test:
 -- 1. In / Not In

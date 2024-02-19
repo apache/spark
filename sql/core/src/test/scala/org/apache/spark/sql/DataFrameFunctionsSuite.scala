@@ -179,12 +179,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     val df5 = Seq((Seq("a", null), Seq(1, 2))).toDF("k", "v")
-    val e1 = intercept[SparkException] {
-      df5.select(map_from_arrays($"k", $"v")).collect()
-    }
-    assert(e1.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
-      exception = e1.getCause.asInstanceOf[SparkRuntimeException],
+      exception = intercept[SparkRuntimeException] {
+        df5.select(map_from_arrays($"k", $"v")).collect()
+      },
       errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
@@ -1242,8 +1240,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(null)
     )
 
-    intercept[SparkException](df1.selectExpr("map_concat(map1, map2)").collect())
-    intercept[SparkException](df1.select(map_concat($"map1", $"map2")).collect())
+    intercept[SparkRuntimeException](df1.selectExpr("map_concat(map1, map2)").collect())
+    intercept[SparkRuntimeException](df1.select(map_concat($"map1", $"map2")).collect())
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       checkAnswer(df1.selectExpr("map_concat(map1, map2)"), expected1a)
       checkAnswer(df1.select(map_concat($"map1", $"map2")), expected1a)
@@ -1529,23 +1527,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(false))
     )
 
-    if (!conf.ansiEnabled) {
-      checkError(
-        exception = intercept[AnalysisException] {
-          OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
-        },
-        errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
-        parameters = Map(
-          "sqlExpr" -> "\"array_contains(array(1), 0.01234567890123456790123456780)\"",
-          "functionName" -> "`array_contains`",
-          "dataType" -> "\"ARRAY\"",
-          "leftType" -> "\"ARRAY<INT>\"",
-          "rightType" -> "\"DECIMAL(38,29)\""
-        ),
-        queryContext = Array(ExpectedContext("", "", 0, 55,
-          "array_contains(array(1), .01234567890123456790123456780)"))
-      )
-    }
+    checkAnswer(
+      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)"),
+      Seq(Row(false))
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -2001,7 +1986,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"reverse(struct(1, a))\"",
         "paramIndex" -> "1",
         "inputSql" -> "\"struct(1, a)\"",
-        "inputType" -> "\"STRUCT<col1: INT, col2: STRING>\"",
+        "inputType" -> "\"STRUCT<col1: INT NOT NULL, col2: STRING NOT NULL>\"",
         "requiredType" -> "(\"STRING\" or \"ARRAY\")"
       ),
       queryContext = Array(ExpectedContext("", "", 7, 29, "reverse(struct(1, 'a'))"))
@@ -3430,12 +3415,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
     checkAnswer(df4.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(true, false, false))))
 
-    val e1 = intercept[SparkException] {
-      df5.selectExpr("array_insert(a, b, c)").show()
-    }
-    assert(e1.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
-      exception = e1.getCause.asInstanceOf[SparkRuntimeException],
+      exception = intercept[SparkRuntimeException] {
+        df5.selectExpr("array_insert(a, b, c)").show()
+      },
       errorClass = "INVALID_INDEX_OF_ZERO",
       parameters = Map.empty,
       context = ExpectedContext(
@@ -4958,10 +4941,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(dfExample2.select(transform_keys(col("j"), (k, v) => k + v)),
         Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7))))
 
-      intercept[SparkException] {
+      intercept[SparkRuntimeException] {
         dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)").collect()
       }
-      intercept[SparkException] {
+      intercept[SparkRuntimeException] {
         dfExample3.select(transform_keys(col("x"), (k, v) => k % 2 === 0 || v)).collect()
       }
       withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
@@ -5030,22 +5013,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         stop = 35)
     )
 
-    val ex3 = intercept[SparkException] {
-      dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
-    }
-    assert(ex3.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
-      exception = ex3.getCause.asInstanceOf[SparkRuntimeException],
+      exception = intercept[SparkRuntimeException] {
+        dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
+      },
       errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
 
-    val ex3a = intercept[Exception] {
-      dfExample1.select(transform_keys(col("i"), (k, v) => v)).show()
-    }
-    assert(ex3a.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
-      exception = ex3a.getCause.asInstanceOf[SparkRuntimeException],
+      exception = intercept[SparkRuntimeException] {
+        dfExample1.select(transform_keys(col("i"), (k, v) => v)).show()
+      },
       errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
@@ -5672,12 +5651,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24734: Fix containsNull of Concat for array type") {
     val df = Seq((Seq(1), Seq[Integer](null), Seq("a", "b"))).toDF("k1", "k2", "v")
-    val e1 = intercept[SparkException] {
-      df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
-    }
-    assert(e1.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
-      exception = e1.getCause.asInstanceOf[SparkRuntimeException],
+      exception = intercept[SparkRuntimeException] {
+        df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
+      },
       errorClass = "NULL_MAP_KEY",
       parameters = Map.empty
     )
@@ -6036,7 +6013,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = intercept[SparkException] {
         df1.map(r => df2.count() * r.getInt(0)).collect()
-      }.getCause.asInstanceOf[SparkException],
+      },
       errorClass = "CANNOT_INVOKE_IN_TRANSFORMATIONS",
       parameters = Map.empty
     )

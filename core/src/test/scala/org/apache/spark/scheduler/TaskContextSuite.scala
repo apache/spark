@@ -35,6 +35,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 
 class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
@@ -476,7 +477,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("localProperties are propagated to executors correctly") {
     sc = new SparkContext("local", "test")
     sc.setLocalProperty("testPropKey", "testPropValue")
-    val res = sc.parallelize(Array(1), 1).map(i => i).map(i => {
+    val res = sc.parallelize(Array(1).toImmutableArraySeq, 1).map(i => i).map(i => {
       val inTask = TaskContext.get().getLocalProperty("testPropKey")
       val inDeser = Executor.taskDeserializationProps.get().getProperty("testPropKey")
       s"$inTask,$inDeser"
@@ -669,6 +670,16 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(invocationOrder === Seq("C", "B", "A", "D"))
   }
 
+  test("SPARK-46480: Add isFailed in TaskContext") {
+    val context = TaskContext.empty()
+    var isFailed = false
+    context.addTaskCompletionListener[Unit] { context =>
+      isFailed = context.isFailed()
+    }
+    context.markTaskFailed(new RuntimeException())
+    context.markTaskCompleted(None)
+    assert(isFailed)
+  }
 }
 
 private object TaskContextSuite {

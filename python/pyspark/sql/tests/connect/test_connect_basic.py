@@ -31,9 +31,11 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkException,
     PySparkValueError,
+    RetriesExceeded,
 )
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
+from pyspark.sql.connect.client.retries import RetryPolicy
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -71,7 +73,7 @@ if should_test_connect:
     import numpy as np
     from pyspark.sql.connect.proto import Expression as ProtoExpression
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.sql.connect.client import ChannelBuilder
+    from pyspark.sql.connect.client import DefaultChannelBuilder, ChannelBuilder
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.readwriter import DataFrameWriterV2
     from pyspark.sql.dataframe import DataFrame
@@ -159,6 +161,19 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_recursion_handling_for_plan_logging(self):
+        """SPARK-45852 - Test that we can handle recursion in plan logging."""
+        cdf = self.connect.range(1)
+        for x in range(400):
+            cdf = cdf.withColumn(f"col_{x}", CF.lit(x))
+
+        # Calling schema will trigger logging the message that will in turn trigger the message
+        # conversion into protobuf that will then trigger the recursion error.
+        self.assertIsNotNone(cdf.schema)
+
+        result = self.connect._client._proto_to_string(cdf._plan.to_proto(self.connect._client))
+        self.assertIn("recursion", result)
+
     def test_df_getattr_behavior(self):
         cdf = self.connect.range(10)
         sdf = self.spark.range(10)
@@ -500,6 +515,20 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf7.schema, sdf7.schema)
         self.assertEqual(cdf7.collect(), sdf7.collect())
 
+    def test_join_with_cte(self):
+        cte_query = "with dt as (select 1 as ida) select ida as id from dt"
+
+        sdf1 = self.spark.range(10)
+        sdf2 = self.spark.sql(cte_query)
+        sdf3 = sdf1.join(sdf2, sdf1.id == sdf2.id)
+
+        cdf1 = self.connect.range(10)
+        cdf2 = self.connect.sql(cte_query)
+        cdf3 = cdf1.join(cdf2, cdf1.id == cdf2.id)
+
+        self.assertEqual(sdf3.schema, cdf3.schema)
+        self.assertEqual(sdf3.collect(), cdf3.collect())
+
     def test_invalid_column(self):
         # SPARK-41812: fail df1.select(df2.col)
         data1 = [Row(a=1, b=2, c=3)]
@@ -514,9 +543,58 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(AnalysisException):
             cdf2.withColumn("x", cdf1.a + 1).schema
 
-        with self.assertRaisesRegex(AnalysisException, "attribute.*missing"):
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        ):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
+
+        # Can not find the target plan node by plan id
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf1.select(cdf2.a).schema
+
+    def test_invalid_star(self):
+        data1 = [Row(a=1, b=2, c=3)]
+        cdf1 = self.connect.createDataFrame(data1)
+
+        data2 = [Row(a=2, b=0)]
+        cdf2 = self.connect.createDataFrame(data2)
+
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf3 = cdf1.select(cdf1.a)
+            cdf3.select(cdf1["*"]).schema
+
+        # Can find the target plan node, but fail to resolve with it
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            # column 'a has been replaced
+            cdf3 = cdf1.withColumn("a", CF.lit(0))
+            cdf3.select(cdf1["*"]).schema
+
+        # Can not find the target plan node by plan id
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf1.select(cdf2["*"]).schema
+
+        # cdf1["*"] exists on both side
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "AMBIGUOUS_COLUMN_REFERENCE",
+        ):
+            cdf1.join(cdf1).select(cdf1["*"]).schema
 
     def test_collect(self):
         cdf = self.connect.read.table(self.tbl_name)
@@ -690,11 +768,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(ParseException):
             self.connect.createDataFrame(data, "col1 magic_type, col2 int, col3 int, col4 int")
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "Length mismatch: Expected axis has 3 elements, new values have 4 elements",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.createDataFrame(data, "col1 int, col2 int, col3 int")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="AXIS_LENGTH_MISMATCH",
+            message_parameters={"expected_length": "3", "actual_length": "4"},
+        )
 
     def test_with_local_rows(self):
         # SPARK-41789, SPARK-41810: Test creating a dataframe with list of rows and dictionaries
@@ -1043,6 +1124,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assertEqual(cdf.schema, sdf.schema)
         self.assertEqual(cdf.collect(), sdf.collect())
+
+    def test_create_df_nullability(self):
+        data = [("asd", None)]
+        schema = StructType(
+            [
+                StructField("name", StringType(), nullable=True),
+                StructField("age", IntegerType(), nullable=False),
+            ]
+        )
+
+        with self.assertRaises(PySparkValueError):
+            self.spark.createDataFrame(data, schema)
 
     def test_simple_explain_string(self):
         df = self.connect.read.table(self.tbl_name).limit(10)
@@ -1810,7 +1903,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         self.assert_eq(cdf, df)
 
-        self.assert_eq(cobservation.get, observation.get)
+        self.assertEqual(cobservation.get, observation.get)
 
         observed_metrics = cdf.attrs["observed_metrics"]
         self.assert_eq(len(observed_metrics), 1)
@@ -1986,6 +2079,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # SPARK-41212: Test is empty
         self.assertFalse(self.connect.sql("SELECT 1 AS X").isEmpty())
         self.assertTrue(self.connect.sql("SELECT 1 AS X LIMIT 0").isEmpty())
+
+    def test_is_empty_with_unsupported_types(self):
+        df = self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval")
+        self.assertEqual(df.count(), 1)
+        self.assertFalse(df.isEmpty())
 
     def test_session(self):
         self.assertEqual(self.connect, self.connect.sql("SELECT 1").sparkSession)
@@ -2196,7 +2294,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 "arg_name": "fractions",
                 "arg_type": "dict",
                 "allowed_types": "float, int, str",
-                "return_type": "NoneType",
+                "item_type": "NoneType",
             },
         )
 
@@ -3354,8 +3452,8 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             name = "test" * 10000
             with self.assertRaises(AnalysisException) as e:
                 self.spark.sql("select " + name).collect()
-            self.assertTrue(name in e.exception.message)
-            self.assertFalse("JVM stacktrace" in e.exception.message)
+            self.assertTrue(name in e.exception._message)
+            self.assertFalse("JVM stacktrace" in e.exception._message)
 
     def test_error_enrichment_jvm_stacktrace(self):
         with self.sql_conf(
@@ -3370,7 +3468,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
                         """select from_json(
                             '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))"""
                     ).collect()
-                self.assertFalse("JVM stacktrace" in e.exception.message)
+                self.assertFalse("JVM stacktrace" in e.exception._message)
 
             with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": True}):
                 with self.assertRaises(SparkUpgradeException) as e:
@@ -3415,7 +3513,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.spark.stop()
         spark = (
             PySparkSession.builder.config(conf=self.conf())
-            .config("spark.connect.jvmStacktrace.maxSize", 128)
+            .config("spark.connect.grpc.maxMetadataSize", 128)
             .remote("local[4]")
             .getOrCreate()
         )
@@ -3435,11 +3533,11 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         self.assertIsNotNone(self.spark._client)
         # Creates a new remote session.
         other = PySparkSession.builder.remote("sc://other.remote:114/").create()
-        self.assertNotEquals(self.spark, other)
+        self.assertNotEqual(self.spark, other)
 
         # Gets currently active session.
         same = PySparkSession.builder.remote("sc://other.remote.host:114/").getOrCreate()
-        self.assertEquals(other, same)
+        self.assertEqual(other, same)
         same.release_session_on_close = False  # avoid sending release to dummy connection
         same.stop()
 
@@ -3448,6 +3546,28 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         with self.assertRaises(RuntimeError) as e:
             PySparkSession.builder.create()
             self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
+
+    def test_get_message_parameters_without_enriched_error(self):
+        with self.sql_conf({"spark.sql.connect.enrichError.enabled": False}):
+            exception = None
+            try:
+                self.spark.sql("""SELECT a""")
+            except AnalysisException as e:
+                exception = e
+
+            self.assertIsNotNone(exception)
+            self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
+
+    def test_custom_channel_builder(self):
+        # Access self.spark's DefaultChannelBuilder to reuse same endpoint
+        endpoint = self.spark._client._builder.endpoint
+
+        class CustomChannelBuilder(ChannelBuilder):
+            def toChannel(self):
+                return self._insecure_channel(endpoint)
+
+        session = RemoteSparkSession.builder.channelBuilder(CustomChannelBuilder()).create()
+        session.sql("select 1 + 1")
 
 
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
@@ -3471,128 +3591,140 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
         self.assertEqual(self.spark.conf.get("integer"), "1")
 
 
+class TestError(grpc.RpcError, Exception):
+    def __init__(self, code: grpc.StatusCode):
+        self._code = code
+
+    def code(self):
+        return self._code
+
+
+class TestPolicy(RetryPolicy):
+    # Put a small value for initial backoff so that tests don't spend
+    # Time waiting
+    def __init__(self, initial_backoff=10, **kwargs):
+        super().__init__(initial_backoff=initial_backoff, **kwargs)
+
+    def can_retry(self, exception: BaseException):
+        return isinstance(exception, TestError)
+
+
+class TestPolicySpecificError(TestPolicy):
+    def __init__(self, specific_code: grpc.StatusCode, **kwargs):
+        super().__init__(**kwargs)
+        self.specific_code = specific_code
+
+    def can_retry(self, exception: BaseException):
+        return exception.code() == self.specific_code
+
+
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class ClientTests(unittest.TestCase):
-    def test_retry_error_handling(self):
-        # Helper class for wrapping the test.
-        class TestError(grpc.RpcError, Exception):
-            def __init__(self, code: grpc.StatusCode):
-                self._code = code
+class RetryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.call_wrap = defaultdict(int)
 
-            def code(self):
-                return self._code
+    def stub(self, retries, code):
+        self.call_wrap["attempts"] += 1
+        if self.call_wrap["attempts"] < retries:
+            self.call_wrap["raised"] += 1
+            raise TestError(code)
 
-        def stub(retries, w, code):
-            w["attempts"] += 1
-            if w["attempts"] < retries:
-                w["raised"] += 1
-                raise TestError(code)
-
+    def test_simple(self):
         # Check that max_retries 1 is only one retry so two attempts.
-        call_wrap = defaultdict(int)
-        for attempt in Retrying(
-            can_retry=lambda x: True,
-            max_retries=1,
-            backoff_multiplier=1,
-            initial_backoff=1,
-            max_backoff=10,
-            jitter=0,
-            min_jitter_threshold=0,
-        ):
+        for attempt in Retrying(TestPolicy(max_retries=1)):
             with attempt:
-                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+                self.stub(2, grpc.StatusCode.INTERNAL)
 
-        self.assertEqual(2, call_wrap["attempts"])
-        self.assertEqual(1, call_wrap["raised"])
+        self.assertEqual(2, self.call_wrap["attempts"])
+        self.assertEqual(1, self.call_wrap["raised"])
 
+    def test_below_limit(self):
         # Check that if we have less than 4 retries all is ok.
-        call_wrap = defaultdict(int)
-        for attempt in Retrying(
-            can_retry=lambda x: True,
-            max_retries=4,
-            backoff_multiplier=1,
-            initial_backoff=1,
-            max_backoff=10,
-            jitter=0,
-            min_jitter_threshold=0,
-        ):
+        for attempt in Retrying(TestPolicy(max_retries=4)):
             with attempt:
-                stub(2, call_wrap, grpc.StatusCode.INTERNAL)
+                self.stub(2, grpc.StatusCode.INTERNAL)
 
-        self.assertTrue(call_wrap["attempts"] < 4)
-        self.assertEqual(call_wrap["raised"], 1)
+        self.assertLess(self.call_wrap["attempts"], 4)
+        self.assertEqual(self.call_wrap["raised"], 1)
 
+    def test_exceed_retries(self):
         # Exceed the retries.
-        call_wrap = defaultdict(int)
-        with self.assertRaises(TestError):
-            for attempt in Retrying(
-                can_retry=lambda x: True,
-                max_retries=2,
-                max_backoff=50,
-                backoff_multiplier=1,
-                initial_backoff=50,
-                jitter=0,
-                min_jitter_threshold=0,
-            ):
+        with self.assertRaises(RetriesExceeded):
+            for attempt in Retrying(TestPolicy(max_retries=2)):
                 with attempt:
-                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+                    self.stub(5, grpc.StatusCode.INTERNAL)
 
-        self.assertTrue(call_wrap["attempts"] < 5)
-        self.assertEqual(call_wrap["raised"], 3)
+        self.assertLess(self.call_wrap["attempts"], 5)
+        self.assertEqual(self.call_wrap["raised"], 3)
 
+    def test_throw_not_retriable_error(self):
+        with self.assertRaises(ValueError):
+            for attempt in Retrying(TestPolicy(max_retries=2)):
+                with attempt:
+                    raise ValueError
+
+    def test_specific_exception(self):
         # Check that only specific exceptions are retried.
         # Check that if we have less than 4 retries all is ok.
-        call_wrap = defaultdict(int)
-        for attempt in Retrying(
-            can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
-            max_retries=4,
-            backoff_multiplier=1,
-            initial_backoff=1,
-            max_backoff=10,
-            jitter=0,
-            min_jitter_threshold=0,
-        ):
+        policy = TestPolicySpecificError(max_retries=4, specific_code=grpc.StatusCode.UNAVAILABLE)
+
+        for attempt in Retrying(policy):
             with attempt:
-                stub(2, call_wrap, grpc.StatusCode.UNAVAILABLE)
+                self.stub(2, grpc.StatusCode.UNAVAILABLE)
 
-        self.assertTrue(call_wrap["attempts"] < 4)
-        self.assertEqual(call_wrap["raised"], 1)
+        self.assertLess(self.call_wrap["attempts"], 4)
+        self.assertEqual(self.call_wrap["raised"], 1)
 
+    def test_specific_exception_exceed_retries(self):
         # Exceed the retries.
-        call_wrap = defaultdict(int)
-        with self.assertRaises(TestError):
-            for attempt in Retrying(
-                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
-                max_retries=2,
-                max_backoff=50,
-                backoff_multiplier=1,
-                initial_backoff=50,
-                jitter=0,
-                min_jitter_threshold=0,
-            ):
+        policy = TestPolicySpecificError(max_retries=2, specific_code=grpc.StatusCode.UNAVAILABLE)
+        with self.assertRaises(RetriesExceeded):
+            for attempt in Retrying(policy):
                 with attempt:
-                    stub(5, call_wrap, grpc.StatusCode.UNAVAILABLE)
+                    self.stub(5, grpc.StatusCode.UNAVAILABLE)
 
-        self.assertTrue(call_wrap["attempts"] < 4)
-        self.assertEqual(call_wrap["raised"], 3)
+        self.assertLess(self.call_wrap["attempts"], 4)
+        self.assertEqual(self.call_wrap["raised"], 3)
 
+    def test_rejected_by_policy(self):
         # Test that another error is always thrown.
-        call_wrap = defaultdict(int)
-        with self.assertRaises(TestError):
-            for attempt in Retrying(
-                can_retry=lambda x: x.code() == grpc.StatusCode.UNAVAILABLE,
-                max_retries=4,
-                backoff_multiplier=1,
-                initial_backoff=1,
-                max_backoff=10,
-                jitter=0,
-                min_jitter_threshold=0,
-            ):
-                with attempt:
-                    stub(5, call_wrap, grpc.StatusCode.INTERNAL)
+        policy = TestPolicySpecificError(max_retries=4, specific_code=grpc.StatusCode.UNAVAILABLE)
 
-        self.assertEqual(call_wrap["attempts"], 1)
-        self.assertEqual(call_wrap["raised"], 1)
+        with self.assertRaises(TestError):
+            for attempt in Retrying(policy):
+                with attempt:
+                    self.stub(5, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(self.call_wrap["attempts"], 1)
+        self.assertEqual(self.call_wrap["raised"], 1)
+
+    def test_multiple_policies(self):
+        policy1 = TestPolicySpecificError(max_retries=2, specific_code=grpc.StatusCode.UNAVAILABLE)
+        policy2 = TestPolicySpecificError(max_retries=4, specific_code=grpc.StatusCode.INTERNAL)
+
+        # Tolerate 2 UNAVAILABLE errors and 4 INTERNAL errors
+
+        error_suply = iter([grpc.StatusCode.UNAVAILABLE] * 2 + [grpc.StatusCode.INTERNAL] * 4)
+
+        for attempt in Retrying([policy1, policy2]):
+            with attempt:
+                error = next(error_suply, None)
+                if error:
+                    raise TestError(error)
+
+        self.assertEqual(next(error_suply, None), None)
+
+    def test_multiple_policies_exceed(self):
+        policy1 = TestPolicySpecificError(max_retries=2, specific_code=grpc.StatusCode.INTERNAL)
+        policy2 = TestPolicySpecificError(max_retries=4, specific_code=grpc.StatusCode.INTERNAL)
+
+        with self.assertRaises(RetriesExceeded):
+            for attempt in Retrying([policy1, policy2]):
+                with attempt:
+                    self.stub(10, grpc.StatusCode.INTERNAL)
+
+        self.assertEqual(self.call_wrap["attempts"], 7)
+        self.assertEqual(self.call_wrap["raised"], 7)
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -3606,65 +3738,71 @@ class ChannelBuilderTests(unittest.TestCase):
             "sc://host/;parm1;param2",
         ]
         for i in invalid:
-            self.assertRaises(PySparkValueError, ChannelBuilder, i)
+            self.assertRaises(PySparkValueError, DefaultChannelBuilder, i)
 
     def test_sensible_defaults(self):
-        chan = ChannelBuilder("sc://host")
+        chan = DefaultChannelBuilder("sc://host")
         self.assertFalse(chan.secure, "Default URL is not secure")
 
-        chan = ChannelBuilder("sc://host/;token=abcs")
+        chan = DefaultChannelBuilder("sc://host/;token=abcs")
         self.assertTrue(chan.secure, "specifying a token must set the channel to secure")
         self.assertRegex(
             chan.userAgent, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
         )
-        chan = ChannelBuilder("sc://host/;use_ssl=abcs")
+        chan = DefaultChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
     def test_user_agent(self):
-        chan = ChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
+        chan = DefaultChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
         self.assertIn("Agent123 /3.4", chan.userAgent)
 
     def test_user_agent_len(self):
         user_agent = "x" * 2049
-        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        chan = DefaultChannelBuilder(f"sc://host/;user_agent={user_agent}")
         with self.assertRaises(SparkConnectException) as err:
             chan.userAgent
-        self.assertRegex(err.exception.message, "'user_agent' parameter should not exceed")
+        self.assertRegex(err.exception._message, "'user_agent' parameter should not exceed")
 
         user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
         expected = "ä" * 341
-        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        chan = DefaultChannelBuilder(f"sc://host/;user_agent={user_agent}")
         self.assertIn(expected, chan.userAgent)
 
     def test_valid_channel_creation(self):
-        chan = ChannelBuilder("sc://host").toChannel()
+        chan = DefaultChannelBuilder("sc://host").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
         # Sets up a channel without tokens because ssl is not used.
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc").toChannel()
+        chan = DefaultChannelBuilder("sc://host/;use_ssl=true;token=abc").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
-        chan = ChannelBuilder("sc://host/;use_ssl=true").toChannel()
+        chan = DefaultChannelBuilder("sc://host/;use_ssl=true").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
 
     def test_channel_properties(self):
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021")
+        chan = DefaultChannelBuilder(
+            "sc://host/;use_ssl=true;token=abc;user_agent=foo;param1=120%2021"
+        )
         self.assertEqual("host:15002", chan.endpoint)
         self.assertIn("foo", chan.userAgent.split(" "))
         self.assertEqual(True, chan.secure)
         self.assertEqual("120 21", chan.get("param1"))
 
     def test_metadata(self):
-        chan = ChannelBuilder("sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd")
+        chan = DefaultChannelBuilder(
+            "sc://host/;use_ssl=true;token=abc;param1=120%2021;x-my-header=abcd"
+        )
         md = chan.metadata()
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
     def test_metadata(self):
         id = str(uuid.uuid4())
-        chan = ChannelBuilder(f"sc://host/;session_id={id}")
+        chan = DefaultChannelBuilder(f"sc://host/;session_id={id}")
         self.assertEqual(id, chan.session_id)
 
-        chan = ChannelBuilder(f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true")
+        chan = DefaultChannelBuilder(
+            f"sc://host/;session_id={id};user_agent=acbd;token=abcd;use_ssl=true"
+        )
         md = chan.metadata()
         for kv in md:
             self.assertNotIn(
@@ -3680,13 +3818,11 @@ class ChannelBuilderTests(unittest.TestCase):
             )
 
         with self.assertRaises(ValueError) as ve:
-            chan = ChannelBuilder("sc://host/;session_id=abcd")
+            chan = DefaultChannelBuilder("sc://host/;session_id=abcd")
             SparkConnectClient(chan)
-        self.assertIn(
-            "Parameter value 'session_id' must be a valid UUID format.", str(ve.exception)
-        )
+        self.assertIn("Parameter value session_id must be a valid UUID format", str(ve.exception))
 
-        chan = ChannelBuilder("sc://host/")
+        chan = DefaultChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)
 
 

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * An abstract class for row used internally in Spark SQL, which only contains the columns as
@@ -92,7 +93,7 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
       values(i) = get(i, fieldTypes(i))
       i += 1
     }
-    values
+    values.toImmutableArraySeq
   }
 
   def toSeq(schema: StructType): Seq[Any] = toSeq(schema.map(_.dataType))
@@ -139,12 +140,12 @@ object InternalRow {
         case PhysicalLongType => (input, ordinal) => input.getLong(ordinal)
         case PhysicalFloatType => (input, ordinal) => input.getFloat(ordinal)
         case PhysicalDoubleType => (input, ordinal) => input.getDouble(ordinal)
-        case PhysicalStringType => (input, ordinal) => input.getUTF8String(ordinal)
+        case _: PhysicalStringType => (input, ordinal) => input.getUTF8String(ordinal)
         case PhysicalBinaryType => (input, ordinal) => input.getBinary(ordinal)
         case PhysicalCalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
         case t: PhysicalDecimalType => (input, ordinal) =>
           input.getDecimal(ordinal, t.precision, t.scale)
-        case t: PhysicalStructType => (input, ordinal) => input.getStruct(ordinal, t.fields.size)
+        case t: PhysicalStructType => (input, ordinal) => input.getStruct(ordinal, t.fields.length)
         case _: PhysicalArrayType => (input, ordinal) => input.getArray(ordinal)
         case _: PhysicalMapType => (input, ordinal) => input.getMap(ordinal)
         case _ => (input, ordinal) => input.get(ordinal, dt)

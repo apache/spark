@@ -30,7 +30,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroCompressionCodec._
@@ -61,7 +61,10 @@ private[sql] object AvroUtils extends Logging {
           new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
       }
 
-    SchemaConverters.toSqlType(avroSchema, parsedOptions.useStableIdForUnionType).dataType match {
+    SchemaConverters.toSqlType(
+      avroSchema,
+      parsedOptions.useStableIdForUnionType,
+      parsedOptions.stableIdPrefixForUnionType).dataType match {
       case t: StructType => Some(t)
       case _ => throw new RuntimeException(
         s"""Avro schema cannot be converted to a Spark SQL StructType:
@@ -72,6 +75,8 @@ private[sql] object AvroUtils extends Logging {
   }
 
   def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: VariantType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }
@@ -100,22 +105,34 @@ private[sql] object AvroUtils extends Logging {
 
     AvroJob.setOutputKeySchema(job, outputAvroSchema)
 
-    if (parsedOptions.compression == UNCOMPRESSED.lowerCaseName()) {
-      job.getConfiguration.setBoolean("mapred.output.compress", false)
-    } else {
-      job.getConfiguration.setBoolean("mapred.output.compress", true)
-      logInfo(s"Compressing Avro output using the ${parsedOptions.compression} codec")
-      val codec = AvroCompressionCodec.fromString(parsedOptions.compression) match {
-        case DEFLATE =>
-          val deflateLevel = sqlConf.avroDeflateLevel
-          logInfo(s"Avro compression level $deflateLevel will be used for " +
-            s"${DEFLATE.getCodecName()} codec.")
-          job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
-          DEFLATE.getCodecName()
-        case codec @ (SNAPPY | BZIP2 | XZ | ZSTANDARD) => codec.getCodecName()
-        case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
-      }
-      job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
+    parsedOptions.compression.toLowerCase(Locale.ROOT) match {
+      case codecName if AvroCompressionCodec.values().exists(c => c.lowerCaseName() == codecName) =>
+        val jobConf = job.getConfiguration
+        AvroCompressionCodec.fromString(codecName) match {
+          case UNCOMPRESSED =>
+            jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", false)
+          case compressed =>
+            jobConf.setBoolean("mapreduce.output.fileoutputformat.compress", true)
+            jobConf.set(AvroJob.CONF_OUTPUT_CODEC, compressed.getCodecName)
+            if (compressed.getSupportCompressionLevel) {
+              val level = sqlConf.getConfString(s"spark.sql.avro.$codecName.level",
+                compressed.getDefaultCompressionLevel.toString)
+              logInfo(s"Compressing Avro output using the $codecName codec at level $level")
+              val s = if (compressed == ZSTANDARD) {
+                val bufferPoolEnabled = sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED)
+                jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY, bufferPoolEnabled)
+                "zstd"
+              } else {
+                codecName
+              }
+              jobConf.setInt(s"avro.mapred.$s.level", level.toInt)
+            } else {
+              logInfo(s"Compressing Avro output using the $codecName codec")
+            }
+        }
+      case unknown =>
+        throw new SparkIllegalArgumentException(
+          "CODEC_SHORT_NAME_NOT_FOUND", Map("codecName" -> unknown))
     }
 
     new AvroOutputWriterFactory(dataSchema,
@@ -180,16 +197,19 @@ private[sql] object AvroUtils extends Logging {
 
     def hasNextRow: Boolean = {
       while (!completed && currentRow.isEmpty) {
-        val r = fileReader.hasNext && !fileReader.pastSync(stopPosition)
-        if (!r) {
+        if (fileReader.pastSync(stopPosition)) {
           fileReader.close()
           completed = true
           currentRow = None
-        } else {
+        } else if (fileReader.hasNext()) {
           val record = fileReader.next()
           // the row must be deserialized in hasNextRow, because AvroDeserializer#deserialize
           // potentially filters rows
           currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
+        } else {
+          // In this case, `fileReader.hasNext()` returns false but we are not past sync point yet.
+          // This means empty blocks, we need to continue reading the file in case there are non
+          // empty blocks or we are past sync point.
         }
       }
       currentRow.isDefined
@@ -242,8 +262,7 @@ private[sql] object AvroUtils extends Logging {
     private[this] val avroFieldArray = avroSchema.getFields.asScala.toArray
     private[this] val fieldMap = avroSchema.getFields.asScala
       .groupBy(_.name.toLowerCase(Locale.ROOT))
-      .view
-      .mapValues(_.toSeq) // toSeq needed for scala 2.13
+      .transform((_, v) => v.toSeq) // toSeq needed for scala 2.13
 
     /** The fields which have matching equivalents in both Avro and Catalyst schemas. */
     val matchedFields: Seq[AvroMatchedField] = catalystSchema.zipWithIndex.flatMap {

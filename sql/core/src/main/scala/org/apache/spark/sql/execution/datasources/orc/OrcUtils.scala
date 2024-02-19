@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, Schem
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 object OrcUtils extends Logging {
 
@@ -502,7 +503,7 @@ object OrcUtils extends Logging {
         case (x, _) =>
           throw new IllegalArgumentException(
             s"createAggInternalRowFromFooter should not take $x as the aggregate expression")
-      }
+      }.toImmutableArraySeq
 
     val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
       (0 until schemaWithoutGroupBy.length).toArray)

@@ -27,14 +27,16 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.9.5 and Java 17/21.
+Building Spark using Maven requires Maven 3.9.6 and Java 17/21.
 Spark requires Scala 2.13; support for Scala 2.12 was removed in Spark 4.0.0.
 
 ### Setting up Maven's Memory Usage
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`:
 
-    export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g"
+```sh
+export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g"
+```
 
 (The `ReservedCodeCacheSize` setting is optional but recommended.)
 If you don't add these parameters to `MAVEN_OPTS`, you may see errors and warnings like the following:
@@ -171,12 +173,16 @@ assembly JAR (for developers who build with SBT).  For more information about ho
 
 When building on an encrypted filesystem (if your home directory is encrypted, for example), then the Spark build might fail with a "Filename too long" error. As a workaround, add the following in the configuration args of the `scala-maven-plugin` in the project `pom.xml`:
 
-    <arg>-Xmax-classfile-name</arg>
-    <arg>128</arg>
+```xml
+<arg>-Xmax-classfile-name</arg>
+<arg>128</arg>
+```
 
 and in `project/SparkBuild.scala` add:
 
-    scalacOptions in Compile ++= Seq("-Xmax-classfile-name", "128"),
+```scala
+scalacOptions in Compile ++= Seq("-Xmax-classfile-name", "128"),
+```
 
 to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/pull/2883/files) if you are unsure of where to add these lines.
 
@@ -214,7 +220,7 @@ If you are building Spark for use in a Python environment and you wish to pip in
 
 **Note:** Due to packaging requirements you can not directly pip install from the Python directory, rather you must first build the sdist package as described above.
 
-Alternatively, you can also run make-distribution with the --pip option.
+Alternatively, you can also run `make-distribution.sh` with the `--pip` option.
 
 ## PySpark Tests with Maven or SBT
 
@@ -276,15 +282,19 @@ Enable the profile (e.g. 2.13):
 
 ## Running Jenkins tests with GitHub Enterprise
 
+While the Spark project does not maintain its own Jenkins infrastructure, [community members like Scaleway][scaleway] do.
+
+[scaleway]: https://spark.apache.org/developer-tools.html#scaleway
+
 To run tests with Jenkins:
 
     ./dev/run-tests-jenkins
 
-If use an individual repository or a repository on GitHub Enterprise, export below environment variables before running above command.
+If you use an individual repository or a repository on GitHub Enterprise, export the environment variables below before running the above command.
 
 ### Related environment variables
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SPARK_PROJECT_URL</code></td>
@@ -302,7 +312,7 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
 </tr>
 </table>
 
-### Building and testing on IPv6-only environment
+# Building and testing on an IPv6-only environment
 
 Use Apache Spark GitBox URL because GitHub doesn't support IPv6 yet.
 
@@ -310,13 +320,15 @@ Use Apache Spark GitBox URL because GitHub doesn't support IPv6 yet.
 
 To build and run tests on IPv6-only environment, the following configurations are required.
 
-    export SPARK_LOCAL_HOSTNAME="your-IPv6-address" # e.g. '[2600:1700:232e:3de0:...]'
-    export DEFAULT_ARTIFACT_REPOSITORY=https://ipv6.repo1.maven.org/maven2/
-    export MAVEN_OPTS="-Djava.net.preferIPv6Addresses=true"
-    export SBT_OPTS="-Djava.net.preferIPv6Addresses=true"
-    export SERIAL_SBT_TESTS=1
+```sh
+export SPARK_LOCAL_HOSTNAME="your-IPv6-address" # e.g. '[2600:1700:232e:3de0:...]'
+export DEFAULT_ARTIFACT_REPOSITORY=https://ipv6.repo1.maven.org/maven2/
+export MAVEN_OPTS="-Djava.net.preferIPv6Addresses=true"
+export SBT_OPTS="-Djava.net.preferIPv6Addresses=true"
+export SERIAL_SBT_TESTS=1
+```
 
-### Building with user-defined `protoc`
+# Building with a user-defined `protoc`
 
 When the user cannot use the official `protoc` binary files to build the `core` module in the compilation environment, for example, compiling `core` module on CentOS 6 or CentOS 7 which the default `glibc` version is less than 2.14, we can try to compile and test by specifying the user-defined `protoc` binary files as follows:
 

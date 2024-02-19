@@ -49,11 +49,13 @@ private[hive] class SparkExecuteStatementOperation(
   with SparkOperation
   with Logging {
 
+  val session = sqlContext.sparkSession
+
   // If a timeout value `queryTimeout` is specified by users and it is smaller than
   // a global timeout value, we use the user-specified value.
   // This code follows the Hive timeout behaviour (See #29933 for details).
   private val timeout = {
-    val globalTimeout = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
+    val globalTimeout = session.sessionState.conf.getConf(SQLConf.THRIFTSERVER_QUERY_TIMEOUT)
     if (globalTimeout > 0 && (queryTimeout <= 0 || globalTimeout < queryTimeout)) {
       globalTimeout
     } else {
@@ -61,13 +63,13 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  private val forceCancel = sqlContext.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
+  private val forceCancel = session.sessionState.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
 
   private val redactedStatement = {
-    val substitutorStatement = SQLConf.withExistingConf(sqlContext.conf) {
+    val substitutorStatement = SQLConf.withExistingConf(session.sessionState.conf) {
       new VariableSubstitution().substitute(statement)
     }
-    SparkUtils.redact(sqlContext.conf.stringRedactionPattern, substitutorStatement)
+    SparkUtils.redact(session.sessionState.conf.stringRedactionPattern, substitutorStatement)
   }
 
   private var result: DataFrame = _
@@ -114,7 +116,7 @@ private[hive] class SparkExecuteStatementOperation(
     val offset = iter.getPosition
     val rows = iter.take(maxRows).toList
     log.debug(s"Returning result set with ${rows.length} rows from offsets " +
-      s"[${iter.getFetchStart}, ${offset}) with $statementId")
+      s"[${iter.getFetchStart}, ${iter.getPosition}) with $statementId")
     RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion, getTimeFormatters)
   }
 
@@ -259,7 +261,7 @@ private[hive] class SparkExecuteStatementOperation(
           e match {
             case _: HiveSQLException => throw e
             case _ => throw HiveThriftServerErrors.runningQueryError(
-              e, sqlContext.conf.errorMessageFormat)
+              e, sqlContext.sparkSession.sessionState.conf.errorMessageFormat)
           }
         }
     } finally {

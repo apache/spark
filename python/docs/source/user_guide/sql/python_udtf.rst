@@ -65,8 +65,8 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
         def analyze(self, *args: Any) -> AnalyzeResult:
             """
-            Computes the output schema of a particular call to this function in response to the
-            arguments provided.
+            Static method to compute the output schema of a particular call to this function in
+            response to the arguments provided.
 
             This method is optional and only needed if the registration of the UDTF did not provide
             a static output schema to be use for all calls to the function. In this context,
@@ -92,7 +92,7 @@ To implement a Python UDTF, you first need to define a class implementing the me
             that all rows of the input table are consumed by the `eval` method from exactly one
             instance of the UDTF class. On the other hand, if the `partitionBy` list is non-empty,
             the query planner will arrange a repartitioning such that all rows with each unique
-            combination of values of the partitioning columns are consumed by a separate unique
+            combination of values of the partitioning expressions are consumed by a separate unique
             instance of the UDTF class. If `orderBy` is non-empty, this specifies the requested
             ordering of rows within each partition.
 
@@ -101,12 +101,20 @@ To implement a Python UDTF, you first need to define a class implementing the me
                 partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
                 orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
 
+            Notes
+            -----
+            - It is possible for the `analyze` method to accept the exact arguments expected,
+              mapping 1:1 with the arguments provided to the UDTF call.
+            - The `analyze` method can instead choose to accept positional arguments if desired
+              (using `*args`) or keyword arguments (using `**kwargs`).
+
             Examples
             --------
-            analyze implementation that returns one output column for each word in the input string
-            argument.
+            This is an `analyze` implementation that returns one output column for each word in the
+            input string argument.
 
-            >>> def analyze(self, text: str) -> AnalyzeResult:
+            >>> @staticmethod
+            ... def analyze(text: str) -> AnalyzeResult:
             ...     schema = StructType()
             ...     for index, word in enumerate(text.split(" ")):
             ...         schema = schema.add(f"word_{index}")
@@ -114,7 +122,8 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
             Same as above, but using *args to accept the arguments.
 
-            >>> def analyze(self, *args) -> AnalyzeResult:
+            >>> @staticmethod
+            ... def analyze(*args) -> AnalyzeResult:
             ...     assert len(args) == 1, "This function accepts one argument only"
             ...     assert args[0].dataType == StringType(), "Only string arguments are supported"
             ...     text = args[0]
@@ -125,7 +134,8 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
             Same as above, but using **kwargs to accept the arguments.
 
-            >>> def analyze(self, **kwargs) -> AnalyzeResult:
+            >>> @staticmethod
+            ... def analyze(**kwargs) -> AnalyzeResult:
             ...     assert len(kwargs) == 1, "This function accepts one argument only"
             ...     assert "text" in kwargs, "An argument named 'text' is required"
             ...     assert kwargs["text"].dataType == StringType(), "Only strings are supported"
@@ -135,10 +145,11 @@ To implement a Python UDTF, you first need to define a class implementing the me
             ...         schema = schema.add(f"word_{index}")
             ...     return AnalyzeResult(schema=schema)
 
-            analyze implementation that returns a constant output schema, but add custom information
-            in the result metadata to be consumed by future __init__ method calls:
+            An `analyze` implementation that returns a constant output schema, but add custom
+            information in the result metadata to be consumed by future __init__ method calls:
 
-            >>> def analyze(self, text: str) -> AnalyzeResult:
+            >>> @staticmethod
+            ... def analyze(text: str) -> AnalyzeResult:
             ...     @dataclass
             ...     class AnalyzeResultWithOtherMetadata(AnalyzeResult):
             ...         num_words: int
@@ -190,6 +201,13 @@ To implement a Python UDTF, you first need to define a class implementing the me
             - It is also possible for UDTFs to accept the exact arguments expected, along with
               their types.
             - UDTFs can instead accept keyword arguments during the function call if needed.
+            - The `eval` method can raise a `SkipRestOfInputTableException` to indicate that the
+              UDTF wants to skip consuming all remaining rows from the current partition of the
+              input table. This will cause the UDTF to proceed directly to the `terminate` method.
+            - The `eval` method can raise any other exception to indicate that the UDTF should be
+              aborted entirely. This will cause the UDTF to skip the `terminate` method and proceed
+              directly to the `cleanup` method, and then the exception will be propagated to the
+              query processor causing the invoking query to fail.
 
             Examples
             --------

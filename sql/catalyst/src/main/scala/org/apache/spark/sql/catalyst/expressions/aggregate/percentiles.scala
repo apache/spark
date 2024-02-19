@@ -20,17 +20,18 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult, UnresolvedWithinGroup}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
 abstract class PercentileBase
@@ -166,7 +167,7 @@ abstract class PercentileBase
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
     }.tail
 
-    percentages.map(getPercentile(accumulatedCounts, _))
+    percentages.map(getPercentile(accumulatedCounts, _)).toImmutableArraySeq
   }
 
   private def generateOutput(percentiles: Seq[Double]): Any = {
@@ -358,6 +359,7 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   extends AggregateFunction
   with RuntimeReplaceableAggregate
   with ImplicitCastInputTypes
+  with SupportsOrderingWithinGroup
   with BinaryLike[Expression] {
   private lazy val percentile = new Percentile(left, right, reverse)
   override def replacement: Expression = percentile
@@ -371,6 +373,17 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
 
   override def checkInputDataTypes(): TypeCheckResult = {
     percentile.checkInputDataTypes()
+  }
+
+  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
+    if (orderingWithinGroup.length != 1) {
+      throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+        nodeName, 1, orderingWithinGroup.length)
+    }
+    orderingWithinGroup.head match {
+      case SortOrder(child, Ascending, _, _) => this.copy(left = child)
+      case SortOrder(child, Descending, _, _) => this.copy(left = child, reverse = true)
+    }
   }
 
   override protected def withNewChildrenInternal(
@@ -393,7 +406,7 @@ case class PercentileDisc(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     legacyCalculation: Boolean = SQLConf.get.getConf(SQLConf.LEGACY_PERCENTILE_DISC_CALCULATION))
-  extends PercentileBase with BinaryLike[Expression] {
+  extends PercentileBase with SupportsOrderingWithinGroup with BinaryLike[Expression] {
 
   val frequencyExpression: Expression = Literal(1L)
 
@@ -414,6 +427,17 @@ case class PercentileDisc(
     val distinct = if (isDistinct) "DISTINCT " else ""
     val direction = if (reverse) " DESC" else ""
     s"$prettyName($distinct${right.sql}) WITHIN GROUP (ORDER BY ${left.sql}$direction)"
+  }
+
+  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
+    if (orderingWithinGroup.length != 1) {
+      throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+        nodeName, 1, orderingWithinGroup.length)
+    }
+    orderingWithinGroup.head match {
+      case SortOrder(expr, Ascending, _, _) => this.copy(child = expr)
+      case SortOrder(expr, Descending, _, _) => this.copy(child = expr, reverse = true)
+    }
   }
 
   override protected def withNewChildrenInternal(
@@ -440,6 +464,58 @@ case class PercentileDisc(
       val higherKey = accumulatedCounts(higherIndex)._1
 
       toDoubleValue(higherKey)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
+    "a continuous distribution of numeric or ANSI interval column `col` at the given " +
+    "`percentage` (specified in ORDER BY clause).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);
+       2.5
+      > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       0-2
+  """,
+  group = "agg_funcs",
+  since = "4.0.0")
+// scalastyle:on line.size.limit
+object PercentileContBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      PercentileCont(UnresolvedWithinGroup, expressions(0))
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
+    "a discrete distribution of numeric or ANSI interval column `col` at the given " +
+    "`percentage` (specified in ORDER BY clause).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);
+       0.0
+      > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
+       0-0
+  """,
+  group = "agg_funcs",
+  since = "4.0.0")
+// scalastyle:on line.size.limit
+object PercentileDiscBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      PercentileDisc(UnresolvedWithinGroup, expressions(0))
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1), numArgs)
     }
   }
 }

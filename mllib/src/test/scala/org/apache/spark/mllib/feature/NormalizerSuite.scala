@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -35,7 +36,7 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     Vectors.sparse(3, Seq())
   )
 
-  lazy val dataRDD = sc.parallelize(data, 3)
+  lazy val dataRDD = sc.parallelize(data.toImmutableArraySeq, 3)
 
   test("Normalization using L1 distance") {
     val l1Normalizer = new Normalizer(1)

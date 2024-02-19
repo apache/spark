@@ -42,7 +42,8 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
       case RateStreamPartitionOffset(i, currVal, nextRead) =>
         (i, ValueRunTimeMsPair(currVal, nextRead))
     }
-    RateStreamOffset(Map(tuples: _*))
+    import org.apache.spark.util.ArrayImplicits._
+    RateStreamOffset(Map(tuples.toImmutableArraySeq: _*))
   }
 
   override def deserializeOffset(json: String): Offset = {

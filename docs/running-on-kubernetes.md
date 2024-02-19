@@ -592,7 +592,7 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
-<table class="table table-striped">
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kubernetes.context</code></td>
@@ -1658,7 +1658,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Metadata
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>name</td>
@@ -1694,7 +1694,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Spec
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>imagePullSecrets</td>
@@ -1747,7 +1747,7 @@ See the below table for the full list of pod specifications that will be overwri
 
 The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>env</td>
@@ -1927,10 +1927,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.3.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.4.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.3.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.4.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

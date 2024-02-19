@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
 
 class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
@@ -67,7 +68,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     SimpleTextRelation.lastHadoopConf = Option(hadoopConf)
-    SimpleTextRelation.requiredColumns = requiredSchema.fieldNames
+    SimpleTextRelation.requiredColumns = requiredSchema.fieldNames.toImmutableArraySeq
     SimpleTextRelation.pushedFilters = filters.toSet
 
     val fieldTypes = dataSchema.map(_.dataType)

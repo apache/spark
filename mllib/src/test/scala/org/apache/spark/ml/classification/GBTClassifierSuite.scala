@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -58,13 +59,17 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
+    data = sc
+      .parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
+        .toImmutableArraySeq, 2)
       .map(_.asML)
     trainData =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120), 2)
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120)
+          .toImmutableArraySeq, 2)
         .map(_.asML)
     validationData =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80)
+          .toImmutableArraySeq, 2)
         .map(_.asML)
     binaryDataset = generateSVMInput(0.01, Array[Double](-1.5, 1.0), 1000, seed).toDF()
   }
@@ -270,7 +275,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val data = TreeTests.getTwoTreesLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
-    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    val df = sc.parallelize(data.toImmutableArraySeq, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>

@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.window
 
 import java.util
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -111,7 +113,7 @@ abstract class OffsetWindowFunctionFrameBase(
   protected val projection = {
     // Collect the expressions and bind them.
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
-      expressions.toSeq.map(_.input), inputAttrs)
+      expressions.toImmutableArraySeq.map(_.input), inputAttrs)
 
     // Create the projection.
     newMutableProjection(boundExpressions, Nil).target(target)
@@ -120,7 +122,7 @@ abstract class OffsetWindowFunctionFrameBase(
   /** Create the projection used when the offset row DOES NOT exists. */
   protected val fillDefaultValue = {
     // Collect the expressions and bind them.
-    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
+    val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toImmutableArraySeq.map { e =>
       if (e.default == null || e.default.foldable && e.default.eval() == null) {
         // The default value is null.
         Literal.create(null, e.dataType)
@@ -179,10 +181,10 @@ abstract class OffsetWindowFunctionFrameBase(
   }
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
+    resetStates(rows)
     if (absOffset > rows.length) {
       fillDefaultValue(EmptyRow)
     } else {
-      resetStates(rows)
       if (ignoreNulls) {
         prepareForIgnoreNulls()
       } else {
@@ -193,19 +195,21 @@ abstract class OffsetWindowFunctionFrameBase(
 
   protected def prepareForIgnoreNulls(): Unit = findNextRowWithNonNullInput()
 
-  protected def prepareForRespectNulls(): Unit
-
-  override def write(index: Int, current: InternalRow): Unit = {
-    if (input != null) {
-      doWrite(index, current)
+  protected def prepareForRespectNulls(): Unit = {
+    // drain the first few rows if offset is larger than one
+    while (inputIndex < offset) {
+      nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+      inputIndex += 1
     }
+    // `inputIndex` starts as 0, but the `offset` can be negative and we may not enter the
+    // while loop at all. We need to make sure `inputIndex` ends up as `offset` to meet the
+    // assumption of the write path.
+    inputIndex = offset
   }
 
-  protected def doWrite(index: Int, current: InternalRow): Unit
+  override def currentLowerBound(): Int = throw SparkUnsupportedOperationException()
 
-  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
-
-  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
+  override def currentUpperBound(): Int = throw SparkUnsupportedOperationException()
 }
 
 /**
@@ -225,15 +229,6 @@ class FrameLessOffsetWindowFunctionFrame(
     ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
-
-  override def prepareForRespectNulls(): Unit = {
-    // drain the first few rows if offset is larger than zero
-    while (inputIndex < offset) {
-      if (inputIterator.hasNext) inputIterator.next()
-      inputIndex += 1
-    }
-    inputIndex = offset
-  }
 
   private val doWrite = if (ignoreNulls && offset > 0) {
     // For illustration, here is one example: the input data contains nine rows,
@@ -312,8 +307,12 @@ class FrameLessOffsetWindowFunctionFrame(
       inputIndex += 1
   }
 
-  protected def doWrite(index: Int, current: InternalRow): Unit = {
-    doWrite(current)
+  override def write(index: Int, current: InternalRow): Unit = {
+    if (absOffset > input.length) {
+      // Already use default values in prepare.
+    } else {
+      doWrite(current)
+    }
   }
 }
 
@@ -339,7 +338,7 @@ class UnboundedOffsetWindowFunctionFrame(
   assert(offset > 0)
 
   override def prepareForIgnoreNulls(): Unit = {
-    findNextRowWithNonNullInput()
+    super.prepareForIgnoreNulls()
     if (nextSelectedRow == EmptyRow) {
       // Use default values since the offset row whose input value is not null does not exist.
       fillDefaultValue(EmptyRow)
@@ -349,16 +348,11 @@ class UnboundedOffsetWindowFunctionFrame(
   }
 
   override def prepareForRespectNulls(): Unit = {
-    var selectedRow: UnsafeRow = null
-    // drain the first few rows if offset is larger than one
-    while (inputIndex < offset) {
-      selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputIndex += 1
-    }
-    projection(selectedRow)
+    super.prepareForRespectNulls()
+    projection(nextSelectedRow)
   }
 
-  protected def doWrite(index: Int, current: InternalRow): Unit = {
+  override def write(index: Int, current: InternalRow): Unit = {
     // The results are the same for each row in the partition, and have been evaluated in prepare.
     // Don't need to recalculate here.
   }
@@ -386,16 +380,10 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset, ignoreNulls) {
   assert(offset > 0)
 
-  override def prepareForRespectNulls(): Unit = {
-    // drain the first few rows if offset is larger than one
-    while (inputIndex < offset) {
-      nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputIndex += 1
-    }
-  }
-
-  protected def doWrite(index: Int, current: InternalRow): Unit = {
-    if (index >= inputIndex - 1 && nextSelectedRow != null) {
+  override def write(index: Int, current: InternalRow): Unit = {
+    if (absOffset > input.length) {
+      // Already use default values in prepare.
+    } else if (index >= inputIndex - 1 && nextSelectedRow != null) {
       projection(nextSelectedRow)
     } else {
       fillDefaultValue(EmptyRow)

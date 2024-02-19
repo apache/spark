@@ -133,7 +133,14 @@ org.apache.spark.sql.AnalysisException
     "originName" : "`c`",
     "originType" : "\"CHAR(5)\"",
     "table" : "`spark_catalog`.`default`.`char_tbl1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 50,
+    "fragment" : "alter table char_tbl1 change column c type char(6)"
+  } ]
 }
 
 
@@ -360,7 +367,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 +- Project [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, charTypeWriteSideCheck, cast(c#x as string), 7, true, false, true) AS c7#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, charTypeWriteSideCheck, cast(c#x as string), 8, true, false, true) AS c8#x, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, varcharTypeWriteSideCheck, cast(v#x as string), 6, true, false, true) AS v#x, cast(c#x as string) AS s#x]
    +- Project [c#x, c#x, v#x, c#x]
       +- SubqueryAlias str_view
-         +- View (`str_view`, [c#x,v#x])
+         +- View (`str_view`, [c#x, v#x])
             +- Project [cast(c#x as string) AS c#x, cast(v#x as string) AS v#x]
                +- Project [c#x, v#x]
                   +- SubqueryAlias t

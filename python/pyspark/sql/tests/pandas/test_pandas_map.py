@@ -31,7 +31,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
+from pyspark.testing.utils import QuietTest, eventually
 
 if have_pandas:
     import pandas as pd
@@ -110,7 +110,7 @@ class MapInPandasTestsMixin:
             df = (
                 self.spark.range(10, numPartitions=3)
                 .select(col("id").cast("string").alias("str"))
-                .withColumn("bin", encode(col("str"), "utf8"))
+                .withColumn("bin", encode(col("str"), "utf-8"))
             )
             actual = df.mapInPandas(func, "str string, bin binary").collect()
             expected = df.collect()
@@ -381,6 +381,7 @@ class MapInPandasTestsMixin:
         self.assertEqual(sorted(actual), sorted(expected))
 
     # SPARK-33277
+    @eventually(timeout=180, catch_assertions=True)
     def test_map_in_pandas_with_column_vector(self):
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
@@ -394,7 +395,7 @@ class MapInPandasTestsMixin:
 
             for offheap in ["true", "false"]:
                 with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
-                    self.assertEquals(
+                    self.assertEqual(
                         self.spark.read.parquet(path).mapInPandas(func, "id long").head(), Row(0)
                     )
         finally:

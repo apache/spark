@@ -34,6 +34,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
@@ -246,7 +247,7 @@ object Pipeline extends MLReadable[Pipeline] {
         sc: SparkContext,
         path: String): Unit = instrumented { instr =>
       val stageUids = stages.map(_.uid)
-      val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toSeq))))
+      val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toImmutableArraySeq))))
       DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = Some(jsonParams))
 
       // Save stages

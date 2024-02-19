@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.execution.window.{SlidingWindowFunctionFrame, UnboundedFollowingWindowFunctionFrame, UnboundedPrecedingWindowFunctionFrame, UnboundedWindowFunctionFrame, WindowEvaluatorFactoryBase, WindowFunctionFrame}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class WindowInPandasEvaluatorFactory(
@@ -42,7 +43,8 @@ class WindowInPandasEvaluatorFactory(
     val orderSpec: Seq[SortOrder],
     val childOutput: Seq[Attribute],
     val spillSize: SQLMetric,
-    pythonMetrics: Map[String, SQLMetric])
+    pythonMetrics: Map[String, SQLMetric],
+    profiler: Option[String])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
 
   /**
@@ -68,15 +70,15 @@ class WindowInPandasEvaluatorFactory(
   private val windowBoundTypeConf = "pandas_window_bound_types"
 
   private def collectFunctions(
-      udf: PythonFuncExpression): (ChainedPythonFunctions, Seq[Expression]) = {
+      udf: PythonFuncExpression): ((ChainedPythonFunctions, Long), Seq[Expression]) = {
     udf.children match {
       case Seq(u: PythonFuncExpression) =>
-        val (chained, children) = collectFunctions(u)
-        (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
+        val ((chained, _), children) = collectFunctions(u)
+        ((ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), udf.resultId.id), children)
       case children =>
         // There should not be any other UDFs, or the children can't be evaluated directly.
         assert(children.forall(!_.exists(_.isInstanceOf[PythonFuncExpression])))
-        (ChainedPythonFunctions(Seq(udf.func)), udf.children)
+        ((ChainedPythonFunctions(Seq(udf.func)), udf.resultId.id), udf.children)
     }
   }
 
@@ -140,7 +142,7 @@ class WindowInPandasEvaluatorFactory(
     private val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
 
     private val (numBoundIndices, lowerBoundIndex, upperBoundIndex, frameWindowBoundTypes) =
-      computeWindowBoundHelpers(factories)
+      computeWindowBoundHelpers(factories.toImmutableArraySeq)
     private val isBounded = { frameIndex: Int => lowerBoundIndex(frameIndex) >= 0 }
     private val numFrames = factories.length
 
@@ -287,7 +289,8 @@ class WindowInPandasEvaluatorFactory(
           new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
         var bufferIterator: Iterator[UnsafeRow] = _
 
-        val indexRow = new SpecificInternalRow(Array.fill(numBoundIndices)(IntegerType))
+        val indexRow =
+          new SpecificInternalRow(Array.fill(numBoundIndices)(IntegerType).toImmutableArraySeq)
 
         val frames = factories.map(_ (indexRow))
 
@@ -366,7 +369,8 @@ class WindowInPandasEvaluatorFactory(
         largeVarTypes,
         pythonRunnerConf,
         pythonMetrics,
-        jobArtifactUUID).compute(pythonInput, context.partitionId(), context)
+        jobArtifactUUID,
+        profiler).compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
 

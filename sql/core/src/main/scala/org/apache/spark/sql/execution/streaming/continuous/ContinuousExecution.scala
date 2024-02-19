@@ -36,9 +36,10 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Partitio
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Clock
 
 class ContinuousExecution(
@@ -60,7 +61,7 @@ class ContinuousExecution(
   private val failure: AtomicReference[Throwable] = new AtomicReference[Throwable](null)
 
   override val logicalPlan: WriteToContinuousDataSource = {
-    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
+    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
@@ -78,12 +79,14 @@ class ContinuousExecution(
           // TODO: operator pushdown.
           val scan = table.newScanBuilder(options).build()
           val stream = scan.toContinuousStream(metadataPath)
-          StreamingDataSourceV2Relation(output, scan, stream, catalog, identifier)
+          val relation = StreamingDataSourceV2Relation(
+              table, output, catalog, identifier, options, metadataPath)
+          StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
         })
     }
 
     sources = _logicalPlan.collect {
-      case r: StreamingDataSourceV2Relation => r.stream.asInstanceOf[ContinuousStream]
+      case r: StreamingDataSourceV2ScanRelation => r.stream.asInstanceOf[ContinuousStream]
     }
     uniqueSources = sources.distinct.map(s => s -> ReadLimit.allAvailable()).toMap
 
@@ -95,7 +98,7 @@ class ContinuousExecution(
     }
 
     val streamingWrite = write.toStreaming
-    val customMetrics = write.supportedCustomMetrics.toSeq
+    val customMetrics = write.supportedCustomMetrics.toImmutableArraySeq
     WriteToContinuousDataSource(streamingWrite, _logicalPlan, customMetrics)
   }
 
@@ -196,7 +199,7 @@ class ContinuousExecution(
     }
 
     val withNewSources: LogicalPlan = logicalPlan transform {
-      case relation: StreamingDataSourceV2Relation =>
+      case relation: StreamingDataSourceV2ScanRelation =>
         val loggedOffset = offsets.offsets(0)
         val realOffset = loggedOffset.map(off => relation.stream.deserializeOffset(off.json))
         val startOffset = realOffset.getOrElse(relation.stream.initialOffset)
@@ -226,7 +229,7 @@ class ContinuousExecution(
     }
 
     val stream = withNewSources.collect {
-      case relation: StreamingDataSourceV2Relation =>
+      case relation: StreamingDataSourceV2ScanRelation =>
         relation.stream.asInstanceOf[ContinuousStream]
     }.head
 

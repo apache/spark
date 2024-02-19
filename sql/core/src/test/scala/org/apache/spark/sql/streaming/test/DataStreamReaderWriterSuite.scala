@@ -629,7 +629,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         val queryCheckpointDir = new File(checkpointPath, queryName)
         assert(queryCheckpointDir.exists(), s"$queryCheckpointDir doesn't exist")
         assert(
-          checkpointPath.listFiles().size === 1,
+          checkpointPath.listFiles().length === 1,
           s"${checkpointPath.listFiles().toList} has 0 or more than 1 files ")
       }
     }
@@ -643,7 +643,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         ds.writeStream.format("console").start().stop()
         // Should create a random folder in `checkpointPath`
         assert(
-          checkpointPath.listFiles().size === 1,
+          checkpointPath.listFiles().length === 1,
           s"${checkpointPath.listFiles().toList} has 0 or more than 1 files ")
       }
     }

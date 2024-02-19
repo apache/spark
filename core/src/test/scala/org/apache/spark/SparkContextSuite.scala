@@ -47,6 +47,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUpdate, SparkListenerJobStart, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
@@ -126,7 +127,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
         sc.addFile(file1.getAbsolutePath)
         sc.addFile(relativePath)
-        sc.parallelize(Array(1), 1).map(x => {
+        sc.parallelize(Array(1).toImmutableArraySeq, 1).map(x => {
           val gotten1 = new File(SparkFiles.get(file1.getName))
           val gotten2 = new File(SparkFiles.get(file2.getName))
           if (!gotten1.exists()) {
@@ -196,7 +197,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         sc.addArchive(s"${zipFile.getAbsolutePath}#bar")
         sc.addArchive(relativePath2)
 
-        sc.parallelize(Array(1), 1).map { x =>
+        sc.parallelize(Array(1).toImmutableArraySeq, 1).map { x =>
           val gotten1 = new File(SparkFiles.get(jarFile.getName))
           val gotten2 = new File(SparkFiles.get(zipFile.getName))
           val gotten3 = new File(SparkFiles.get("foo"))
@@ -294,7 +295,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       try {
         sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
         sc.addFile(neptune.getAbsolutePath, true)
-        sc.parallelize(Array(1), 1).map(x => {
+        sc.parallelize(Array(1).toImmutableArraySeq, 1).map(x => {
           val sep = File.separator
           if (!new File(SparkFiles.get(neptune.getName + sep + alien1.getName)).exists()) {
             throw new SparkException("can't access file under root added directory")
@@ -1241,7 +1242,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         sc.addFile(fileUrl1)
         sc.addJar(jar2.toString)
         sc.addFile(file2.toString)
-        sc.parallelize(Array(1), 1).map { x =>
+        sc.parallelize(Array(1).toImmutableArraySeq, 1).map { x =>
           val gottenJar1 = new File(SparkFiles.get(jar1.getName))
           if (!gottenJar1.exists()) {
             throw new SparkException("file doesn't exist : " + jar1)

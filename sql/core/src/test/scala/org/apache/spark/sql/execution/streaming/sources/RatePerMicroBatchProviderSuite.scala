@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.functions.spark_partition_id
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
@@ -29,7 +30,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   import testImplicits._
 
   test("RatePerMicroBatchProvider in registry") {
-    val ds = DataSource.lookupDataSource("rate-micro-batch", spark.sqlContext.conf)
+    val ds = DataSource.lookupDataSource("rate-micro-batch", spark.sessionState.conf)
       .getConstructor().newInstance()
     assert(ds.isInstanceOf[RatePerMicroBatchProvider], "Could not find rate-micro-batch source")
   }
@@ -130,7 +131,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
 
   private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
     eventually(Timeout(streamingTimeout)) {
-      if (!q.exception.isDefined) {
+      if (q.exception.isEmpty) {
         assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
       }
     }
@@ -193,14 +194,15 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
   }
 
   test("user-specified schema given") {
-    val exception = intercept[UnsupportedOperationException] {
-      spark.readStream
-        .format("rate-micro-batch")
-        .option("rowsPerBatch", "10")
-        .schema(spark.range(1).schema)
-        .load()
-    }
-    assert(exception.getMessage.contains(
-      "RatePerMicroBatchProvider source does not support user-specified schema"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        spark.readStream
+          .format("rate-micro-batch")
+          .option("rowsPerBatch", "10")
+          .schema(spark.range(1).schema)
+          .load()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2242",
+      parameters = Map("provider" -> "RatePerMicroBatchProvider"))
   }
 }

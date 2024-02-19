@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution.streaming.continuous
 import java.io.{BufferedReader, InputStreamReader, IOException}
 import java.net.Socket
 import java.sql.Timestamp
-import java.util.Calendar
+import java.time.Instant
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ListBuffer
 
-import org.json4s.{DefaultFormats, NoTypeHints}
+import org.json4s.{DefaultFormats, Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.SparkEnv
@@ -185,8 +185,7 @@ class TextSocketContinuousStream(
             TextSocketContinuousStream.this.synchronized {
               currentOffset += 1
               val newData = (line,
-                Timestamp.valueOf(
-                  TextSocketReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
+                Timestamp.valueOf(TextSocketReader.DATE_TIME_FORMATTER.format(Instant.now()))
               )
               buckets(currentOffset % numPartitions) += toRow(newData)
                 .copy().asInstanceOf[UnsafeRow]
@@ -286,6 +285,6 @@ class TextSocketContinuousPartitionReader(
 }
 
 case class TextSocketOffset(offsets: List[Int]) extends Offset {
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
   override def json: String = Serialization.write(offsets)
 }

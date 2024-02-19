@@ -29,6 +29,7 @@ import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A column that will be computed based on the data in a `DataFrame`.
@@ -1004,7 +1005,7 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
    * @group expr_ops
    * @since 3.4.0
    */
-  def as(aliases: Array[String]): Column = as(aliases.toSeq)
+  def as(aliases: Array[String]): Column = as(aliases.toImmutableArraySeq)
 
   /**
    * Gives the column an alias.
@@ -1297,7 +1298,8 @@ private[sql] object Column {
     val builder = proto.Expression.newBuilder()
     name match {
       case "*" =>
-        builder.getUnresolvedStarBuilder
+        val starBuilder = builder.getUnresolvedStarBuilder
+        planId.foreach(starBuilder.setPlanId)
       case _ if name.endsWith(".*") =>
         builder.getUnresolvedStarBuilder.setUnparsedTarget(name)
       case _ =>

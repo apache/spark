@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.ArrayImplicits._
 
 trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
@@ -161,7 +162,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
     case _: DecimalType if useDecimalPlainString =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
-    case StringType => identity
+    case _: StringType => identity
     case _ => o => UTF8String.fromString(o.toString)
   }
 
@@ -221,7 +222,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           val row = ctx.freshVariable("row", classOf[InternalRow])
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
+          val writeStructCode =
+            writeStructToStringBuilder(fields.map(_.dataType).toImmutableArraySeq, row, buffer, ctx)
           code"""
              |InternalRow $row = $c;
              |$bufferClass $buffer = new $bufferClass();
@@ -255,7 +257,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       // notation if an exponent is needed.
       case _: DecimalType if useDecimalPlainString =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
-      case StringType =>
+      case _: StringType =>
         (c, evPrim) => code"$evPrim = $c;"
       case _ =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"

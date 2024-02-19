@@ -39,6 +39,7 @@ import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test whether EventLoggingListener logs events properly.
@@ -72,6 +73,14 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   test("End-to-end event logging") {
     testApplicationEventLogging()
+  }
+
+  test("End-to-end event logging with exit code") {
+    testEventLogging(exitCode = Some(0))
+  }
+
+  test("End-to-end event logging with exit code being None") {
+    testEventLogging(exitCode = None)
   }
 
   test("End-to-end event logging with compression") {
@@ -217,7 +226,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    */
   private def testEventLogging(
       compressionCodec: Option[String] = None,
-      extraConf: Map[String, String] = Map()): Unit = {
+      extraConf: Map[String, String] = Map(),
+      exitCode: Option[Int] = None): Unit = {
     val conf = getLoggingConf(testDirPath, compressionCodec)
     extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
@@ -225,7 +235,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val listenerBus = new LiveListenerBus(conf)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
-    val applicationEnd = SparkListenerApplicationEnd(1000L)
+    val applicationEnd = SparkListenerApplicationEnd(1000L, exitCode)
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()
@@ -587,7 +597,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       } else {
         stageIds.map(id => (id, 0) -> executorMetrics).toMap
       }
-    SparkListenerExecutorMetricsUpdate(executorId, accum, executorUpdates)
+    SparkListenerExecutorMetricsUpdate(executorId, accum.toImmutableArraySeq, executorUpdates)
   }
 
   private def createTaskEndEvent(

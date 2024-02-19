@@ -141,7 +141,7 @@ SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
 SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
-    | fgrep --count "<id>hive</id>";\
+    | grep -F --count "<id>hive</id>";\
     # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
     # because we use "set -o pipefail"
     echo -n)

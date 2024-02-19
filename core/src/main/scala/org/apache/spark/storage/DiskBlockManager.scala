@@ -36,6 +36,7 @@ import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIRECTORY
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -167,8 +168,8 @@ private[spark] class DiskBlockManager(
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) files.toSeq else Seq.empty
-    }
+      if (files != null) files.toImmutableArraySeq else Seq.empty
+    }.toImmutableArraySeq
   }
 
   /** List all the blocks currently stored on disk by the disk manager. */

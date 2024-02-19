@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution.window
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.util.ArrayImplicits._
 
 
 /**
@@ -90,7 +92,7 @@ private[window] object AggregateProcessor {
         updateExpressions ++= noOps
         evaluateExpressions += imperative
       case other =>
-        throw new IllegalStateException(s"Unsupported aggregate function: $other")
+        throw SparkException.internalError(s"Unsupported aggregate function: $other")
     }
 
     // Create the projections.
@@ -124,7 +126,8 @@ private[window] final class AggregateProcessor(
 
   private[this] val join = new JoinedRow
   private[this] val numImperatives = imperatives.length
-  private[this] val buffer = new SpecificInternalRow(bufferSchema.toSeq.map(_.dataType))
+  private[this] val buffer =
+    new SpecificInternalRow(bufferSchema.toImmutableArraySeq.map(_.dataType))
   initialProjection.target(buffer)
   updateProjection.target(buffer)
 

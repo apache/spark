@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -31,6 +32,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
@@ -234,7 +236,9 @@ case class ReplaceData(
       case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
         operation
       case _ =>
-        throw new AnalysisException(s"Cannot retrieve row-level operation from $table")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3057",
+          messageParameters = Map("table" -> table.toString))
     }
   }
 
@@ -312,7 +316,9 @@ case class WriteDelta(
       case DataSourceV2Relation(RowLevelOperationTable(_, operation), _, _, _, _) =>
         operation.asInstanceOf[SupportsDelta]
       case _ =>
-        throw new AnalysisException(s"Cannot retrieve row-level operation from $table")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3057",
+          messageParameters = Map("table" -> table.toString))
     }
   }
 
@@ -344,7 +350,7 @@ case class WriteDelta(
   // validates row ID projection output is compatible with row ID attributes
   private def rowIdAttrsResolved: Boolean = {
     val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
-      operation.rowId,
+      operation.rowId.toImmutableArraySeq,
       originalTable)
 
     val projectionSchema = projections.rowIdProjection.schema
@@ -358,7 +364,7 @@ case class WriteDelta(
     projections.metadataProjection match {
       case Some(projection) =>
         val metadataAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
-          operation.requiredMetadataAttributes,
+          operation.requiredMetadataAttributes.toImmutableArraySeq,
           originalTable)
 
         val projectionSchema = projection.schema
@@ -406,12 +412,28 @@ trait V2CreateTableAsSelectPlan
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
-    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+    references.map(_.fieldNames.toImmutableArraySeq)
+      .forall(query.schema.findNestedField(_).isDefined)
   }
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(name, query)
 
-  override def tableSchema: StructType = query.schema
+  override lazy val tableSchema: StructType = query.schema
+
+  override def columns: Seq[ColumnDefinition] = {
+    query.schema.map { field =>
+      ColumnDefinition(
+        field.name,
+        field.dataType,
+        field.nullable,
+        field.getComment(),
+        // The input query can't define column default/generation expressions.
+        defaultValue = None,
+        generationExpression = None,
+        metadata = field.metadata
+      )
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): V2CreateTableAsSelectPlan = {
@@ -420,7 +442,9 @@ trait V2CreateTableAsSelectPlan
       case Seq(newName, newQuery) =>
         withNameAndQuery(newName, newQuery)
       case others =>
-        throw new IllegalArgumentException("Must be 2 children: " + others)
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3218",
+          messageParameters = Map("others" -> others.toString()))
     }
   }
 
@@ -432,8 +456,12 @@ trait V2CreateTableAsSelectPlan
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {
   def name: LogicalPlan
+
   def partitioning: Seq[Transform]
-  def tableSchema: StructType
+
+  def columns: Seq[ColumnDefinition]
+
+  lazy val tableSchema: StructType = StructType(columns.map(_.toV1Column))
 
   def tableName: Identifier = {
     assert(name.resolved)
@@ -452,7 +480,7 @@ trait V2CreateTablePlan extends LogicalPlan {
  */
 case class CreateTable(
     name: LogicalPlan,
-    tableSchema: StructType,
+    columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
     ignoreIfExists: Boolean)
@@ -504,7 +532,7 @@ case class CreateTableAsSelect(
  */
 case class ReplaceTable(
     name: LogicalPlan,
-    tableSchema: StructType,
+    columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
     orCreate: Boolean)
@@ -884,24 +912,35 @@ object ShowTables {
 }
 
 /**
- * The logical plan of the SHOW TABLE EXTENDED command.
+ * The logical plan of the SHOW TABLE EXTENDED (without PARTITION) command.
  */
-case class ShowTableExtended(
+case class ShowTablesExtended(
     namespace: LogicalPlan,
     pattern: String,
-    partitionSpec: Option[PartitionSpec],
-    override val output: Seq[Attribute] = ShowTableExtended.getOutputAttrs) extends UnaryCommand {
+    override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
-  override protected def withNewChildInternal(newChild: LogicalPlan): ShowTableExtended =
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablesExtended =
     copy(namespace = newChild)
 }
 
-object ShowTableExtended {
+object ShowTablesUtils {
   def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
     AttributeReference("information", StringType, nullable = false)())
+}
+
+/**
+ * The logical plan of the SHOW TABLE EXTENDED ... PARTITION ... command.
+ */
+case class ShowTablePartition(
+    table: LogicalPlan,
+    partitionSpec: PartitionSpec,
+    override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs)
+  extends V2PartitionCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablePartition =
+    copy(table = newChild)
 }
 
 /**
@@ -1421,7 +1460,7 @@ case class UnresolvedTableSpec(
     external: Boolean) extends UnaryExpression with Unevaluable with TableSpecBase {
 
   override def dataType: DataType =
-    throw new UnsupportedOperationException("UnresolvedTableSpec doesn't have a data type")
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3113")
 
   override def child: Expression = optionExpression
 
@@ -1467,16 +1506,6 @@ case class TableSpec(
   def withNewLocation(newLocation: Option[String]): TableSpec = {
     TableSpec(properties, provider, options, newLocation, comment, serde, external)
   }
-}
-
-/**
- * A fake expression which holds the default value expression and its original SQL text.
- */
-case class DefaultValueExpression(child: Expression, originalSQL: String)
-  extends UnaryExpression with Unevaluable {
-  override def dataType: DataType = child.dataType
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
 }
 
 /**

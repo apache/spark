@@ -33,7 +33,6 @@ from typing import (
 
 from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark import copy_func
 from pyspark.context import SparkContext
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import DataType
@@ -75,7 +74,7 @@ def _to_java_expr(col: "ColumnOrName") -> JavaObject:
 
 @overload
 def _to_seq(sc: SparkContext, cols: Iterable[JavaObject]) -> JavaObject:
-    pass
+    ...
 
 
 @overload
@@ -84,7 +83,7 @@ def _to_seq(
     cols: Iterable["ColumnOrName"],
     converter: Optional[Callable[["ColumnOrName"], JavaObject]],
 ) -> JavaObject:
-    pass
+    ...
 
 
 def _to_seq(
@@ -924,10 +923,20 @@ class Column:
 
         Examples
         --------
+
+        Example 1. Using integers for the input arguments.
+
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col='Ali'), Row(col='Bob')]
+
+        Example 2. Using columns for the input arguments.
+
+        >>> df = spark.createDataFrame(
+        ...      [(3, 4, "Alice"), (2, 3, "Bob")], ["sidx", "eidx", "name"])
+        >>> df.select(df.name.substr(df.sidx, df.eidx).alias("col")).collect()
+        [Row(col='ice'), Row(col='ob')]
         """
         if type(startPos) != type(length):
             raise PySparkTypeError(
@@ -1143,9 +1152,23 @@ class Column:
     >>> df.filter(df.height.isNotNull()).collect()
     [Row(name='Tom', height=80)]
     """
+    _isNaN_doc = """
+    True if the current expression is NaN.
+
+    .. versionadded:: 4.0.0
+
+    Examples
+    --------
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame(
+    ...     [Row(name='Tom', height=80.0), Row(name='Alice', height=float('nan'))])
+    >>> df.filter(df.height.isNaN()).collect()
+    [Row(name='Alice', height=nan)]
+    """
 
     isNull = _unary_op("isNull", _isNull_doc)
     isNotNull = _unary_op("isNotNull", _isNotNull_doc)
+    isNaN = _unary_op("isNaN", _isNaN_doc)
 
     def alias(self, *alias: str, **kwargs: Any) -> "Column":
         """
@@ -1199,14 +1222,20 @@ class Column:
             else:
                 return Column(getattr(self._jc, "as")(alias[0]))
         else:
-            if metadata:
+            if metadata is not None:
                 raise PySparkValueError(
                     error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
                     message_parameters={"arg_name": "metadata"},
                 )
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
-    name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
+    def name(self, *alias: str, **kwargs: Any) -> "Column":
+        """
+        :func:`name` is an alias for :func:`alias`.
+
+        .. versionadded:: 2.0.0
+        """
+        return self.alias(*alias, **kwargs)
 
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         """
@@ -1253,7 +1282,13 @@ class Column:
             )
         return Column(jc)
 
-    astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
+    def astype(self, dataType: Union[DataType, str]) -> "Column":
+        """
+        :func:`astype` is an alias for :func:`cast`.
+
+        .. versionadded:: 1.4.0
+        """
+        return self.cast(dataType)
 
     def between(
         self,

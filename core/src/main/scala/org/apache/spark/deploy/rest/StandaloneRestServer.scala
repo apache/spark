@@ -27,6 +27,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -69,6 +70,8 @@ private[deploy] class StandaloneRestServer(
     new StandaloneStatusRequestServlet(masterEndpoint, masterConf)
   protected override val clearRequestServlet =
     new StandaloneClearRequestServlet(masterEndpoint, masterConf)
+  protected override val readyzRequestServlet =
+    new StandaloneReadyzRequestServlet(masterEndpoint, masterConf)
 }
 
 /**
@@ -146,6 +149,22 @@ private[rest] class StandaloneClearRequestServlet(masterEndpoint: RpcEndpointRef
 }
 
 /**
+ * A servlet for handling readyz requests passed to the [[StandaloneRestServer]].
+ */
+private[rest] class StandaloneReadyzRequestServlet(masterEndpoint: RpcEndpointRef, conf: SparkConf)
+  extends ReadyzRequestServlet {
+
+  protected def handleReadyz(): ReadyzResponse = {
+    val success = masterEndpoint.askSync[Boolean](DeployMessages.RequestReadyz)
+    val r = new ReadyzResponse
+    r.serverSparkVersion = sparkVersion
+    r.message = ""
+    r.success = success
+    r
+  }
+}
+
+/**
  * A servlet for handling submit requests passed to the [[StandaloneRestServer]].
  */
 private[rest] class StandaloneSubmitRequestServlet(
@@ -207,7 +226,7 @@ private[rest] class StandaloneSubmitRequestServlet(
       .getOrElse(Seq.empty)
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
-    val javaModuleOptions = JavaModuleOptions.defaultModuleOptionArray().toSeq
+    val javaModuleOptions = JavaModuleOptions.defaultModuleOptionArray().toImmutableArraySeq
     val javaOpts = javaModuleOptions ++ sparkJavaOpts ++ defaultJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",

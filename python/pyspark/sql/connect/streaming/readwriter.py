@@ -52,7 +52,7 @@ class DataStreamReader(OptionUtils):
     def _df(self, plan: LogicalPlan) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
 
-        return DataFrame.withPlan(plan, self._client)
+        return DataFrame(plan, self._client)
 
     def format(self, source: str) -> "DataStreamReader":
         self._format = source

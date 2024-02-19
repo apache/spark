@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for showing functions.
@@ -54,9 +55,10 @@ case class ShowFunctionsExec(
       // List all temporary functions in the session catalog
       applyPattern(session.sessionState.catalog.listTemporaryFunctions().map(_.unquotedString)) ++
         // List all functions registered in the given namespace of the catalog
-        applyPattern(catalog.listFunctions(namespace.toArray).map(_.name())).map { funcName =>
-          (catalog.name() +: namespace :+ funcName).quoted
-        }
+        applyPattern(catalog.listFunctions(namespace.toArray).map(_.name()).toImmutableArraySeq)
+          .map { funcName =>
+            (catalog.name() +: namespace :+ funcName).quoted
+          }
     } else Seq.empty
     (userFunctions ++ systemFunctions).distinct.sorted.foreach { fn =>
       rows += toCatalystRow(fn)

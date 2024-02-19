@@ -26,7 +26,6 @@ from typing import cast
 import io
 from contextlib import redirect_stdout
 
-from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Row, functions
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
 from pyspark.sql.types import (
@@ -47,6 +46,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
+    PySparkAssertionError,
     PySparkTypeError,
     PySparkValueError,
 )
@@ -68,6 +68,74 @@ class DataFrameTestsMixin:
         self.assertEqual(self.spark.range(0, 1 << 40, 1 << 39).count(), 2)
         self.assertEqual(self.spark.range(-2).count(), 0)
         self.assertEqual(self.spark.range(3).count(), 3)
+
+    def test_table(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.table(None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "tableName", "arg_type": "NoneType"},
+        )
+
+    def test_dataframe_star(self):
+        df1 = self.spark.createDataFrame([{"a": 1}])
+        df2 = self.spark.createDataFrame([{"a": 1, "b": "v"}])
+        df3 = df2.withColumnsRenamed({"a": "x", "b": "y"})
+
+        df = df1.join(df2)
+        self.assertEqual(df.columns, ["a", "a", "b"])
+        self.assertEqual(df.select(df1["*"]).columns, ["a"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+
+        df = df1.join(df2).withColumn("c", lit(0))
+        self.assertEqual(df.columns, ["a", "a", "b", "c"])
+        self.assertEqual(df.select(df1["*"]).columns, ["a"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+
+        df = df1.join(df2, "a")
+        self.assertEqual(df.columns, ["a", "b"])
+        self.assertEqual(df.select(df1["*"]).columns, ["a"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+
+        df = df1.join(df2, "a").withColumn("c", lit(0))
+        self.assertEqual(df.columns, ["a", "b", "c"])
+        self.assertEqual(df.select(df1["*"]).columns, ["a"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+
+        df = df2.join(df3)
+        self.assertEqual(df.columns, ["a", "b", "x", "y"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+        self.assertEqual(df.select(df3["*"]).columns, ["x", "y"])
+
+        df = df2.join(df3).withColumn("c", lit(0))
+        self.assertEqual(df.columns, ["a", "b", "x", "y", "c"])
+        self.assertEqual(df.select(df2["*"]).columns, ["a", "b"])
+        self.assertEqual(df.select(df3["*"]).columns, ["x", "y"])
+
+    def test_count_star(self):
+        df1 = self.spark.createDataFrame([{"a": 1}])
+        df2 = self.spark.createDataFrame([{"a": 1, "b": "v"}])
+        df3 = df2.select(struct("a", "b").alias("s"))
+
+        self.assertEqual(df1.select(count(df1["*"])).columns, ["count(1)"])
+        self.assertEqual(df1.select(count(col("*"))).columns, ["count(1)"])
+
+        self.assertEqual(df2.select(count(df2["*"])).columns, ["count(1)"])
+        self.assertEqual(df2.select(count(col("*"))).columns, ["count(1)"])
+
+        self.assertEqual(df3.select(count(df3["*"])).columns, ["count(1)"])
+        self.assertEqual(df3.select(count(col("*"))).columns, ["count(1)"])
+        self.assertEqual(df3.select(count(col("s.*"))).columns, ["count(1)"])
+
+    def test_self_join(self):
+        df1 = self.spark.range(10).withColumn("a", lit(0))
+        df2 = df1.withColumnRenamed("a", "b")
+        df = df1.join(df2, df1["a"] == df2["b"])
+        self.assertTrue(df.count() == 100)
+        df = df2.join(df1, df2["b"] == df1["a"])
+        self.assertTrue(df.count() == 100)
 
     def test_duplicated_column_names(self):
         df = self.spark.createDataFrame([(1, 2)], ["c", "c"])
@@ -105,6 +173,43 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
 
+    def test_drop_join(self):
+        left_df = self.spark.createDataFrame(
+            [(1, "a"), (2, "b"), (3, "c")],
+            ["join_key", "value1"],
+        )
+        right_df = self.spark.createDataFrame(
+            [(1, "aa"), (2, "bb"), (4, "dd")],
+            ["join_key", "value2"],
+        )
+        joined_df = left_df.join(
+            right_df,
+            on=left_df["join_key"] == right_df["join_key"],
+            how="left",
+        )
+
+        dropped_1 = joined_df.drop(left_df["join_key"])
+        self.assertEqual(dropped_1.columns, ["value1", "join_key", "value2"])
+        self.assertEqual(
+            dropped_1.sort("value1").collect(),
+            [
+                Row(value1="a", join_key=1, value2="aa"),
+                Row(value1="b", join_key=2, value2="bb"),
+                Row(value1="c", join_key=None, value2=None),
+            ],
+        )
+
+        dropped_2 = joined_df.drop(right_df["join_key"])
+        self.assertEqual(dropped_2.columns, ["join_key", "value1", "value2"])
+        self.assertEqual(
+            dropped_2.sort("value1").collect(),
+            [
+                Row(join_key=1, value1="a", value2="aa"),
+                Row(join_key=2, value1="b", value2="bb"),
+                Row(join_key=3, value1="c", value2=None),
+            ],
+        )
+
     def test_with_columns_renamed(self):
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
 
@@ -125,6 +230,15 @@ class DataFrameTestsMixin:
             error_class="NOT_DICT",
             message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
         )
+
+    def test_ordering_of_with_columns_renamed(self):
+        df = self.spark.range(10)
+
+        df1 = df.withColumnsRenamed({"id": "a", "a": "b"})
+        self.assertEqual(df1.columns, ["b"])
+
+        df2 = df.withColumnsRenamed({"a": "b", "id": "a"})
+        self.assertEqual(df2.columns, ["a"])
 
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
@@ -916,6 +1030,24 @@ class DataFrameTestsMixin:
             ):
                 df.unpivot("id", ["int", "str"], "var", "val").collect()
 
+    def test_melt_groupby(self):
+        df = self.spark.createDataFrame(
+            [(1, 2, 3, 4, 5, 6)],
+            ["f1", "f2", "label", "pred", "model_version", "ts"],
+        )
+        self.assertEqual(
+            df.melt(
+                "model_version",
+                ["label", "f2"],
+                "f1",
+                "f2",
+            )
+            .groupby("f1")
+            .count()
+            .count(),
+            2,
+        )
+
     def test_observe(self):
         # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
         from pyspark.sql import Observation
@@ -931,6 +1063,16 @@ class DataFrameTestsMixin:
 
         unnamed_observation = Observation()
         named_observation = Observation("metric")
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            unnamed_observation.get()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NO_OBSERVE_BEFORE_GET",
+            message_parameters={},
+        )
+
         observed = (
             df.orderBy("id")
             .observe(
@@ -957,10 +1099,19 @@ class DataFrameTestsMixin:
         self.assertEqual(named_observation.get, dict(cnt=3, sum=6, mean=2.0))
         self.assertEqual(unnamed_observation.get, dict(rows=3))
 
+        with self.assertRaises(PySparkAssertionError) as pe:
+            df.observe(named_observation, count(lit(1)).alias("count"))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="REUSE_OBSERVATION",
+            message_parameters={},
+        )
+
         # observation requires name (if given) to be non empty string
-        with self.assertRaisesRegex(TypeError, "name should be a string"):
+        with self.assertRaisesRegex(TypeError, "`name` should be a str, got int"):
             Observation(123)
-        with self.assertRaisesRegex(ValueError, "name should not be empty"):
+        with self.assertRaisesRegex(ValueError, "`name` must be a non-empty string, got ''."):
             Observation("")
 
         # dataframe.observe requires at least one expr
@@ -1040,6 +1191,27 @@ class DataFrameTestsMixin:
 
         self.assertEqual(observation1.get, dict(cnt=50))
         self.assertEqual(observation2.get, dict(cnt=100))
+
+    def test_observe_on_commands(self):
+        from pyspark.sql import Observation
+
+        df = self.spark.range(50)
+
+        test_table = "test_table"
+
+        # DataFrameWriter
+        with self.table(test_table):
+            for command, action in [
+                ("collect", lambda df: df.collect()),
+                ("show", lambda df: df.show(50)),
+                ("save", lambda df: df.write.format("noop").mode("overwrite").save()),
+                ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
+            ]:
+                with self.subTest(command=command):
+                    observation = Observation()
+                    observed_df = df.observe(observation, count(lit(1)).alias("cnt"))
+                    action(observed_df)
+                    self.assertEqual(observation.get, dict(cnt=50))
 
     def test_sample(self):
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1845,6 +2017,35 @@ class DataFrameTestsMixin:
 
         self.assertEqual(df.schema, schema)
         self.assertEqual(df.collect(), data)
+
+    def test_partial_inference_failure(self):
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.createDataFrame([(None, 1)])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_DETERMINE_TYPE",
+            message_parameters={},
+        )
+
+    def test_invalid_argument_create_dataframe(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([(1, 2)], schema=123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame(self.spark.range(1))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE",
+            message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
+        )
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

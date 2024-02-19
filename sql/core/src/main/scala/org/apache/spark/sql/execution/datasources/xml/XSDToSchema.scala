@@ -16,52 +16,41 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{File, FileInputStream, InputStreamReader, StringReader}
-import java.nio.charset.StandardCharsets
-import java.nio.file.Path
+import java.io.StringReader
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.shaded.org.jline.utils.InputStreamReader
 import org.apache.ws.commons.schema._
 import org.apache.ws.commons.schema.constants.Constants
 
-import org.apache.spark.sql.catalyst.xml.XmlOptions
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.xml.{ValidatorUtil, XmlOptions}
 import org.apache.spark.sql.types._
 
 /**
  * Utility to generate a Spark schema from an XSD. Not all XSD schemas are simple tabular schemas,
  * so not all elements or XSDs are supported.
  */
-object XSDToSchema {
+object XSDToSchema extends Logging{
 
   /**
-   * Reads a schema from an XSD file.
+   * Reads a schema from an XSD path.
    * Note that if the schema consists of one complex parent type which you want to use as
    * the row tag schema, then you will need to extract the schema of the single resulting
    * struct in the resulting StructType, and use its StructType as your schema.
    *
-   * @param xsdFile XSD file
+   * @param xsdPath XSD path
    * @return Spark-compatible schema
    */
-  def read(xsdFile: File): StructType = {
+  def read(xsdPath: Path): StructType = {
+    val in = ValidatorUtil.openSchemaFile(xsdPath)
     val xmlSchemaCollection = new XmlSchemaCollection()
-    xmlSchemaCollection.setBaseUri(xsdFile.getParent)
-    val xmlSchema = xmlSchemaCollection.read(
-      new InputStreamReader(new FileInputStream(xsdFile), StandardCharsets.UTF_8))
-
+    xmlSchemaCollection.setBaseUri(xsdPath.getParent.toString)
+    val xmlSchema = xmlSchemaCollection.read(new InputStreamReader(in))
     getStructType(xmlSchema)
   }
-
-  /**
-   * Reads a schema from an XSD file.
-   * Note that if the schema consists of one complex parent type which you want to use as
-   * the row tag schema, then you will need to extract the schema of the single resulting
-   * struct in the resulting StructType, and use its StructType as your schema.
-   *
-   * @param xsdFile XSD file
-   * @return Spark-compatible schema
-   */
-  def read(xsdFile: Path): StructType = read(xsdFile.toFile)
 
   /**
    * Reads a schema from an XSD as a string.
@@ -107,17 +96,18 @@ object XSDToSchema {
                   case facet: XmlSchemaTotalDigitsFacet => facet.getValue.toString.toInt
                 }.getOrElse(38)
                 DecimalType(totalDigits, math.min(totalDigits, fracDigits))
-              case Constants.XSD_UNSIGNEDLONG => DecimalType(38, 0)
+              case Constants.XSD_UNSIGNEDLONG |
+                   Constants.XSD_INTEGER |
+                   Constants.XSD_NEGATIVEINTEGER |
+                   Constants.XSD_NONNEGATIVEINTEGER |
+                   Constants.XSD_NONPOSITIVEINTEGER |
+                   Constants.XSD_POSITIVEINTEGER => DecimalType(38, 0)
               case Constants.XSD_DOUBLE => DoubleType
               case Constants.XSD_FLOAT => FloatType
               case Constants.XSD_BYTE => ByteType
               case Constants.XSD_SHORT |
                    Constants.XSD_UNSIGNEDBYTE => ShortType
-              case Constants.XSD_INTEGER |
-                   Constants.XSD_NEGATIVEINTEGER |
-                   Constants.XSD_NONNEGATIVEINTEGER |
-                   Constants.XSD_NONPOSITIVEINTEGER |
-                   Constants.XSD_POSITIVEINTEGER |
+              case Constants.XSD_INT |
                    Constants.XSD_UNSIGNEDSHORT => IntegerType
               case Constants.XSD_LONG |
                    Constants.XSD_UNSIGNEDINT => LongType

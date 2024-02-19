@@ -318,7 +318,7 @@ class JavaMLReader(MLReader[RL]):
             raise NotImplementedError(
                 "This Java ML type cannot be loaded into Python currently: %r" % self._clazz
             )
-        return self._clazz._from_java(java_obj)  # type: ignore[attr-defined]
+        return self._clazz._from_java(java_obj)
 
     def session(self: JR, sparkSession: SparkSession) -> JR:
         """Sets the Spark Session to use for loading."""

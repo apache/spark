@@ -32,6 +32,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object Column {
 
@@ -154,7 +155,7 @@ class Column(val expr: Expression) extends Logging {
     name match {
       case "*" => UnresolvedStar(None)
       case _ if name.endsWith(".*") =>
-        val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
+        val parts = UnresolvedAttribute.parseAttributeName(name.dropRight(2))
         UnresolvedStar(Some(parts))
       case _ => UnresolvedAttribute.quotedString(name)
     }
@@ -1131,7 +1132,9 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Array[String]): Column = withExpr { MultiAlias(expr, aliases) }
+  def as(aliases: Array[String]): Column = withExpr {
+    MultiAlias(expr, aliases.toImmutableArraySeq)
+  }
 
   /**
    * Gives the column an alias.

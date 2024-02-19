@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.text.SimpleDateFormat
-import java.util.{Date, Optional, UUID}
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.util.{Optional, UUID}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
+import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
 import org.apache.spark.util.Clock
@@ -91,8 +92,10 @@ trait ProgressReporter extends Logging {
   // The timestamp we report an event that has not executed anything
   private var lastNoExecutionProgressEventTime = Long.MinValue
 
-  private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
+  private val timestampFormat =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
+      .withZone(DateTimeUtils.getZoneId("UTC"))
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -136,16 +139,16 @@ trait ProgressReporter extends Logging {
       from: StreamProgress,
       to: StreamProgress,
       latest: StreamProgress): Unit = {
-    currentTriggerStartOffsets = from.view.mapValues(_.json).toMap
-    currentTriggerEndOffsets = to.view.mapValues(_.json).toMap
-    currentTriggerLatestOffsets = latest.view.mapValues(_.json).toMap
+    currentTriggerStartOffsets = from.transform((_, v) => v.json)
+    currentTriggerEndOffsets = to.transform((_, v) => v.json)
+    currentTriggerLatestOffsets = latest.transform((_, v) => v.json)
     latestStreamProgress = to
   }
 
   private def addNewProgress(newProgress: StreamingQueryProgress): Unit = {
     progressBuffer.synchronized {
       progressBuffer += newProgress
-      while (progressBuffer.length >= sparkSession.sqlContext.conf.streamingProgressRetention) {
+      while (progressBuffer.length >= sparkSession.sessionState.conf.streamingProgressRetention) {
         progressBuffer.dequeue()
       }
     }
@@ -243,7 +246,7 @@ trait ProgressReporter extends Logging {
       batchId = currentBatchId,
       batchDuration = processingTimeMills,
       durationMs =
-        new java.util.HashMap(currentDurationsMs.toMap.view.mapValues(long2Long).toMap.asJava),
+        new java.util.HashMap(currentDurationsMs.toMap.transform((_, v) => long2Long(v)).asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
@@ -297,17 +300,17 @@ trait ProgressReporter extends Logging {
         Map(
           "max" -> stats.max,
           "min" -> stats.min,
-          "avg" -> stats.avg.toLong).view.mapValues(formatTimestamp)
+          "avg" -> stats.avg.toLong).transform((_, v) => formatTimestamp(v))
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
-    ExecutionStats(numInputRows, stateOperators, eventTimeStats.toMap)
+    ExecutionStats(numInputRows, stateOperators, eventTimeStats)
   }
 
   /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
 
     def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
-      tuples.groupBy(_._1).view.mapValues(_.map(_._2).sum).toMap // sum up rows for each source
+      tuples.groupBy(_._1).transform((_, v) => v.map(_._2).sum) // sum up rows for each source
     }
 
     def unrollCTE(plan: LogicalPlan): LogicalPlan = {
@@ -326,7 +329,7 @@ trait ProgressReporter extends Logging {
     val onlyDataSourceV2Sources = {
       // Check whether the streaming query's logical plan has only V2 micro-batch data sources
       val allStreamingLeaves = logicalPlan.collect {
-        case s: StreamingDataSourceV2Relation => s.stream.isInstanceOf[MicroBatchStream]
+        case s: StreamingDataSourceV2ScanRelation => s.stream.isInstanceOf[MicroBatchStream]
         case _: StreamingExecutionRelation => false
       }
       allStreamingLeaves.forall(_ == true)
@@ -435,7 +438,7 @@ trait ProgressReporter extends Logging {
   }
 
   protected def formatTimestamp(millis: Long): String = {
-    timestampFormat.format(new Date(millis))
+    timestampFormat.format(Instant.ofEpochMilli(millis))
   }
 
   /** Updates the message returned in `status`. */

@@ -44,6 +44,8 @@ class UDTFRegistration private[sql] (tableFunctionRegistry: TableFunctionRegistr
          | udfDeterministic: ${udtf.udfDeterministic}
       """.stripMargin)
 
-    tableFunctionRegistry.createOrReplaceTempFunction(name, udtf.builder, "python_udtf")
+    tableFunctionRegistry.createOrReplaceTempFunction(
+      name, udtf.builder(_, SparkSession.getActiveSession.get.sessionState.sqlParser),
+      source = "python_udtf")
   }
 }

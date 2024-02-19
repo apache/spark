@@ -85,9 +85,9 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       summary ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
-        modifiedConfigs(configs.view.filterKeys(!_.startsWith(pandasOnSparkConfPrefix)).toMap) ++
+        modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
         modifiedPandasOnSparkConfigs(
-          configs.view.filterKeys(_.startsWith(pandasOnSparkConfPrefix)).toMap)
+          configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) })
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }

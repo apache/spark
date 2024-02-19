@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, UserDefinedScalarFunc}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableExpression
@@ -345,6 +345,18 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       Some(new GeneralAggregateFunc("REGR_SLOPE", isDistinct, Array(left, right)))
     case aggregate.RegrSXY(PushableExpression(left), PushableExpression(right)) =>
       Some(new GeneralAggregateFunc("REGR_SXY", isDistinct, Array(left, right)))
+    // Translate Mode if it is deterministic or reverse is defined.
+    case aggregate.Mode(PushableExpression(expr), _, _, Some(reverse)) =>
+      Some(new GeneralAggregateFunc(
+        "MODE", isDistinct, Array.empty, Array(generateSortValue(expr, !reverse))))
+    case aggregate.Percentile(
+      PushableExpression(left), PushableExpression(right), LongLiteral(1L), _, _, reverse) =>
+      Some(new GeneralAggregateFunc("PERCENTILE_CONT", isDistinct,
+        Array(right), Array(generateSortValue(left, reverse))))
+    case aggregate.PercentileDisc(
+      PushableExpression(left), PushableExpression(right), reverse, _, _, _) =>
+      Some(new GeneralAggregateFunc("PERCENTILE_DISC", isDistinct,
+        Array(right), Array(generateSortValue(left, reverse))))
     // TODO supports other aggregate functions
     case aggregate.V2Aggregator(aggrFunc, children, _, _) =>
       val translatedExprs = children.flatMap(PushableExpression.unapply(_))
@@ -375,6 +387,12 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
     } else {
       None
     }
+  }
+
+  private def generateSortValue(expr: V2Expression, reverse: Boolean): SortValue = if (reverse) {
+    SortValue(expr, SortDirection.DESCENDING, NullOrdering.NULLS_LAST)
+  } else {
+    SortValue(expr, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
   }
 }
 

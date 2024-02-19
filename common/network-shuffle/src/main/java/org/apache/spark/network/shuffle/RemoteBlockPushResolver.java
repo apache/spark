@@ -372,7 +372,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       ShuffleIndexInformation shuffleIndexInformation = indexCache.get(indexFilePath);
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(chunkId);
       return new FileSegmentManagedBuffer(
-        conf, dataFile, shuffleIndexRecord.getOffset(), shuffleIndexRecord.getLength());
+        conf, dataFile, shuffleIndexRecord.offset(), shuffleIndexRecord.length());
     } catch (ExecutionException e) {
       throw new RuntimeException(String.format(
         "Failed to open merged shuffle index file %s", indexFilePath), e);
@@ -809,7 +809,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                 msg.shuffleMergeId, partition.reduceId);
             // This can throw IOException which will marks this shuffle partition as not merged.
             partition.finalizePartition();
-            if (partition.mapTracker.getCardinality() > 0) {
+            if (!partition.mapTracker.isEmpty()) {
               bitmaps.add(partition.mapTracker);
               reduceIds.add(partition.reduceId);
               sizes.add(partition.getLastChunkOffset());

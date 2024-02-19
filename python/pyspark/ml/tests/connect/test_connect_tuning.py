@@ -30,7 +30,7 @@ class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
             SparkSession.builder.remote("local[2]")
-            .config("spark.connect.copyFromLocalToFs.allowDestLocal", "true")
+            .config("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
             .getOrCreate()
         )
 

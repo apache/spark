@@ -266,10 +266,8 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             assert(newChildren.length == 2)
-            val newExcept = Except(newChildren.head, newChildren.last, isAll)
-            newExcept.copyTagsFrom(s)
             val attrMapping = left.output.zip(newChildren.head.output)
-            newExcept -> attrMapping
+            Except(newChildren.head, newChildren.last, isAll) -> attrMapping
           }
 
         case s @ Intersect(left, right, isAll) if s.childrenResolved &&
@@ -279,10 +277,8 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             assert(newChildren.length == 2)
-            val newIntersect = Intersect(newChildren.head, newChildren.last, isAll)
-            newIntersect.copyTagsFrom(s)
             val attrMapping = left.output.zip(newChildren.head.output)
-            newIntersect -> attrMapping
+            Intersect(newChildren.head, newChildren.last, isAll) -> attrMapping
           }
 
         case s: Union if s.childrenResolved && !s.byName &&
@@ -292,9 +288,7 @@ abstract class TypeCoercionBase {
             s -> Nil
           } else {
             val attrMapping = s.children.head.output.zip(newChildren.head.output)
-            val newUnion = s.copy(children = newChildren)
-            newUnion.copyTagsFrom(s)
-            newUnion -> attrMapping
+            s.copy(children = newChildren) -> attrMapping
           }
       }
     }
@@ -934,8 +928,8 @@ object TypeCoercion extends TypeCoercionBase {
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
     // See SPARK-22469 for details.
-    case (n: DecimalType, s: StringType) => Some(DoubleType)
-    case (s: StringType, n: DecimalType) => Some(DoubleType)
+    case (DecimalType.Fixed(_, s), _: StringType) if s > 0 => Some(DoubleType)
+    case (_: StringType, DecimalType.Fixed(_, s)) if s > 0 => Some(DoubleType)
 
     case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
     case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)

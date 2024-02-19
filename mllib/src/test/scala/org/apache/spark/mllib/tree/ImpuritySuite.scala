@@ -20,6 +20,7 @@ package org.apache.spark.mllib.tree
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.tree.impurity._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Test suites for `GiniAggregator` and `EntropyAggregator`.
@@ -63,8 +64,8 @@ class ImpuritySuite extends SparkFunSuite {
       }
     }
     val rng = new scala.util.Random(seed)
-    val samples = Array.fill(10)(rng.nextDouble())
-    val _weights = Array.fill(10)(rng.nextDouble())
+    val samples = Array.fill(10)(rng.nextDouble()).toImmutableArraySeq
+    val _weights = Array.fill(10)(rng.nextDouble()).toImmutableArraySeq
     val smallWeights = _weights.map(_ * 0.0001)
     val largeWeights = _weights.map(_ * 10000)
     val (count, sum, sumSquared) = computeStats(samples, _weights)

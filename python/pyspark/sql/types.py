@@ -50,7 +50,15 @@ from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject,
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
-from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    PySparkNotImplementedError,
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkIndexError,
+    PySparkRuntimeError,
+    PySparkAttributeError,
+    PySparkKeyError,
+)
 
 if has_numpy:
     import numpy as np
@@ -469,9 +477,12 @@ class DayTimeIntervalType(AnsiIntervalType):
 
         fields = DayTimeIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
-            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
-        self.startField = cast(int, startField)
-        self.endField = cast(int, endField)
+            raise PySparkRuntimeError(
+                error_class="INVALID_INTERVAL_CASTING",
+                message_parameters={"start_field": str(startField), "end_field": str(endField)},
+            )
+        self.startField = startField
+        self.endField = endField
 
     def _str_repr(self) -> str:
         fields = DayTimeIntervalType._fields
@@ -524,9 +535,12 @@ class YearMonthIntervalType(AnsiIntervalType):
 
         fields = YearMonthIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
-            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
-        self.startField = cast(int, startField)
-        self.endField = cast(int, endField)
+            raise PySparkRuntimeError(
+                error_class="INVALID_INTERVAL_CASTING",
+                message_parameters={"start_field": str(startField), "end_field": str(endField)},
+            )
+        self.startField = startField
+        self.endField = endField
 
     def _str_repr(self) -> str:
         fields = YearMonthIntervalType._fields
@@ -1037,12 +1051,17 @@ class StructType(DataType):
             for field in self:
                 if field.name == key:
                     return field
-            raise KeyError("No StructField named {0}".format(key))
+            raise PySparkKeyError(
+                error_class="KEY_NOT_EXISTS", message_parameters={"key": str(key)}
+            )
         elif isinstance(key, int):
             try:
                 return self.fields[key]
             except IndexError:
-                raise IndexError("StructType index out of range")
+                raise PySparkIndexError(
+                    error_class="INDEX_OUT_OF_RANGE",
+                    message_parameters={"arg_name": "StructType", "index": str(key)},
+                )
         elif isinstance(key, slice):
             return StructType(self.fields[key])
         else:
@@ -1844,9 +1863,9 @@ def _infer_schema(
 
     elif isinstance(row, (tuple, list)):
         if hasattr(row, "__fields__"):  # Row
-            items = zip(row.__fields__, tuple(row))  # type: ignore[union-attr]
+            items = zip(row.__fields__, tuple(row))
         elif hasattr(row, "_fields"):  # namedtuple
-            items = zip(row._fields, tuple(row))  # type: ignore[union-attr]
+            items = zip(row._fields, tuple(row))
         else:
             if names is None:
                 names = ["_%d" % i for i in range(1, len(row) + 1)]
@@ -2217,7 +2236,7 @@ def _make_type_verifier(
                     error_class="NOT_INSTANCE_OF",
                     message_parameters={
                         "value": str(obj),
-                        "data_type": str(dataType),
+                        "type": str(dataType),
                     },
                 )
             verifier(dataType.toInternal(obj))
@@ -2229,13 +2248,15 @@ def _make_type_verifier(
         def verify_byte(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if obj < -128 or obj > 127:
+            lower_bound = -128
+            upper_bound = 127
+            if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
-                        "lower_bound": "127",
-                        "upper_bound": "-127",
+                        "lower_bound": str(lower_bound),
+                        "upper_bound": str(upper_bound),
                         "actual": str(obj),
                     },
                 )
@@ -2247,13 +2268,15 @@ def _make_type_verifier(
         def verify_short(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if obj < -32768 or obj > 32767:
+            lower_bound = -32768
+            upper_bound = 32767
+            if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
-                        "lower_bound": "32767",
-                        "upper_bound": "-32768",
+                        "lower_bound": str(lower_bound),
+                        "upper_bound": str(upper_bound),
                         "actual": str(obj),
                     },
                 )
@@ -2265,13 +2288,15 @@ def _make_type_verifier(
         def verify_integer(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if obj < -2147483648 or obj > 2147483647:
+            lower_bound = -2147483648
+            upper_bound = 2147483647
+            if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
-                        "lower_bound": "2147483647",
-                        "upper_bound": "-2147483648",
+                        "lower_bound": str(lower_bound),
+                        "upper_bound": str(upper_bound),
                         "actual": str(obj),
                     },
                 )
@@ -2283,13 +2308,15 @@ def _make_type_verifier(
         def verify_long(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if obj < -9223372036854775808 or obj > 9223372036854775807:
+            lower_bound = -9223372036854775808
+            upper_bound = 9223372036854775807
+            if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
-                        "lower_bound": "9223372036854775807",
-                        "upper_bound": "-9223372036854775808",
+                        "lower_bound": str(lower_bound),
+                        "upper_bound": str(upper_bound),
                         "actual": str(obj),
                     },
                 )
@@ -2555,26 +2582,37 @@ class Row(tuple):
             idx = self.__fields__.index(item)
             return super(Row, self).__getitem__(idx)
         except IndexError:
-            raise KeyError(item)
+            raise PySparkKeyError(
+                error_class="KEY_NOT_EXISTS", message_parameters={"key": str(item)}
+            )
         except ValueError:
             raise PySparkValueError(item)
 
     def __getattr__(self, item: str) -> Any:
         if item.startswith("__"):
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
         try:
             # it will be slow when it has many fields,
             # but this will not be used in normal cases
             idx = self.__fields__.index(item)
             return self[idx]
         except IndexError:
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
         except ValueError:
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
 
     def __setattr__(self, key: Any, value: Any) -> None:
         if key != "__fields__":
-            raise RuntimeError("Row is read-only")
+            raise PySparkRuntimeError(
+                error_class="READ_ONLY",
+                message_parameters={"object": "Row"},
+            )
         self.__dict__[key] = value
 
     def __reduce__(

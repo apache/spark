@@ -545,7 +545,7 @@ checkpointed offsets after a failure. See the earlier section on
 [fault-tolerance semantics](#fault-tolerance-semantics).
 Here are the details of all the sources in Spark.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Source</th>
@@ -561,6 +561,8 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>maxFilesPerTrigger</code>: maximum number of new files to be considered in every trigger (default: no max)
         <br/>
+        <code>maxBytesPerTrigger</code>: maximum total size of new files to be considered in every trigger (default: no max). <code>maxBytesPerTrigger</code> and <code>maxFilesPerTrigger</code> can't both be set at the same time, only one of two must be chosen. Note that a stream always reads at least one file so it can make progress and not get stuck on a file larger than a given maximum.
+        <br/>
         <code>latestFirst</code>: whether to process the latest new files first, useful when there is a large backlog of files (default: false)
         <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
@@ -570,7 +572,7 @@ Here are the details of all the sources in Spark.
         "s3n://a/b/dataset.txt"<br/>
         "s3a://a/b/c/dataset.txt"
         <br/>
-        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
+        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> or <code>maxBytesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
         <br/>
         <code>cleanSource</code>: option to clean up completed files after processing.<br/>
         Available options are "archive", "delete", "off". If the option is not provided, the default value is "off".<br/>
@@ -1819,7 +1821,7 @@ regarding watermark delays and whether data will be dropped or not.
 
 ##### Support matrix for joins in streaming queries
 
-<table class="table table-striped">
+<table>
 <thead>
   <tr>
     <th>Left Input</th>
@@ -2307,7 +2309,7 @@ to `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider`.
 
 Here are the configs regarding to RocksDB instance of the state store provider:
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Config Name</th>
@@ -2452,6 +2454,14 @@ Specifically for built-in HDFS state store provider, users can check the state s
 it is best if cache missing count is minimized that means Spark won't waste too much time on loading checkpointed state.
 User can increase Spark locality waiting configurations to avoid loading state store providers in different executors across batches.
 
+#### State Data Source (Experimental)
+
+Apache Spark provides a streaming state related data source that provides the ability to manipulate state stores in the checkpoint. Users can run the batch query with State Data Source to get the visibility of the states for existing streaming query.
+
+As of Spark 4.0, the data source only supports read feature. See [State Data Source Integration Guide](structured-streaming-state-data-source.html) for more details.
+
+NOTE: this data source is currently marked as experimental - source options and the behavior (output) might be subject to change.
+
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
 ([Python](api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.html#pyspark.sql.streaming.DataStreamWriter)/[Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html) docs)
@@ -2488,7 +2498,7 @@ More information to be added in future releases.
 Different types of streaming queries support different output modes.
 Here is the compatibility matrix.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Query Type</th>
@@ -2627,7 +2637,7 @@ meant for debugging purposes only. See the earlier section on
 [fault-tolerance semantics](#fault-tolerance-semantics).
 Here are the details of all the sinks in Spark.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Sink</th>
@@ -3215,7 +3225,7 @@ The trigger settings of a streaming query define the timing of streaming data pr
 the query is going to be executed as micro-batch query with a fixed batch interval or as a continuous processing query.
 Here are the different kinds of triggers that are supported.
 
-<table class="table table-striped">
+<table>
   <thead>
   <tr>
     <th>Trigger Type</th>
@@ -3264,8 +3274,8 @@ Here are the different kinds of triggers that are supported.
     <td>
         Similar to queries one-time micro-batch trigger, the query will process all the available data and then
         stop on its own. The difference is that, it will process the data in (possibly) multiple micro-batches
-        based on the source options (e.g. <code>maxFilesPerTrigger</code> for file source), which will result
-        in better query scalability.
+        based on the source options (e.g. <code>maxFilesPerTrigger</code> or <code>maxBytesPerTrigger</code> for file 
+        source), which will result in better query scalability.
         <ul>
             <li>This trigger provides a strong guarantee of processing: regardless of how many batches were
                 left over in previous run, it ensures all available data at the time of execution gets

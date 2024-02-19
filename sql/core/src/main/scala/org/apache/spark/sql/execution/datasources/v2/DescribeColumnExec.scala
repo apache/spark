@@ -53,7 +53,7 @@ case class DescribeColumnExec(
           read.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
             case s: SupportsReportStatistics =>
               val stats = s.estimateStatistics()
-              Some(stats.columnStats().get(FieldReference.column(column.name)))
+              Option(stats.columnStats().get(FieldReference.column(column.name)))
             case _ => None
           }
         case _ => None

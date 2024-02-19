@@ -22,10 +22,11 @@ import java.util.Locale
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.DatabaseOnDocker
+import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -53,7 +54,7 @@ import org.apache.spark.tags.DockerTest
  *  $ ./buildContainerImage.sh -v 23.2.0 -f
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
  *
- * This procedure has been validated with Oracle Databae Free version 23.2.0,
+ * This procedure has been validated with Oracle Database Free version 23.2.0,
  * and with Oracle Express Edition versions 18.4.0 and 21.3.0
  */
 @DockerTest
@@ -74,19 +75,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
-  override val db = new DatabaseOnDocker {
-    lazy override val imageName =
-      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-free:23.3")
-    val oracle_password = "Th1s1sThe0racle#Pass"
-    override val env = Map(
-      "ORACLE_PWD" -> oracle_password,      // oracle images uses this
-      "ORACLE_PASSWORD" -> oracle_password  // gvenzl/oracle-free uses this
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 1521
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"
-  }
+  override val db = new OracleDatabaseOnDocker
+
+  override val defaultMetadata: Metadata = new MetadataBuilder()
+    .putLong("scale", 0)
+    .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
+    .build()
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
@@ -106,11 +100,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, defaultMetadata)
+    var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, super.defaultMetadata)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, defaultMetadata)
+    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, super.defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -131,12 +125,17 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  test("SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle JDBC") {
+  test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(c1 string)")
-      sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
-      assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 256)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
+        },
+        errorClass = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "255")
+      )
     }
   }
 }

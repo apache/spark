@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.util.Map;
+
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 
@@ -66,8 +69,11 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalBinaryType) {
       return obj.getBinary(ordinal);
     }
-    if (physicalDataType instanceof PhysicalStructType) {
-      return obj.getStruct(ordinal, ((PhysicalStructType) physicalDataType).fields().length);
+    if (physicalDataType instanceof PhysicalVariantType) {
+      return obj.getVariant(ordinal);
+    }
+    if (physicalDataType instanceof PhysicalStructType dt) {
+      return obj.getStruct(ordinal, dt.fields().length);
     }
     if (physicalDataType instanceof PhysicalArrayType) {
       return obj.getArray(ordinal);
@@ -75,10 +81,11 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalMapType) {
       return obj.getMap(ordinal);
     }
-    if (handleUserDefinedType && dataType instanceof UserDefinedType) {
-      return obj.get(ordinal, ((UserDefinedType)dataType).sqlType());
+    if (handleUserDefinedType && dataType instanceof UserDefinedType dt) {
+      return obj.get(ordinal, dt.sqlType());
     }
 
-    throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3131", Map.of("dataType", dataType.simpleString()));
   }
 }

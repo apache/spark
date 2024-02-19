@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
@@ -36,6 +36,7 @@ import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
@@ -64,11 +65,12 @@ sealed trait Vector extends Serializable {
         if (this.size != v2.size) return false
         (this, v2) match {
           case (s1: SparseVector, s2: SparseVector) =>
-            Vectors.equals(s1.indices, s1.values, s2.indices, s2.values)
+            Vectors.equals(
+              s1.indices.toImmutableArraySeq, s1.values, s2.indices.toImmutableArraySeq, s2.values)
           case (s1: SparseVector, d1: DenseVector) =>
-            Vectors.equals(s1.indices, s1.values, 0 until d1.size, d1.values)
+            Vectors.equals(s1.indices.toImmutableArraySeq, s1.values, 0 until d1.size, d1.values)
           case (d1: DenseVector, s1: SparseVector) =>
-            Vectors.equals(0 until d1.size, d1.values, s1.indices, s1.values)
+            Vectors.equals(0 until d1.size, d1.values, s1.indices.toImmutableArraySeq, s1.values)
           case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
         }
       case _ => false
@@ -430,7 +432,7 @@ object Vectors {
    */
   @Since("1.6.0")
   def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
       case 0 => // sparse
@@ -757,7 +759,7 @@ class DenseVector @Since("1.0.0") (
 
   @Since("1.6.0")
   override def toJson: String = {
-    val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
+    val jValue = ("type" -> 1) ~ ("values" -> values.toImmutableArraySeq)
     compact(render(jValue))
   }
 
@@ -970,8 +972,8 @@ class SparseVector @Since("1.0.0") (
   override def toJson: String = {
     val jValue = ("type" -> 0) ~
       ("size" -> size) ~
-      ("indices" -> indices.toSeq) ~
-      ("values" -> values.toSeq)
+      ("indices" -> indices.toImmutableArraySeq) ~
+      ("values" -> values.toImmutableArraySeq)
     compact(render(jValue))
   }
 

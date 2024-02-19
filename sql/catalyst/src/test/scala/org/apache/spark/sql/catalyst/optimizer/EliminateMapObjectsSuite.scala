@@ -37,8 +37,10 @@ class EliminateMapObjectsSuite extends PlanTest {
     }
   }
 
-  implicit private def intArrayEncoder = ExpressionEncoder[Array[Int]]()
-  implicit private def doubleArrayEncoder = ExpressionEncoder[Array[Double]]()
+  implicit private def intArrayEncoder: ExpressionEncoder[Array[Int]] =
+    ExpressionEncoder[Array[Int]]()
+  implicit private def doubleArrayEncoder: ExpressionEncoder[Array[Double]] =
+    ExpressionEncoder[Array[Double]]()
 
   test("SPARK-20254: Remove unnecessary data conversion for primitive array") {
     val intObjType = ObjectType(classOf[Array[Int]])

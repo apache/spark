@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, ForEachDStream, InputDStream}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A dummy stream that does absolutely nothing.
@@ -97,7 +98,7 @@ class TestOutputStream[T: ClassTag](
       new ConcurrentLinkedQueue[Seq[T]]()
   ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
-    output.add(collected)
+    output.add(collected.toImmutableArraySeq)
   }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
@@ -121,7 +122,7 @@ class TestOutputStreamWithPartitions[T: ClassTag](
       new ConcurrentLinkedQueue[Seq[Seq[T]]]())
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.glom().collect().map(_.toSeq)
-    output.add(collected)
+    output.add(collected.toImmutableArraySeq)
   }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint

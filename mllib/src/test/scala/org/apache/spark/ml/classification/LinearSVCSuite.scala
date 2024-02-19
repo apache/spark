@@ -30,6 +30,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.util.ArrayImplicits._
 
 
 class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
@@ -365,7 +366,7 @@ object LinearSVCSuite {
       val yD = new BDV(xi).dot(weightsMat) + intercept + 0.01 * rnd.nextGaussian()
       if (yD > 0) 1.0 else 0.0
     }
-    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
+    y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2))).toImmutableArraySeq
   }
 
   def checkModels(model1: LinearSVCModel, model2: LinearSVCModel): Unit = {

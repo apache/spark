@@ -21,7 +21,7 @@ import java.util.Random
 
 import org.scalatest.matchers.must.Matchers._
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.test.RemoteSparkSession
 
 class ClientDataFrameStatSuite extends RemoteSparkSession {
@@ -120,7 +120,7 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
     val columnNames = crosstab.schema.fieldNames
     assert(columnNames(0) === "a_b")
     // reduce by key
-    val expected = data.map(t => (t, 1)).groupBy(_._1).view.mapValues(_.length)
+    val expected = data.map(t => (t, 1)).groupBy(_._1).transform((_, v) => v.length)
     val rows = crosstab.collect()
     rows.foreach { row =>
       val i = row.getString(0).toInt
@@ -248,19 +248,19 @@ class ClientDataFrameStatSuite extends RemoteSparkSession {
 
   test("Bloom filter test invalid inputs") {
     val df = spark.range(1000).toDF("id")
-    val message1 = intercept[SparkException] {
+    val error1 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", -1000, 100)
-    }.getMessage
-    assert(message1.contains("Expected insertions must be positive"))
+    }
+    assert(error1.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
 
-    val message2 = intercept[SparkException] {
+    val error2 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -100)
-    }.getMessage
-    assert(message2.contains("Number of bits must be positive"))
+    }
+    assert(error2.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
 
-    val message3 = intercept[SparkException] {
+    val error3 = intercept[AnalysisException] {
       df.stat.bloomFilter("id", 1000, -1.0)
-    }.getMessage
-    assert(message3.contains("False positive probability must be within range (0.0, 1.0)"))
+    }
+    assert(error3.getErrorClass === "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE")
   }
 }

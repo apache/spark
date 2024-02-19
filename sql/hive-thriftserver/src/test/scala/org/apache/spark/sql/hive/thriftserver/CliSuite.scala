@@ -34,7 +34,6 @@ import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkFunSu
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.test.HiveTestJars
@@ -193,7 +192,7 @@ class CliSuite extends SparkFunSuite {
       ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeoutForQuery)
       log.info("Found all expected output.")
     } catch { case cause: Throwable =>
-      val message =
+      val message = lock.synchronized {
         s"""
            |=======================
            |CliSuite failure output
@@ -207,6 +206,7 @@ class CliSuite extends SparkFunSuite {
            |End CliSuite failure output
            |===========================
          """.stripMargin
+      }
       logError(message, cause)
       fail(message, cause)
     } finally {
@@ -650,8 +650,7 @@ class CliSuite extends SparkFunSuite {
     val sparkContext = new SparkContext(sparkConf)
     SparkSQLEnv.sparkContext = sparkContext
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
-    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf, extraConfigs)
+    val cliConf = HiveClientImpl.newHiveConf(sparkConf, hadoopConf)
     val sessionState = new CliSessionState(cliConf)
     SessionState.setCurrentSessionState(sessionState)
     val cli = new SparkSQLCLIDriver
@@ -702,6 +701,7 @@ class CliSuite extends SparkFunSuite {
   testRetry("formats of error messages") {
     def check(format: ErrorMessageFormat.Value, errorMessage: String, silent: Boolean): Unit = {
       val expected = errorMessage.split(System.lineSeparator()).map("" -> _)
+      import org.apache.spark.util.ArrayImplicits._
       runCliWithin(
         1.minute,
         extraArgs = Seq(
@@ -709,7 +709,7 @@ class CliSuite extends SparkFunSuite {
           "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=$format",
           "--conf", s"${SQLConf.ANSI_ENABLED.key}=true",
           "-e", "select 1 / 0"),
-        errorResponses = Seq("DIVIDE_BY_ZERO"))(expected: _*)
+        errorResponses = Seq("DIVIDE_BY_ZERO"))(expected.toImmutableArraySeq: _*)
     }
     check(
       format = ErrorMessageFormat.PRETTY,
@@ -810,7 +810,7 @@ class CliSuite extends SparkFunSuite {
     val catalogUrl =
       s"spark.sql.catalog.$catalogName.url=jdbc:derby:memory:$catalogName;create=true"
     val catalogDriver =
-      s"spark.sql.catalog.$catalogName.driver=org.apache.derby.jdbc.AutoloadedDriver"
+      s"spark.sql.catalog.$catalogName.driver=org.apache.derby.iapi.jdbc.AutoloadedDriver"
     val catalogConfigs =
       Seq(catalogImpl, catalogDriver, catalogUrl, "spark.sql.catalogImplementation=in-memory")
         .flatMap(Seq("--conf", _))

@@ -21,26 +21,27 @@ import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.QuotingUtils.{quoted, quoteIdentifier, quoteNameParts}
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-class NoSuchDatabaseException private[sql](
-  message: String,
-  cause: Option[Throwable],
-  errorClass: Option[String],
-  messageParameters: Map[String, String])
+class NoSuchDatabaseException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
   extends AnalysisException(
     message,
     cause = cause,
     errorClass = errorClass,
     messageParameters = messageParameters) {
 
-  def this(errorClass: String, messageParameters: Map[String, String]) = {
+  def this(errorClass: String, messageParameters: Map[String, String], cause: Option[Throwable]) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      cause = None,
+      cause = cause,
       Some(errorClass),
       messageParameters)
   }
@@ -48,15 +49,8 @@ class NoSuchDatabaseException private[sql](
   def this(db: String) = {
     this(
       errorClass = "SCHEMA_NOT_FOUND",
-      messageParameters = Map("schemaName" -> quoteIdentifier(db)))
-  }
-
-  def this(message: String, cause: Option[Throwable]) = {
-    this(
-      message = message,
-      cause = cause,
-      errorClass = Some("SCHEMA_NOT_FOUND"),
-      messageParameters = Map.empty[String, String])
+      messageParameters = Map("schemaName" -> quoteIdentifier(db)),
+      cause = None)
   }
 }
 
@@ -87,20 +81,12 @@ class NoSuchNamespaceException private(
 
   def this(namespace: Array[String]) = {
     this(errorClass = "SCHEMA_NOT_FOUND",
-      Map("schemaName" -> quoteNameParts(namespace)))
-  }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("SCHEMA_NOT_FOUND"),
-      messageParameters = Map.empty[String, String])
+      Map("schemaName" -> quoteNameParts(namespace.toImmutableArraySeq)))
   }
 }
 
 // any changes to this class should be backward compatible as it may be used by external connectors
-class NoSuchTableException private[sql](
+class NoSuchTableException private(
     message: String,
     cause: Option[Throwable],
     errorClass: Option[String],
@@ -111,36 +97,34 @@ class NoSuchTableException private[sql](
     errorClass = errorClass,
     messageParameters = messageParameters) {
 
-  def this(errorClass: String, messageParameters: Map[String, String]) = {
+  def this(errorClass: String, messageParameters: Map[String, String], cause: Option[Throwable]) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      cause = None,
+      cause = cause,
       Some(errorClass),
       messageParameters)
   }
 
   def this(db: String, table: String) = {
-    this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+    this(
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map("relationName" ->
-        (quoteIdentifier(db) + "." + quoteIdentifier(table))))
+        (quoteIdentifier(db) + "." + quoteIdentifier(table))),
+      cause = None)
   }
 
   def this(name : Seq[String]) = {
-    this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      messageParameters = Map("relationName" -> quoteNameParts(name)))
+    this(
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map("relationName" -> quoteNameParts(name)),
+      cause = None)
   }
 
   def this(tableIdent: Identifier) = {
-    this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-      messageParameters = Map("relationName" -> quoted(tableIdent)))
-  }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
     this(
-      message,
-      cause,
-      errorClass = Some("TABLE_OR_VIEW_NOT_FOUND"),
-      messageParameters = Map.empty[String, String])
+      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map("relationName" -> quoted(tableIdent)),
+      cause = None)
   }
 }
 
@@ -185,14 +169,6 @@ class NoSuchFunctionException private(
   def this(identifier: Identifier) = {
     this(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> quoted(identifier)))
   }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("ROUTINE_NOT_FOUND"),
-      messageParameters = Map.empty[String, String])
-  }
 }
 
 class NoSuchTempFunctionException(func: String)
@@ -223,13 +199,5 @@ class NoSuchIndexException private(
 
   def this(indexName: String, tableName: String, cause: Option[Throwable]) = {
     this("INDEX_NOT_FOUND", Map("indexName" -> indexName, "tableName" -> tableName), cause)
-  }
-
-  def this(message: String, cause: Option[Throwable] = None) = {
-    this(
-      message,
-      cause,
-      errorClass = Some("INDEX_NOT_FOUND"),
-      messageParameters = Map.empty[String, String])
   }
 }

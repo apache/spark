@@ -478,7 +478,10 @@ object GroupBasedRowLevelOperation {
 
       case other =>
         throw new AnalysisException(
-          s"Unexpected row-level read relations (allow multiple = $allowMultipleReads): $other")
+          errorClass = "_LEGACY_ERROR_TEMP_3056",
+          messageParameters = Map(
+            "allowMultipleReads" -> allowMultipleReads.toString,
+            "other" -> other.toString))
     }
   }
 }

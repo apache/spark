@@ -21,26 +21,13 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Time series-related'
 # https://spark.apache.org/docs/latest/api/python/reference/pyspark.pandas/frame.html#time-series-related
 class FrameTimeSeriesMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
-    @property
-    def df_pair(self):
-        pdf = self.pdf
-        psdf = ps.from_pandas(pdf)
-        return pdf, psdf
-
     def test_shift(self):
         pdf = pd.DataFrame(
             {
@@ -133,7 +120,11 @@ class FrameTimeSeriesMixin:
         self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
 
 
-class FrameTimeSeriesTests(FrameTimeSeriesMixin, ComparisonTestBase, SQLTestUtils):
+class FrameTimeSeriesTests(
+    FrameTimeSeriesMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

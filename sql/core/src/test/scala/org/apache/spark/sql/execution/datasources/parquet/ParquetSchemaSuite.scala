@@ -27,6 +27,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.desc
@@ -1040,20 +1041,18 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
       val expectedMessage = "Encountered error while reading file"
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
-      assert(e.getCause.getMessage.contains(expectedMessage))
+      assert(e.getCause.isInstanceOf[ParquetDecodingException])
+      assert(e.getMessage.contains(expectedMessage))
     }
   }
 
   test("schema mismatch failure error message for parquet vectorized reader") {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+      assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
 
       // Check if the physical type is reporting correctly
-      val errMsg = e.getCause.getMessage
+      val errMsg = e.getMessage
       assert(errMsg.startsWith("Parquet column cannot be converted in file"))
       val file = errMsg.substring("Parquet column cannot be converted in file ".length,
         errMsg.indexOf(". "))
@@ -1061,7 +1060,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
         checkError(
-          exception = e.getCause.asInstanceOf[SparkException],
+          exception = e,
           errorClass = "_LEGACY_ERROR_TEMP_2063",
           parameters = Map(
             "filePath" ->
@@ -1073,7 +1072,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         )
       } else {
         checkError(
-          exception = e.getCause.asInstanceOf[SparkException],
+          exception = e,
           errorClass = "_LEGACY_ERROR_TEMP_2063",
           parameters = Map(
             "filePath" ->
@@ -1102,8 +1101,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         val e = intercept[SparkException] {
           spark.read.schema(df2.schema).parquet(s"$path/parquet").collect()
         }
-        assert(e.getCause.isInstanceOf[SparkException])
-        assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
       }
     }
   }
@@ -1120,7 +1118,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
   test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    val e = intercept[org.apache.spark.SparkException] {
+    val e = intercept[AnalysisException] {
       spark.read.parquet(testDataPath).collect()
     }
     assert(e.getMessage.contains("Illegal Parquet type: INT64 (TIMESTAMP(NANOS,true))."))
@@ -2416,7 +2414,39 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       inferTimestampNTZ = inferTimestampNTZ)
   }
 
-  private def testSchemaClipping(
+  test("SPARK-46056: " +
+    "schema with default existence value and binary array decimal type") {
+    import scala.jdk.CollectionConverters._
+
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val data = Seq(Row(Decimal("13.0")))
+
+      // decimal type does not fit in int or long
+      val wideDecimal = DecimalType(32, 10)
+      val initialSchema = StructType(Seq(
+        StructField("f1", wideDecimal)
+      ))
+
+      val evolvedSchemaWithDefaultValue = StructType(Seq(
+        StructField("f1", wideDecimal),
+        StructField("f2", wideDecimal).withExistenceDefaultValue("42.0")
+      ))
+
+      val df = spark.createDataFrame(data.asJava, initialSchema)
+      df.write.mode("overwrite").parquet(s"$path/parquet")
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        val res = spark.read.schema(evolvedSchemaWithDefaultValue)
+          .parquet(s"$path/parquet").collect()
+        assert(res.length == 1)
+        assert(res(0).getDecimal(0).toBigInteger.longValueExact() == 13)
+        assert(res(0).getDecimal(1).toBigInteger.longValueExact() == 42)
+      }
+    }
+  }
+
+    private def testSchemaClipping(
       testName: String,
       parquetSchema: String,
       catalystSchema: StructType,

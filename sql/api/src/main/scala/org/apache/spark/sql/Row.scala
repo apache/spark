@@ -29,6 +29,7 @@ import org.json4s.{JArray, JBool, JDecimal, JDouble, JField, JLong, JNull, JObje
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, pretty, render}
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkDateTimeUtils, TimestampFormatter, UDTUtils}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * @since 1.3.0
@@ -485,7 +487,7 @@ trait Row extends Serializable {
       values.update(i, get(i))
       i += 1
     }
-    values.toSeq
+    values.toImmutableArraySeq
   }
 
   /** Displays all elements of this sequence in a string (without a separator). */
@@ -608,9 +610,13 @@ trait Row extends Serializable {
         new JObject(elements.toList)
       case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
         toJson(UDTUtils.toRow(v, udt), udt.sqlType)
-      case _ =>
-        throw new IllegalArgumentException(s"Failed to convert value $value " +
-          s"(class of ${value.getClass}}) with the type of $dataType to JSON.")
+      case _ => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3249",
+        messageParameters = Map(
+          "value" -> value.toString,
+          "valueClass" -> value.getClass.toString,
+          "dataType" -> dataType.toString)
+      )
     }
     toJson(this, schema)
   }

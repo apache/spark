@@ -29,7 +29,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.RandomStringUtils
 import org.apache.hadoop.fs.Path
 import org.mockito.Mockito.when
-import org.scalactic.TolerantNumerics
+import org.scalactic.{Equality, TolerantNumerics}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatestplus.mockito.MockitoSugar
@@ -39,7 +39,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LocalRelation}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.InputPartition
@@ -60,7 +60,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   import testImplicits._
 
   // To make === between double tolerate inexact values
-  implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
+  implicit val doubleEquality: Equality[Double] = TolerantNumerics.tolerantDoubleEquality(0.01)
 
   after {
     sqlContext.streams.active.foreach(_.stop())
@@ -491,7 +491,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val progress = getStreamingQuery(streamingInputDF.join(streamingInputDF, "value"))
       .recentProgress.head
     assert(progress.numInputRows === 20) // data is read multiple times in self-joins
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 20)
   }
 
@@ -505,7 +505,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val progress = getStreamingQuery(streamingInputDF.join(staticInputDF, "value"))
       .recentProgress.head
     assert(progress.numInputRows === 10)
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 10)
   }
 
@@ -518,7 +518,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     // After the first trigger, the calculated input rows should be 10
     val progress = getStreamingQuery(streamingInputDF).recentProgress.head
     assert(progress.numInputRows === 10)
-    assert(progress.sources.size === 1)
+    assert(progress.sources.length === 1)
     assert(progress.sources(0).numInputRows === 10)
   }
 
@@ -756,7 +756,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
   private def waitUntilBatchProcessed(clock: StreamManualClock) = AssertOnQuery { q =>
     eventually(Timeout(streamingTimeout)) {
-      if (!q.exception.isDefined) {
+      if (q.exception.isEmpty) {
         assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
       }
     }
@@ -891,7 +891,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
       override def getOffset: Option[Offset] = Some(LongOffset(1))
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        spark.range(2).toDF(MockSourceProvider.fakeSchema.fieldNames: _*)
+        import org.apache.spark.util.ArrayImplicits._
+        spark.range(2).toDF(MockSourceProvider.fakeSchema.fieldNames.toImmutableArraySeq: _*)
       }
       override def schema: StructType = MockSourceProvider.fakeSchema
     }
@@ -1316,6 +1317,51 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         },
         CheckAnswer(10))
     }
+  }
+
+  test("SPARK-46062: streaming query reading from CTE, which refers to temp view from " +
+    "streaming source") {
+    val inputStream = MemoryStream[Int]
+    inputStream.toDF().createOrReplaceTempView("tv")
+
+    val df = spark.sql(
+      """
+        |WITH w as (
+        |  SELECT * FROM tv
+        |)
+        |SELECT value from w
+        |""".stripMargin)
+
+    testStream(df)(
+      AddData(inputStream, 1, 2, 3),
+      CheckAnswer(1, 2, 3),
+      Execute { q =>
+        var isStreamingForCteDef: Option[Boolean] = None
+        var isStreamingForCteRef: Option[Boolean] = None
+
+        q.analyzedPlan.foreach {
+          case d: CTERelationDef =>
+            assert(d.resolved, "The definition node must be resolved after analysis.")
+            isStreamingForCteDef = Some(d.isStreaming)
+
+          case d: CTERelationRef =>
+            assert(d.resolved, "The reference node must be marked as resolved after analysis.")
+            isStreamingForCteRef = Some(d.isStreaming)
+
+          case _ =>
+        }
+
+        assert(isStreamingForCteDef.isDefined && isStreamingForCteRef.isDefined,
+          "Both definition and reference for CTE should be available in analyzed plan.")
+
+        assert(isStreamingForCteDef.get, "Expected isStreaming=true for CTE definition, but " +
+          "isStreaming is set to false.")
+
+        assert(isStreamingForCteDef === isStreamingForCteRef,
+          "isStreaming flag should be carried over from definition to reference, " +
+            s"definition: ${isStreamingForCteDef.get}, reference: ${isStreamingForCteRef.get}.")
+      }
+    )
   }
 
   private def checkExceptionMessage(df: DataFrame): Unit = {

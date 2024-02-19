@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 // A builder to create `Expression` from function information.
@@ -26,6 +27,6 @@ trait FunctionExpressionBuilder {
 
 object DummyFunctionExpressionBuilder extends FunctionExpressionBuilder {
   override def makeExpression(name: String, clazz: Class[_], input: Seq[Expression]): Expression = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }

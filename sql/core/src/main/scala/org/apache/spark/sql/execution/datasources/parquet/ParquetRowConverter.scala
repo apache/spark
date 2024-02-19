@@ -29,7 +29,7 @@ import org.apache.parquet.io.ColumnIOFactory
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
 import org.apache.parquet.schema.{GroupType, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation._
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, FLOAT, INT32, INT64, INT96}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -42,7 +42,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -234,7 +234,7 @@ private[parquet] class ParquetRowConverter(
     // maintain a boolean array to track which fields have been explicitly assigned for each row.
     if (ResolveDefaultColumns.hasExistenceDefaultValues(catalystType)) {
       val existingValues = ResolveDefaultColumns.existenceDefaultValues(catalystType)
-      for (i <- 0 until existingValues.size) {
+      for (i <- 0 until existingValues.length) {
        bitmask(i) =
           // Assume the schema for a Parquet file-based table contains N fields. Then if we later
           // run a command "ALTER TABLE t ADD COLUMN c DEFAULT <value>" on the Parquet table, this
@@ -312,6 +312,21 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit =
             this.updater.setLong(Integer.toUnsignedLong(value))
+        }
+      case LongType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            this.updater.setLong(value)
+        }
+      case DoubleType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit =
+            this.updater.setDouble(value)
+        }
+      case DoubleType if parquetType.asPrimitiveType().getPrimitiveTypeName == FLOAT =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addFloat(value: Float): Unit =
+            this.updater.setDouble(value)
         }
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType |
         _: AnsiIntervalType =>
@@ -438,6 +453,16 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      // Allow upcasting INT32 date to timestampNTZ.
+      case TimestampNTZType if schemaConverter.isTimestampNTZEnabled() &&
+      parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
+      parquetType.getLogicalTypeAnnotation.isInstanceOf[DateLogicalTypeAnnotation] =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addInt(value: Int): Unit = {
+            this.updater.set(DateTimeUtils.daysToMicros(dateRebaseFunc(value), ZoneOffset.UTC))
+          }
+        }
+
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
@@ -497,6 +522,9 @@ private[parquet] class ParquetRowConverter(
           datetimeRebaseSpec,
           int96RebaseSpec,
           wrappedUpdater)
+
+      case t: VariantType =>
+        new ParquetVariantConverter(parquetType.asGroupType(), updater)
 
       case t =>
         throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
@@ -807,6 +835,40 @@ private[parquet] class ParquetRowConverter(
         currentKey = null
         currentValue = null
       }
+    }
+  }
+
+  /** Parquet converter for Variant */
+  private final class ParquetVariantConverter(
+     parquetType: GroupType,
+     updater: ParentContainerUpdater)
+    extends ParquetGroupConverter(updater) {
+
+    private[this] var currentValue: Any = _
+    private[this] var currentMetadata: Any = _
+
+    private[this] val converters = Array(
+      // Converter for value
+      newConverter(parquetType.getType(0), BinaryType, new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentValue = value
+      }),
+
+      // Converter for metadata
+      newConverter(parquetType.getType(1), BinaryType, new ParentContainerUpdater {
+        override def set(value: Any): Unit = currentMetadata = value
+      }))
+
+    override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
+
+    override def end(): Unit = {
+      updater.set(
+        new VariantVal(currentValue.asInstanceOf[Array[Byte]],
+            currentMetadata.asInstanceOf[Array[Byte]]))
+    }
+
+    override def start(): Unit = {
+      currentValue = null
+      currentMetadata = null
     }
   }
 

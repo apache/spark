@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write.DataWriter
 import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -59,12 +60,14 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
           var count = 0L
           while (dataIterator.hasNext) {
             if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-              CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
+              CustomMetrics.updateMetrics(
+                dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
             }
             count += 1
             dataWriter.write(dataIterator.next())
           }
-          CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
+          CustomMetrics.updateMetrics(
+            dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
           logInfo(s"Writer for partition ${context.partitionId()} " +
             s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
           val msg = dataWriter.commit()

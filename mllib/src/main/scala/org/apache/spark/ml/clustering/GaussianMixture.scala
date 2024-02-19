@@ -37,7 +37,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Common params for GaussianMixture and GaussianMixtureModel
@@ -189,7 +189,7 @@ class GaussianMixtureModel private[ml] (
   def gaussiansDF: DataFrame = {
     val modelGaussians = gaussians.map { gaussian =>
       (OldVectors.fromML(gaussian.mean), OldMatrices.fromML(gaussian.cov))
-    }
+    }.toImmutableArraySeq
     SparkSession.builder().getOrCreate().createDataFrame(modelGaussians).toDF("mean", "cov")
   }
 
@@ -508,8 +508,8 @@ class GaussianMixture @Since("2.0.0") (
     val gaussians = Array.tabulate(numClusters) { i =>
       val start = i * numSamples
       val end = start + numSamples
-      val sampleSlice = samples.view.slice(start, end)
-      val weightSlice = sampleWeights.view.slice(start, end)
+      val sampleSlice = samples.slice(start, end)
+      val weightSlice = sampleWeights.slice(start, end)
       val localWeightSum = weightSlice.sum
       weights(i) = localWeightSum / weightSum
 

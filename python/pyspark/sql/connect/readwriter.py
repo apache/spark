@@ -134,7 +134,7 @@ class DataFrameReader(OptionUtils):
     def _df(self, plan: LogicalPlan) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
 
-        return DataFrame.withPlan(plan, self._client)
+        return DataFrame(plan, self._client)
 
     def table(self, tableName: str) -> "DataFrame":
         return self._df(Read(tableName, self._options))
@@ -792,6 +792,7 @@ class DataFrameWriter(OptionUtils):
         timestampFormat: Optional[str] = None,
         compression: Optional[str] = None,
         encoding: Optional[str] = None,
+        validateName: Optional[bool] = None,
     ) -> None:
         self.mode(mode)
         self._set_opts(
@@ -806,6 +807,7 @@ class DataFrameWriter(OptionUtils):
             timestampFormat=timestampFormat,
             compression=compression,
             encoding=encoding,
+            validateName=validateName,
         )
         self.format("xml").save(path)
 

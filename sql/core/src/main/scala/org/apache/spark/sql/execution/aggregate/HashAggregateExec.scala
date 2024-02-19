@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CalendarIntervalType, DecimalType, StringType}
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -708,7 +709,8 @@ case class HashAggregateExec(
     // Here we set `currentVars(0)` to `currentVars(numBufferSlots)` to null, so that when
     // generating code for buffer columns, we use `INPUT_ROW`(will be the buffer row), while
     // generating input columns, we use `currentVars`.
-    ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
+    ctx.currentVars = (new Array[ExprCode](aggregateBufferAttributes.length) ++ input)
+      .toImmutableArraySeq
 
     val aggNames = aggregateExpressions.map(_.aggregateFunction.prettyName)
     // Computes start offsets for each aggregation function code

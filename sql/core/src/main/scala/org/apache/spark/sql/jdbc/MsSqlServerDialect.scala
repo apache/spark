@@ -190,14 +190,22 @@ private object MsSqlServerDialect extends JdbcDialect {
     if (limit > 0) s"TOP ($limit)" else ""
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
-          case 3729 => throw NonEmptyNamespaceException(message, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case 3729 =>
+            throw NonEmptyNamespaceException(
+              namespace = messageParameters.get("namespace").toArray,
+              details = sqlException.getMessage,
+              cause = Some(e))
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

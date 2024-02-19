@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.receiver
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.concurrent.duration._
 
 import org.apache.hadoop.conf.Configuration
@@ -159,8 +159,8 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
   // For processing futures used in parallel block storing into block manager and write ahead log
   // # threads = 2, so that both writing to BM and WAL can proceed in parallel
-  implicit private val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
+  implicit private val executionContext: ExecutionContextExecutorService = ExecutionContext
+    .fromExecutorService(ThreadUtils.newDaemonFixedThreadPool(2, this.getClass.getSimpleName))
 
   /**
    * This implementation stores the block into the block manager as well as a write ahead log.

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
@@ -856,16 +857,19 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
         "spark.sql.CodeGenerator.validParamLength" -> "0") {
       withTable("t") {
-        val expectedErrMsg = "Failed to split aggregate code into small functions"
+        val expectedErrMsg = "Failed to split aggregate code into small functions.*"
         Seq(
           // Test case without keys
           "SELECT AVG(v) FROM VALUES(1) t(v)",
           // Tet case with keys
           "SELECT k, AVG(v) FROM VALUES((1, 1)) t(k, v) GROUP BY k").foreach { query =>
-          val e = intercept[IllegalStateException] {
-            sql(query).collect()
-          }
-          assert(e.getMessage.contains(expectedErrMsg))
+          checkError(
+            exception = intercept[SparkException] {
+              sql(query).collect()
+            },
+            errorClass = "INTERNAL_ERROR",
+            parameters = Map("message" -> expectedErrMsg),
+            matchPVals = true)
         }
       }
     }
@@ -877,17 +881,20 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
         "spark.sql.CodeGenerator.validParamLength" -> "0") {
       withTable("t") {
-        val expectedErrMsg = "Failed to split subexpression code into small functions"
+        val expectedErrMsg = "Failed to split subexpression code into small functions.*"
         Seq(
           // Test case without keys
           "SELECT AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1)) t(a, b, c)",
           // Tet case with keys
           "SELECT k, AVG(a + b), SUM(a + b + c) FROM VALUES((1, 1, 1, 1)) t(k, a, b, c) " +
             "GROUP BY k").foreach { query =>
-          val e = intercept[IllegalStateException] {
-            sql(query).collect()
-          }
-          assert(e.getMessage.contains(expectedErrMsg))
+          checkError(
+            exception = intercept[SparkException] {
+              sql(query).collect()
+            },
+            errorClass = "INTERNAL_ERROR",
+            parameters = Map("message" -> expectedErrMsg),
+            matchPVals = true)
         }
       }
     }

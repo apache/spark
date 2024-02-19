@@ -187,7 +187,8 @@ class ExecutorPodsAllocator(
     // to the schedulerKnownNewlyCreatedExecs
     val schedulerKnownExecs = schedulerBackend.getExecutorIds().map(_.toLong).toSet
     schedulerKnownNewlyCreatedExecs ++=
-      newlyCreatedExecutors.view.filterKeys(schedulerKnownExecs.contains(_)).mapValues(_._1)
+      newlyCreatedExecutors.filter { case (k, _) => schedulerKnownExecs.contains(k) }
+        .map { case (k, v) => (k, v._1) }
     newlyCreatedExecutors --= schedulerKnownNewlyCreatedExecs.keySet
 
     // For all executors we've created against the API but have not seen in a snapshot
@@ -239,7 +240,8 @@ class ExecutorPodsAllocator(
       _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
     }
 
-    val notDeletedPods = lastSnapshot.executorPods.view.filterKeys(!_deletedExecutorIds.contains(_))
+    val notDeletedPods = lastSnapshot.executorPods
+      .filter { case (k, _) => !_deletedExecutorIds.contains(k) }
     // Map the pods into per ResourceProfile id so we can check per ResourceProfile,
     // add a fast path if not using other ResourceProfiles.
     val rpIdToExecsAndPodState =
@@ -364,7 +366,6 @@ class ExecutorPodsAllocator(
       // in the snapshot state. Since the messages are a little spammy, avoid them when we know
       // there are no useful updates.
       if (log.isDebugEnabled && snapshots.nonEmpty) {
-        val outstanding = pendingCountForRpId + newlyCreatedExecutorsForRpId.size
         if (currentRunningCount >= targetNum && !dynamicAllocationEnabled) {
           logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
             "equal to the number of requested executors. Not scaling up further.")

@@ -16,7 +16,7 @@
 #
 from pyspark.ml import functions as PyMLFunctions
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions import _invoke_function, _to_col, lit
+from pyspark.sql.connect.functions.builtin import _invoke_function, _to_col, lit
 
 
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:

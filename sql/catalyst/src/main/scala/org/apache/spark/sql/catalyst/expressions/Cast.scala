@@ -21,7 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.{QueryContext, SparkArithmeticException}
+import org.apache.spark.{QueryContext, SparkArithmeticException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -39,6 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
+import org.apache.spark.util.ArrayImplicits._
 
 object Cast extends QueryErrorsBase {
   /**
@@ -506,7 +507,9 @@ case class Cast(
       case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
       case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)
       case EvalMode.TRY => Cast.canTryCast(child.dataType, dataType)
-      case other => throw new IllegalArgumentException(s"Unknown EvalMode value: $other")
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3232",
+        messageParameters = Map("other" -> other.toString))
     }
     if (canCast) {
       TypeCheckResult.TypeCheckSuccess
@@ -2086,7 +2089,7 @@ case class Cast(
        """
     }
     val fieldsEvalCodes = ctx.splitExpressions(
-      expressions = fieldsEvalCode.map(_.code),
+      expressions = fieldsEvalCode.map(_.code).toImmutableArraySeq,
       funcName = "castStruct",
       arguments = ("InternalRow", tmpInput.code) :: (rowClass.code, tmpResult.code) :: Nil)
 

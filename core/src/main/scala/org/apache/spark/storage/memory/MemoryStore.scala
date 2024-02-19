@@ -219,9 +219,13 @@ private[spark] class MemoryStore(
       unrollMemoryUsedByThisBlock += initialMemoryThreshold
     }
 
+    // Only do the thread interruption check on the executors.
+    val shouldCheckThreadInterruption = Option(TaskContext.get()).isDefined
+
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
     // and if no thread interrupts have been received.
-    while (values.hasNext && keepUnrolling && !Thread.currentThread().isInterrupted) {
+    while (values.hasNext && keepUnrolling &&
+      (!shouldCheckThreadInterruption || !Thread.currentThread().isInterrupted)) {
       valuesHolder.storeValue(values.next())
       if (elementsUnrolled % memoryCheckPeriod == 0) {
         val currentSize = valuesHolder.estimatedSize()
@@ -242,7 +246,7 @@ private[spark] class MemoryStore(
 
     // SPARK-45025 - if a thread interrupt was received, we log a warning and return used memory
     // to avoid getting killed by task reaper eventually.
-    if (Thread.currentThread().isInterrupted) {
+    if (shouldCheckThreadInterruption && Thread.currentThread().isInterrupted) {
       logInfo(s"Failed to unroll block=$blockId since thread interrupt was received")
       Left(unrollMemoryUsedByThisBlock)
     } else if (keepUnrolling) {

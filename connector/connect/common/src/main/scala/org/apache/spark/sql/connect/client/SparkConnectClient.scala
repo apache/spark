@@ -43,7 +43,7 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicy)
+  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicies)
   private[this] val bstub =
     new CustomSparkConnectBlockingStub(channel, stubState)
   private[this] val stub =
@@ -302,6 +302,43 @@ private[sql] class SparkConnectClient(
   def addArtifact(uri: URI): Unit = artifactManager.addArtifact(uri)
 
   /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   */
+  def addArtifact(bytes: Array[Byte], target: String): Unit =
+    artifactManager.addArtifact(bytes, target)
+
+  /**
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   */
+  def addArtifact(source: String, target: String): Unit =
+    artifactManager.addArtifact(source, target)
+
+  /**
    * Add multiple artifacts to the session.
    *
    * Currently only local files with extensions .jar and .class are supported.
@@ -443,9 +480,13 @@ object SparkConnectClient {
 
     def sslEnabled: Boolean = _configuration.isSslEnabled.contains(true)
 
-    def retryPolicy(policy: GrpcRetryHandler.RetryPolicy): Builder = {
-      _configuration = _configuration.copy(retryPolicy = policy)
+    def retryPolicy(policies: Seq[RetryPolicy]): Builder = {
+      _configuration = _configuration.copy(retryPolicies = policies)
       this
+    }
+
+    def retryPolicy(policy: RetryPolicy): Builder = {
+      retryPolicy(List(policy))
     }
 
     private object URIParams {
@@ -634,7 +675,7 @@ object SparkConnectClient {
       metadata: Map[String, String] = Map.empty,
       userAgent: String = genUserAgent(
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
-      retryPolicy: GrpcRetryHandler.RetryPolicy = GrpcRetryHandler.RetryPolicy(),
+      retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None) {

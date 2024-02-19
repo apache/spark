@@ -267,6 +267,7 @@ private object RowToColumnConverter {
       case DoubleType => DoubleConverter
       case StringType => StringConverter
       case CalendarIntervalType => CalendarConverter
+      case VariantType => VariantConverter
       case at: ArrayType => ArrayConverter(getConverterForType(at.elementType, at.containsNull))
       case st: StructType => new StructConverter(st.fields.map(
         (f) => getConverterForType(f.dataType, f.nullable)))
@@ -278,7 +279,7 @@ private object RowToColumnConverter {
 
     if (nullable) {
       dataType match {
-        case CalendarIntervalType => new StructNullableTypeConverter(core)
+        case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
         case st: StructType => new StructNullableTypeConverter(core)
         case _ => new BasicNullableTypeConverter(core)
       }
@@ -343,6 +344,15 @@ private object RowToColumnConverter {
       cv.getChild(0).appendInt(c.months)
       cv.getChild(1).appendInt(c.days)
       cv.getChild(2).appendLong(c.microseconds)
+    }
+  }
+
+  private object VariantConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val v = row.getVariant(column)
+      cv.appendStruct(false)
+      cv.getChild(0).appendByteArray(v.getValue, 0, v.getValue.length)
+      cv.getChild(1).appendByteArray(v.getMetadata, 0, v.getMetadata.length)
     }
   }
 

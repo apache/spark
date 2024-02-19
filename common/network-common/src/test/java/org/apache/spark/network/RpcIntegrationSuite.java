@@ -67,14 +67,10 @@ public class RpcIntegrationSuite {
         String msg = JavaUtils.bytesToString(message);
         String[] parts = msg.split("/");
         switch (parts[0]) {
-          case "hello":
+          case "hello" ->
             callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-            break;
-          case "return error":
-            callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-            break;
-          case "throw error":
-            throw new RuntimeException("Thrown: " + parts[1]);
+          case "return error" -> callback.onFailure(new RuntimeException("Returned: " + parts[1]));
+          case "throw error" -> throw new RuntimeException("Thrown: " + parts[1]);
         }
       }
 
@@ -234,17 +230,8 @@ public class RpcIntegrationSuite {
     return res;
   }
 
-  private static class RpcStreamCallback implements RpcResponseCallback {
-    final String streamId;
-    final RpcResult res;
-    final Semaphore sem;
-
-    RpcStreamCallback(String streamId, RpcResult res, Semaphore sem) {
-      this.streamId = streamId;
-      this.res = res;
-      this.sem = sem;
-    }
-
+  private record RpcStreamCallback(
+      String streamId, RpcResult res, Semaphore sem) implements RpcResponseCallback {
     @Override
     public void onSuccess(ByteBuffer message) {
       res.successMessages.add(streamId);

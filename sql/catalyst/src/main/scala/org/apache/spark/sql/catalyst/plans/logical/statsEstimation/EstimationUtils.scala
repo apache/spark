@@ -337,7 +337,7 @@ object EstimationUtils {
               lo = right.lo,
               hi = right.hi,
               leftNdv = left.ndv * leftRatio,
-              rightNdv = right.ndv,
+              rightNdv = right.ndv.toDouble,
               leftNumRows = leftHeight * leftRatio,
               rightNumRows = rightHeight
             )
@@ -350,7 +350,7 @@ object EstimationUtils {
             OverlappedRange(
               lo = left.lo,
               hi = left.hi,
-              leftNdv = left.ndv,
+              leftNdv = left.ndv.toDouble,
               rightNdv = right.ndv * rightRatio,
               leftNumRows = leftHeight,
               rightNumRows = rightHeight * rightRatio

@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset =
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.{WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
@@ -66,7 +66,7 @@ class MicroBatchExecution(
         // When the flag is disabled, Spark will fall back to single batch execution, whenever
         // it figures out any source does not support Trigger.AvailableNow.
         // See SPARK-45178 for more details.
-        if (sparkSession.sqlContext.conf.getConf(
+        if (sparkSession.sessionState.conf.getConf(
             SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)) {
           logInfo("Configured to use the wrapper of Trigger.AvailableNow for query " +
             s"$prettyIdString.")
@@ -103,7 +103,7 @@ class MicroBatchExecution(
     var nextSourceId = 0L
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
-    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2Relation]()
+    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
     // We transform each distinct streaming relation into a StreamingExecutionRelation, keeping a
     // map as we go to ensure each identical relation gets the same StreamingExecutionRelation
     // object. For each microbatch, the StreamingExecutionRelation will be replaced with a logical
@@ -113,7 +113,7 @@ class MicroBatchExecution(
     // transformation is responsible for replacing attributes with their final values.
 
     val disabledSources =
-      Utils.stringToSeq(sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders)
+      Utils.stringToSeq(sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders)
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
@@ -140,11 +140,13 @@ class MicroBatchExecution(
             // TODO: operator pushdown.
             val scan = table.newScanBuilder(options).build()
             val stream = scan.toMicroBatchStream(metadataPath)
-            StreamingDataSourceV2Relation(output, scan, stream, catalog, identifier)
+            val relation = StreamingDataSourceV2Relation(
+              table, output, catalog, identifier, options, metadataPath)
+            StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
-            srcName, sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders, table)
+            srcName, sparkSession.sessionState.conf.disabledV2StreamingMicroBatchReaders, table)
         } else {
           v2ToExecutionRelationMap.getOrElseUpdate(s, {
             // Materialize source to avoid creating it in every batch
@@ -163,7 +165,7 @@ class MicroBatchExecution(
       // v1 source
       case s: StreamingExecutionRelation => s.source
       // v2 source
-      case r: StreamingDataSourceV2Relation => r.stream
+      case r: StreamingDataSourceV2ScanRelation => r.stream
     }
 
     // Initializing TriggerExecutor relies on `sources`, hence calling this after initializing
@@ -706,7 +708,7 @@ class MicroBatchExecution(
         }
 
       // For v2 sources.
-      case r: StreamingDataSourceV2Relation =>
+      case r: StreamingDataSourceV2ScanRelation =>
         mutableNewData.get(r.stream).map {
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))

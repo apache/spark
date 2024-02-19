@@ -61,7 +61,6 @@ public final class ReloadingX509TrustManager
   protected volatile int needsReloadCheckCounts;
   private final AtomicReference<X509TrustManager> trustManagerRef;
 
-  private volatile boolean running;
   private Thread reloader;
 
   /**
@@ -98,7 +97,6 @@ public final class ReloadingX509TrustManager
   public void init() {
     reloader = new Thread(this, "Truststore reloader thread");
     reloader.setDaemon(true);
-    running = true;
     reloader.start();
   }
 
@@ -106,7 +104,6 @@ public final class ReloadingX509TrustManager
    * Stops the reloader thread.
    */
   public void destroy() throws InterruptedException {
-    running = false;
     reloader.interrupt();
     reloader.join();
   }
@@ -190,8 +187,8 @@ public final class ReloadingX509TrustManager
     trustManagerFactory.init(ks);
     TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
     for (TrustManager trustManager1 : trustManagers) {
-      if (trustManager1 instanceof X509TrustManager) {
-        trustManager = (X509TrustManager) trustManager1;
+      if (trustManager1 instanceof X509TrustManager x509TrustManager) {
+        trustManager = x509TrustManager;
         break;
       }
     }
@@ -200,11 +197,12 @@ public final class ReloadingX509TrustManager
 
   @Override
   public void run() {
+    boolean running = true;
     while (running) {
       try {
         Thread.sleep(reloadInterval);
       } catch (InterruptedException e) {
-        //NOP
+        running = false;
       }
       try {
         if (running && needsReload()) {

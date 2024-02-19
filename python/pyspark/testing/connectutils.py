@@ -88,69 +88,70 @@ class MockRemoteSession:
         return functools.partial(self.hooks[item])
 
 
-class MockDF(DataFrame):
-    """Helper class that must only be used for the mock plan tests."""
-
-    def __init__(self, plan: LogicalPlan, session: SparkSession):
-        super().__init__(plan, session)
-
-    def __getattr__(self, name):
-        """All attributes are resolved to columns, because none really exist in the
-        mocked DataFrame."""
-        return self[name]
-
-
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
-    @classmethod
-    def _read_table(cls, table_name):
-        return cls._df_mock(Read(table_name))
+    if should_test_connect:
 
-    @classmethod
-    def _udf_mock(cls, *args, **kwargs):
-        return "internal_name"
+        class MockDF(DataFrame):
+            """Helper class that must only be used for the mock plan tests."""
 
-    @classmethod
-    def _df_mock(cls, plan: LogicalPlan) -> MockDF:
-        return MockDF(plan, cls.connect)
+            def __init__(self, plan: LogicalPlan, session: SparkSession):
+                super().__init__(plan, session)
 
-    @classmethod
-    def _session_range(
-        cls,
-        start,
-        end,
-        step=1,
-        num_partitions=None,
-    ):
-        return cls._df_mock(Range(start, end, step, num_partitions))
-
-    @classmethod
-    def _session_sql(cls, query):
-        return cls._df_mock(SQL(query))
-
-    if have_pandas:
+            def __getattr__(self, name):
+                """All attributes are resolved to columns, because none really exist in the
+                mocked DataFrame."""
+                return self[name]
 
         @classmethod
-        def _with_plan(cls, plan):
-            return cls._df_mock(plan)
+        def _read_table(cls, table_name):
+            return cls._df_mock(Read(table_name))
 
-    @classmethod
-    def setUpClass(cls):
-        cls.connect = MockRemoteSession()
-        cls.session = SparkSession.builder.remote().getOrCreate()
-        cls.tbl_name = "test_connect_plan_only_table_1"
+        @classmethod
+        def _udf_mock(cls, *args, **kwargs):
+            return "internal_name"
 
-        cls.connect.set_hook("readTable", cls._read_table)
-        cls.connect.set_hook("range", cls._session_range)
-        cls.connect.set_hook("sql", cls._session_sql)
-        cls.connect.set_hook("with_plan", cls._with_plan)
+        @classmethod
+        def _df_mock(cls, plan: LogicalPlan) -> MockDF:
+            return PlanOnlyTestFixture.MockDF(plan, cls.connect)
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.connect.drop_hook("readTable")
-        cls.connect.drop_hook("range")
-        cls.connect.drop_hook("sql")
-        cls.connect.drop_hook("with_plan")
+        @classmethod
+        def _session_range(
+            cls,
+            start,
+            end,
+            step=1,
+            num_partitions=None,
+        ):
+            return cls._df_mock(Range(start, end, step, num_partitions))
+
+        @classmethod
+        def _session_sql(cls, query):
+            return cls._df_mock(SQL(query))
+
+        if have_pandas:
+
+            @classmethod
+            def _with_plan(cls, plan):
+                return cls._df_mock(plan)
+
+        @classmethod
+        def setUpClass(cls):
+            cls.connect = MockRemoteSession()
+            cls.session = SparkSession.builder.remote().getOrCreate()
+            cls.tbl_name = "test_connect_plan_only_table_1"
+
+            cls.connect.set_hook("readTable", cls._read_table)
+            cls.connect.set_hook("range", cls._session_range)
+            cls.connect.set_hook("sql", cls._session_sql)
+            cls.connect.set_hook("with_plan", cls._with_plan)
+
+        @classmethod
+        def tearDownClass(cls):
+            cls.connect.drop_hook("readTable")
+            cls.connect.drop_hook("range")
+            cls.connect.drop_hook("sql")
+            cls.connect.drop_hook("with_plan")
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -192,3 +193,8 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
     def tearDownClass(cls):
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         cls.spark.stop()
+
+    def test_assert_remote_mode(self):
+        from pyspark.sql import is_remote
+
+        self.assertTrue(is_remote())

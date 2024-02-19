@@ -101,10 +101,6 @@ SELECT * FROM v;
 |  1|  2|  3|  4|
 +---+---+---+---+
 
--- If name conflict is detected in nested CTE, then AnalysisException is thrown by default.
--- SET spark.sql.legacy.ctePrecedencePolicy = CORRECTED (which is recommended),
--- inner CTE definitions take precedence over outer definitions.
-SET spark.sql.legacy.ctePrecedencePolicy = CORRECTED;
 WITH
     t AS (SELECT 1),
     t2 AS (

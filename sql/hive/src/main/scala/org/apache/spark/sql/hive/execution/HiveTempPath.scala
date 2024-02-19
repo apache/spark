@@ -19,7 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.IOException
 import java.net.URI
-import java.text.SimpleDateFormat
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, Random}
 
 import scala.util.control.NonFatal
@@ -29,6 +30,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -39,6 +41,11 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
   private var stagingDirForCreating: Option[Path] = None
 
   lazy val externalTempPath: Path = getExternalTmpPath(path)
+
+  private lazy val dateTimeFormatter =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   private def getExternalTmpPath(path: Path): Path = {
     import org.apache.spark.sql.hive.client.hive._
@@ -54,7 +61,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
     if (allSupportedHiveVersions.contains(hiveVersion)) {
       externalTempPath(path, stagingDir)
     } else {
-      throw new IllegalStateException("Unsupported hive version: " + hiveVersion.fullVersion)
+      throw SparkException.internalError("Unsupported hive version: " + hiveVersion.fullVersion)
     }
   }
 
@@ -116,8 +123,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
 
   private def executionId: String = {
     val rand: Random = new Random
-    val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
-    "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
+    "hive_" + dateTimeFormatter.format(new Date().toInstant) + "_" + Math.abs(rand.nextLong)
   }
 
   def deleteTmpPath() : Unit = {
@@ -143,7 +149,7 @@ class HiveTempPath(session: SparkSession, val hadoopConf: Configuration, path: P
       stagingDirForCreating.foreach { stagingDir =>
         val fs: FileSystem = stagingDir.getFileSystem(hadoopConf)
         if (!FileUtils.mkdir(fs, stagingDir, true, hadoopConf)) {
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             "Cannot create staging directory  '" + stagingDir.toString + "'")
         }
         fs.deleteOnExit(stagingDir)

@@ -33,6 +33,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{CompletionIterator, ThreadUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class manages write ahead log files.
@@ -246,7 +247,7 @@ private[streaming] class FileBasedWriteAheadLog(
       // leads to much clearer code.
       if (fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
         val logFileInfo = logFilesTologInfo(
-          fileSystem.listStatus(logDirectoryPath).map { _.getPath })
+          fileSystem.listStatus(logDirectoryPath).map { _.getPath }.toImmutableArraySeq)
         pastLogs.clear()
         pastLogs ++= logFileInfo
         logInfo(s"Recovered ${logFileInfo.size} write ahead log files from $logDirectory")

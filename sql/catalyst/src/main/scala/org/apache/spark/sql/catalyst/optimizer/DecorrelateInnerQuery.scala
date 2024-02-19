@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
@@ -416,7 +415,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             s"Child of a domain inner join shouldn't contain another domain join.\n$child")
           child
         case o =>
-          throw new IllegalStateException(s"Unexpected domain join type $o")
+          throw SparkException.internalError(s"Unexpected domain join type $o")
       }
 
       // We should only rewrite a domain join when all corresponding outer plan attributes
@@ -442,7 +441,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case _ => Join(domain, newChild, joinType, outerJoinCondition, JoinHint.NONE)
         }
       } else {
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"Unable to rewrite domain join with conditions: $conditions\n$d.")
       }
     case s @ (_ : Union | _: SetOperation) =>
@@ -460,22 +459,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
       }
     case p: LogicalPlan =>
       p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))
-  }
-
-  private def isCountBugFree(aggregateExpressions: Seq[NamedExpression]): Boolean = {
-    // The COUNT bug only appears if an aggregate expression returns a non-NULL result on an empty
-    // input.
-    // Typical example (hence the name) is COUNT(*) that returns 0 from an empty result.
-    // However, SUM(x) IS NULL is another case that returns 0, and in general any IS/NOT IS and CASE
-    // expressions are suspect (and the combination of those).
-    // For now we conservatively accept only those expressions that are guaranteed to be safe.
-    aggregateExpressions.forall {
-      case _ : AttributeReference => true
-      case Alias(_: AttributeReference, _) => true
-      case Alias(_: Literal, _) => true
-      case Alias(a: AggregateExpression, _) if a.aggregateFunction.defaultResult == None => true
-      case _ => false
-    }
   }
 
   def apply(
@@ -690,20 +673,28 @@ object DecorrelateInnerQuery extends PredicateHelper {
               decorrelate(child, parentOuterReferences, aggregated = true, underSetOp)
             val collectedChildOuterReferences = collectOuterReferencesInPlanTree(child)
             // Add outer references to the PARTITION BY clause
-            val partitionFields = collectedChildOuterReferences.map(outerReferenceMap(_)).toSeq
-            val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
+            val partitionFields = collectedChildOuterReferences
+              .filter(outerReferenceMap.contains(_))
+              .map(outerReferenceMap(_)).toSeq
+            if (partitionFields.isEmpty) {
+              // Underlying subquery has no predicates connecting inner and outer query.
+              // In this case, limit can be computed over the inner query directly.
+              (Limit(limit, newChild), joinCond, outerReferenceMap)
+            } else {
+              val orderByFields = replaceOuterReferences(ordering, outerReferenceMap)
 
-            val rowNumber = WindowExpression(RowNumber(),
-              WindowSpecDefinition(partitionFields, orderByFields,
-                SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
-            val rowNumberAlias = Alias(rowNumber, "rn")()
-            // Window function computes row_number() when partitioning by correlated references,
-            // and projects all the other fields from the input.
-            val window = Window(Seq(rowNumberAlias),
-              partitionFields, orderByFields, newChild)
-            val filter = Filter(LessThanOrEqual(rowNumberAlias.toAttribute, limit), window)
-            val project = Project(newChild.output, filter)
-            (project, joinCond, outerReferenceMap)
+              val rowNumber = WindowExpression(RowNumber(),
+                WindowSpecDefinition(partitionFields, orderByFields,
+                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)))
+              val rowNumberAlias = Alias(rowNumber, "rn")()
+              // Window function computes row_number() when partitioning by correlated references,
+              // and projects all the other fields from the input.
+              val window = Window(Seq(rowNumberAlias),
+                partitionFields, orderByFields, newChild)
+              val filter = Filter(LessThanOrEqual(rowNumberAlias.toAttribute, limit), window)
+              val project = Project(newChild.output, filter)
+              (project, joinCond, outerReferenceMap)
+            }
 
           case w @ Window(projectList, partitionSpec, orderSpec, child) =>
             val outerReferences = collectOuterReferences(w.expressions)
@@ -727,8 +718,6 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
             val outerReferences = collectOuterReferences(a.expressions)
             val newOuterReferences = parentOuterReferences ++ outerReferences
-            val countBugSusceptible = groupingExpressions.isEmpty &&
-              !isCountBugFree(aggregateExpressions)
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated = true, underSetOp)
             // Replace all outer references in grouping and aggregate expressions, and keep
@@ -791,8 +780,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // | 0 | 2    | true       | 2                              |
             // | 0 | null | null       | 0                              |  <--- correct result
             // +---+------+------------+--------------------------------+
-            // TODO(a.gubichev): retire the 'handleCountBug' parameter.
-            if (countBugSusceptible && handleCountBug) {
+            if (groupingExpressions.isEmpty && handleCountBug) {
               // Evaluate the aggregate expressions with zero tuples.
               val resultMap = RewriteCorrelatedScalarSubquery.evalAggregateOnZeroTups(newAggregate)
               val alwaysTrue = Alias(Literal.TrueLiteral, "alwaysTrue")()

@@ -24,17 +24,38 @@ import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
+import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
+
+class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
+  extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
+
+  override def createAtomic(path: Path,
+                            overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+    new RenameBasedFSDataOutputStream(this, path, overwriteIfPossible)
+  }
+
+  override def renameTempFile(srcPath: Path, dstPath: Path,
+                              overwriteIfPossible: Boolean): Unit = {
+    if (!fs.exists(dstPath)) {
+      // only write if a file does not exist at this location
+      super.renameTempFile(srcPath, dstPath, overwriteIfPossible)
+    }
+  }
+}
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
@@ -48,6 +69,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".zip"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 
   def changelogVersionsPresent(dir: File): Seq[Long] = {
@@ -55,12 +77,17 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.getName.stripSuffix(".changelog"))
       .map(_.toLong)
       .sorted
+      .toImmutableArraySeq
   }
 }
 
-
 trait AlsoTestWithChangelogCheckpointingEnabled
   extends SQLTestUtils with RocksDBStateStoreChangelogCheckpointingTestUtil {
+
+  sealed trait TestMode
+  case object TestWithChangelogCheckpointingEnabled extends TestMode
+  case object TestWithChangelogCheckpointingDisabled extends TestMode
+  case object TestWithBothChangelogCheckpointingEnabledAndDisabled extends TestMode
 
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {
@@ -95,6 +122,41 @@ trait AlsoTestWithChangelogCheckpointingEnabled
       super.afterEach()
     }
   }
+
+  def testWithColumnFamilies(
+      testName: String,
+      testMode: TestMode,
+      testTags: Tag*)
+      (testBody: Boolean => Any): Unit = {
+    Seq(true, false).foreach { colFamiliesEnabled =>
+      testMode match {
+        case TestWithChangelogCheckpointingEnabled =>
+          testWithChangelogCheckpointingEnabled(s"$testName - " +
+            s"with colFamiliesEnabled=$colFamiliesEnabled", testTags: _*) {
+            testBody(colFamiliesEnabled)
+          }
+
+        case TestWithChangelogCheckpointingDisabled =>
+          testWithChangelogCheckpointingDisabled(s"$testName - " +
+            s"with colFamiliesEnabled=$colFamiliesEnabled", testTags: _*) {
+            testBody(colFamiliesEnabled)
+          }
+
+        case TestWithBothChangelogCheckpointingEnabledAndDisabled =>
+          testWithChangelogCheckpointingEnabled(s"$testName - " +
+            s"with colFamiliesEnabled=$colFamiliesEnabled", testTags: _*) {
+            testBody(colFamiliesEnabled)
+          }
+          testWithChangelogCheckpointingDisabled(s"$testName - " +
+            s"with colFamiliesEnabled=$colFamiliesEnabled", testTags: _*) {
+            testBody(colFamiliesEnabled)
+          }
+
+        case _ =>
+          throw new IllegalArgumentException(s"Unknown test mode: $testMode")
+      }
+    }
+  }
 }
 
 @SlowSQLTest
@@ -102,16 +164,18 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
 
-  testWithChangelogCheckpointingEnabled(
-    "RocksDB: check changelog and snapshot version") {
+  testWithColumnFamilies(
+    "RocksDB: check changelog and snapshot version",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 1)
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     for (version <- 0 to 49) {
-      withDB(remoteDir, version = version, conf = conf) { db =>
-          db.put(version.toString, version.toString)
-          db.commit()
-          if ((version + 1) % 5 == 0) db.doMaintenance()
+      withDB(remoteDir, version = version, conf = conf,
+        useColumnFamilies = colFamiliesEnabled) { db =>
+        db.put(version.toString, version.toString)
+        db.commit()
+        if ((version + 1) % 5 == 0) db.doMaintenance()
       }
     }
 
@@ -124,7 +188,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDB: load version that doesn't exist") {
+  testWithColumnFamilies(s"RocksDB: load version that doesn't exist",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) {
+    colFamiliesEnabled =>
     val provider = new RocksDBStateStoreProvider()
     var ex = intercept[SparkException] {
       provider.getStore(-1)
@@ -144,8 +210,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     )
 
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
-    withDB(remoteDir) { db =>
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, useColumnFamilies = colFamiliesEnabled) { db =>
       ex = intercept[SparkException] {
         db.load(1)
       }
@@ -159,13 +225,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled(
-    "RocksDB: purge changelog and snapshots") {
+  testWithColumnFamilies(
+    "RocksDB: purge changelog and snapshots",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true,
       minVersionsToRetain = 3, minDeltasForSnapshot = 1)
-    withDB(remoteDir, conf = conf) { db =>
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       db.load(0)
       db.commit()
       for (version <- 1 to 2) {
@@ -200,12 +267,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled(
-    "RocksDB: minDeltasForSnapshot") {
+  testWithColumnFamilies(
+    "RocksDB: minDeltasForSnapshot",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     val conf = dbConf.copy(enableChangelogCheckpointing = true, minDeltasForSnapshot = 3)
-    withDB(remoteDir, conf = conf) { db =>
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       for (version <- 0 to 1) {
         db.load(version)
         db.commit()
@@ -241,12 +309,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  testWithChangelogCheckpointingEnabled("SPARK-45419: Do not reuse SST files" +
-    " in different RocksDB instances") {
+  testWithColumnFamilies("SPARK-45419: Do not reuse SST files" +
+    " in different RocksDB instances",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
     val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
-    new File(remoteDir).delete()  // to make sure that the directory gets created
-    withDB(remoteDir, conf = conf) { db =>
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       for (version <- 0 to 2) {
         db.load(version)
         db.put(version.toString, version.toString)
@@ -264,7 +333,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       db.doMaintenance()
     }
 
-    withDB(remoteDir, conf = conf) { db =>
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       // Open the db to verify that the state in 4.zip is no corrupted.
       db.load(4)
     }
@@ -272,13 +341,15 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   // A rocksdb instance with changelog checkpointing enabled should be able to load
   // an existing checkpoint without changelog.
-  testWithChangelogCheckpointingEnabled(
-    "RocksDB: changelog checkpointing backward compatibility") {
+  testWithColumnFamilies(
+    "RocksDB: changelog checkpointing backward compatibility",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     val disableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = false, minVersionsToRetain = 30)
-    withDB(remoteDir, conf = disableChangelogCheckpointingConf) { db =>
+    withDB(remoteDir, conf = disableChangelogCheckpointingConf,
+      useColumnFamilies = colFamiliesEnabled) { db =>
       for (version <- 1 to 30) {
         db.load(version - 1)
         db.put(version.toString, version.toString)
@@ -293,7 +364,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val enableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 30,
         minDeltasForSnapshot = 1)
-    withDB(remoteDir, conf = enableChangelogCheckpointingConf) { db =>
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = colFamiliesEnabled) { db =>
       for (version <- 1 to 30) {
         db.load(version)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
@@ -324,14 +396,16 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   // A rocksdb instance with changelog checkpointing disabled should be able to load
   // an existing checkpoint with changelog.
-  testWithChangelogCheckpointingEnabled(
-    "RocksDB: changelog checkpointing forward compatibility") {
+  testWithColumnFamilies(
+    "RocksDB: changelog checkpointing forward compatibility",
+    TestWithChangelogCheckpointingEnabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
     val enableChangelogCheckpointingConf =
       dbConf.copy(enableChangelogCheckpointing = true, minVersionsToRetain = 20,
         minDeltasForSnapshot = 3)
-    withDB(remoteDir, conf = enableChangelogCheckpointingConf) { db =>
+    withDB(remoteDir, conf = enableChangelogCheckpointingConf,
+      useColumnFamilies = colFamiliesEnabled) { db =>
       for (version <- 1 to 30) {
         db.load(version - 1)
         db.put(version.toString, version.toString)
@@ -345,7 +419,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val disableChangelogCheckpointingConf =
     dbConf.copy(enableChangelogCheckpointing = false, minVersionsToRetain = 20,
       minDeltasForSnapshot = 1)
-    withDB(remoteDir, conf = disableChangelogCheckpointingConf) { db =>
+    withDB(remoteDir, conf = disableChangelogCheckpointingConf,
+      useColumnFamilies = colFamiliesEnabled) { db =>
       for (version <- 1 to 30) {
         db.load(version)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
@@ -374,28 +449,30 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDB: compression conf") {
+  testWithColumnFamilies(s"RocksDB: compression conf",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     val remoteDir = Utils.createTempDir().toString
-    new File(remoteDir).delete()  // to make sure that the directory gets created
+    new File(remoteDir).delete() // to make sure that the directory gets created
 
     val conf = RocksDBConf().copy(compression = "zstd")
-    withDB(remoteDir, conf = conf) { db =>
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       assert(db.columnFamilyOptions.compressionType() == CompressionType.ZSTD_COMPRESSION)
     }
 
     // Test the default is LZ4
-    withDB(remoteDir, conf = RocksDBConf().copy()) { db =>
+    withDB(remoteDir, conf = RocksDBConf().copy(), useColumnFamilies = colFamiliesEnabled) { db =>
       assert(db.columnFamilyOptions.compressionType() == CompressionType.LZ4_COMPRESSION)
     }
   }
 
-  test("RocksDB: get, put, iterator, commit, load") {
+  testWithColumnFamilies(s"RocksDB: get, put, iterator, commit, load",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     def testOps(compactOnCommit: Boolean): Unit = {
       val remoteDir = Utils.createTempDir().toString
-      new File(remoteDir).delete()  // to make sure that the directory gets created
+      new File(remoteDir).delete() // to make sure that the directory gets created
 
       val conf = RocksDBConf().copy(compactOnCommit = compactOnCommit)
-      withDB(remoteDir, conf = conf) { db =>
+      withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
         assert(db.get("a") === null)
         assert(iterator(db).isEmpty)
 
@@ -404,13 +481,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.commit()
       }
 
-      withDB(remoteDir, conf = conf, version = 0) { db =>
+      withDB(remoteDir, conf = conf, version = 0, useColumnFamilies = colFamiliesEnabled) { db =>
         // version 0 can be loaded again
         assert(toStr(db.get("a")) === null)
         assert(iterator(db).isEmpty)
       }
 
-      withDB(remoteDir, conf = conf, version = 1) { db =>
+      withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = colFamiliesEnabled) { db =>
         // version 1 data recovered correctly
         assert(toStr(db.get("a")) === "1")
         assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
@@ -421,7 +498,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
       }
 
-      withDB(remoteDir, conf = conf, version = 1) { db =>
+      withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = colFamiliesEnabled) { db =>
         // version 1 data not changed
         assert(toStr(db.get("a")) === "1")
         assert(db.get("b") === null)
@@ -434,13 +511,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
       }
 
-      withDB(remoteDir, conf = conf, version = 1) { db =>
+      withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = colFamiliesEnabled) { db =>
         // version 1 data not changed
         assert(toStr(db.get("a")) === "1")
         assert(db.get("b") === null)
       }
 
-      withDB(remoteDir, conf = conf, version = 2) { db =>
+      withDB(remoteDir, conf = conf, version = 2, useColumnFamilies = colFamiliesEnabled) { db =>
         // version 2 can be loaded again
         assert(toStr(db.get("b")) === "2")
         assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
@@ -458,13 +535,131 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDB: handle commit failures and aborts") {
+  testWithColumnFamilies(s"RocksDB: get, put, iterator, commit, load " +
+    s"with multiple column families",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    val colFamily1: String = "abc"
+    val colFamily2: String = "xyz"
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+      val ex = intercept[Exception] {
+        db.createColFamilyIfAbsent("default")
+      }
+      ex.getCause.isInstanceOf[UnsupportedOperationException]
+    }
+
+    withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+      db.createColFamilyIfAbsent(colFamily1)
+      db.createColFamilyIfAbsent(colFamily2)
+
+      assert(db.get("a", colFamily1) === null)
+      assert(iterator(db, colFamily1).isEmpty)
+
+      db.put("a", "1", colFamily1)
+      assert(toStr(db.get("a", colFamily1)) === "1")
+
+      assert(db.get("a", colFamily2) === null)
+      assert(iterator(db, colFamily2).isEmpty)
+
+      db.put("a", "1", colFamily2)
+      assert(toStr(db.get("a", colFamily2)) === "1")
+
+      db.commit()
+    }
+
+    withDB(remoteDir, conf = conf, version = 0, useColumnFamilies = true) { db =>
+      val ex = intercept[Exception] {
+        // version 0 can be loaded again
+        assert(toStr(db.get("a", colFamily1)) === null)
+        assert(iterator(db, colFamily1).isEmpty)
+
+        // version 0 can be loaded again
+        assert(toStr(db.get("a", colFamily2)) === null)
+        assert(iterator(db, colFamily2).isEmpty)
+      }
+      assert(ex.isInstanceOf[RuntimeException])
+      assert(ex.getMessage.contains("does not exist"))
+    }
+
+    withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>
+      // version 1 data recovered correctly
+      assert(toStr(db.get("a", colFamily1)) === "1")
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1")))
+
+      // make changes but do not commit version 2
+      db.put("b", "2", colFamily1)
+      assert(toStr(db.get("b", colFamily1)) === "2")
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      // version 1 data recovered correctly
+      assert(toStr(db.get("a", colFamily2)) === "1")
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1")))
+
+      // make changes but do not commit version 2
+      db.put("b", "2", colFamily2)
+      assert(toStr(db.get("b", colFamily2)) === "2")
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+    }
+
+    withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>
+      // version 1 data not changed
+      assert(toStr(db.get("a", colFamily1)) === "1")
+      assert(db.get("b", colFamily1) === null)
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1")))
+
+      assert(toStr(db.get("a", colFamily2)) === "1")
+      assert(db.get("b", colFamily2) === null)
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1")))
+
+      // commit version 2
+      db.put("b", "2", colFamily1)
+      assert(toStr(db.get("b", colFamily1)) === "2")
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      db.put("b", "2", colFamily2)
+      assert(toStr(db.get("b", colFamily2)) === "2")
+      db.commit()
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+    }
+
+    withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>
+      // version 1 data not changed
+      assert(toStr(db.get("a", colFamily1)) === "1")
+      assert(db.get("b", colFamily1) === null)
+
+      assert(toStr(db.get("a", colFamily2)) === "1")
+      assert(db.get("b", colFamily2) === null)
+    }
+
+    withDB(remoteDir, conf = conf, version = 2, useColumnFamilies = true) { db =>
+      // version 2 can be loaded again
+      assert(toStr(db.get("b", colFamily1)) === "2")
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      assert(toStr(db.get("b", colFamily2)) === "2")
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+      db.load(1)
+      assert(toStr(db.get("b", colFamily1)) === null)
+      assert(db.iterator(colFamily1).map(toStr).toSet === Set(("a", "1")))
+
+      db.load(1)
+      assert(toStr(db.get("b", colFamily2)) === null)
+      assert(db.iterator(colFamily2).map(toStr).toSet === Set(("a", "1")))
+    }
+  }
+
+  testWithColumnFamilies(s"RocksDB: handle commit failures and aborts",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     val hadoopConf = new Configuration()
     hadoopConf.set(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
       classOf[CreateAtomicTestManager].getName)
     val remoteDir = Utils.createTempDir().getAbsolutePath
-    withDB(remoteDir, hadoopConf = hadoopConf) { db =>
+    withDB(remoteDir, hadoopConf = hadoopConf, useColumnFamilies = colFamiliesEnabled) { db =>
       // Disable failure of output stream and generate versions
       CreateAtomicTestManager.shouldFailInCreateAtomic = false
       for (version <- 1 to 10) {
@@ -478,7 +673,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       CreateAtomicTestManager.shouldFailInCreateAtomic = true
       db.load(10)
       db.put("11", "11")
-      intercept[IOException] { quietly { db.commit() } }
+      intercept[IOException] {
+        quietly {
+          db.commit()
+        }
+      }
       assert(db.load(10, readOnly = true).iterator().map(toStr).toSet === version10Data)
       CreateAtomicTestManager.shouldFailInCreateAtomic = false
 
@@ -490,25 +689,144 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDB: Unsupported Operations" +
+    " with Changelog Checkpointing") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val changelogWriter = fileManager.getChangeLogWriter(1)
+
+    val ex1 = intercept[SparkUnsupportedOperationException] {
+      changelogWriter.put("a", "1", "testColFamily")
+    }
+
+    checkError(
+      ex1,
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Put",
+        "entity" -> "changelog writer v1"
+      ),
+      matchPVals = true
+    )
+    val ex2 = intercept[SparkUnsupportedOperationException] {
+      changelogWriter.delete("a", "testColFamily")
+    }
+
+    checkError(
+      ex2,
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Delete",
+        "entity" -> "changelog writer v1"
+      ),
+      matchPVals = true
+    )
+  }
+
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1)
-    for (i <- 1 to 5) changelogWriter.put(i.toString, i.toString)
-    for (j <- 2 to 4) changelogWriter.delete(j.toString)
+
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString))
+
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(1)
     val entries = changelogReader.toSeq
-    val expectedEntries = (1 to 5).map(i => (i.toString.getBytes, i.toString.getBytes)) ++
-      (2 to 4).map(j => (j.toString.getBytes, null))
+    val expectedEntries = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
-      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2)
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 &&
+        e1._3 === e2._3 && e1._4 === e2._4)
     }
   }
 
-  test("RocksDBFileManager: create init dfs directory with unknown number of keys") {
+  testWithChangelogCheckpointingEnabled(
+    "RocksDBFileManager: read and write v2 changelog with default col family") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val changelogWriter = fileManager.getChangeLogWriter(1, true)
+    (1 to 5).foreach { i =>
+      changelogWriter.put(i.toString, i.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
+    (2 to 4).foreach { j =>
+      changelogWriter.delete(j.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(1, true)
+    val entries = changelogReader.toSeq
+    val expectedEntries = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 &&
+        e1._3 === e2._3 && e1._4 === e2._4)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled(
+    "RocksDBFileManager: read and write v2 changelog with multiple col families") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val testColFamily1: String = "testColFamily1"
+    val testColFamily2: String = "testColFamily2"
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val changelogWriter = fileManager.getChangeLogWriter(1, true)
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString, testColFamily1))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString, testColFamily1))
+
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString, testColFamily2))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString, testColFamily2))
+
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(1, true)
+    val entries = changelogReader.toSeq
+    val expectedEntriesForColFamily1 = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, testColFamily1)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, testColFamily1)
+    }
+
+    val expectedEntriesForColFamily2 = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, testColFamily2)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, testColFamily2)
+    }
+
+    val expectedEntries = expectedEntriesForColFamily1 ++ expectedEntriesForColFamily2
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 &&
+        e1._3 === e2._3 && e1._4 === e2._4)
+    }
+  }
+
+  testWithColumnFamilies("RocksDBFileManager: create init dfs directory with " +
+    s"unknown number of keys",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     try {
       val verificationDir = Utils.createTempDir().getAbsolutePath
@@ -527,7 +845,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDBFileManager: delete orphan files") {
+  testWithColumnFamilies("RocksDBFileManager: delete orphan files",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       // Use 2 file managers here to emulate concurrent execution
@@ -554,7 +873,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       assert(fileManager.getLatestVersion() === 1)
       assert(numRemoteSSTFiles == 2) // 2 sst files copied
       assert(numRemoteLogFiles == 2)
-
 
       // Overwrite version 1, previous sst and log files will become orphan
       val cpFiles1_ = Seq(
@@ -606,7 +924,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDBFileManager: don't delete orphan files when there is only 1 version") {
+  testWithColumnFamilies("RocksDBFileManager: don't delete orphan files " +
+    s"when there is only 1 version",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val fileManager = new RocksDBFileManager(
@@ -660,7 +980,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDBFileManager: upload only new immutable files") {
+  testWithColumnFamilies("RocksDBFileManager: upload only new immutable files",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val verificationDir = Utils.createTempDir().getAbsolutePath // local dir to load checkpoints
@@ -708,19 +1029,19 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // Save SAME version again with different checkpoint files and load back again to verify
       // whether files were overwritten.
       val cpFiles1_ = Seq(
-        "sst-file1.sst" -> 10, // same SST file as before, but same version, so should get copied
+        "sst-file1.sst" -> 10, // same SST file as before, this should get reused
         "sst-file2.sst" -> 25, // new SST file with same name as before, but different length
         "sst-file3.sst" -> 30, // new SST file
         "other-file1" -> 100, // same non-SST file as before, should not get copied
         "other-file2" -> 210, // new non-SST file with same name as before, but different length
         "other-file3" -> 300, // new non-SST file
-        "archive/00001.log" -> 1000, // same log file as before and version, so should get copied
+        "archive/00001.log" -> 1000, // same log file as before, this should get reused
         "archive/00002.log" -> 2500, // new log file with same name as before, but different length
         "archive/00003.log" -> 3000 // new log file
       )
       saveCheckpointFiles(fileManager, cpFiles1_, version = 1, numKeys = 1001)
-      assert(numRemoteSSTFiles === 5, "shouldn't copy same files again") // 2 old + 3 new SST files
-      assert(numRemoteLogFiles === 5, "shouldn't copy same files again") // 2 old + 3 new log files
+      assert(numRemoteSSTFiles === 4, "shouldn't copy same files again") // 2 old + 2 new SST files
+      assert(numRemoteLogFiles === 4, "shouldn't copy same files again") // 2 old + 2 new log files
       loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, cpFiles1_, 1001)
 
       // Save another version and verify
@@ -730,8 +1051,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         "archive/00004.log" -> 4000
       )
       saveCheckpointFiles(fileManager, cpFiles2, version = 2, numKeys = 1501)
-      assert(numRemoteSSTFiles === 6) // 1 new file over earlier 5 files
-      assert(numRemoteLogFiles === 6) // 1 new file over earlier 5 files
+      assert(numRemoteSSTFiles === 5) // 1 new file over earlier 4 files
+      assert(numRemoteLogFiles === 5) // 1 new file over earlier 4 files
       loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 2, cpFiles2, 1501)
 
       // Loading an older version should work
@@ -748,7 +1069,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDBFileManager: error writing [version].zip cancels the output stream") {
+  testWithColumnFamilies("RocksDBFileManager: error writing [version].zip " +
+    s"cancels the output stream",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     quietly {
       val hadoopConf = new Configuration()
       hadoopConf.set(
@@ -765,18 +1088,23 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("disallow concurrent updates to the same RocksDB instance") {
+  testWithColumnFamilies("disallow concurrent updates to the same RocksDB instance",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     quietly {
       withDB(
         Utils.createTempDir().toString,
-        conf = dbConf.copy(lockAcquireTimeoutMs = 20)) { db =>
-        // DB has been loaded so current thread has alread acquired the lock on the RocksDB instance
+        conf = dbConf.copy(lockAcquireTimeoutMs = 20),
+        useColumnFamilies = colFamiliesEnabled) { db =>
+        // DB has been loaded so current thread has already
+        // acquired the lock on the RocksDB instance
 
-        db.load(0)  // Current thread should be able to load again
+        db.load(0) // Current thread should be able to load again
 
         // Another thread should not be able to load while current thread is using it
         var ex = intercept[SparkException] {
-          ThreadUtils.runInNewThread("concurrent-test-thread-1") { db.load(0) }
+          ThreadUtils.runInNewThread("concurrent-test-thread-1") {
+            db.load(0)
+          }
         }
         checkError(
           ex,
@@ -801,7 +1129,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         // Another thread should not be able to load while current thread is using it
         db.load(2)
         ex = intercept[SparkException] {
-          ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
+          ThreadUtils.runInNewThread("concurrent-test-thread-2") {
+            db.load(2)
+          }
         }
         checkError(
           ex,
@@ -826,7 +1156,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("ensure concurrent access lock is released after Spark task completes") {
+  testWithColumnFamilies("ensure concurrent access lock is released after Spark task completes",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     RocksDBSuite.withSingletonDB {
       // Load a RocksDB instance, that is, get a lock inside a task and then fail
       quietly {
@@ -843,12 +1174,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("checkpoint metadata serde roundtrip") {
+  testWithColumnFamilies("checkpoint metadata serde roundtrip",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     // expect read metadata error when metadata uses unsupported version
     withTempDir { dir =>
       val file2 = new File(dir, "json")
       val json2 = """{"sstFiles":[],"numKeys":0}"""
-      FileUtils.write(file2, s"v2\n$json2")
+      FileUtils.write(file2, s"v2\n$json2", Charset.defaultCharset)
       val e = intercept[SparkException] {
         RocksDBCheckpointMetadata.readFromFile(file2)
       }
@@ -890,7 +1222,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // scalastyle:on line.size.limit
   }
 
-  test("SPARK-36236: reset RocksDB metrics whenever a new version is loaded") {
+  testWithColumnFamilies("SPARK-36236: reset RocksDB metrics whenever a new version is loaded",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     def verifyMetrics(putCount: Long, getCount: Long, iterCountPositive: Boolean = false,
                       metrics: RocksDBMetrics): Unit = {
       assert(metrics.nativeOpsHistograms("put").count === putCount, "invalid put count")
@@ -918,14 +1251,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
-      withDB(remoteDir) { db =>
-        verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
+      withDB(remoteDir, useColumnFamilies = colFamiliesEnabled) { db =>
         db.load(0)
         db.put("a", "1") // put also triggers a db get
         db.get("a") // this is found in-memory writebatch - no get triggered in db
         db.get("b") // key doesn't exists - triggers db get
         db.commit()
-        verifyMetrics(putCount = 1, getCount = 3, metrics = db.metrics)
+        verifyMetrics(putCount = 1, getCount = 3, metrics = db.metricsOpt.get)
 
         db.load(1)
         db.put("b", "2") // put also triggers a db get
@@ -933,34 +1265,37 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.get("c") // key doesn't exists - triggers db get
         assert(iterator(db).toSet === Set(("a", "1"), ("b", "2")))
         db.commit()
-        verifyMetrics(putCount = 1, getCount = 3, iterCountPositive = true, db.metrics)
+        verifyMetrics(putCount = 1, getCount = 3, iterCountPositive = true, db.metricsOpt.get)
       }
     }
 
     // disable resetting stats
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
-      withDB(remoteDir, conf = dbConf.copy(resetStatsOnLoad = false)) { db =>
-        verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
+      withDB(remoteDir,
+        conf = dbConf.copy(resetStatsOnLoad = false),
+        useColumnFamilies = colFamiliesEnabled) { db =>
         db.load(0)
         db.put("a", "1") // put also triggers a db get
         db.commit()
         // put and get counts are cumulative
-        verifyMetrics(putCount = 1, getCount = 1, metrics = db.metrics)
+        verifyMetrics(putCount = 1, getCount = 1, metrics = db.metricsOpt.get)
 
         db.load(1)
         db.put("b", "2") // put also triggers a db get
         db.get("a")
         db.commit()
         // put and get counts are cumulative: existing get=1, put=1: new get=2, put=1
-        verifyMetrics(putCount = 2, getCount = 3, metrics = db.metrics)
+        verifyMetrics(putCount = 2, getCount = 3, metrics = db.metricsOpt.get)
       }
     }
 
     // force compaction and check the compaction metrics
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
-      withDB(remoteDir, conf = RocksDBConf().copy(compactOnCommit = true)) { db =>
+      withDB(remoteDir,
+        conf = RocksDBConf().copy(compactOnCommit = true),
+        useColumnFamilies = colFamiliesEnabled) { db =>
         db.load(0)
         db.put("a", "5")
         db.put("b", "5")
@@ -971,7 +1306,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.put("b", "25")
         db.commit()
 
-        val metrics = db.metrics
+        val metrics = db.metricsOpt.get
         assert(metrics.nativeOpsHistograms("compaction").count > 0)
         assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
         assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
@@ -983,8 +1318,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   // Add tests to check valid and invalid values for max_open_files passed to the underlying
   // RocksDB instance.
   Seq("-1", "100", "1000").foreach { maxOpenFiles =>
-    test(s"SPARK-39781: adding valid max_open_files=$maxOpenFiles config property " +
-      "for RocksDB state store instance should succeed") {
+    testWithColumnFamilies(s"SPARK-39781: adding valid max_open_files=$maxOpenFiles " +
+      "config property for RocksDB state store instance should succeed",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
       withTempDir { dir =>
         val sqlConf = SQLConf.get.clone()
         sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxOpenFiles", maxOpenFiles)
@@ -992,7 +1328,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         assert(dbConf.maxOpenFiles === maxOpenFiles.toInt)
 
         val remoteDir = dir.getCanonicalPath
-        withDB(remoteDir, conf = dbConf) { db =>
+        withDB(remoteDir, conf = dbConf,
+          useColumnFamilies = colFamiliesEnabled) { db =>
           // Do some DB ops
           db.load(0)
           db.put("a", "1")
@@ -1004,8 +1341,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   Seq("test", "true").foreach { maxOpenFiles =>
-    test(s"SPARK-39781: adding invalid max_open_files=$maxOpenFiles config property " +
-      "for RocksDB state store instance should fail") {
+    testWithColumnFamilies(s"SPARK-39781: adding invalid max_open_files=$maxOpenFiles config " +
+      "property for RocksDB state store instance should fail",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
       withTempDir { dir =>
         val ex = intercept[IllegalArgumentException] {
           val sqlConf = SQLConf.get.clone()
@@ -1015,7 +1353,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           assert(dbConf.maxOpenFiles === maxOpenFiles.toInt)
 
           val remoteDir = dir.getCanonicalPath
-          withDB(remoteDir, conf = dbConf) { db =>
+          withDB(remoteDir, conf = dbConf, useColumnFamilies = colFamiliesEnabled) { db =>
             // Do some DB ops
             db.load(0)
             db.put("a", "1")
@@ -1031,8 +1369,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   Seq("1", "2", "3").foreach { maxWriteBufferNumber =>
     Seq("16", "32", "64").foreach {writeBufferSizeMB =>
-      test(s"SPARK-42819: configure memtable memory usage with " +
-        s"maxWriteBufferNumber=$maxWriteBufferNumber and writeBufferSize=$writeBufferSizeMB") {
+      testWithColumnFamilies(s"SPARK-42819: configure memtable memory usage with " +
+        s"maxWriteBufferNumber=$maxWriteBufferNumber and writeBufferSize=$writeBufferSizeMB",
+        TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
         withTempDir { dir =>
           val sqlConf = new SQLConf
           sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber",
@@ -1044,7 +1383,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           assert(dbConf.writeBufferSizeMB === writeBufferSizeMB.toInt)
 
           val remoteDir = dir.getCanonicalPath
-          withDB(remoteDir, conf = dbConf) { db =>
+          withDB(remoteDir, conf = dbConf, useColumnFamilies = colFamiliesEnabled) { db =>
             // Do some DB ops
             db.load(0)
             db.put("a", "1")
@@ -1056,14 +1395,16 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("Verify that fallocate is allowed by default") {
+  testWithColumnFamilies("Verify that fallocate is allowed by default",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
      val sqlConf = new SQLConf
      val dbConf = RocksDBConf(StateStoreConf(sqlConf))
      assert(dbConf.allowFAllocate == true)
   }
 
  /** RocksDB memory management tests for bounded memory usage */
-  test("Memory mgmt - invalid config") {
+  testWithColumnFamilies("Memory mgmt - invalid config",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       try {
         RocksDBMemoryManager.resetWriteBufferManagerAndCache
@@ -1085,7 +1426,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         val ex = intercept[Exception] {
           val remoteDir = dir.getCanonicalPath
-          withDB(remoteDir, conf = dbConf) { db =>
+          withDB(remoteDir, conf = dbConf, useColumnFamilies = colFamiliesEnabled) { db =>
             db.load(0)
             db.put("a", "1")
             db.commit()
@@ -1100,7 +1441,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   Seq("true", "false").foreach { boundedMemoryUsage =>
-    test(s"Memory mgmt - Cache reuse for RocksDB with boundedMemoryUsage=$boundedMemoryUsage") {
+    testWithColumnFamilies(s"Memory mgmt - Cache reuse for RocksDB " +
+      s"with boundedMemoryUsage=$boundedMemoryUsage",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
       withTempDir { dir1 =>
         withTempDir { dir2 =>
           try {
@@ -1112,7 +1455,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
             assert(dbConf.boundedMemoryUsage === boundedMemoryUsage.toBoolean)
 
             val remoteDir1 = dir1.getCanonicalPath
-            val (writeManager1, cache1) = withDB(remoteDir1, conf = dbConf) { db =>
+            val (writeManager1, cache1) = withDB(remoteDir1,
+              conf = dbConf,
+              useColumnFamilies = colFamiliesEnabled) { db =>
               db.load(0)
               db.put("a", "1")
               db.commit()
@@ -1120,7 +1465,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
             }
 
             val remoteDir2 = dir2.getCanonicalPath
-            val (writeManager2, cache2) = withDB(remoteDir2, conf = dbConf) { db =>
+            val (writeManager2, cache2) = withDB(remoteDir2,
+              conf = dbConf,
+              useColumnFamilies = colFamiliesEnabled) { db =>
               db.load(0)
               db.put("a", "1")
               db.commit()
@@ -1144,7 +1491,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   Seq("100", "1000", "100000").foreach { totalMemorySizeMB =>
-    test(s"Memory mgmt - valid config with totalMemorySizeMB=$totalMemorySizeMB") {
+    testWithColumnFamilies(s"Memory mgmt - valid config " +
+      s"with totalMemorySizeMB=$totalMemorySizeMB",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
       withTempDir { dir =>
         try {
           val sqlConf = new SQLConf
@@ -1164,7 +1513,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           assert(dbConf.highPriorityPoolRatio === 0.1)
 
           val remoteDir = dir.getCanonicalPath
-          withDB(remoteDir, conf = dbConf) { db =>
+          withDB(remoteDir, conf = dbConf, useColumnFamilies = colFamiliesEnabled) { db =>
             db.load(0)
             db.put("a", "1")
             db.put("b", "2")
@@ -1179,62 +1528,337 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("SPARK-37224: flipping option 'trackTotalNumberOfRows' during restart") {
+  testWithColumnFamilies("SPARK-37224: flipping option 'trackTotalNumberOfRows' during restart",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
 
       var curVersion: Long = 0
       // starting with the config "trackTotalNumberOfRows = true"
       // this should track the number of rows correctly
-      withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = true)) { db =>
+      withDB(remoteDir,
+        conf = dbConf.copy(trackTotalNumberOfRows = true),
+        useColumnFamilies = colFamiliesEnabled) { db =>
         db.load(curVersion)
         db.put("a", "5")
         db.put("b", "5")
 
-        assert(db.metrics.numUncommittedKeys === 2)
-        assert(db.metrics.numCommittedKeys === 0)
-
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === 2)
-        assert(db.metrics.numCommittedKeys === 2)
+        assert(db.metricsOpt.get.numUncommittedKeys === 2)
+        assert(db.metricsOpt.get.numCommittedKeys === 2)
       }
 
       // restart with config "trackTotalNumberOfRows = false"
       // this should reset the number of keys as -1, and keep the number as -1
-      withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = false)) { db =>
+      withDB(remoteDir,
+        conf = dbConf.copy(trackTotalNumberOfRows = false),
+        useColumnFamilies = colFamiliesEnabled) { db =>
         db.load(curVersion)
-
-        assert(db.metrics.numUncommittedKeys === -1)
-        assert(db.metrics.numCommittedKeys === -1)
 
         db.put("b", "7")
         db.put("c", "7")
 
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === -1)
-        assert(db.metrics.numCommittedKeys === -1)
+        assert(db.metricsOpt.get.numUncommittedKeys === -1)
+        assert(db.metricsOpt.get.numCommittedKeys === -1)
       }
 
       // restart with config "trackTotalNumberOfRows = true" again
       // this should count the number of keys at the load phase, and continue tracking the number
-      withDB(remoteDir, conf = dbConf.copy(trackTotalNumberOfRows = true)) { db =>
+      withDB(remoteDir,
+        conf = dbConf.copy(trackTotalNumberOfRows = true),
+        useColumnFamilies = colFamiliesEnabled) { db =>
         db.load(curVersion)
-
-        assert(db.metrics.numUncommittedKeys === 3)
-        assert(db.metrics.numCommittedKeys === 3)
 
         db.put("c", "8")
         db.put("d", "8")
 
-        assert(db.metrics.numUncommittedKeys === 4)
-        assert(db.metrics.numCommittedKeys === 3)
-
         curVersion = db.commit()
 
-        assert(db.metrics.numUncommittedKeys === 4)
-        assert(db.metrics.numCommittedKeys === 4)
+        assert(db.metricsOpt.get.numUncommittedKeys === 4)
+        assert(db.metricsOpt.get.numCommittedKeys === 4)
+      }
+    }
+  }
+
+  test("time travel - validate successful RocksDB load") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 1, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 1) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 2.zip
+      db.doMaintenance()
+      for (version <- Seq(2)) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 3.zip
+      db.doMaintenance()
+      // simulate db in another executor that override the zip file
+      withDB(remoteDir, conf = conf) { db1 =>
+        for (version <- 0 to 1) {
+          db1.load(version)
+          db1.put(version.toString, version.toString)
+          db1.commit()
+        }
+        db1.doMaintenance()
+      }
+      db.load(2)
+      for (version <- Seq(2)) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 3.zip
+      db.doMaintenance()
+      // rollback to version 2
+      db.load(2)
+    }
+  }
+
+  test("time travel 2 - validate successful RocksDB load") {
+    Seq(1, 2).map(minDeltasForSnapshot => {
+      val remoteDir = Utils.createTempDir().toString
+      val conf = dbConf.copy(minDeltasForSnapshot = minDeltasForSnapshot,
+        compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      withDB(remoteDir, conf = conf) { db =>
+        for (version <- 0 to 1) {
+          db.load(version)
+          db.put(version.toString, version.toString)
+          db.commit()
+        }
+        // upload snapshot 2.zip
+        db.doMaintenance()
+        for (version <- 2 to 3) {
+          db.load(version)
+          db.put(version.toString, version.toString)
+          db.commit()
+        }
+        db.load(0)
+        // simulate db in another executor that override the zip file
+        withDB(remoteDir, conf = conf) { db1 =>
+          for (version <- 0 to 1) {
+            db1.load(version)
+            db1.put(version.toString, version.toString)
+            db1.commit()
+          }
+          db1.doMaintenance()
+        }
+        for (version <- 2 to 3) {
+          db.load(version)
+          db.put(version.toString, version.toString)
+          db.commit()
+        }
+        // upload snapshot 4.zip
+        db.doMaintenance()
+      }
+      withDB(remoteDir, version = 4, conf = conf) { db =>
+      }
+    })
+  }
+
+  test("time travel 3 - validate successful RocksDB load") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 0, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 2) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 2.zip
+      db.doMaintenance()
+      for (version <- 1 to 3) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+      // upload snapshot 4.zip
+      db.doMaintenance()
+    }
+
+    withDB(remoteDir, version = 4, conf = conf) { db =>
+    }
+  }
+
+  test("validate Rocks DB SST files do not have a VersionIdMismatch" +
+    " when metadata file is not overwritten - scenario 1") {
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "NoOverwriteFileSystemBasedCheckpointFileManager"
+    withTempDir { dir =>
+      val dbConf = RocksDBConf(StateStoreConf(new SQLConf()))
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db1 =>
+        withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db2 =>
+          // commit version 1 via db1
+          db1.load(0)
+          db1.put("a", "1")
+          db1.put("b", "1")
+
+          db1.commit()
+
+          // commit version 1 via db2
+          db2.load(0)
+          db2.put("a", "1")
+          db2.put("b", "1")
+
+          db2.commit()
+
+          // commit version 2 via db2
+          db2.load(1)
+          db2.put("a", "2")
+          db2.put("b", "2")
+
+          db2.commit()
+
+          // reload version 1, this should succeed
+          db2.load(1)
+          db1.load(1)
+
+          // reload version 2, this should succeed
+          db2.load(2)
+          db1.load(2)
+        }
+      }
+    }
+  }
+
+  test("validate Rocks DB SST files do not have a VersionIdMismatch" +
+    " when metadata file is overwritten - scenario 1") {
+    withTempDir { dir =>
+      val dbConf = RocksDBConf(StateStoreConf(new SQLConf()))
+      val hadoopConf = new Configuration()
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db1 =>
+        withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db2 =>
+          // commit version 1 via db1
+          db1.load(0)
+          db1.put("a", "1")
+          db1.put("b", "1")
+
+          db1.commit()
+
+          // commit version 1 via db2
+          db2.load(0)
+          db2.put("a", "1")
+          db2.put("b", "1")
+
+          db2.commit()
+
+          // commit version 2 via db2
+          db2.load(1)
+          db2.put("a", "2")
+          db2.put("b", "2")
+
+          db2.commit()
+
+          // reload version 1, this should succeed
+          db2.load(1)
+          db1.load(1)
+
+          // reload version 2, this should succeed
+          db2.load(2)
+          db1.load(2)
+        }
+      }
+    }
+  }
+
+  test("validate Rocks DB SST files do not have a VersionIdMismatch" +
+    " when metadata file is not overwritten - scenario 2") {
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "NoOverwriteFileSystemBasedCheckpointFileManager"
+    withTempDir { dir =>
+      val dbConf = RocksDBConf(StateStoreConf(new SQLConf()))
+      val hadoopConf = new Configuration()
+      hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db1 =>
+        withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db2 =>
+          // commit version 1 via db2
+          db2.load(0)
+          db2.put("a", "1")
+          db2.put("b", "1")
+
+          db2.commit()
+
+          // commit version 1 via db1
+          db1.load(0)
+          db1.put("a", "1")
+          db1.put("b", "1")
+
+          db1.commit()
+
+          // commit version 2 via db2
+          db2.load(1)
+          db2.put("a", "2")
+          db2.put("b", "2")
+
+          db2.commit()
+
+          // reload version 1, this should succeed
+          db2.load(1)
+          db1.load(1)
+
+          // reload version 2, this should succeed
+          db2.load(2)
+          db1.load(2)
+        }
+      }
+    }
+  }
+
+  test("validate Rocks DB SST files do not have a VersionIdMismatch" +
+    " when metadata file is overwritten - scenario 2") {
+    withTempDir { dir =>
+      val dbConf = RocksDBConf(StateStoreConf(new SQLConf()))
+      val hadoopConf = new Configuration()
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db1 =>
+        withDB(remoteDir, conf = dbConf, hadoopConf = hadoopConf) { db2 =>
+          // commit version 1 via db2
+          db2.load(0)
+          db2.put("a", "1")
+          db2.put("b", "1")
+
+          db2.commit()
+
+          // commit version 1 via db1
+          db1.load(0)
+          db1.put("a", "1")
+          db1.put("b", "1")
+
+          db1.commit()
+
+          // commit version 2 via db2
+          db2.load(1)
+          db2.put("a", "2")
+          db2.put("b", "2")
+
+          db2.commit()
+
+          // reload version 1, this should succeed
+          db2.load(1)
+          db1.load(1)
+
+          // reload version 2, this should succeed
+          db2.load(2)
+          db1.load(2)
+        }
       }
     }
   }
@@ -1247,13 +1871,16 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       remoteDir: String,
       version: Int = 0,
       conf: RocksDBConf = dbConf,
-      hadoopConf: Configuration = new Configuration())(
+      hadoopConf: Configuration = new Configuration(),
+      useColumnFamilies: Boolean = false)(
       func: RocksDB => T): T = {
     var db: RocksDB = null
     try {
       db = new RocksDB(
         remoteDir, conf = conf, hadoopConf = hadoopConf,
-        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+        loggingId = s"[Thread-${Thread.currentThread.getId}]",
+        useColumnFamilies = useColumnFamilies
+        )
       db.load(version)
       func(db)
     } finally {
@@ -1266,7 +1893,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
-      FileUtils.write(file, "a" * length)
+      FileUtils.write(file, "a" * length, Charset.defaultCharset)
     }
   }
 
@@ -1302,11 +1929,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
 
-  def iterator(db: RocksDB): Iterator[(String, String)] = db.iterator().map(toStr)
+  def iterator(db: RocksDB, colFamilyName: String = "default"):
+    Iterator[(String, String)] = db.iterator(colFamilyName).map(toStr)
 
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty
     file.listFiles.filter(file => !file.getName.endsWith("crc") && !file.isDirectory)
+      .toImmutableArraySeq
   }
 
   def listFiles(file: String): Seq[File] = listFiles(new File(file))

@@ -33,6 +33,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType.YEAR
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
@@ -347,7 +348,7 @@ object RandomDataGenerator {
       case StructType(fields) =>
         val maybeFieldGenerators: Seq[Option[() => Any]] = fields.map { field =>
           forType(field.dataType, nullable = field.nullable, rand)
-        }
+        }.toImmutableArraySeq
         if (maybeFieldGenerators.forall(_.isDefined)) {
           val fieldGenerators: Seq[() => Any] = maybeFieldGenerators.map(_.get)
           Some(() => Row.fromSeq(fieldGenerators.map(_.apply())))

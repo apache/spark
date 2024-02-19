@@ -34,6 +34,7 @@ import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, 
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils.weakIntern
 
 /**
@@ -276,6 +277,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationEnd)
     g.writeNumberField("Timestamp", applicationEnd.time)
+    applicationEnd.exitCode.foreach(exitCode => g.writeNumberField("ExitCode", exitCode))
     g.writeEndObject()
   }
 
@@ -956,11 +958,12 @@ private[spark] object JsonProtocol extends JsonUtils {
     val jobId = json.get("Job ID").extractInt
     val submissionTime =
       jsonOption(json.get("Submission Time")).map(_.extractLong).getOrElse(-1L)
-    val stageIds = json.get("Stage IDs").extractElements.map(_.extractInt).toArray.toSeq
+    val stageIds =
+      json.get("Stage IDs").extractElements.map(_.extractInt).toArray.toImmutableArraySeq
     val properties = propertiesFromJson(json.get("Properties"))
     // The "Stage Infos" field was added in Spark 1.2.0
     val stageInfos = jsonOption(json.get("Stage Infos"))
-      .map(_.extractElements.map(stageInfoFromJson).toArray.toSeq).getOrElse {
+      .map(_.extractElements.map(stageInfoFromJson).toArray.toImmutableArraySeq).getOrElse {
         stageIds.map { id =>
           new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown",
             resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
@@ -1063,7 +1066,8 @@ private[spark] object JsonProtocol extends JsonUtils {
   }
 
   def applicationEndFromJson(json: JsonNode): SparkListenerApplicationEnd = {
-    SparkListenerApplicationEnd(json.get("Timestamp").extractLong)
+    val exitCode = jsonOption(json.get("ExitCode")).map(_.extractInt)
+    SparkListenerApplicationEnd(json.get("Timestamp").extractLong, exitCode)
   }
 
   def executorAddedFromJson(json: JsonNode): SparkListenerExecutorAdded = {
@@ -1092,9 +1096,10 @@ private[spark] object JsonProtocol extends JsonUtils {
       val stageId = json.get("Stage ID").extractInt
       val stageAttemptId = json.get("Stage Attempt ID").extractInt
       val updates =
-        json.get("Accumulator Updates").extractElements.map(accumulableInfoFromJson).toArray.toSeq
+        json.get("Accumulator Updates").extractElements.map(accumulableInfoFromJson)
+          .toArray.toImmutableArraySeq
       (taskId, stageId, stageAttemptId, updates)
-    }.toArray.toSeq
+    }.toArray.toImmutableArraySeq
     val executorUpdates = jsonOption(json.get("Executor Metrics Updated")).map { value =>
       value.extractElements.map { json =>
         val stageId = json.get("Stage ID").extractInt
@@ -1130,7 +1135,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     val numTasks = json.get("Number of Tasks").extractInt
     val rddInfos = json.get("RDD Info").extractElements.map(rddInfoFromJson).toArray
     val parentIds = jsonOption(json.get("Parent IDs"))
-      .map { l => l.extractElements.map(_.extractInt).toArray.toSeq }
+      .map { l => l.extractElements.map(_.extractInt).toArray.toImmutableArraySeq }
       .getOrElse(Seq.empty)
     val details = jsonOption(json.get("Details")).map(_.asText).getOrElse("")
     val submissionTime = jsonOption(json.get("Submission Time")).map(_.extractLong)
@@ -1149,8 +1154,8 @@ private[spark] object JsonProtocol extends JsonUtils {
 
     val rpId = jsonOption(json.get("Resource Profile Id")).map(_.extractInt)
     val stageProf = rpId.getOrElse(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    val stageInfo = new StageInfo(stageId, attemptId, stageName, numTasks, rddInfos,
-      parentIds, details, resourceProfileId = stageProf,
+    val stageInfo = new StageInfo(stageId, attemptId, stageName, numTasks,
+      rddInfos.toImmutableArraySeq, parentIds, details, resourceProfileId = stageProf,
       isShufflePushEnabled = isShufflePushEnabled,
       shuffleMergerCount = shufflePushMergersCount)
     stageInfo.submissionTime = submissionTime
@@ -1178,7 +1183,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     val failed = json.get("Failed").extractBoolean
     val killed = jsonOption(json.get("Killed")).exists(_.extractBoolean)
     val accumulables = jsonOption(json.get("Accumulables")).map(_.extractElements) match {
-      case Some(values) => values.map(accumulableInfoFromJson).toArray.toSeq
+      case Some(values) => values.map(accumulableInfoFromJson).toArray.toImmutableArraySeq
       case None => Seq.empty[AccumulableInfo]
     }
 
@@ -1223,7 +1228,7 @@ private[spark] object JsonProtocol extends JsonUtils {
           val id = BlockId(blockJson.get("Block ID").extractString)
           val status = blockStatusFromJson(blockJson.get("Status"))
           (id, status)
-        }.toArray.toSeq.asJava
+        }.toArray.toImmutableArraySeq.asJava
       } else {
         throw new IllegalArgumentException(s"unexpected json value $value for " +
           "accumulator " + name.get)
@@ -1326,7 +1331,7 @@ private[spark] object JsonProtocol extends JsonUtils {
         val id = BlockId(blockJson.get("Block ID").extractString)
         val status = blockStatusFromJson(blockJson.get("Status"))
         (id, status)
-      }.toArray.toSeq)
+      }.toArray.toImmutableArraySeq)
     }
 
     metrics
@@ -1372,10 +1377,10 @@ private[spark] object JsonProtocol extends JsonUtils {
           jsonOption(json.get("Full Stack Trace")).map(_.asText).orNull
         // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
         val accumUpdates = jsonOption(json.get("Accumulator Updates"))
-          .map(_.extractElements.map(accumulableInfoFromJson).toArray.toSeq)
+          .map(_.extractElements.map(accumulableInfoFromJson).toArray.toImmutableArraySeq)
           .getOrElse(taskMetricsFromJson(json.get("Metrics")).accumulators().map(acc => {
             acc.toInfo(Some(acc.value), None)
-          }).toArray.toSeq)
+          }).toArray.toImmutableArraySeq)
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` =>
@@ -1384,7 +1389,7 @@ private[spark] object JsonProtocol extends JsonUtils {
           .map(_.asText).getOrElse("unknown reason")
         // The "Accumulator Updates" field was added in Spark 2.4.0:
         val accumUpdates = jsonOption(json.get("Accumulator Updates"))
-          .map(_.extractElements.map(accumulableInfoFromJson).toArray.toSeq)
+          .map(_.extractElements.map(accumulableInfoFromJson).toArray.toImmutableArraySeq)
           .getOrElse(Seq[AccumulableInfo]())
         TaskKilled(killReason, accumUpdates)
       case `taskCommitDenied` =>
@@ -1442,7 +1447,7 @@ private[spark] object JsonProtocol extends JsonUtils {
       .map(RDDOperationScope.fromJson)
     val callsite = jsonOption(json.get("Callsite")).map(_.asText).getOrElse("")
     val parentIds = jsonOption(json.get("Parent IDs"))
-      .map { l => l.extractElements.map(_.extractInt).toArray.toSeq }
+      .map { l => l.extractElements.map(_.extractInt).toArray.toImmutableArraySeq }
       .getOrElse(Seq.empty)
     val storageLevel = storageLevelFromJson(json.get("Storage Level"))
     // The "Barrier" field was added in Spark 3.0.0:

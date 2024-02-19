@@ -89,18 +89,25 @@ class Expression:
     def __init__(self) -> None:
         pass
 
-    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+    def to_plan(  # type: ignore[empty-body]
+        self, session: "SparkConnectClient"
+    ) -> "proto.Expression":
         ...
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # type: ignore[empty-body]
         ...
 
     def alias(self, *alias: str, **kwargs: Any) -> "ColumnAlias":
         metadata = kwargs.pop("metadata", None)
+        if len(alias) > 1 and metadata is not None:
+            raise PySparkValueError(
+                error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+                message_parameters={"arg_name": "metadata"},
+            )
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
         return ColumnAlias(self, list(alias), metadata)
 
-    def name(self) -> str:
+    def name(self) -> str:  # type: ignore[empty-body]
         ...
 
 
@@ -489,19 +496,23 @@ class ColumnReference(Expression):
 
 
 class UnresolvedStar(Expression):
-    def __init__(self, unparsed_target: Optional[str]):
+    def __init__(self, unparsed_target: Optional[str], plan_id: Optional[int] = None):
         super().__init__()
 
         if unparsed_target is not None:
             assert isinstance(unparsed_target, str) and unparsed_target.endswith(".*")
-
         self._unparsed_target = unparsed_target
+
+        assert plan_id is None or isinstance(plan_id, int)
+        self._plan_id = plan_id
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         expr = proto.Expression()
         expr.unresolved_star.SetInParent()
         if self._unparsed_target is not None:
             expr.unresolved_star.unparsed_target = self._unparsed_target
+        if self._plan_id is not None:
+            expr.unresolved_star.plan_id = self._plan_id
         return expr
 
     def __repr__(self) -> str:

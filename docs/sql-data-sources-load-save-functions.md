@@ -209,6 +209,12 @@ file directly with SQL.
 {% include_example direct_sql r/RSparkSQLExample.R %}
 </div>
 
+<div data-lang="SQL"  markdown="1">
+{% highlight sql %}
+SELECT * FROM parquet.`examples/src/main/resources/users.parquet`
+{% endhighlight %}
+</div>
+
 </div>
 
 ### Save Modes
@@ -218,7 +224,7 @@ present. It is important to realize that these save modes do not utilize any loc
 atomic. Additionally, when performing an `Overwrite`, the data will be deleted before writing out the
 new data.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SaveMode.ErrorIfExists</code> (default)</td>
@@ -301,12 +307,10 @@ Bucketing and sorting are applicable only to persistent tables:
 <div data-lang="SQL"  markdown="1">
 {% highlight sql %}
 
-CREATE TABLE users_bucketed_by_name(
-  name STRING,
-  favorite_color STRING,
-  favorite_numbers array<integer>
-) USING parquet
-CLUSTERED BY(name) INTO 42 BUCKETS;
+CREATE TABLE people_bucketed
+USING json
+CLUSTERED BY(name) INTO 42 BUCKETS
+AS SELECT * FROM json.`examples/src/main/resources/people.json`;
 
 {% endhighlight %}
 </div>
@@ -334,11 +338,10 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 <div data-lang="SQL"  markdown="1">
 {% highlight sql %}
 
-CREATE TABLE users_by_favorite_color(
-  name STRING,
-  favorite_color STRING,
-  favorite_numbers array<integer>
-) USING csv PARTITIONED BY(favorite_color);
+CREATE TABLE users_by_favorite_color
+USING parquet
+PARTITIONED BY(favorite_color)
+AS SELECT * FROM parquet.`examples/src/main/resources/users.parquet`;
 
 {% endhighlight %}
 </div>
@@ -364,13 +367,11 @@ It is possible to use both partitioning and bucketing for a single table:
 <div data-lang="SQL"  markdown="1">
 {% highlight sql %}
 
-CREATE TABLE users_bucketed_and_partitioned(
-  name STRING,
-  favorite_color STRING,
-  favorite_numbers array<integer>
-) USING parquet
+CREATE TABLE users_partitioned_bucketed
+USING parquet
 PARTITIONED BY (favorite_color)
-CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
+CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS
+AS SELECT * FROM parquet.`examples/src/main/resources/users.parquet`;
 
 {% endhighlight %}
 </div>

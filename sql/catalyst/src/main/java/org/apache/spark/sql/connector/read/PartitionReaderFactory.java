@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.read;
 
 import java.io.Serializable;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -50,7 +51,7 @@ public interface PartitionReaderFactory extends Serializable {
    * {@link InputPartition} class defined for the data source.
    */
   default PartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
-    throw new UnsupportedOperationException("Cannot create columnar reader.");
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3150");
   }
 
   /**

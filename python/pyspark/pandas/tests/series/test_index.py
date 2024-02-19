@@ -20,19 +20,11 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesIndexMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_align(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
         psdf = ps.from_pandas(pdf)
@@ -459,7 +451,11 @@ class SeriesIndexMixin:
         )
 
 
-class SeriesIndexTests(SeriesIndexMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesIndexTests(
+    SeriesIndexMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

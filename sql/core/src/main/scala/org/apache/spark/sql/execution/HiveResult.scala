@@ -29,7 +29,8 @@ import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedComm
 import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTablesExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Runs a query returning the result in Hive compatible form.
@@ -62,18 +63,18 @@ object HiveResult {
       // SHOW TABLES in Hive only output table names while our v1 command outputs
       // database, table name, isTemp.
       case ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
-        executedPlan.executeCollect().map(_.getString(1))
+        executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       // SHOW TABLES in Hive only output table names while our v2 command outputs
       // namespace and table name.
       case _ : ShowTablesExec =>
-        executedPlan.executeCollect().map(_.getString(1))
+        executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
       // namespace, viewName, and isTemporary.
       case ExecutedCommandExec(_: ShowViewsCommand) =>
-        executedPlan.executeCollect().map(_.getString(1))
+        executedPlan.executeCollect().map(_.getString(1)).toImmutableArraySeq
       case other =>
         val timeFormatters = getTimeFormatters
-        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toImmutableArraySeq
         // We need the types so we can output struct field names
         val types = executedPlan.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
@@ -87,7 +88,7 @@ object HiveResult {
         Seq(name, dataType, Option(comment.asInstanceOf[String]).getOrElse(""))
           .map(s => String.format("%-20s", s))
           .mkString("\t")
-    }
+    }.toImmutableArraySeq
   }
 
   /** Formats a datum (based on the given data type) and returns the string representation. */
@@ -105,7 +106,7 @@ object HiveResult {
     case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
-    case (s: String, StringType) => if (nested) "\"" + s + "\"" else s
+    case (s: String, _: StringType) => if (nested) "\"" + s + "\"" else s
     case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
     case (seq: scala.collection.Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
@@ -130,6 +131,7 @@ object HiveResult {
         HIVE_STYLE,
         startField,
         endField)
+    case (v: VariantVal, VariantType) => v.toString
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }

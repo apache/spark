@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -58,7 +59,7 @@ class CSVHeaderChecker(
   private def checkHeaderColumnNames(columnNames: Array[String]): Unit = {
     if (columnNames != null) {
       val fieldNames = schema.map(_.name).toIndexedSeq
-      val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
+      val (headerLen, schemaSize) = (columnNames.length, fieldNames.length)
       var errorMessage: Option[String] = None
 
       if (headerLen == schemaSize) {
@@ -92,7 +93,9 @@ class CSVHeaderChecker(
         if (enforceSchema) {
           logWarning(msg)
         } else {
-          throw new IllegalArgumentException(msg)
+          throw new SparkIllegalArgumentException(
+            errorClass = "_LEGACY_ERROR_TEMP_3241",
+            messageParameters = Map("msg" -> msg))
         }
       }
     }

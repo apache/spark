@@ -55,7 +55,7 @@ class CollectTopKSuite extends MLTest {
       1 -> Array(39f),
       2 -> Array(18f, 45f)
     )
-    assert(topK.size === expected.size)
+    assert(topK.length === expected.size)
     topK.foreach { case (k, v) => assert(v === expected(k)) }
   }
 
@@ -71,7 +71,7 @@ class CollectTopKSuite extends MLTest {
       1 -> Array(39f),
       2 -> Array(18f, 45f, 51f)
     )
-    assert(topK.size === expected.size)
+    assert(topK.length === expected.size)
     topK.foreach { case (k, v) => assert(v === expected(k)) }
   }
 
@@ -88,7 +88,7 @@ class CollectTopKSuite extends MLTest {
       1 -> Array((3, 39f)),
       2 -> Array((3, 51f), (5, 45f))
     )
-    assert(topK.size === expected.size)
+    assert(topK.length === expected.size)
     topK.foreach { case (k, v) => assert(v === expected(k)) }
   }
 
@@ -105,7 +105,7 @@ class CollectTopKSuite extends MLTest {
       1 -> Array((3, 39f)),
       2 -> Array((3, 51f), (5, 45f), (6, 18f))
     )
-    assert(topK.size === expected.size)
+    assert(topK.length === expected.size)
     topK.foreach { case (k, v) => assert(v === expected(k)) }
   }
 }

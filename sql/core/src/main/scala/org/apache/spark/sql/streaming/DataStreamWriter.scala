@@ -30,7 +30,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, OptionList, UnresolvedTableSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, OptionList, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -272,10 +273,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this.tableName = tableName
 
     import df.sparkSession.sessionState.analyzer.CatalogAndIdentifier
-
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    val originalMultipartIdentifier = df.sparkSession.sessionState.sqlParser
-      .parseMultipartIdentifier(tableName)
+    val parser = df.sparkSession.sessionState.sqlParser
+    val originalMultipartIdentifier = parser.parseMultipartIdentifier(tableName)
     val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier
 
     // Currently we don't create a logical streaming writer node in logical plan, so cannot rely
@@ -301,8 +301,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         false)
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),
-        df.schema.asNullable,
-        partitioningColumns.getOrElse(Nil).asTransforms.toSeq,
+        df.schema.asNullable.map(ColumnDefinition.fromV1Column(_, parser)),
+        partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq,
         tableSpec,
         ignoreIfExists = false)
       Dataset.ofRows(df.sparkSession, cmd)
@@ -369,7 +369,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
       val disabledSources =
-        Utils.stringToSeq(df.sparkSession.sqlContext.conf.disabledV2StreamingWriters)
+        Utils.stringToSeq(df.sparkSession.sessionState.conf.disabledV2StreamingWriters)
       val useV1Source = disabledSources.contains(cls.getCanonicalName) ||
         // file source v2 does not support streaming yet.
         classOf[FileDataSourceV2].isAssignableFrom(cls)
@@ -384,7 +384,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = df.sparkSession.sessionState.conf)
-        val finalOptions = sessionOptions.view.filterKeys(!optionsWithPath.contains(_)).toMap ++
+        val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
           optionsWithPath.originalMap
         val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
         // If the source accepts external table metadata, here we pass the schema of input query

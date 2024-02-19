@@ -1113,13 +1113,13 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
     provider.checkForLogs()
     provider.cleanLogs()
-    assert(new File(testDir.toURI).listFiles().size === logCount)
+    assert(new File(testDir.toURI).listFiles().length === logCount)
 
     // Move the clock forward 1 day and scan the files again. They should still be there.
     clock.advance(TimeUnit.DAYS.toMillis(1))
     provider.checkForLogs()
     provider.cleanLogs()
-    assert(new File(testDir.toURI).listFiles().size === logCount)
+    assert(new File(testDir.toURI).listFiles().length === logCount)
 
     // Update the slow app to contain valid info. Code should detect the change and not clean
     // it up.
@@ -1133,7 +1133,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     clock.advance(TimeUnit.DAYS.toMillis(2))
     provider.checkForLogs()
     provider.cleanLogs()
-    assert(new File(testDir.toURI).listFiles().size === validLogCount)
+    assert(new File(testDir.toURI).listFiles().length === validLogCount)
   }
 
   test("always find end event for finished apps") {
@@ -1414,12 +1414,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
     provider.checkForLogs()
     // The invalid application log file would be cleaned by checkAndCleanLog().
-    assert(new File(testDir.toURI).listFiles().size === 1)
+    assert(new File(testDir.toURI).listFiles().length === 1)
 
     clock.advance(1)
     // cleanLogs() would clean the valid application log file.
     provider.cleanLogs()
-    assert(new File(testDir.toURI).listFiles().size === 0)
+    assert(new File(testDir.toURI).listFiles().length === 0)
   }
 
   private def assertOptionAfterSerde(opt: Option[Long], expected: Option[Long]): Unit = {
@@ -1556,7 +1556,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
       provider.checkForLogs()
       provider.cleanLogs()
-      assert(dir.listFiles().size === 1)
+      assert(dir.listFiles().length === 1)
       assert(provider.getListing().length === 1)
 
       // Manually delete the appstatus file to make an invalid rolling event log
@@ -1578,7 +1578,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       provider.checkForLogs()
       provider.cleanLogs()
       assert(provider.getListing().length === 1)
-      assert(dir.listFiles().size === 2)
+      assert(dir.listFiles().length === 2)
 
       // Make sure a new provider sees the valid application
       provider.stop()
@@ -1615,7 +1615,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       // The 1st checkForLogs should scan/update app2 only since it is newer than app1
       provider.checkForLogs()
       assert(provider.getListing().length === 1)
-      assert(dir.listFiles().size === 2)
+      assert(dir.listFiles().length === 2)
       assert(provider.getListing().map(e => e.id).contains("app2"))
       assert(!provider.getListing().map(e => e.id).contains("app1"))
 
@@ -1630,7 +1630,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       // The 2nd checkForLogs should scan/update app3 only since it is newer than app1
       provider.checkForLogs()
       assert(provider.getListing().length === 2)
-      assert(dir.listFiles().size === 3)
+      assert(dir.listFiles().length === 3)
       assert(provider.getListing().map(e => e.id).contains("app3"))
       assert(!provider.getListing().map(e => e.id).contains("app1"))
 
@@ -1655,7 +1655,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
       provider.checkForLogs()
       provider.cleanLogs()
-      assert(dir.listFiles().size === 1)
+      assert(dir.listFiles().length === 1)
       assert(provider.getListing().length === 1)
 
       // Manually delete event log files and create event log file reader

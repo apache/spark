@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.Locale
 
+import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
@@ -40,8 +41,11 @@ object JoinType {
         "leftanti", "left_anti", "anti",
         "cross")
 
-      throw new IllegalArgumentException(s"Unsupported join type '$typ'. " +
-        "Supported join types include: " + supported.mkString("'", "', '", "'") + ".")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3216",
+        messageParameters = Map(
+          "typ" -> typ,
+          "supported" -> supported.mkString("'", "', '", "'")))
   }
 }
 
@@ -91,7 +95,7 @@ case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
     // This join type is only used in the end of optimizer and physical plans, we will not
     // generate SQL for this join type
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }
 
@@ -132,8 +136,11 @@ object AsOfJoinDirection {
       case "nearest" => Nearest
       case _ =>
         val supported = Seq("forward", "backward", "nearest")
-        throw new IllegalArgumentException(s"Unsupported as-of join direction '$direction'. " +
-          "Supported as-of join direction include: " + supported.mkString("'", "', '", "'") + ".")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3217",
+          messageParameters = Map(
+            "direction" -> direction,
+            "supported" -> supported.mkString("'", "', '", "'")))
     }
   }
 }

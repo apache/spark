@@ -17,11 +17,35 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+
 private[spark] object Deploy {
   val RECOVERY_MODE = ConfigBuilder("spark.deploy.recoveryMode")
     .version("0.8.1")
     .stringConf
     .createWithDefault("NONE")
+
+  object RecoverySerializer extends Enumeration {
+    val JAVA, KRYO = Value
+  }
+
+  val RECOVERY_SERIALIZER = ConfigBuilder("spark.deploy.recoverySerializer")
+    .doc("Serializer for writing/reading objects to/from persistence engines; " +
+      "JAVA or KRYO. Java serializer has been the default mode since Spark 0.8.1." +
+      "KRYO serializer is a new fast and compact mode from Spark 4.0.0.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(RecoverySerializer.values.map(_.toString))
+    .createWithDefault(RecoverySerializer.JAVA.toString)
+
+  val RECOVERY_COMPRESSION_CODEC = ConfigBuilder("spark.deploy.recoveryCompressionCodec")
+    .doc("A compression codec for persistence engines. none (default), lz4, lzf, snappy, and " +
+      "zstd. Currently, only FILESYSTEM mode supports this configuration.")
+    .version("4.0.0")
+    .stringConf
+    .createOptional
 
   val RECOVERY_MODE_FACTORY = ConfigBuilder("spark.deploy.recoveryMode.factory")
     .version("1.2.0")
@@ -32,6 +56,14 @@ private[spark] object Deploy {
     .version("0.8.1")
     .stringConf
     .createWithDefault("")
+
+  val RECOVERY_TIMEOUT = ConfigBuilder("spark.deploy.recoveryTimeout")
+    .doc("Configures the timeout for recovery process. The default value is the same " +
+      "with ${WORKER_TIMEOUT.key}.")
+    .version("4.0.0")
+    .timeConf(TimeUnit.SECONDS)
+    .checkValue(_ > 0, "spark.deploy.recoveryTimeout must be positive.")
+    .createOptional
 
   val ZOOKEEPER_URL = ConfigBuilder("spark.deploy.zookeeper.url")
     .doc(s"When `${RECOVERY_MODE.key}` is set to ZOOKEEPER, this " +
@@ -65,10 +97,34 @@ private[spark] object Deploy {
     .intConf
     .createWithDefault(10)
 
-  val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOut")
-    .version("0.6.1")
+  val SPREAD_OUT_DRIVERS = ConfigBuilder("spark.deploy.spreadOutDrivers")
+    .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val SPREAD_OUT_APPS = ConfigBuilder("spark.deploy.spreadOutApps")
+    .version("0.6.1")
+    .withAlternative("spark.deploy.spreadOut")
+    .booleanConf
+    .createWithDefault(true)
+
+  object WorkerSelectionPolicy extends Enumeration {
+    val CORES_FREE_ASC, CORES_FREE_DESC, MEMORY_FREE_ASC, MEMORY_FREE_DESC, WORKER_ID = Value
+  }
+
+  val WORKER_SELECTION_POLICY = ConfigBuilder("spark.deploy.workerSelectionPolicy")
+    .doc("A policy to assign executors on one of the assignable workers; " +
+      "CORES_FREE_ASC to choose a worker with the least free cores, " +
+      "CORES_FREE_DESC to choose a worker with the most free cores, " +
+      "MEMORY_FREE_ASC to choose a worker with the least free memory, " +
+      "MEMORY_FREE_DESC to choose a worker with the most free memory, " +
+      "WORKER_ID to choose a worker with the smallest worker id. " +
+      "CORES_FREE_DESC is the default behavior.")
+    .version("4.0.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(WorkerSelectionPolicy.values.map(_.toString))
+    .createWithDefault(WorkerSelectionPolicy.CORES_FREE_DESC.toString)
 
   val DEFAULT_CORES = ConfigBuilder("spark.deploy.defaultCores")
     .version("0.9.0")

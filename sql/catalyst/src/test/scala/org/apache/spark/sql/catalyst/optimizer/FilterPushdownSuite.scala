@@ -1190,7 +1190,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("watermark pushdown: no pushdown on watermark attribute #1") {
     val interval = new CalendarInterval(2, 2, 2000L)
-    val relation = LocalRelation(attrA, $"b".timestamp, attrC)
+    val relation = LocalRelation(Seq(attrA, $"b".timestamp, attrC), Nil, isStreaming = true)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1205,7 +1205,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("watermark pushdown: no pushdown for nondeterministic filter") {
     val interval = new CalendarInterval(2, 2, 2000L)
-    val relation = LocalRelation(attrA, attrB, $"c".timestamp)
+    val relation = LocalRelation(Seq(attrA, attrB, $"c".timestamp), Nil, isStreaming = true)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1221,7 +1221,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("watermark pushdown: full pushdown") {
     val interval = new CalendarInterval(2, 2, 2000L)
-    val relation = LocalRelation(attrA, attrB, $"c".timestamp)
+    val relation = LocalRelation(Seq(attrA, attrB, $"c".timestamp), Nil, isStreaming = true)
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
@@ -1236,7 +1236,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("watermark pushdown: no pushdown on watermark attribute #2") {
     val interval = new CalendarInterval(2, 2, 2000L)
-    val relation = LocalRelation($"a".timestamp, attrB, attrC)
+    val relation = LocalRelation(Seq($"a".timestamp, attrB, attrC), Nil, isStreaming = true)
 
     val originalQuery = EventTimeWatermark($"a", interval, relation)
       .where($"a" === new java.sql.Timestamp(0) && $"b" === 10)
@@ -1432,5 +1432,68 @@ class FilterPushdownSuite extends PlanTest {
 
     val correctAnswer = RebalancePartitions(Seq.empty, testRelation.where($"a" > 3)).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-46707: push down predicate with sequence (without step) through joins") {
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
+
+    // do not push down when sequence has step param
+    val queryWithStep = x.join(y, joinType = Inner, condition = Some($"x.c" === $"y.d"))
+      .where(IsNotNull(Sequence($"x.a", $"x.b", Some(Literal(1)))))
+      .analyze
+    val optimizedQueryWithStep = Optimize.execute(queryWithStep)
+    comparePlans(optimizedQueryWithStep, queryWithStep)
+
+    // push down when sequence does not have step param
+    val queryWithoutStep = x.join(y, joinType = Inner, condition = Some($"x.c" === $"y.d"))
+      .where(IsNotNull(Sequence($"x.a", $"x.b", None)))
+      .analyze
+    val optimizedQueryWithoutStep = Optimize.execute(queryWithoutStep)
+    val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)))
+      .join(y, joinType = Inner, condition = Some($"x.c" === $"y.d"))
+      .analyze
+    comparePlans(optimizedQueryWithoutStep, correctAnswer)
+  }
+
+  test("SPARK-46707: push down predicate with sequence (without step) through aggregates") {
+    val x = testRelation.subquery("x")
+
+    // do not push down when sequence has step param
+    val queryWithStep = x.groupBy($"x.a", $"x.b")($"x.a", $"x.b")
+      .where(IsNotNull(Sequence($"x.a", $"x.b", Some(Literal(1)))))
+      .analyze
+    val optimizedQueryWithStep = Optimize.execute(queryWithStep)
+    comparePlans(optimizedQueryWithStep, queryWithStep)
+
+    // push down when sequence does not have step param
+    val queryWithoutStep = x.groupBy($"x.a", $"x.b")($"x.a", $"x.b")
+      .where(IsNotNull(Sequence($"x.a", $"x.b", None)))
+      .analyze
+    val optimizedQueryWithoutStep = Optimize.execute(queryWithoutStep)
+    val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)))
+      .groupBy($"x.a", $"x.b")($"x.a", $"x.b")
+      .analyze
+    comparePlans(optimizedQueryWithoutStep, correctAnswer)
+  }
+
+  test("SPARK-46707: combine predicate with sequence (without step) with other filters") {
+    val x = testRelation.subquery("x")
+
+    // do not combine when sequence has step param
+    val queryWithStep = x.where($"x.c" > 1)
+      .where(IsNotNull(Sequence($"x.a", $"x.b", Some(Literal(1)))))
+      .analyze
+    val optimizedQueryWithStep = Optimize.execute(queryWithStep)
+    comparePlans(optimizedQueryWithStep, queryWithStep)
+
+    // combine when sequence does not have step param
+    val queryWithoutStep = x.where($"x.c" > 1)
+      .where(IsNotNull(Sequence($"x.a", $"x.b", None)))
+      .analyze
+    val optimizedQueryWithoutStep = Optimize.execute(queryWithoutStep)
+    val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)) && $"x.c" > 1)
+      .analyze
+    comparePlans(optimizedQueryWithoutStep, correctAnswer)
   }
 }

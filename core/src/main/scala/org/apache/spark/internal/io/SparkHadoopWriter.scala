@@ -36,6 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A helper object that saves an RDD using a Hadoop OutputFormat.
@@ -97,7 +98,8 @@ object SparkHadoopWriter extends Logging {
       })
 
       logInfo(s"Start to commit write Job ${jobContext.getJobID}.")
-      val (_, duration) = Utils.timeTakenMs { committer.commitJob(jobContext, ret) }
+      val (_, duration) = Utils
+        .timeTakenMs { committer.commitJob(jobContext, ret.toImmutableArraySeq) }
       logInfo(s"Write Job ${jobContext.getJobID} committed. Elapsed time: $duration ms.")
     } catch {
       case cause: Throwable =>

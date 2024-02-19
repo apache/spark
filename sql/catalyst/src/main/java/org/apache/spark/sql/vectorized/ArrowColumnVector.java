@@ -23,6 +23,7 @@ import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.holders.NullableLargeVarCharHolder;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
@@ -151,36 +152,36 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   void initAccessor(ValueVector vector) {
-    if (vector instanceof BitVector) {
-      accessor = new BooleanAccessor((BitVector) vector);
-    } else if (vector instanceof TinyIntVector) {
-      accessor = new ByteAccessor((TinyIntVector) vector);
-    } else if (vector instanceof SmallIntVector) {
-      accessor = new ShortAccessor((SmallIntVector) vector);
-    } else if (vector instanceof IntVector) {
-      accessor = new IntAccessor((IntVector) vector);
-    } else if (vector instanceof BigIntVector) {
-      accessor = new LongAccessor((BigIntVector) vector);
-    } else if (vector instanceof Float4Vector) {
-      accessor = new FloatAccessor((Float4Vector) vector);
-    } else if (vector instanceof Float8Vector) {
-      accessor = new DoubleAccessor((Float8Vector) vector);
-    } else if (vector instanceof DecimalVector) {
-      accessor = new DecimalAccessor((DecimalVector) vector);
-    } else if (vector instanceof VarCharVector) {
-      accessor = new StringAccessor((VarCharVector) vector);
-    } else if (vector instanceof LargeVarCharVector) {
-      accessor = new LargeStringAccessor((LargeVarCharVector) vector);
-    } else if (vector instanceof VarBinaryVector) {
-      accessor = new BinaryAccessor((VarBinaryVector) vector);
-    } else if (vector instanceof LargeVarBinaryVector) {
-      accessor = new LargeBinaryAccessor((LargeVarBinaryVector) vector);
-    } else if (vector instanceof DateDayVector) {
-      accessor = new DateAccessor((DateDayVector) vector);
-    } else if (vector instanceof TimeStampMicroTZVector) {
-      accessor = new TimestampAccessor((TimeStampMicroTZVector) vector);
-    } else if (vector instanceof TimeStampMicroVector) {
-      accessor = new TimestampNTZAccessor((TimeStampMicroVector) vector);
+    if (vector instanceof BitVector bitVector) {
+      accessor = new BooleanAccessor(bitVector);
+    } else if (vector instanceof TinyIntVector tinyIntVector) {
+      accessor = new ByteAccessor(tinyIntVector);
+    } else if (vector instanceof SmallIntVector smallIntVector) {
+      accessor = new ShortAccessor(smallIntVector);
+    } else if (vector instanceof IntVector intVector) {
+      accessor = new IntAccessor(intVector);
+    } else if (vector instanceof BigIntVector bigIntVector) {
+      accessor = new LongAccessor(bigIntVector);
+    } else if (vector instanceof Float4Vector float4Vector) {
+      accessor = new FloatAccessor(float4Vector);
+    } else if (vector instanceof Float8Vector float8Vector) {
+      accessor = new DoubleAccessor(float8Vector);
+    } else if (vector instanceof DecimalVector decimalVector) {
+      accessor = new DecimalAccessor(decimalVector);
+    } else if (vector instanceof VarCharVector varCharVector) {
+      accessor = new StringAccessor(varCharVector);
+    } else if (vector instanceof LargeVarCharVector largeVarCharVector) {
+      accessor = new LargeStringAccessor(largeVarCharVector);
+    } else if (vector instanceof VarBinaryVector varBinaryVector) {
+      accessor = new BinaryAccessor(varBinaryVector);
+    } else if (vector instanceof LargeVarBinaryVector largeVarBinaryVector) {
+      accessor = new LargeBinaryAccessor(largeVarBinaryVector);
+    } else if (vector instanceof DateDayVector dateDayVector) {
+      accessor = new DateAccessor(dateDayVector);
+    } else if (vector instanceof TimeStampMicroTZVector timeStampMicroTZVector) {
+      accessor = new TimestampAccessor(timeStampMicroTZVector);
+    } else if (vector instanceof TimeStampMicroVector timeStampMicroVector) {
+      accessor = new TimestampNTZAccessor(timeStampMicroVector);
     } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector listVector) {
@@ -192,16 +193,16 @@ public class ArrowColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         childColumns[i] = new ArrowColumnVector(structVector.getVectorById(i));
       }
-    } else if (vector instanceof NullVector) {
-      accessor = new NullAccessor((NullVector) vector);
-    } else if (vector instanceof IntervalYearVector) {
-      accessor = new IntervalYearAccessor((IntervalYearVector) vector);
-    } else if (vector instanceof DurationVector) {
-      accessor = new DurationAccessor((DurationVector) vector);
-    } else if (vector instanceof IntervalMonthDayNanoVector) {
-      accessor = new IntervalMonthDayNanoAccessor((IntervalMonthDayNanoVector) vector);
+    } else if (vector instanceof NullVector nullVector) {
+      accessor = new NullAccessor(nullVector);
+    } else if (vector instanceof IntervalYearVector intervalYearVector) {
+      accessor = new IntervalYearAccessor(intervalYearVector);
+    } else if (vector instanceof DurationVector durationVector) {
+      accessor = new DurationAccessor(durationVector);
+    } else if (vector instanceof IntervalMonthDayNanoVector intervalMonthDayNanoVector) {
+      accessor = new IntervalMonthDayNanoAccessor(intervalMonthDayNanoVector);
     } else {
-      throw new UnsupportedOperationException();
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3160");
     }
   }
 
@@ -226,55 +227,55 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     boolean getBoolean(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     byte getByte(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     short getShort(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     int getInt(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     long getLong(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     float getFloat(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     double getDouble(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     CalendarInterval getInterval(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     Decimal getDecimal(int rowId, int precision, int scale) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     UTF8String getUTF8String(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     byte[] getBinary(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     ColumnarArray getArray(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
 
     ColumnarMap getMap(int rowId) {
-      throw new UnsupportedOperationException();
+      throw SparkUnsupportedOperationException.apply();
     }
   }
 

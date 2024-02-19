@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.TypedAggUtils
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
@@ -43,8 +43,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
   // Similar to [[Dataset]], we turn the passed in encoder to `ExpressionEncoder` explicitly.
-  private implicit val kExprEnc = encoderFor(kEncoder)
-  private implicit val vExprEnc = encoderFor(vEncoder)
+  private implicit val kExprEnc: ExpressionEncoder[K] = encoderFor(kEncoder)
+  private implicit val vExprEnc: ExpressionEncoder[V] = encoderFor(vEncoder)
 
   private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
@@ -241,7 +241,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
       SortExprs: Array[Column],
       f: FlatMapGroupsFunction[K, V, U],
       encoder: Encoder[U]): Dataset[U] = {
-    flatMapSortedGroups(SortExprs: _*)((key, data) => f.call(key, data.asJava).asScala)(encoder)
+    import org.apache.spark.util.ArrayImplicits._
+    flatMapSortedGroups(
+      SortExprs.toImmutableArraySeq: _*)((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
 
   /**
@@ -642,6 +644,40 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   /**
    * (Scala-specific)
+   * Invokes methods defined in the stateful processor used in arbitrary state API v2.
+   * We allow the user to act on per-group set of input rows along with keyed state and the
+   * user can choose to output/return 0 or more rows.
+   * For a static/batch dataset, this operator is not supported and will throw an exception.
+   * For a streaming dataframe, we will repeatedly invoke the interface methods for new rows
+   * in each trigger and the user's state/state variables will be stored persistently across
+   * invocations.
+   *
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
+   *                          operator.
+   * @param timeoutMode The timeout mode of the stateful processor.
+   * @param outputMode The output mode of the stateful processor. Defaults to APPEND mode.
+   *
+   */
+  private[sql] def transformWithState[U: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {
+    Dataset[U](
+      sparkSession,
+      TransformWithState[K, V, U](
+        groupingAttributes,
+        dataAttributes,
+        statefulProcessor,
+        timeoutMode,
+        outputMode,
+        child = logicalPlan
+      )
+    )
+  }
+
+  /**
+   * (Scala-specific)
    * Reduces the elements of each group of data using the specified binary function.
    * The given function must be commutative and associative or the result may be non-deterministic.
    *
@@ -901,7 +937,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
       otherSortExprs: Array[Column],
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
-    cogroupSorted(other)(thisSortExprs: _*)(otherSortExprs: _*)(
+    import org.apache.spark.util.ArrayImplicits._
+    cogroupSorted(other)(
+      thisSortExprs.toImmutableArraySeq: _*)(otherSortExprs.toImmutableArraySeq: _*)(
       (key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 

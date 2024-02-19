@@ -746,15 +746,16 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       withTable("HiveGenericUDFTable") {
         sql(s"create table HiveGenericUDFTable as select false as v")
         val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
-        val e = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException]
         checkError(
-          e,
+          intercept[SparkException](df.collect()),
           "FAILED_EXECUTE_UDF",
           parameters = Map(
             "functionName" ->
               "`org`.`apache`.`hadoop`.`hive`.`ql`.`udf`.`generic`.`GenericUDFAssertTrue`",
             "signature" -> "boolean",
-            "result" -> "void"))
+            "result" -> "void",
+            "reason" ->
+              "org.apache.hadoop.hive.ql.metadata.HiveException: ASSERT_TRUE(): assertion failed."))
       }
     }
   }
@@ -778,14 +779,22 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       withTable("HiveSimpleUDFTable") {
         sql(s"create table HiveSimpleUDFTable as select false as v")
         val df = sql("SELECT CodeGenHiveSimpleUDF(v) from HiveSimpleUDFTable")
+
+        val reason = """
+          |org.apache.hadoop.hive.ql.metadata.HiveException: Unable to execute method public
+          |boolean org.apache.spark.sql.hive.execution.SimpleUDFAssertTrue.evaluate(boolean) with
+          |arguments {false}:ASSERT_TRUE(): assertion failed."""
+          .stripMargin.replaceAll("\n", " ").trim
+
         checkError(
-          exception = intercept[SparkException](df.collect()).getCause.asInstanceOf[SparkException],
+          exception = intercept[SparkException](df.collect()),
           errorClass = "FAILED_EXECUTE_UDF",
           parameters = Map(
             "functionName" ->
               "`org`.`apache`.`spark`.`sql`.`hive`.`execution`.`SimpleUDFAssertTrue`",
             "signature" -> "boolean",
-            "result" -> "boolean"
+            "result" -> "boolean",
+            "reason" -> reason
           )
         )
       }

@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -51,7 +52,7 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient private val 
       !SparkEnv.get.blockManager.master.contains(RDDBlockId(rdd.id, i))
     }
     if (missingPartitionIndices.nonEmpty) {
-      rdd.sparkContext.runJob(rdd, action, missingPartitionIndices)
+      rdd.sparkContext.runJob(rdd, action, missingPartitionIndices.toImmutableArraySeq)
     }
 
     new LocalCheckpointRDD[T](rdd)

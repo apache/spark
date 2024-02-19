@@ -362,7 +362,7 @@ class VectorUDTTests(MLlibTestCase):
             Row(v2=unwrapped_vec(1, None, None, [1.0, 2.0, 3.0])),
             Row(v2=unwrapped_vec(0, 3, [1, 2], [1.0, 5.5])),
         ]
-        self.assertEquals(results, expected)
+        self.assertEqual(results, expected)
 
 
 class MatrixUDTTests(MLlibTestCase):

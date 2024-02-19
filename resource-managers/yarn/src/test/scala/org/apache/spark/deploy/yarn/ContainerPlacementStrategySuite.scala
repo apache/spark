@@ -23,6 +23,7 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.util.ArrayImplicits._
 
 class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
 
@@ -49,7 +50,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
 
     val (handler, allocatorConf) = createAllocator(2)
     handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
+    handler.handleAllocatedContainers(
+      Array(createContainer("host1"), createContainer("host2")).toImmutableArraySeq)
 
     ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
@@ -74,7 +76,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
       createContainer("host1"),
       createContainer("host1"),
       createContainer("host2")
-    ))
+    ).toImmutableArraySeq)
 
     ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
@@ -98,7 +100,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
       createContainer("host1"),
       createContainer("host1"),
       createContainer("host2")
-    ))
+    ).toImmutableArraySeq)
 
     ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
@@ -120,7 +122,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
       createContainer("host2"),
       createContainer("host2"),
       createContainer("host3")
-    ))
+    ).toImmutableArraySeq)
 
     ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
@@ -136,7 +138,8 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
 
     val (handler, allocatorConf) = createAllocator(2)
     handler.updateResourceRequests()
-    handler.handleAllocatedContainers(Array(createContainer("host1"), createContainer("host2")))
+    handler.handleAllocatedContainers(
+      Array(createContainer("host1"), createContainer("host2")).toImmutableArraySeq)
 
     ResourceProfile.clearDefaultProfile()
     val rp = ResourceProfile.getOrCreateDefaultProfile(allocatorConf)
@@ -154,7 +157,7 @@ class ContainerPlacementStrategySuite extends SparkFunSuite with Matchers {
       createContainer("host1"),
       createContainer("host1"),
       createContainer("host2")
-    ))
+    ).toImmutableArraySeq)
 
     val pendingAllocationRequests = Seq(
       createContainerRequest(Array("host2", "host3")),

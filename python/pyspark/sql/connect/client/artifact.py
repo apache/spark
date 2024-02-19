@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.sql.connect.utils import check_dependencies
 from pyspark.sql.connect.client.logging import logger
 
@@ -112,7 +113,10 @@ class Artifact:
         if isinstance(self.storage, LocalData):
             return self.storage.size
         else:
-            raise RuntimeError(f"Unsupported storage {type(self.storage)}")
+            raise PySparkRuntimeError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"operation": f"{self.storage} storage"},
+            )
 
 
 def new_jar_artifact(file_name: str, storage: LocalData) -> Artifact:
@@ -214,7 +218,13 @@ class ArtifactManager:
                     # Minimal fix for the workaround of fragment handling in URI.
                     # This has a limitation - hash(#) in the file name would not work.
                     if "#" in local_path:
-                        raise ValueError("'#' in the path is not supported for adding an archive.")
+                        raise PySparkValueError(
+                            error_class="VALUE_ALLOWED",
+                            message_parameters={
+                                "arg_name": "artifact path",
+                                "disallowed_value": "#",
+                            },
+                        )
                     name = f"{name}#{parsed.fragment}"
 
                 artifact = new_archive_artifact(name, LocalFile(local_path))
@@ -223,9 +233,15 @@ class ArtifactManager:
             elif name.endswith(".jar"):
                 artifact = new_jar_artifact(name, LocalFile(local_path))
             else:
-                raise RuntimeError(f"Unsupported file format: {local_path}")
+                raise PySparkRuntimeError(
+                    error_class="UNSUPPORTED_OPERATION",
+                    message_parameters={"operation": f"{local_path} file format"},
+                )
             return [artifact]
-        raise RuntimeError(f"Unsupported scheme: {parsed.scheme}")
+        raise PySparkRuntimeError(
+            error_class="UNSUPPORTED_OPERATION",
+            message_parameters={"operation": f"{parsed.scheme} scheme"},
+        )
 
     def _parse_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
         abs_path: Path = Path(local_path).absolute()

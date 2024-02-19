@@ -35,10 +35,11 @@ import org.apache.spark.sql.functions.{window => windowFn, _}
 import org.apache.spark.sql.internal.SQLConf.SHUFFLE_PARTITIONS
 import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.{SlowSQLTest, WebBrowserTest}
 import org.apache.spark.ui.SparkUICssErrorHandler
 import org.apache.spark.util.Utils
 
+@WebBrowserTest
 @SlowSQLTest
 class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
@@ -156,8 +157,9 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
             summaryText should contain ("Global Watermark Gap (?)")
             summaryText should contain ("Aggregated Number Of Total State Rows (?)")
             summaryText should contain ("Aggregated Number Of Updated State Rows (?)")
+            summaryText should contain ("Aggregated Number Of Removed State Rows (?)")
             summaryText should contain ("Aggregated State Memory Used In Bytes (?)")
-            summaryText should contain ("Aggregated Number Of Rows Dropped By Watermark (?)")
+            summaryText should contain ("Aggregated Number Of Late Rows Dropped By Watermark (?)")
             summaryText should contain ("Aggregated Custom Metric stateOnCurrentVersionSizeBytes" +
               " (?)")
             summaryText should not contain ("Aggregated Custom Metric loadedMapCacheHitCount (?)")
@@ -181,6 +183,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
   }
 }
 
+@WebBrowserTest
 @SlowSQLTest
 class UISeleniumWithRocksDBBackendSuite extends UISeleniumSuite {
   private val storePath = Utils.createTempDir()

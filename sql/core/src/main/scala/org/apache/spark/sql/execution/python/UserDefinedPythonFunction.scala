@@ -25,8 +25,8 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -106,7 +106,7 @@ case class UserDefinedPythonTableFunction(
     this(name, func, None, pythonEvalType, udfDeterministic)
   }
 
-  def builder(exprs: Seq[Expression]): LogicalPlan = {
+  def builder(exprs: Seq[Expression], parser: => ParserInterface): LogicalPlan = {
     /*
      * Check if the named arguments:
      * - don't have duplicated names
@@ -133,7 +133,8 @@ case class UserDefinedPythonTableFunction(
           case _ => false
         }
         val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
-          val runner = new UserDefinedPythonTableFunctionAnalyzeRunner(func, exprs, tableArgs)
+          val runner =
+            new UserDefinedPythonTableFunctionAnalyzeRunner(name, func, exprs, tableArgs, parser)
           runner.runInPython()
         }
         UnresolvedPolymorphicPythonUDTF(
@@ -156,7 +157,7 @@ case class UserDefinedPythonTableFunction(
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(_.expr))
+    val udtf = builder(exprs.map(_.expr), session.sessionState.sqlParser)
     Dataset.ofRows(session, udtf)
   }
 }
@@ -184,14 +185,18 @@ case class UserDefinedPythonTableFunction(
  * will be thrown when an exception is raised in Python.
  */
 class UserDefinedPythonTableFunctionAnalyzeRunner(
+    name: String,
     func: PythonFunction,
     exprs: Seq[Expression],
-    tableArgs: Seq[Boolean]) extends PythonPlannerRunner[PythonUDTFAnalyzeResult](func) {
+    tableArgs: Seq[Boolean],
+    parser: ParserInterface)
+  extends PythonPlannerRunner[PythonUDTFAnalyzeResult](func) {
 
   override val workerModule = "pyspark.sql.worker.analyze_udtf"
 
   override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
     // Send Python UDTF
+    PythonWorkerUtils.writeUTF(name, dataOut)
     PythonWorkerUtils.writePythonFunction(func, dataOut)
 
     // Send arguments
@@ -226,6 +231,9 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     val length = dataIn.readInt()
     if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
+        // Remove the leading traceback stack trace from the error message string, if any, since it
+        // usually only includes the "analyze_udtf.py" filename and a line number.
+        .split("PySparkValueError:").last.strip()
       throw QueryCompilationErrors.tableValuedFunctionFailedToAnalyseInPythonError(msg)
     }
 
@@ -237,34 +245,55 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
 
     // Receive whether the "with single partition" property is requested.
     val withSinglePartition = dataIn.readInt() == 1
-    // Receive the list of requested partitioning columns, if any.
-    val partitionByColumns = ArrayBuffer.empty[Expression]
-    val numPartitionByColumns = dataIn.readInt()
-    for (_ <- 0 until numPartitionByColumns) {
-      val columnName = PythonWorkerUtils.readUTF(dataIn)
-      partitionByColumns.append(UnresolvedAttribute(columnName))
+    // Receive the list of requested partitioning expressions, if any.
+    val partitionByExpressions = ArrayBuffer.empty[Expression]
+    val numPartitionByExpressions = dataIn.readInt()
+    for (_ <- 0 until numPartitionByExpressions) {
+      val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
+      val parsed: Expression = parser.parseExpression(expressionSql)
+      partitionByExpressions.append(parsed)
     }
-    // Receive the list of requested ordering columns, if any.
+    // Receive the list of requested ordering expressions, if any.
     val orderBy = ArrayBuffer.empty[SortOrder]
     val numOrderByItems = dataIn.readInt()
     for (_ <- 0 until numOrderByItems) {
-      val columnName = PythonWorkerUtils.readUTF(dataIn)
+      val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
+      val parsed: Expression = parser.parseExpression(expressionSql)
+      // Perform a basic check that the requested ordering column string does not include an alias,
+      // since it is possible to accidentally try to specify a sort order like ASC or DESC or NULLS
+      // FIRST/LAST in this manner leading to confusing results.
+      parsed match {
+        case a: Alias =>
+          throw QueryCompilationErrors
+            .invalidSortOrderInUDTFOrderingColumnFromAnalyzeMethodHasAlias(aliasName = a.name)
+        case _ =>
+      }
       val direction = if (dataIn.readInt() == 1) Ascending else Descending
       val overrideNullsFirst = dataIn.readInt()
       overrideNullsFirst match {
-        case 0 =>
-          orderBy.append(SortOrder(UnresolvedAttribute(columnName), direction))
-        case 1 => orderBy.append(
-          SortOrder(UnresolvedAttribute(columnName), direction, NullsFirst, Seq.empty))
-        case 2 => orderBy.append(
-          SortOrder(UnresolvedAttribute(columnName), direction, NullsLast, Seq.empty))
+        case 0 => orderBy.append(SortOrder(parsed, direction))
+        case 1 => orderBy.append(SortOrder(parsed, direction, NullsFirst, Seq.empty))
+        case 2 => orderBy.append(SortOrder(parsed, direction, NullsLast, Seq.empty))
       }
+    }
+    // Receive the list of requested input columns to select, if specified.
+    val numSelectedInputExpressions = dataIn.readInt()
+    val selectedInputExpressions = ArrayBuffer.empty[PythonUDTFSelectedExpression]
+    for (_ <- 0 until numSelectedInputExpressions) {
+      val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
+      val parsed: Expression = parser.parseExpression(expressionSql)
+      val alias: String = PythonWorkerUtils.readUTF(dataIn)
+      selectedInputExpressions.append(
+        PythonUDTFSelectedExpression(
+          parsed,
+          if (alias.nonEmpty) Some(alias) else None))
     }
     PythonUDTFAnalyzeResult(
       schema = schema,
       withSinglePartition = withSinglePartition,
-      partitionByExpressions = partitionByColumns.toSeq,
+      partitionByExpressions = partitionByExpressions.toSeq,
       orderByExpressions = orderBy.toSeq,
+      selectedInputExpressions = selectedInputExpressions.toSeq,
       pickledAnalyzeResult = pickledAnalyzeResult)
   }
 }

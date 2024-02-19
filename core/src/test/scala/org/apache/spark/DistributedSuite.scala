@@ -80,7 +80,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc = new SparkContext(clusterUrl, "test")
     val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 5)
     val groups = pairs.groupByKey(5).collect()
-    assert(groups.size === 2)
+    assert(groups.length === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
@@ -264,8 +264,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     sc = new SparkContext(clusterUrl, "test")
     val data = sc.parallelize(Seq(true, true), 2)
     assert(data.count() === 2) // force executors to start
-    assert(data.map(markNodeIfIdentity).collect().size === 2)
-    assert(data.map(failOnMarkedIdentity).collect().size === 2)
+    assert(data.map(markNodeIfIdentity).collect().length === 2)
+    assert(data.map(failOnMarkedIdentity).collect().length === 2)
   }
 
   test("recover from repeated node failures during shuffle-map") {
@@ -275,7 +275,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, false), 2)
       assert(data.count() === 2)
-      assert(data.map(markNodeIfIdentity).collect().size === 2)
+      assert(data.map(markNodeIfIdentity).collect().length === 2)
       assert(data.map(failOnMarkedIdentity).map(x => x -> x).groupByKey().count() === 2)
     }
   }
@@ -287,7 +287,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     for (i <- 1 to 3) {
       val data = sc.parallelize(Seq(true, true), 2)
       assert(data.count() === 2)
-      assert(data.map(markNodeIfIdentity).collect().size === 2)
+      assert(data.map(markNodeIfIdentity).collect().length === 2)
       // This relies on mergeCombiners being used to perform the actual reduce for this
       // test to actually be testing what it claims.
       val grouped = data.map(x => x -> x).combineByKey(
@@ -295,7 +295,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
                       (x: Boolean, y: Boolean) => x,
                       (x: Boolean, y: Boolean) => failOnMarkedIdentity(x)
                     )
-      assert(grouped.collect().size === 1)
+      assert(grouped.collect().length === 1)
     }
   }
 
@@ -310,8 +310,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
       data.persist(StorageLevel.MEMORY_ONLY_2)
 
       assert(data.count() === 4)
-      assert(data.map(markNodeIfIdentity).collect().size === 4)
-      assert(data.map(failOnMarkedIdentity).collect().size === 4)
+      assert(data.map(markNodeIfIdentity).collect().length === 4)
+      assert(data.map(failOnMarkedIdentity).collect().length === 4)
 
       // Create a new replicated RDD to make sure that cached peer information doesn't cause
       // problems.

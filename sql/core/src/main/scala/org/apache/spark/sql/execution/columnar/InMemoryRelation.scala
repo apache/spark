@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,6 +38,7 @@ import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType,
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{LongAccumulator, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The default implementation of CachedBatch.
@@ -60,7 +61,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] =
-    throw new IllegalStateException("Columnar input is not supported")
+    throw SparkException.internalError("Columnar input is not supported")
 
   override def convertInternalRowToCachedBatch(
       input: RDD[InternalRow],
@@ -111,7 +112,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
           }
 
           val stats = InternalRow.fromSeq(
-            columnBuilders.flatMap(_.columnStats.collectedStatistics).toSeq)
+            columnBuilders.flatMap(_.columnStats.collectedStatistics).toImmutableArraySeq)
           DefaultCachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
@@ -192,7 +193,7 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     }.toArray
 
     input.mapPartitionsInternal { cachedBatchIterator =>
-      val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
+      val columnarIterator = GenerateColumnAccessor.generate(columnTypes.toImmutableArraySeq)
       columnarIterator.initialize(cachedBatchIterator.asInstanceOf[Iterator[DefaultCachedBatch]],
         columnTypes,
         requestedColumnIndices.toArray)
@@ -284,9 +285,11 @@ case class CachedRDDBuilder(
         cachedPlan.conf)
     }
     val cached = cb.mapPartitionsInternal { it =>
-      TaskContext.get().addTaskCompletionListener[Unit](_ => {
-        materializedPartitions.add(1L)
-      })
+      TaskContext.get().addTaskCompletionListener[Unit] { context =>
+        if (!context.isFailed() && !context.isInterrupted()) {
+          materializedPartitions.add(1L)
+        }
+      }
       new Iterator[CachedBatch] {
         override def hasNext: Boolean = it.hasNext
         override def next(): CachedBatch = {
@@ -413,7 +416,7 @@ case class InMemoryRelation(
   }
 
   override def doCanonicalize(): logical.LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExpressions(_, cachedPlan.output)),
+    copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),
       cacheBuilder,
       outputOrdering)
 

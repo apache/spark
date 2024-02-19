@@ -250,15 +250,18 @@ class SparkSession private[sql] (
           .setSql(sqlText)
           .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
-    // .toBuffer forces that the iterator is consumed and closed
-    val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+    val responseIter = client.execute(plan.build())
 
-    val response = responseSeq
-      .find(_.hasSqlCommandResult)
-      .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-
-    // Update the builder with the values from the result.
-    builder.mergeFrom(response.getSqlCommandResult.getRelation)
+    try {
+      val response = responseIter
+        .find(_.hasSqlCommandResult)
+        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+      // Update the builder with the values from the result.
+      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+    } finally {
+      // consume the rest of the iterator
+      responseIter.foreach(_ => ())
+    }
   }
 
   /**
@@ -307,17 +310,20 @@ class SparkSession private[sql] (
           proto.SqlCommand
             .newBuilder()
             .setSql(sqlText)
-            .putAllNamedArguments(args.asScala.view.mapValues(lit(_).expr).toMap.asJava)))
+            .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      // .toBuffer forces that the iterator is consumed and closed
-      val responseSeq = client.execute(plan.build()).toBuffer.toSeq
+      val responseIter = client.execute(plan.build())
 
-      val response = responseSeq
-        .find(_.hasSqlCommandResult)
-        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-
-      // Update the builder with the values from the result.
-      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      try {
+        val response = responseIter
+          .find(_.hasSqlCommandResult)
+          .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+        // Update the builder with the values from the result.
+        builder.mergeFrom(response.getSqlCommandResult.getRelation)
+      } finally {
+        // consume the rest of the iterator
+        responseIter.foreach(_ => ())
+      }
   }
 
   /**
@@ -543,14 +549,14 @@ class SparkSession private[sql] (
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    // .toBuffer forces that the iterator is consumed and closed
-    client.execute(plan).toBuffer
+    // .foreach forces that the iterator is consumed and closed
+    client.execute(plan).foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    // .toBuffer forces that the iterator is consumed and closed
-    client.execute(plan).toBuffer.toSeq
+    // .toSeq forces that the iterator is consumed and closed
+    client.execute(plan).toSeq
   }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
@@ -583,6 +589,47 @@ class SparkSession private[sql] (
    */
   @Experimental
   def addArtifact(uri: URI): Unit = client.addArtifact(uri)
+
+  /**
+   * Add a single in-memory artifact to the session while preserving the directory structure
+   * specified by `target` under the session's working directory of that particular file
+   * extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact(bytesBar, "foo/bar.class")
+   *  addArtifact(bytesFlat, "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(bytes: Array[Byte], target: String): Unit = client.addArtifact(bytes, target)
+
+  /**
+   * Add a single artifact to the session while preserving the directory structure specified by
+   * `target` under the session's working directory of that particular file extension.
+   *
+   * Supported target file extensions are .jar and .class.
+   *
+   * ==Example==
+   * {{{
+   *  addArtifact("/Users/dummyUser/files/foo/bar.class", "foo/bar.class")
+   *  addArtifact("/Users/dummyUser/files/flat.class", "flat.class")
+   *  // Directory structure of the session's working directory for class files would look like:
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/flat.class
+   *  // ${WORKING_DIR_FOR_CLASS_FILES}/foo/bar.class
+   * }}}
+   *
+   * @since 4.0.0
+   */
+  @Experimental
+  def addArtifact(source: String, target: String): Unit = client.addArtifact(source, target)
 
   /**
    * Add one or more artifacts to the session.

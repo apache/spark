@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.util
 
 import scala.collection.immutable
 

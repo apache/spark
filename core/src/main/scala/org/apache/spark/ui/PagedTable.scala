@@ -207,10 +207,9 @@ private[spark] trait PagedTable[T] {
           .withKeyValueSeparator("=")
           .split(search)
           .asScala
-          .view
-          .filterKeys(_ != pageSizeFormField)
-          .filterKeys(_ != pageNumberFormField)
-          .mapValues(URLDecoder.decode(_, UTF_8.name()))
+          .filter { case (k, _) => k != pageSizeFormField}
+          .filter { case (k, _) => k != pageNumberFormField}
+          .map { case (k, v) => (k, URLDecoder.decode(v, UTF_8.name())) }
           .map { case (k, v) =>
             <input type="hidden" name={k} value={v} />
           }

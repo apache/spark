@@ -75,6 +75,15 @@ SELECT * FROM
     VALUES (0), (1) AS t(col)
     JOIN LATERAL
     UDTFPartitionByOrderBy(TABLE(t2) PARTITION BY partition_col);
+SELECT * FROM UDTFPartitionByOrderByComplexExpr(TABLE(t2));
+SELECT * FROM UDTFPartitionByOrderBySelectExpr(TABLE(t2));
+SELECT * FROM UDTFPartitionByOrderBySelectComplexExpr(TABLE(t2));
+SELECT * FROM UDTFPartitionByOrderBySelectExprOnlyPartitionColumn(TABLE(t2));
+SELECT * FROM UDTFInvalidSelectExprParseError(TABLE(t2));
+SELECT * FROM UDTFInvalidSelectExprStringValue(TABLE(t2));
+SELECT * FROM UDTFInvalidComplexSelectExprMissingAlias(TABLE(t2));
+SELECT * FROM UDTFInvalidOrderByAscKeyword(TABLE(t2));
+SELECT * FROM UDTFInvalidOrderByStringList(TABLE(t2));
 -- As a reminder, UDTFInvalidPartitionByAndWithSinglePartition returns this analyze result:
 --     AnalyzeResult(
 --         schema=StructType()
@@ -116,6 +125,24 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2));
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2));
 SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2));
+-- The following UDTF calls exercise various invalid function definitions and calls to show the
+-- error messages.
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs();
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(1, 2);
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(invalid => 2);
+SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(argument => 1, argument => 2);
+SELECT * FROM InvalidAnalyzeMethodWithSinglePartitionNoInputTable(argument => 1);
+SELECT * FROM InvalidAnalyzeMethodWithPartitionByNoInputTable(argument => 1);
+SELECT * FROM InvalidAnalyzeMethodReturnsNonStructTypeSchema(TABLE(t2));
+SELECT * FROM InvalidAnalyzeMethodWithPartitionByListOfStrings(argument => TABLE(t2));
+SELECT * FROM InvalidForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2));
+SELECT * FROM InvalidNotForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2));
+SELECT * FROM UDTFWithSinglePartition(1);
+SELECT * FROM UDTFWithSinglePartition(1, 2, 3);
+SELECT * FROM UDTFWithSinglePartition(1, invalid_arg_name => 2);
+SELECT * FROM UDTFWithSinglePartition(1, initial_count => 2);
+SELECT * FROM UDTFWithSinglePartition(initial_count => 1, initial_count => 2);
+SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2));
 
 -- cleanup
 DROP VIEW t1;

@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, Scan, ScanBuilder, S
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwriteV2, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 class InMemoryTableWithV2Filter(
     name: String,
@@ -42,7 +43,7 @@ class InMemoryTableWithV2Filter(
   override def deleteWhere(filters: Array[Predicate]): Unit = dataMap.synchronized {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTableWithV2Filter
-      .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
+      .filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -51,8 +52,8 @@ class InMemoryTableWithV2Filter(
 
   class InMemoryV2FilterScanBuilder(tableSchema: StructType)
     extends InMemoryScanBuilder(tableSchema) {
-    override def build: Scan =
-      InMemoryV2FilterBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
+    override def build: Scan = InMemoryV2FilterBatchScan(
+      data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq, schema, tableSchema)
   }
 
   case class InMemoryV2FilterBatchScan(
@@ -122,7 +123,7 @@ class InMemoryTableWithV2Filter(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val deleteKeys = InMemoryTableWithV2Filter.filtersToKeys(
-        dataMap.keys, partCols.map(_.toSeq.quoted), predicates)
+        dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, predicates)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }

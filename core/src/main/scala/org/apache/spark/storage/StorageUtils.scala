@@ -23,7 +23,6 @@ import scala.collection.Map
 import scala.collection.mutable
 
 import sun.misc.Unsafe
-import sun.nio.ch.DirectBuffer
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{config, Logging}
@@ -197,13 +196,11 @@ private[spark] class StorageStatus(
 /** Helper methods for storage-related objects. */
 private[spark] object StorageUtils extends Logging {
 
-  private val bufferCleaner: DirectBuffer => Unit = {
-    val cleanerMethod =
-      Utils.classForName("sun.misc.Unsafe").getMethod("invokeCleaner", classOf[ByteBuffer])
+  private val bufferCleaner: ByteBuffer => Unit = {
     val unsafeField = classOf[Unsafe].getDeclaredField("theUnsafe")
     unsafeField.setAccessible(true)
     val unsafe = unsafeField.get(null).asInstanceOf[Unsafe]
-    buffer: DirectBuffer => cleanerMethod.invoke(unsafe, buffer)
+    buffer: ByteBuffer => unsafe.invokeCleaner(buffer)
   }
 
   /**
@@ -217,7 +214,7 @@ private[spark] object StorageUtils extends Logging {
   def dispose(buffer: ByteBuffer): Unit = {
     if (buffer != null && buffer.isInstanceOf[MappedByteBuffer]) {
       logTrace(s"Disposing of $buffer")
-      bufferCleaner(buffer.asInstanceOf[DirectBuffer])
+      bufferCleaner(buffer)
     }
   }
 

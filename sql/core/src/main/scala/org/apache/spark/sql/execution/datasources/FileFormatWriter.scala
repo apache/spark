@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 
 /** A helper object for writing FileFormat data out to a location. */
@@ -231,7 +232,7 @@ object FileFormatWriter extends Logging {
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
       // partition rdd to make sure we at least set up one write task to write the metadata.
       val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
-        sparkSession.sparkContext.parallelize(Array.empty[InternalRow], 1)
+        sparkSession.sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
       } else {
         rdd
       }
@@ -272,10 +273,12 @@ object FileFormatWriter extends Logging {
       val commitMsgs = ret.map(_.commitMsg)
 
       logInfo(s"Start to commit write Job ${description.uuid}.")
-      val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
+      val (_, duration) = Utils
+        .timeTakenMs { committer.commitJob(job, commitMsgs.toImmutableArraySeq) }
       logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
-      processStats(description.statsTrackers, ret.map(_.summary.stats), duration)
+      processStats(
+        description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
       logInfo(s"Finished processing stats for write job ${description.uuid}.")
 
       // return a set of all the partition paths that were updated during this job

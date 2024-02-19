@@ -60,7 +60,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester {
     val rdd = MapWithStateRDD.createFromPairRDD[Int, Int, String, Int](
       sc.parallelize(data), partitioner, Time(123))
     assertRDD[Int, Int, String, Int](rdd, data.map { x => (x._1, x._2, 123)}.toSet, Set.empty)
-    assert(rdd.partitions.size === partitioner.numPartitions)
+    assert(rdd.partitions.length === partitioner.numPartitions)
 
     assert(rdd.partitioner === Some(partitioner))
   }

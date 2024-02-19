@@ -32,7 +32,7 @@ import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{PrimitiveType, Types}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType}
+import org.apache.spark.util.ArrayImplicits._
 
 object ParquetUtils extends Logging {
 
@@ -141,11 +142,13 @@ object ParquetUtils extends Logging {
     val leaves = allFiles.toArray.sortBy(_.getPath.toString)
 
     FileTypes(
-      data = leaves.filterNot(f => isSummaryFile(f.getPath)),
+      data = leaves.filterNot(f => isSummaryFile(f.getPath)).toImmutableArraySeq,
       metadata =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE),
+        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
+          .toImmutableArraySeq,
       commonMetadata =
-        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE))
+        leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
+          .toImmutableArraySeq)
   }
 
   private def isSummaryFile(file: Path): Boolean = {
@@ -391,8 +394,11 @@ object ParquetUtils extends Logging {
       isMax: Boolean): Any = {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.hasNonNullValue) {
-      throw new UnsupportedOperationException(s"No min/max found for Parquet file $filePath. " +
-        s"Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3172",
+        messageParameters = Map(
+          "filePath" -> filePath,
+          "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     } else {
       if (isMax) statistics.genericGetMax else statistics.genericGetMin
     }
@@ -404,9 +410,11 @@ object ParquetUtils extends Logging {
       i: Int): Long = {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.isNumNullsSet) {
-      throw new UnsupportedOperationException(s"Number of nulls not set for Parquet file" +
-        s" $filePath. Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute" +
-        s" again")
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3171",
+        messageParameters = Map(
+          "filePath" -> filePath,
+          "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
     }
     statistics.getNumNulls;
   }

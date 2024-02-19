@@ -60,7 +60,7 @@ required by Keystone.
 The following table contains a list of Keystone mandatory parameters. <code>PROVIDER</code> can be
 any (alphanumeric) name.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Property Name</th><th>Meaning</th><th>Required</th></tr></thead>
 <tr>
   <td><code>fs.swift.service.PROVIDER.auth.url</code></td>

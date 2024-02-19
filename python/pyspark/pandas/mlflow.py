@@ -25,6 +25,7 @@ import pandas as pd
 import numpy as np
 
 from pyspark.sql.types import DataType
+from pyspark.sql.functions import struct
 from pyspark.pandas._typing import Label, Dtype
 from pyspark.pandas.utils import lazy_property, default_session
 from pyspark.pandas.frame import DataFrame
@@ -93,11 +94,8 @@ class PythonModelWrapper:
         if isinstance(data, pd.DataFrame):
             return self._model.predict(data)
         elif isinstance(data, DataFrame):
-            return_col = self._model_udf(*data._internal.data_spark_columns)
-            # TODO: the columns should be named according to the mlflow spec
-            # However, this is only possible with spark >= 3.0
-            # s = F.struct(*data.columns)
-            # return_col = self._model_udf(s)
+            s = struct(*data.columns)
+            return_col = self._model_udf(s)
             column_labels: List[Label] = [
                 (col,) for col in data._internal.spark_frame.select(return_col).columns
             ]

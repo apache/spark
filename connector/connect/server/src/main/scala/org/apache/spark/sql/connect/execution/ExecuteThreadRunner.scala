@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.execution
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
@@ -42,6 +43,8 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   // forwarding of thread locals needs to be taken into account.
   private val executionThread: Thread = new ExecutionThread()
 
+  private var started: Boolean = false
+
   private var interrupted: Boolean = false
 
   private var completed: Boolean = false
@@ -49,12 +52,21 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   private val lock = new Object
 
   /** Launches the execution in a background thread, returns immediately. */
-  def start(): Unit = {
-    executionThread.start()
+  private[connect] def start(): Unit = {
+    lock.synchronized {
+      assert(!started)
+      // Do not start if already interrupted.
+      if (!interrupted) {
+        executionThread.start()
+        started = true
+      }
+    }
   }
 
   /** Joins the background execution thread after it is finished. */
-  def join(): Unit = {
+  private[connect] def join(): Unit = {
+    // only called when the execution is completed or interrupted.
+    assert(completed || interrupted)
     executionThread.join()
   }
 
@@ -63,9 +75,21 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    * @return
    *   true if it was not interrupted before, false if it was already interrupted or completed.
    */
-  def interrupt(): Boolean = {
+  private[connect] def interrupt(): Boolean = {
     lock.synchronized {
-      if (!interrupted && !completed) {
+      if (!started && !interrupted) {
+        // execution thread hasn't started yet, and will not be started.
+        // handle the interrupted error here directly.
+        interrupted = true
+        ErrorUtils.handleError(
+          "execute",
+          executeHolder.responseObserver,
+          executeHolder.sessionHolder.userId,
+          executeHolder.sessionHolder.sessionId,
+          Some(executeHolder.eventsManager),
+          interrupted)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
+        true
+      } else if (!interrupted && !completed) {
         // checking completed prevents sending interrupt onError after onCompleted
         interrupted = true
         executionThread.interrupt()
@@ -160,6 +184,36 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
         case _ =>
           throw new UnsupportedOperationException(
             s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
+      }
+
+      val observedMetrics: Map[String, Seq[(Option[String], Any)]] = {
+        executeHolder.observations.map { case (name, observation) =>
+          val values = observation.getOrEmpty.map { case (key, value) =>
+            (Some(key), value)
+          }.toSeq
+          name -> values
+        }.toMap
+      }
+      val accumulatedInPython: Map[String, Seq[(Option[String], Any)]] = {
+        executeHolder.sessionHolder.pythonAccumulator.flatMap { accumulator =>
+          accumulator.synchronized {
+            val value = accumulator.value.asScala.toSeq
+            if (value.nonEmpty) {
+              accumulator.reset()
+              Some("__python_accumulator__" -> value.map(value => (None, value)))
+            } else {
+              None
+            }
+          }
+        }.toMap
+      }
+      if (observedMetrics.nonEmpty || accumulatedInPython.nonEmpty) {
+        executeHolder.responseObserver.onNext(
+          SparkConnectPlanExecution
+            .createObservedMetricsResponse(
+              executeHolder.sessionHolder.sessionId,
+              executeHolder.sessionHolder.serverSessionId,
+              observedMetrics ++ accumulatedInPython))
       }
 
       lock.synchronized {

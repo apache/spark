@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.trees
 
 import org.apache.spark.QueryContext
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Contexts of TreeNodes, including location, SQL text, object type and object name.
@@ -34,7 +35,7 @@ case class Origin(
     stackTrace: Option[Array[StackTraceElement]] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
-    DataFrameQueryContext(stackTrace.get)
+    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq)
   } else {
     SQLQueryContext(
       line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)

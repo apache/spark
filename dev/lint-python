@@ -18,7 +18,7 @@
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
-MINIMUM_MYPY="0.920"
+MINIMUM_MYPY="1.8.0"
 MYPY_BUILD="mypy"
 PYTEST_BUILD="pytest"
 
@@ -31,7 +31,7 @@ function exit_with_usage {
   echo "lint-python - linter for Python"
   echo ""
   echo "usage:"
-  cl_options="[--compile] [--black] [--flake8] [--mypy] [--mypy-examples] [--mypy-data]"
+  cl_options="[--compile] [--black] [--custom-pyspark-error] [--flake8] [--mypy] [--mypy-examples] [--mypy-data]"
   echo "lint-python $cl_options"
   echo ""
   exit 1
@@ -45,6 +45,9 @@ while (( "$#" )); do
       ;;
     --black)
       BLACK_TEST=true
+      ;;
+    --custom-pyspark-error)
+      PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
       ;;
     --flake8)
       FLAKE8_TEST=true
@@ -66,9 +69,10 @@ while (( "$#" )); do
   shift
 done
 
-if [[ -z "$COMPILE_TEST$BLACK_TEST$FLAKE8_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
   COMPILE_TEST=true
   BLACK_TEST=true
+  PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
   FLAKE8_TEST=true
   MYPY_TEST=true
   MYPY_EXAMPLES_TEST=true
@@ -289,6 +293,24 @@ function black_test {
     fi
 }
 
+function pyspark_custom_errors_check_test {
+    local PYSPARK_CUSTOM_ERRORS_CHECK_REPORT=
+    local PYSPARK_CUSTOM_ERRORS_CHECK_STATUS=
+
+    echo "starting PySpark custom errors check..."
+    PYSPARK_CUSTOM_ERRORS_CHECK_REPORT=$( "$PYTHON_EXECUTABLE" dev/check_pyspark_custom_errors.py 2>&1 )
+    PYSPARK_CUSTOM_ERRORS_CHECK_STATUS=$?
+
+    if [ "$PYSPARK_CUSTOM_ERRORS_CHECK_STATUS" -ne 0 ]; then
+        echo "PySpark custom errors check failed!"
+        echo "$PYSPARK_CUSTOM_ERRORS_CHECK_REPORT"
+        exit "$PYSPARK_CUSTOM_ERRORS_CHECK_STATUS"
+    else
+        echo "PySpark custom errors check passed."
+        echo
+    fi
+}
+
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 
@@ -301,6 +323,9 @@ if [[ "$COMPILE_TEST" == "true" ]]; then
 fi
 if [[ "$BLACK_TEST" == "true" ]]; then
     black_test
+fi
+if [[ "$PYSPARK_CUSTOM_ERRORS_CHECK_TEST" == "true" ]]; then
+    pyspark_custom_errors_check_test
 fi
 if [[ "$FLAKE8_TEST" == "true" ]]; then
     flake8_test

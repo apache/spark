@@ -45,7 +45,7 @@ object MasterFailureTest extends Logging {
 
   def main(args: Array[String]): Unit = {
     // scalastyle:off println
-    if (args.size < 2) {
+    if (args.length < 2) {
       println(
         "Usage: MasterFailureTest <local/HDFS directory> <# batches> " +
           "[<batch size in milliseconds>]")
@@ -53,7 +53,7 @@ object MasterFailureTest extends Logging {
     }
     val directory = args(0)
     val numBatches = args(1).toInt
-    val batchDuration = if (args.size > 2) Milliseconds(args(2).toInt) else Seconds(1)
+    val batchDuration = if (args.length > 2) Milliseconds(args(2).toInt) else Seconds(1)
 
     println("\n\n========================= MAP TEST =========================\n\n")
     testMap(directory, numBatches, batchDuration)

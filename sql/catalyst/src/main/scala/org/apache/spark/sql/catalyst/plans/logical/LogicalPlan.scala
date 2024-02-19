@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
@@ -207,7 +208,8 @@ trait LeafNode extends LogicalPlan with LeafLike[LogicalPlan] {
   override def producedAttributes: AttributeSet = outputSet
 
   /** Leaf nodes that can survive analysis must define their own statistics. */
-  def computeStats(): Statistics = throw new UnsupportedOperationException
+  def computeStats(): Statistics =
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3114")
 }
 
 /**
@@ -381,6 +383,15 @@ object LogicalPlanIntegrity {
     }.flatten
   }
 
+  def validateSchemaOutput(previousPlan: LogicalPlan, currentPlan: LogicalPlan): Option[String] = {
+    if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+      Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
+        currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
+        "plan:\n" + currentPlan.treeString)
+    } else {
+      None
+    }
+  }
 
   /**
    * Validate the structural integrity of an optimized plan.
@@ -400,17 +411,11 @@ object LogicalPlanIntegrity {
     } else if (currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty)) {
       Some("Special expressions are placed in the wrong plan: " + currentPlan.treeString)
     } else {
-      LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan).orElse {
-        if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
-          Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
-            currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
-            "plan:\n" + currentPlan.treeString)
-        } else {
-          None
-        }
-      }
+      None
     }
     validation = validation
+      .orElse(LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateSchemaOutput(previousPlan, currentPlan))
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
       .orElse(LogicalPlanIntegrity.validateGroupByTypes(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))

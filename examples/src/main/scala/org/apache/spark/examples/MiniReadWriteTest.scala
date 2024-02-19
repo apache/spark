@@ -81,8 +81,7 @@ object MiniReadWriteTest {
       .flatMap(_.split("\t"))
       .filter(_.nonEmpty)
       .groupBy(w => w)
-      .view
-      .mapValues(_.size)
+      .transform((_, v) => v.size)
       .values
       .sum
   }

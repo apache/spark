@@ -30,11 +30,9 @@ import org.apache.hadoop.fs.{FsUrlStreamHandlerFactory, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.DataSourceRegistration
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.CacheManager
-import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab, StreamingQueryStatusStore}
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -106,16 +104,6 @@ private[sql] class SharedState(
    */
   @GuardedBy("activeQueriesLock")
   private[sql] val activeStreamingQueries = new ConcurrentHashMap[UUID, StreamExecution]()
-
-  /**
-   * A data source manager shared by all sessions.
-   */
-  lazy val dataSourceManager = new DataSourceManager()
-
-  /**
-   * A collection of method used for registering user-defined data sources.
-   */
-  lazy val dataSourceRegistration = new DataSourceRegistration(dataSourceManager)
 
   /**
    * A status store to query SQL status/metrics of this Spark application, based on SQL-specific

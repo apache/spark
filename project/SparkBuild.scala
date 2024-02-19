@@ -89,9 +89,9 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.23.4"
+  val protoVersion = "3.25.1"
   // GRPC version used for Spark Connect.
-  val gprcVersion = "1.56.0"
+  val grpcVersion = "1.59.0"
 }
 
 object SparkBuild extends PomBuild {
@@ -232,11 +232,8 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=deprecation:wv,any:e",
         // 2.13-specific warning hits to be muted (as narrowly as possible) and addressed separately
         "-Wunused:imports",
-        // SPARK-33775 Suppress compilation warnings that contain the following contents.
-        // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
-        //  fixed.
-        "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
-        "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
+        "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:e",
+        "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e",
         // SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated:e",
         // TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
@@ -247,8 +244,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
-        // SPARK-40497 Upgrade Scala to 2.13.11 and suppress `Implicit definition should have explicit type`
-        "-Wconf:msg=Implicit definition should have explicit type:s",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=symbol literal is deprecated:e",
         // SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
@@ -299,21 +294,16 @@ object SparkBuild extends PomBuild {
 
     javaOptions ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
+      val major = versionParts(0).toInt
       if (major >= 21) {
         Seq("--add-modules=jdk.incubator.vector", "-Dforeign.restricted=warn")
-      } else if (major >= 16) {
-        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
       } else {
-        Seq.empty
+        Seq("--add-modules=jdk.incubator.vector,jdk.incubator.foreign", "-Dforeign.restricted=warn")
       }
     },
 
     (Compile / doc / javacOptions) ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
-      if (major == 1) major = versionParts(1).toInt
-      if (major >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
+      Seq("-Xdoclint:all", "-Xdoclint:-missing")
     },
 
     javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("java.version").asInstanceOf[String],
@@ -425,8 +415,7 @@ object SparkBuild extends PomBuild {
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
 
-  // SPARK-14738 - Remove docker tests from main Spark build
-  // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
+  enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   if (!profiles.contains("volcano")) {
     enable(Volcano.settings)(kubernetes)
@@ -541,9 +530,10 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
     "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
+    "org.apache.spark.sql.streaming.RocksDBStateStoreStreamingAggregationSuite",
     "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite",
     "org.apache.spark.sql.hive.HiveScalaReflectionSuite"
-  )
+  ) ++ sys.env.get("DEDICATED_JVM_SBT_TESTS").map(_.split(",")).getOrElse(Array.empty).toSet
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
   private val HIVE_EXECUTION_TEST_GROUP = "hive_execution_test_group"
@@ -654,7 +644,7 @@ object SparkConnectCommon {
         SbtPomKeys.effectivePom.value.getProperties.get(
           "guava.failureaccess.version").asInstanceOf[String]
       Seq(
-        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.gprcVersion asProtocPlugin(),
+        "io.grpc" % "protoc-gen-grpc-java" % BuildCommons.grpcVersion asProtocPlugin(),
         "com.google.guava" % "guava" % guavaVersion,
         "com.google.guava" % "failureaccess" % guavaFailureaccessVersion,
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -762,14 +752,20 @@ object SparkConnect {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
-    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`,`guava-*.jar`,
+    // `failureaccess-*.jar`, `annotations-*.jar`, `grpc-*.jar`, `protobuf-*.jar`,
+    // `gson-*.jar`, `error_prone_annotations-*.jar`, `j2objc-annotations-*.jar`,
+    // `animal-sniffer-annotations-*.jar`, `perfmark-api-*.jar`,
+    // `proto-google-common-protos-*.jar` in assembly.
+    // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      cp filter { v =>
-        val name = v.data.getName
-        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jsr305-") || name.startsWith("netty-") || name == "unused-1.0.0.jar"
+      val validPrefixes = Set("spark-connect", "unused-", "guava-", "failureaccess-",
+        "annotations-", "grpc-", "protobuf-", "gson", "error_prone_annotations",
+        "j2objc-annotations", "animal-sniffer-annotations", "perfmark-api",
+        "proto-google-common-protos")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
       }
     },
 
@@ -955,7 +951,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
+    dependencyOverrides += "com.google.guava" % "guava" % "33.0.0-jre"
   )
 }
 
@@ -999,8 +995,12 @@ object KubernetesIntegrationTests {
             s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile")
         val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
             s"$bindingsDir/python/Dockerfile")
-        val rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
+        var rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
             s"$bindingsDir/R/Dockerfile")
+        val excludeTags = sys.props.getOrElse("test.exclude.tags", "").split(",")
+        if (excludeTags.exists(_.equalsIgnoreCase("r"))) {
+          rDockerFile = ""
+        }
         val extraOptions = if (javaImageTag.isDefined) {
           Seq("-b", s"java_image_tag=$javaImageTag")
         } else {
@@ -1361,7 +1361,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/connect/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
@@ -1377,6 +1377,7 @@ object Unidoc {
     classpaths
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka-clients-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka_2\..*-0\.10.*""")))
+      .map(_.filterNot(_.data.getCanonicalPath.contains("apache-rat")))
   }
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
@@ -1415,10 +1416,6 @@ object Unidoc {
     },
 
     (JavaUnidoc / unidoc / javacOptions) := {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      var major = versionParts(0).toInt
-      if (major == 1) major = versionParts(1).toInt
-
       Seq(
         "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
         "-public",
@@ -1430,7 +1427,8 @@ object Unidoc {
         "-tag", "constructor:X",
         "-tag", "todo:X",
         "-tag", "groupname:X",
-      ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
+        "--ignore-source-errors", "-notree"
+      )
     },
 
     // Use GitHub repository for Scaladoc source links
@@ -1489,7 +1487,11 @@ object CopyDependencies {
           if (destJar.isFile()) {
             destJar.delete()
           }
-          if (jar.getName.contains("spark-connect") &&
+
+          if (jar.getName.contains("spark-connect-common") &&
+            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+            // Don't copy the spark connect common JAR as it is shaded in the spark connect.
+          } else if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else if (jar.getName.contains("connect-client-jvm") &&

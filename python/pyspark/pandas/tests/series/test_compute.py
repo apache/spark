@@ -22,19 +22,11 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.errors import PySparkValueError
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesComputeMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_duplicated(self):
         for pser in [
             pd.Series(["beetle", None, "beetle", None, "lama", "beetle"], name="objects"),
@@ -583,7 +575,11 @@ class SeriesComputeMixin:
         )
 
 
-class SeriesComputeTests(SeriesComputeMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesComputeTests(
+    SeriesComputeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -694,7 +694,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType) {
+        if (c.type instanceof StructType || c.type instanceof VariantType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -723,10 +723,18 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
     if (value instanceof Decimal decimal) {
       long unscaled = decimal.toUnscaledLong();
-      if (decimal.precision() < 10) {
+      if (decimal.precision() <= Decimal.MAX_INT_DIGITS()) {
         return Optional.of(appendInts(length, (int) unscaled));
-      } else {
+      } else if (decimal.precision() <= Decimal.MAX_LONG_DIGITS()) {
         return Optional.of(appendLongs(length, unscaled));
+      } else {
+        BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
+        byte[] bytes = integer.toByteArray();
+        int result = 0;
+        for (int i = 0; i < length; ++i) {
+          result += appendByteArray(bytes, 0, bytes.length);
+        }
+        return Optional.of(result);
       }
     }
     if (value instanceof Double) {
@@ -757,7 +765,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (int i = 0; i < length; ++i) {
         appendArray(arrayData.numElements());
         for (Object element : arrayData.array()) {
-          if (!arrayData().appendObjects(1, element).isPresent()) {
+          if (arrayData().appendObjects(1, element).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -771,7 +779,7 @@ public abstract class WritableColumnVector extends ColumnVector {
         appendStruct(false);
         for (int j = 0; j < row.values().length; ++j) {
           Object element = row.values()[j];
-          if (!childColumns[j].appendObjects(1, element).isPresent()) {
+          if (childColumns[j].appendObjects(1, element).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -784,12 +792,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       int result = 0;
       for (int i = 0; i < length; ++i) {
         for (Object key : data.keyArray().array()) {
-          if (!childColumns[0].appendObjects(1, key).isPresent()) {
+          if (childColumns[0].appendObjects(1, key).isEmpty()) {
             return Optional.empty();
           }
         }
         for (Object val: data.valueArray().array()) {
-          if (!childColumns[1].appendObjects(1, val).isPresent()) {
+          if (childColumns[1].appendObjects(1, val).isEmpty()) {
             return Optional.empty();
           }
         }
@@ -975,6 +983,10 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+    } else if (type instanceof VariantType) {
+      this.childColumns = new WritableColumnVector[2];
+      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.BinaryType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.BinaryType);
     } else {
       this.childColumns = null;
     }

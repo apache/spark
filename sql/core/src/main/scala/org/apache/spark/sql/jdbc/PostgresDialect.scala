@@ -129,10 +129,6 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case _ => None
   }
 
-  override def getTableExistsQuery(table: String): String = {
-    s"SELECT 1 FROM $table LIMIT 1"
-  }
-
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   /**
@@ -225,40 +221,48 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     s"DROP INDEX ${quoteIdentifier(indexName)}"
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  // Message pattern defined by postgres specification
+  private final val pgAlreadyExistsRegex = """(?:.*)relation "(.*)" already exists""".r
+
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42P07" =>
-            // Message patterns defined at caller sides of spark
-            val indexRegex = "(?s)Failed to create index (.*) in (.*)".r
-            val renameRegex = "(?s)Failed table renaming from (.*) to (.*)".r
-            // Message pattern defined by postgres specification
-            val pgRegex = """(?:.*)relation "(.*)" already exists""".r
-
-            message match {
-              case indexRegex(index, table) =>
-                throw new IndexAlreadyExistsException(
-                  indexName = index, tableName = table, cause = Some(e))
-              case renameRegex(_, newTable) =>
-                throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
-              case _ if pgRegex.findFirstMatchIn(sqlException.getMessage).nonEmpty =>
-                val tableName = pgRegex.findFirstMatchIn(sqlException.getMessage).get.group(1)
-                throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
-              case _ => super.classifyException(message, e)
+            if (errorClass == "FAILED_JDBC.CREATE_INDEX") {
+              throw new IndexAlreadyExistsException(
+                indexName = messageParameters("indexName"),
+                tableName = messageParameters("tableName"),
+                cause = Some(e))
+            } else if (errorClass == "FAILED_JDBC.RENAME_TABLE") {
+              val newTable = messageParameters("newName")
+              throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+            } else {
+              val tblRegexp = pgAlreadyExistsRegex.findFirstMatchIn(sqlException.getMessage)
+              if (tblRegexp.nonEmpty) {
+                throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
+              } else {
+                super.classifyException(e, errorClass, messageParameters, description)
+              }
             }
-          case "42704" =>
-            // The message is: Failed to drop index indexName in tableName
-            val regex = "(?s)Failed to drop index (.*) in (.*)".r
-            val indexName = regex.findFirstMatchIn(message).get.group(1)
-            val tableName = regex.findFirstMatchIn(message).get.group(2)
+          case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+            val indexName = messageParameters("indexName")
+            val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case "2BP01" => throw NonEmptyNamespaceException(message, cause = Some(e))
-          case _ => super.classifyException(message, e)
+          case "2BP01" =>
+            throw NonEmptyNamespaceException(
+              namespace = messageParameters.get("namespace").toArray,
+              details = sqlException.getMessage,
+              cause = Some(e))
+          case _ => super.classifyException(e, errorClass, messageParameters, description)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(message, e)
+      case _ => super.classifyException(e, errorClass, messageParameters, description)
     }
   }
 

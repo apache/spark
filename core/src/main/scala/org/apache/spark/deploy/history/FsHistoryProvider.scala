@@ -50,6 +50,7 @@ import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.kvstore._
 
 /**
@@ -316,7 +317,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Split a comma separated String, filter out any empty items, and return a Sequence of strings
    */
   private def stringToSeq(list: String): Seq[String] = {
-    list.split(',').map(_.trim).filter(!_.isEmpty)
+    list.split(',').map(_.trim).filter(_.nonEmpty).toImmutableArraySeq
   }
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
@@ -380,7 +381,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } else {
       Map()
     }
-    Map("Event log directory" -> logDir) ++ safeMode
+    val driverLog = if (conf.contains(DRIVER_LOG_DFS_DIR)) {
+      Map("Driver log directory" -> conf.get(DRIVER_LOG_DFS_DIR).get)
+    } else {
+      Map()
+    }
+    Map("Event log directory" -> logDir) ++ safeMode ++ driverLog
   }
 
   override def start(): Unit = {
@@ -456,7 +462,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // right after this check and before the check for stale entities will be identified as stale
       // and will be deleted from the UI until the next 'checkForLogs' run.
       val notStale = mutable.HashSet[String]()
-      val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
+      val updated = Option(fs.listStatus(new Path(logDir)))
+        .map(_.toImmutableArraySeq).getOrElse(Nil)
         .filter { entry => isAccessible(entry.getPath) }
         .filter { entry =>
           if (isProcessing(entry.getPath)) {
@@ -858,7 +865,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           try {
             // Fetch the entry first to avoid an RPC when it's already removed.
             listing.read(classOf[LogInfo], inProgressLog)
-            if (!fs.isFile(new Path(inProgressLog))) {
+            if (!SparkHadoopUtil.isFile(fs, new Path(inProgressLog))) {
               listing.synchronized {
                 listing.delete(classOf[LogInfo], inProgressLog)
               }
@@ -924,11 +931,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * UI lifecycle.
    */
   private def invalidateUI(appId: String, attemptId: Option[String]): Unit = {
-    synchronized {
-      activeUIs.get((appId, attemptId)).foreach { ui =>
-        ui.invalidate()
-        ui.ui.store.close()
-      }
+    val uiOption = synchronized {
+      activeUIs.get((appId, attemptId))
+    }
+    uiOption.foreach { ui =>
+      ui.invalidate()
+      ui.ui.store.close()
     }
   }
 

@@ -19,19 +19,11 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesCumulativeMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_cummin(self):
         pser = pd.Series([1.0, None, 0.0, 4.0, 9.0])
         psser = ps.from_pandas(pser)
@@ -122,7 +114,11 @@ class SeriesCumulativeMixin:
             ps.Series(["a", "b", "c", "d"]).cumprod()
 
 
-class SeriesCumulativeTests(SeriesCumulativeMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesCumulativeTests(
+    SeriesCumulativeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

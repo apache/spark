@@ -22,6 +22,7 @@ import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -75,7 +76,7 @@ class ParquetFileMetadataStructRowIndexSuite extends QueryTest with SharedSparkS
       case s: StructType => collectMetadataCols(s)
       case _ if allMetadataCols.contains(field.name) => Some(field.name)
       case _ => None
-    }}
+    }}.toImmutableArraySeq
   }
 
   for (useVectorizedReader <- Seq(false, true))

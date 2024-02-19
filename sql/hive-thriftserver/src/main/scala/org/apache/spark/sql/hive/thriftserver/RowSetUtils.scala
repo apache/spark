@@ -52,11 +52,7 @@ object RowSetUtils {
       rows: Seq[Row],
       schema: Array[DataType],
       timeFormatters: TimeFormatters): TRowSet = {
-    var i = 0
-    val rowSize = rows.length
-    val tRows = new java.util.ArrayList[TRow](rowSize)
-    while (i < rowSize) {
-      val row = rows(i)
+    val tRows = rows.map { row =>
       val tRow = new TRow()
       var j = 0
       val columnSize = row.length
@@ -65,9 +61,8 @@ object RowSetUtils {
         tRow.addToColVals(columnValue)
         j += 1
       }
-      i += 1
-      tRows.add(tRow)
-    }
+      tRow
+    }.asJava
     new TRowSet(startRowOffSet, tRows)
   }
 
@@ -159,8 +154,7 @@ object RowSetUtils {
     val size = rows.length
     val ret = new java.util.ArrayList[T](size)
     var idx = 0
-    while (idx < size) {
-      val row = rows(idx)
+    rows.foreach { row =>
       if (row.isNullAt(ordinal)) {
         nulls.set(idx, true)
         ret.add(idx, defaultVal)

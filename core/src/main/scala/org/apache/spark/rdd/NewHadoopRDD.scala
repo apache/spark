@@ -18,8 +18,9 @@
 package org.apache.spark.rdd
 
 import java.io.{FileNotFoundException, IOException}
-import java.text.SimpleDateFormat
-import java.util.{Date, Locale}
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -41,6 +42,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[spark] class NewHadoopPartition(
     rddId: Int,
@@ -103,8 +105,11 @@ class NewHadoopRDD[K, V](
   // private val serializableConf = new SerializableWritable(_conf)
 
   private val jobTrackerId: String = {
-    val formatter = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-    formatter.format(new Date())
+    val dateTimeFormatter =
+      DateTimeFormatter
+        .ofPattern("yyyyMMddHHmmss", Locale.US)
+        .withZone(ZoneId.systemDefault())
+    dateTimeFormatter.format(Instant.now())
   }
 
   @transient protected val jobId = new JobID(jobTrackerId, id)
@@ -346,7 +351,7 @@ class NewHadoopRDD[K, V](
   override def getPreferredLocations(hsplit: Partition): Seq[String] = {
     val split = hsplit.asInstanceOf[NewHadoopPartition].serializableHadoopSplit.value
     val locs = HadoopRDD.convertSplitLocationInfo(split.getLocationInfo)
-    locs.getOrElse(split.getLocations.filter(_ != "localhost"))
+    locs.getOrElse(split.getLocations.filter(_ != "localhost").toImmutableArraySeq)
   }
 
   override def persist(storageLevel: StorageLevel): this.type = {

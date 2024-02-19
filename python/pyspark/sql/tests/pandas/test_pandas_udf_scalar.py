@@ -181,7 +181,7 @@ class ScalarPandasUDFTestsMixin:
 
         mirror = pandas_udf(lambda s: s, df.dtypes[0][1])
 
-        self.assertEquals(
+        self.assertEqual(
             df.select(mirror(df.struct).alias("res")).first(),
             Row(
                 res=Row(
@@ -194,13 +194,13 @@ class ScalarPandasUDFTestsMixin:
         df = self.df_with_nested_maps
 
         str_repr = pandas_udf(lambda s: s.astype(str), StringType())
-        self.assertEquals(
+        self.assertEqual(
             df.select(str_repr(df.attributes).alias("res")).first(),
             Row(res="{'personal': {'name': 'John', 'city': 'New York'}}"),
         )
 
         extract_name = pandas_udf(lambda s: s.apply(lambda x: x["personal"]["name"]), StringType())
-        self.assertEquals(
+        self.assertEqual(
             df.select(extract_name(df.attributes).alias("res")).first(),
             Row(res="John"),
         )
@@ -209,7 +209,7 @@ class ScalarPandasUDFTestsMixin:
         df = self.df_with_nested_arrays
 
         str_repr = pandas_udf(lambda s: s.astype(str), StringType())
-        self.assertEquals(
+        self.assertEqual(
             df.select(str_repr(df.nested_array).alias("res")).first(),
             Row(res="[array([1, 2, 3], dtype=int32) array([4, 5], dtype=int32)]"),
         )
@@ -1321,8 +1321,9 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected_multi, df_multi_2.collect())
 
     def test_mixed_udf_and_sql(self):
-        from pyspark.sql.connect.column import Column as ConnectColumn
+        self._test_mixed_udf_and_sql(Column)
 
+    def _test_mixed_udf_and_sql(self, col_type):
         df = self.spark.range(0, 1).toDF("v")
 
         # Test mixture of UDFs, Pandas UDFs and SQL expression.
@@ -1333,7 +1334,7 @@ class ScalarPandasUDFTestsMixin:
             return x + 1
 
         def f2(x):
-            assert type(x) in (Column, ConnectColumn)
+            assert type(x) == col_type
             return x + 10
 
         @pandas_udf("int")
@@ -1450,9 +1451,7 @@ class ScalarPandasUDFTestsMixin:
 
             for offheap in ["true", "false"]:
                 with self.sql_conf({"spark.sql.columnVector.offheap.enabled": offheap}):
-                    self.assertEquals(
-                        self.spark.read.parquet(path).select(udf("id")).head(), Row(0)
-                    )
+                    self.assertEqual(self.spark.read.parquet(path).select(udf("id")).head(), Row(0))
         finally:
             shutil.rmtree(path)
 

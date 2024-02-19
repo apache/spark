@@ -186,7 +186,7 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
   @volatile private var subActions: List[FutureAction[_]] = Nil
 
   // A promise used to signal the future.
-  private val p = Promise[T]().tryCompleteWith(run(jobSubmitter))
+  private val p = Promise[T]().completeWith(run(jobSubmitter))
 
   override def cancel(): Unit = synchronized {
     _cancelled = true

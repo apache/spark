@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Median, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -35,6 +35,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -167,25 +168,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     val inlineCTE = InlineCTE(alwaysInline = true)
     val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     inlineCTE.buildCTEMap(plan, cteMap)
-    cteMap.values.foreach { case (relation, _, _) =>
+    val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
+    cteMap.foreach { case (cteId, (relation, refCount, _)) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
       try {
         // If a CTE relation ref count is 0, the other CTE relations that reference it
         // should also be checked by checkAnalysis0. This code will also guarantee the leaf
         // relations that do not reference any others are checked first.
-        val visited: mutable.Map[Long, Boolean] = mutable.Map.empty.withDefaultValue(false)
-        cteMap.foreach { case (cteId, _) =>
-          val (_, refCount, _) = cteMap(cteId)
-          if (refCount == 0) {
-            checkUnreferencedCTERelations(cteMap, visited, cteId)
-          }
+        if (refCount == 0) {
+          checkUnreferencedCTERelations(cteMap, visited, cteId)
         }
       } catch {
         case e: AnalysisException =>
           throw new ExtendedAnalysisException(e, relation.child)
       }
-
     }
     // Inline all CTEs in the plan to help check query plan structures in subqueries.
     var inlinedPlan: Option[LogicalPlan] = None
@@ -226,8 +223,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
-        throw new IllegalStateException(
-          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
+        throw SparkException.internalError(
+          "Logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.schemaNotFound(u.multipartIdentifier)
@@ -274,9 +271,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case _ =>
         }
 
-      // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
-      case _: ShowTableExtended =>
-        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
+      case o: OverwriteByExpression if o.deleteExpr.exists(_.isInstanceOf[SubqueryExpression]) =>
+        o.deleteExpr.failAnalysis (
+          errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
+          messageParameters = Map.empty)
 
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
@@ -303,6 +301,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
         new ResolveReferencesInAggregate(catalogManager).checkUnresolvedGroupByAll(operator)
+
+        // Early checks for column definitions, to produce better error messages
+        ColumnDefinition.checkColumnDefinitions(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -479,10 +480,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.WINDOW_EXPRESSIONS_UNSUPPORTED",
                     Map("expr" -> toSQLExpr(s)))
-                case _ if !e.deterministic && !seenAggregate =>
-                  e.failAnalysis(
-                    "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
-                    Map("expr" -> toSQLExpr(s)))
                 case a: AggregateExpression if seenAggregate =>
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.NESTED_AGGREGATES_UNSUPPORTED",
@@ -495,12 +492,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.AGGREGATE_EXPRESSION_WITH_FILTER_UNSUPPORTED",
                     Map("expr" -> toSQLExpr(s)))
+                case _: AggregateExpression | _: AggregateFunction =>
+                  e.children.foreach(checkMetric (s, _, seenAggregate = true))
                 case _: Attribute if !seenAggregate =>
                   e.failAnalysis(
                     "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_ATTRIBUTE",
                     Map("expr" -> toSQLExpr(s)))
-                case _: AggregateExpression =>
-                  e.children.foreach(checkMetric (s, _, seenAggregate = true))
+                case a: Alias =>
+                  checkMetric(s, a.child, seenAggregate)
+                case a if !e.deterministic && !seenAggregate =>
+                  e.failAnalysis(
+                    "INVALID_OBSERVED_METRICS.NON_AGGREGATE_FUNC_ARG_IS_NON_DETERMINISTIC",
+                    Map("expr" -> toSQLExpr(s)))
                 case _ =>
                   e.children.foreach(checkMetric (s, _, seenAggregate))
               }
@@ -604,7 +607,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case create: V2CreateTablePlan =>
             val references = create.partitioning.flatMap(_.references).toSet
             val badReferences = references.map(_.fieldNames).flatMap { column =>
-              create.tableSchema.findNestedField(column) match {
+              create.tableSchema.findNestedField(column.toImmutableArraySeq) match {
                 case Some(_) =>
                   None
                 case _ =>
@@ -631,7 +634,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               if c.resolved && c.defaultExpr.child.containsPattern(PLAN_EXPRESSION) =>
             val ident = c.name.asInstanceOf[ResolvedIdentifier]
             val varName = toSQLId(
-              ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
+              (ident.catalog.name +: ident.identifier.namespace :+ ident.identifier.name)
+                .toImmutableArraySeq)
             throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
               "DECLARE VARIABLE",
               varName,
@@ -736,11 +740,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "dataType" -> toSQLType(mapCol.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
-            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            !o.isInstanceOf[Project] &&
+            // non-deterministic expressions inside CollectMetrics have been
+            // already validated inside checkMetric function
+            !o.isInstanceOf[CollectMetrics] &&
+            !o.isInstanceOf[Filter] &&
+            !o.isInstanceOf[Aggregate] &&
+            !o.isInstanceOf[Window] &&
             !o.isInstanceOf[Expand] &&
             !o.isInstanceOf[Generate] &&
             !o.isInstanceOf[CreateVariable] &&
+            !o.isInstanceOf[MapInPandas] &&
+            !o.isInstanceOf[MapInArrow] &&
             // Lateral join is checked in checkSubqueryExpression.
             !o.isInstanceOf[LateralJoin] =>
             // The rule above is used to check Aggregate operator.
@@ -749,7 +760,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map("sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "))
             )
 
-          case _: UnresolvedHint => throw new IllegalStateException(
+          case _: UnresolvedHint => throw SparkException.internalError(
             "Logical hint operator should be removed during analysis.")
 
           case f @ Filter(condition, _)
@@ -1366,11 +1377,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Correlated subquery can have a LIMIT clause
         case l @ Limit(_, input) =>
           failOnInvalidOuterReference(l)
-          checkPlan(input, aggregated, canContainOuter)
+          checkPlan(
+            input,
+            aggregated,
+            canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_LIMIT_ENABLED))
 
         case o @ Offset(_, input) =>
           failOnInvalidOuterReference(o)
-          checkPlan(input, aggregated, canContainOuter)
+          checkPlan(
+            input,
+            aggregated,
+            canContainOuter && SQLConf.get.getConf(SQLConf.DECORRELATE_OFFSET_ENABLED))
 
         // Category 4: Any other operators not in the above 3 categories
         // cannot be on a correlation path, that is they are allowed only
