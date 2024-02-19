@@ -1170,7 +1170,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
       val dataType = YearMonthIntervalType()
       val expectedMsg = s"Interval string does not match year-month format of " +
-        s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+        s"${IntervalUtils.supportedFormat(("year-month", dataType.startField, dataType.endField))
           .map(format => s"`$format`").mkString(", ")} " +
         s"when cast to ${dataType.typeName}: $interval"
       checkExceptionInExpression[IllegalArgumentException](
@@ -1190,7 +1190,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
       .foreach { case (interval, dataType) =>
         val expectedMsg = s"Interval string does not match year-month format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+          s"${IntervalUtils.supportedFormat(("year-month", dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval"
         checkExceptionInExpression[IllegalArgumentException](
@@ -1310,7 +1310,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("1.23", DayTimeIntervalType(MINUTE)))
       .foreach { case (interval, dataType) =>
         val expectedMsg = s"Interval string does not match day-time format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+          s"${IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval, " +
           s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
@@ -1334,7 +1334,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
       .foreach { case (interval, dataType) =>
         val expectedMsg = "Interval string does not match day-time format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+          s"${IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
             .map(format => s"`$format`").mkString(", ")} " +
           s"when cast to ${dataType.typeName}: $interval, " +
           s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
