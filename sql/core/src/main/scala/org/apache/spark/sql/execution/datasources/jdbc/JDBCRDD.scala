@@ -191,10 +191,13 @@ class JDBCRDD(
     var builder = dialect
       .getJdbcSQLQueryBuilder(options)
       .withColumns(columns)
-      .withPredicates(predicates, partition)
       .withSortOrders(sortOrders)
       .withLimit(limit)
       .withOffset(offset)
+
+    if (partition.isDefined) {
+      builder = builder.withPredicates(predicates, partition.get)
+    }
 
     groupByColumns.foreach { groupByKeys =>
       builder = builder.withGroupByColumns(groupByKeys)

@@ -81,21 +81,17 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   /**
    * Constructs the WHERE clause that following dialect's SQL syntax.
    */
-  def withPredicates(
-      predicates: Array[Predicate],
-      part: Option[JDBCPartition]): JdbcSQLQueryBuilder = {
+  def withPredicates(predicates: Array[Predicate], part: JDBCPartition): JdbcSQLQueryBuilder = {
     // `filters`, but as a WHERE clause suitable for injection into a SQL query.
     val filterWhereClause: String = {
       predicates.flatMap(dialect.compileExpression(_)).map(p => s"($p)").mkString(" AND ")
     }
 
-    val partitionWhereClause = part.map(p => p.whereClause).orNull
-
     // A WHERE clause representing both `filters`, if any, and the current partition.
-    whereClause = if (partitionWhereClause != null && filterWhereClause.length > 0) {
-      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${partitionWhereClause})"
-    } else if (partitionWhereClause != null) {
-      "WHERE " + partitionWhereClause
+    whereClause = if (part.whereClause != null && filterWhereClause.length > 0) {
+      "WHERE " + s"($filterWhereClause)" + " AND " + s"(${part.whereClause})"
+    } else if (part.whereClause != null) {
+      "WHERE " + part.whereClause
     } else if (filterWhereClause.length > 0) {
       "WHERE " + filterWhereClause
     } else {
