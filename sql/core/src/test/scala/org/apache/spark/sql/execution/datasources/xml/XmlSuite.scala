@@ -1347,6 +1347,23 @@ class XmlSuite
     checkAnswer(df3, df)
   }
 
+  test("to_xml: input must be struct data type") {
+    val df = Seq(1, 2).toDF("value")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_xml($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"to_xml(value)\"",
+        "paramIndex" -> "0",
+        "inputSql" -> "\"value\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(fragment = "to_xml", getCurrentClassCallSitePattern)
+    )
+  }
+
   test("decimals with scale greater than precision") {
     val spark = this.spark;
     import spark.implicits._

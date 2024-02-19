@@ -7692,11 +7692,6 @@
       "cannot generate code for unsupported type: <dataType>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3234" : {
-    "message" : [
-      "Unsupported input type <other>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3235" : {
     "message" : [
       "The numbers of zipped arrays and field names should be the same"
