@@ -989,7 +989,7 @@ primaryExpression
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
-    | primaryExpression collateExpression                                                      #collate
+    | primaryExpression collateClause                                                      #collate
     | primaryExpression DOUBLE_COLON dataType                                                  #castByColon
     | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
     | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
@@ -1095,7 +1095,7 @@ colPosition
     : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
     ;
 
-collateExpression
+collateClause
     : COLLATE collationName=stringLit
     ;
 
@@ -1109,7 +1109,7 @@ type
     | DOUBLE
     | DATE
     | TIMESTAMP | TIMESTAMP_NTZ | TIMESTAMP_LTZ
-    | STRING collateExpression?
+    | STRING collateClause?
     | CHARACTER | CHAR
     | VARCHAR
     | BINARY

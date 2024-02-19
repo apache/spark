@@ -215,7 +215,9 @@ class CollationSuite extends QueryTest with SharedSparkSession {
 
   test("add collated column with alter table") {
     val tableName = "alter_column_tbl"
+    val defaultCollation = "UCS_BASIC"
     val collationName = "UCS_BASIC_LCASE"
+
     withTable(tableName) {
       sql(
         s"""
@@ -223,15 +225,24 @@ class CollationSuite extends QueryTest with SharedSparkSession {
            |USING PARQUET
            |""".stripMargin)
 
-      // should not return any collation
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
-          Seq())
+          Seq(Row(defaultCollation)))
 
       sql(
       s"""
          |ALTER TABLE $tableName
          |ADD COLUMN c2 STRING COLLATE '$collationName'
          |""".stripMargin)
+
+      sql(
+        s"""
+           |ALTER TABLE $tableName
+           |ALTER COLUMN c2
+           |SET DEFAULT ''
+           |""".stripMargin)
 
       sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
