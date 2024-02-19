@@ -1314,7 +1314,7 @@ class SparkConnectClient(object):
                 # Swallow all errors if aborted.
                 logger.debug(f"Caught an error during interrupt handling, silenced: {e}")
                 pass
-            if not progress is None:
+            if progress is not None:
                 progress.finish()
         except Exception as error:
             self._handle_error(error)
