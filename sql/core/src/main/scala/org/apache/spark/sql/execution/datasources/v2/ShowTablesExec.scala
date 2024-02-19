@@ -21,7 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.LeafExecNode
@@ -37,11 +36,12 @@ case class ShowTablesExec(
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
 
-    val tables = catalog.listTables(namespace.toArray)
+    val tables = pattern match {
+      case Some(v) => catalog.listTables(namespace.toArray, v)
+      case _ => catalog.listTables(namespace.toArray)
+    }
     tables.map { table =>
-      if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table))
-      }
+      rows += toCatalystRow(table.namespace().quoted, table.name(), isTempView(table))
     }
 
     rows.toSeq
