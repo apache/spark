@@ -279,7 +279,7 @@ case class StructsToXml(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
-      case _: StructType  => TypeCheckSuccess
+      case _: StructType => TypeCheckSuccess
       case _ => DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
