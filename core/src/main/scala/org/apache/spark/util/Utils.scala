@@ -2886,8 +2886,15 @@ private[spark] object Utils
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
 
-  /** Create a UriBuilder from URI. */
+  /** Create a UriBuilder from URI object. */
   def getUriBuilder(uri: URI): UriBuilder = {
+    // scalastyle:off uribuilder
+    UriBuilder.fromUri(uri)
+    // scalastyle:on uribuilder
+  }
+
+  /** Create a UriBuilder from URI string. */
+  def getUriBuilder(uri: String): UriBuilder = {
     // scalastyle:off uribuilder
     UriBuilder.fromUri(uri)
     // scalastyle:on uribuilder
