@@ -145,6 +145,7 @@
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.19</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
+    <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
     <!--
