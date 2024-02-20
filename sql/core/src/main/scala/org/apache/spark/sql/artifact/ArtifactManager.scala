@@ -21,7 +21,6 @@ import java.io.File
 import java.net.{URI, URL, URLClassLoader}
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
-import javax.ws.rs.core.UriBuilder
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -29,7 +28,7 @@ import scala.reflect.ClassTag
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
 import org.apache.spark.sql.SparkSession
@@ -174,7 +173,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         }
       } else if (remoteRelativePath.startsWith(s"archives${File.separator}")) {
         val canonicalUri =
-          fragment.map(UriBuilder.fromUri(new URI(uri)).fragment).getOrElse(new URI(uri))
+          fragment.map(Utils.getUriBuilder(new URI(uri)).fragment).getOrElse(new URI(uri))
         session.sparkContext.addArchive(canonicalUri.toString)
       } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
         session.sparkContext.addFile(uri)
@@ -275,8 +274,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         // `spark.sql.artifact.copyFromLocalToFs.allowDestLocal`
         // to `true` when starting spark driver, we should only enable it for testing
         // purpose.
-        throw new UnsupportedOperationException(
-          "Uploading artifact file to local file system destination path is not supported.")
+        throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3161")
       }
     }
     fs.copyFromLocalFile(false, true, new FSPath(localPath.toString), destFSPath)

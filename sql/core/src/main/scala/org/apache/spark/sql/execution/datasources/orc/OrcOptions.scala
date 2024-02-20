@@ -23,6 +23,7 @@ import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -53,8 +54,7 @@ class OrcOptions(
       .toLowerCase(Locale.ROOT)
     if (!shortOrcCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
-      throw new IllegalArgumentException(s"Codec [$codecName] " +
-        s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+      throw QueryExecutionErrors.codecNotAvailableError(codecName, availableCodecs.mkString(", "))
     }
     shortOrcCompressionCodecNames(codecName)
   }

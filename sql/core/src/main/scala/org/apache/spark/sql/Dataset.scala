@@ -37,6 +37,7 @@ import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -688,6 +689,14 @@ class Dataset[T] private[sql](
    * plan may grow exponentially. It will be saved to files inside the checkpoint
    * directory set with `SparkContext#setCheckpointDir`.
    *
+   * @param eager Whether to checkpoint this dataframe immediately
+   *
+   * @note When checkpoint is used with eager = false, the final data that is checkpointed after
+   *       the first action may be different from the data that was used during the job due to
+   *       non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *       saving a deterministic snapshot of the data, eager = true should be used. Otherwise,
+   *       it is only deterministic after the first execution, after the checkpoint was finalized.
+   *
    * @group basic
    * @since 2.1.0
    */
@@ -709,6 +718,14 @@ class Dataset[T] private[sql](
    * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. Local checkpoints are written to executor storage and despite
    * potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager Whether to checkpoint this dataframe immediately
+   *
+   * @note When checkpoint is used with eager = false, the final data that is checkpointed after
+   *       the first action may be different from the data that was used during the job due to
+   *       non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *       saving a deterministic snapshot of the data, eager = true should be used. Otherwise,
+   *       it is only deterministic after the first execution, after the checkpoint was finalized.
    *
    * @group basic
    * @since 2.3.0
@@ -3499,14 +3516,18 @@ class Dataset[T] private[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def mapInPandas(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
+  private[sql] def mapInPandas(
+      func: PythonUDF,
+      isBarrier: Boolean = false,
+      profile: ResourceProfile = null): DataFrame = {
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
         func,
         toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
-        isBarrier))
+        isBarrier,
+        Option(profile)))
   }
 
   /**
@@ -3514,14 +3535,18 @@ class Dataset[T] private[sql](
    * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
    * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
    */
-  private[sql] def mapInArrow(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
+  private[sql] def mapInArrow(
+      func: PythonUDF,
+      isBarrier: Boolean = false,
+      profile: ResourceProfile = null): DataFrame = {
     Dataset.ofRows(
       sparkSession,
       MapInArrow(
         func,
         toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
-        isBarrier))
+        isBarrier,
+        Option(profile)))
   }
 
   /**

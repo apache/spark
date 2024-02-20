@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedAttribute, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -687,6 +687,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD",
       messageParameters = Map("aliasName" -> aliasName))
+  }
+
+  def invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(expression: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS",
+      messageParameters = Map("expression" -> expression))
   }
 
   def windowAggregateFunctionWithFilterNotSupportedError(): Throwable = {
@@ -2631,7 +2637,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def alterTableChangeColumnNotSupportedForColumnTypeError(
       tableName: String,
       originColumn: StructField,
-      newColumn: StructField): Throwable = {
+      newColumn: StructField,
+      origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       messageParameters = Map(
@@ -2639,7 +2646,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "originName" -> toSQLId(originColumn.name),
         "originType" -> toSQLType(originColumn.dataType),
         "newName" -> toSQLId(newColumn.name),
-        "newType"-> toSQLType(newColumn.dataType)))
+        "newType"-> toSQLType(newColumn.dataType)),
+      origin = origin
+    )
   }
 
   def cannotAlterPartitionColumn(
@@ -3543,6 +3552,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "defaultValue" -> defaultValue))
   }
 
+  def defaultValueNotConstantError(
+      statement: String,
+      colName: String,
+      defaultValue: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+      messageParameters = Map(
+        "statement" -> toSQLStmt(statement),
+        "colName" -> toSQLId(colName),
+        "defaultValue" -> defaultValue
+      ))
+  }
+
   def nullableColumnOrFieldError(name: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "NULLABLE_COLUMN_OR_FIELD",
@@ -3881,6 +3903,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("provider" -> provider))
   }
 
+  def foundMultipleXMLDataSourceError(provider: String,
+      sourceNames: Seq[String],
+      externalSource: String): Throwable = {
+    new AnalysisException(
+      errorClass = "MULTIPLE_XML_DATA_SOURCE",
+      messageParameters = Map("provider" -> provider,
+        "sourceNames" -> sourceNames.mkString(", "),
+        "externalSource" -> externalSource)
+    )
+  }
+
   def xmlRowTagRequiredError(optionName: String): Throwable = {
     new AnalysisException(
       errorClass = "XML_ROW_TAG_MISSING",
@@ -3941,19 +3974,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "expectedSchema" -> toSQLType(expectedSchema)))
   }
 
-  def cannotResolveColumn(u: UnresolvedAttribute): Throwable = {
+  def cannotResolveDataFrameColumn(e: Expression): Throwable = {
     new AnalysisException(
       errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
-      messageParameters = Map("name" -> toSQLId(u.nameParts)),
-      origin = u.origin
+      messageParameters = Map("name" -> toSQLExpr(e)),
+      origin = e.origin
     )
   }
 
-  def ambiguousColumnReferences(u: UnresolvedAttribute): Throwable = {
+  def ambiguousColumnReferences(e: Expression): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
-      messageParameters = Map("name" -> toSQLId(u.nameParts)),
-      origin = u.origin
+      messageParameters = Map("name" -> toSQLExpr(e)),
+      origin = e.origin
     )
   }
 }

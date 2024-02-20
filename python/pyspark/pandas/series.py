@@ -392,8 +392,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     ):
         assert data is not None
 
-        self._anchor: DataFrame
-        self._col_label: Label
+        self._anchor: DataFrame  # type: ignore[annotation-unchecked]
+        self._col_label: Label  # type: ignore[annotation-unchecked]
         if isinstance(data, DataFrame):
             assert dtype is None
             assert name is None
@@ -7092,15 +7092,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         rule : str
             The offset string or object representing target conversion.
-            Currently, supported units are {'Y', 'A', 'M', 'D', 'H',
-            'T', 'MIN', 'S'}.
+            Currently, supported units are {'YE', 'A', 'ME', 'D', 'h',
+            'min', 'MIN', 's'}.
         closed : {{'right', 'left'}}, default None
             Which side of bin interval is closed. The default is 'left'
-            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            for all frequency offsets except for 'A', 'YE' and 'ME' which all
             have a default of 'right'.
         label : {{'right', 'left'}}, default None
             Which bin edge label to label bucket with. The default is 'left'
-            for all frequency offsets except for 'A', 'Y' and 'M' which all
+            for all frequency offsets except for 'A', 'YE' and 'ME' which all
             have a default of 'right'.
         on : Series, optional
             For a DataFrame, column to use instead of index for resampling.

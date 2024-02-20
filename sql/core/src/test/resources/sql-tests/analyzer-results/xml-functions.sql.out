@@ -22,7 +22,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"array(named_struct(a, 1, b, 2))\"",
-    "inputType" : "\"ARRAY<STRUCT<a: INT, b: INT>>\"",
+    "inputType" : "\"ARRAY<STRUCT<a: INT NOT NULL, b: INT NOT NULL>>\"",
     "paramIndex" : "1",
     "requiredType" : "\"STRUCT\"",
     "sqlExpr" : "\"to_xml(array(named_struct(a, 1, b, 2)))\""

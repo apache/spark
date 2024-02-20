@@ -81,7 +81,8 @@
       "unresolvedFunction": {
         "functionName": "count",
         "arguments": [{
-          "unresolvedStar": {
+          "literal": {
+            "integer": 1
           }
         }]
       }

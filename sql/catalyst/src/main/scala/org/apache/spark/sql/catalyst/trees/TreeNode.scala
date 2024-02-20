@@ -1000,12 +1000,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
     val str = if (verbose) {
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
+    } else if (printNodeId) {
+      simpleStringWithNodeId()
     } else {
-      if (printNodeId) {
-        simpleStringWithNodeId()
-      } else {
-        simpleString(maxFields)
-      }
+      simpleString(maxFields)
     }
     append(prefix)
     append(str)

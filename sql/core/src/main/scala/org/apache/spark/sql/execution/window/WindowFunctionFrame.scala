@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.window
 
 import java.util
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
@@ -206,9 +207,9 @@ abstract class OffsetWindowFunctionFrameBase(
     inputIndex = offset
   }
 
-  override def currentLowerBound(): Int = throw new UnsupportedOperationException()
+  override def currentLowerBound(): Int = throw SparkUnsupportedOperationException()
 
-  override def currentUpperBound(): Int = throw new UnsupportedOperationException()
+  override def currentUpperBound(): Int = throw SparkUnsupportedOperationException()
 }
 
 /**

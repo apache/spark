@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -92,7 +93,9 @@ class CSVHeaderChecker(
         if (enforceSchema) {
           logWarning(msg)
         } else {
-          throw new IllegalArgumentException(msg)
+          throw new SparkIllegalArgumentException(
+            errorClass = "_LEGACY_ERROR_TEMP_3241",
+            messageParameters = Map("msg" -> msg))
         }
       }
     }

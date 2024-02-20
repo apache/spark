@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -110,7 +110,11 @@ class FrameCumulativeMixin:
         self._test_cumprod(pdf, psdf)
 
 
-class FrameCumulativeTests(FrameCumulativeMixin, ComparisonTestBase, SQLTestUtils):
+class FrameCumulativeTests(
+    FrameCumulativeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

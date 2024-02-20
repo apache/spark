@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
@@ -251,9 +251,9 @@ class FileBasedDataSourceSuite extends QueryTest
               case _ => "_LEGACY_ERROR_TEMP_2055"
             }
             checkErrorMatchPVals(
-              exception = intercept[SparkException] {
+              exception = intercept[SparkFileNotFoundException] {
                 testIgnoreMissingFiles(options)
-              }.getCause.asInstanceOf[SparkFileNotFoundException],
+              },
               errorClass = errorClass,
               parameters = Map("message" -> ".*does not exist")
             )
@@ -322,7 +322,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`struct(a)`",
-          "columnType" -> "\"STRUCT<a: INT>\"",
+          "columnType" -> "\"STRUCT<a: INT NOT NULL>\"",
           "format" -> "Text")
       )
 
@@ -404,7 +404,7 @@ class FileBasedDataSourceSuite extends QueryTest
         errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`struct(a, b)`",
-          "columnType" -> "\"STRUCT<a: INT, b: STRING>\"",
+          "columnType" -> "\"STRUCT<a: INT NOT NULL, b: STRING>\"",
           "format" -> "CSV")
       )
 
@@ -1257,9 +1257,9 @@ object TestingUDT {
 
     override def sqlType: DataType = CalendarIntervalType
     override def serialize(obj: IntervalData): Any =
-      throw new UnsupportedOperationException("Not implemented")
+      throw SparkUnsupportedOperationException()
     override def deserialize(datum: Any): IntervalData =
-      throw new UnsupportedOperationException("Not implemented")
+      throw SparkUnsupportedOperationException()
     override def userClass: Class[IntervalData] = classOf[IntervalData]
   }
 
@@ -1270,9 +1270,9 @@ object TestingUDT {
 
     override def sqlType: DataType = NullType
     override def serialize(obj: NullData): Any =
-      throw new UnsupportedOperationException("Not implemented")
+      throw SparkUnsupportedOperationException()
     override def deserialize(datum: Any): NullData =
-      throw new UnsupportedOperationException("Not implemented")
+      throw SparkUnsupportedOperationException()
     override def userClass: Class[NullData] = classOf[NullData]
   }
 }

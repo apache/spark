@@ -266,31 +266,31 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
 trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
   override def registerFunction(
       name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
+    throw SparkUnsupportedOperationException()
   }
 
   override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
+    throw SparkUnsupportedOperationException()
   }
 
   override def listFunction(): Seq[FunctionIdentifier] = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
+    throw SparkUnsupportedOperationException()
   }
 
   override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
+    throw SparkUnsupportedOperationException()
   }
 
   override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
+    throw SparkUnsupportedOperationException()
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
+    throw SparkUnsupportedOperationException()
   }
 
   override def clear(): Unit = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3124")
+    throw SparkUnsupportedOperationException()
   }
 }
 
@@ -520,6 +520,8 @@ object FunctionRegistry {
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
     expression[Chr]("chr"),
+    expressionBuilder("collate", CollateExpressionBuilder),
+    expression[Collation]("collation"),
     expressionBuilder("contains", ContainsExpressionBuilder),
     expressionBuilder("startswith", StartsWithExpressionBuilder),
     expressionBuilder("endswith", EndsWithExpressionBuilder),
@@ -642,6 +644,7 @@ object FunctionRegistry {
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),
     expression[WeekDay]("weekday"),
+    expression[DayName]("dayname"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),

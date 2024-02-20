@@ -90,7 +90,7 @@ public final class ColumnarBatchRow extends InternalRow {
 
   @Override
   public boolean anyNull() {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3151");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
@@ -201,11 +201,11 @@ public final class ColumnarBatchRow extends InternalRow {
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3153");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void setNullAt(int ordinal) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3153");
+    throw SparkUnsupportedOperationException.apply();
   }
 }

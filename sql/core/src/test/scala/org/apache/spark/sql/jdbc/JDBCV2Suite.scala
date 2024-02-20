@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalo
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
@@ -2859,12 +2860,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkAggregateRemoved(df, false)
         checkPushedInfo(df, "PushedAggregates: [COUNT(PRICE), SUM(PRICE)]")
         if (ansiEnabled) {
-          val e = intercept[SparkException] {
+          val e = intercept[ArithmeticException] {
             df.collect()
           }
-          assert(e.getCause.isInstanceOf[ArithmeticException])
-          assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
-            e.getCause.getMessage.contains("Overflow in sum of decimals"))
+          assert(e.getMessage.contains("cannot be represented as Decimal") ||
+            e.getMessage.contains("Overflow in sum of decimals"))
         } else {
           checkAnswer(df, Seq(Row(null)))
         }
@@ -2980,8 +2980,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       },
       errorClass = "INDEX_ALREADY_EXISTS",
       parameters = Map(
-        "indexName" -> "people_index",
-        "tableName" -> "test.people"
+        "indexName" -> "`people_index`",
+        "tableName" -> "`test`.`people`"
       )
     )
     assert(jdbcTable.indexExists("people_index"))
@@ -2997,7 +2997,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
       errorClass = "INDEX_NOT_FOUND",
-      parameters = Map("indexName" -> "people_index", "tableName" -> "test.people")
+      parameters = Map("indexName" -> "`people_index`", "tableName" -> "`test`.`people`")
     )
     assert(jdbcTable.indexExists("people_index") == false)
     val indexes3 = jdbcTable.listIndexes()
@@ -3021,5 +3021,11 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       JdbcDialects.unregisterDialect(testH2Dialect)
       JdbcDialects.registerDialect(H2Dialect)
     }
+  }
+
+  test("Explain shows executed SQL query") {
+    val df = sql("SELECT max(id) FROM h2.test.people WHERE id > 1")
+    val explained = getNormalizedExplain(df, FormattedMode)
+    assert(explained.contains("External engine query:"))
   }
 }

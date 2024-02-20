@@ -47,6 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
+from pyspark.sql.profiler import AccumulatorProfilerCollector, ProfilerCollector
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
@@ -80,6 +81,12 @@ if TYPE_CHECKING:
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
 
+try:
+    import memory_profiler  # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 __all__ = ["SparkSession"]
 
@@ -122,7 +129,7 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
-    RDD.toDF = toDF  # type: ignore[assignment]
+    RDD.toDF = toDF  # type: ignore[method-assign]
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -622,6 +629,8 @@ class SparkSession(SparkConversionMixin):
             assert self._jvm is not None
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
             self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+
+        self._profiler_collector = AccumulatorProfilerCollector()
 
     def _repr_html_(self) -> str:
         return """
@@ -1418,7 +1427,7 @@ class SparkSession(SparkConversionMixin):
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         if isinstance(schema, str):
@@ -1704,6 +1713,12 @@ class SparkSession(SparkConversionMixin):
         |  4|
         +---+
         """
+        if not isinstance(tableName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
         return DataFrame(self._jsparkSession.table(tableName), self)
 
     @property
@@ -1816,7 +1831,10 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.streaming import StreamingQueryManager
 
-        return StreamingQueryManager(self._jsparkSession.streams())
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
+        return self._sqm
 
     def stop(self) -> None:
         """
@@ -2109,6 +2127,33 @@ class SparkSession(SparkConversionMixin):
             error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
             message_parameters={"feature": "SparkSession.clearTags"},
         )
+
+    def showPerfProfiles(self, id: Optional[int] = None) -> None:
+        self._profiler_collector.show_perf_profiles(id)
+
+    showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
+
+    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
+        if has_memory_profiler:
+            self._profiler_collector.show_memory_profiles(id)
+        else:
+            warnings.warn(
+                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
+                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
+                UserWarning,
+            )
+
+    showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
+
+    def dumpPerfProfiles(self, path: str, id: Optional[int] = None) -> None:
+        self._profiler_collector.dump_perf_profiles(path, id)
+
+    dumpPerfProfiles.__doc__ = ProfilerCollector.dump_perf_profiles.__doc__
+
+    def dumpMemoryProfiles(self, path: str, id: Optional[int] = None) -> None:
+        self._profiler_collector.dump_memory_profiles(path, id)
+
+    dumpMemoryProfiles.__doc__ = ProfilerCollector.dump_memory_profiles.__doc__
 
 
 def _test() -> None:

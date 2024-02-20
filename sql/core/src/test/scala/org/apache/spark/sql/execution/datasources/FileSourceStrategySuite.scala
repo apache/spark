@@ -480,8 +480,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
         val e = intercept[SparkException] {
           spark.read.text(inputFile.toURI.toString).collect()
         }
-        assert(e.getCause.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)

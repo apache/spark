@@ -22,7 +22,7 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
@@ -302,8 +302,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
   }
 
   if (children.size != names.size) {
-    throw new IllegalArgumentException(
-      "The numbers of zipped arrays and field names should be the same")
+    throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3235")
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)
@@ -2983,6 +2982,9 @@ case class Sequence(
 
   override def nullable: Boolean = children.exists(_.nullable)
 
+  // If step is defined, then an error will be thrown if the start and stop do not satisfy the step.
+  override lazy val throwable: Boolean = stepOpt.isDefined
+
   override def dataType: ArrayType = ArrayType(start.dataType, containsNull = false)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -3350,8 +3352,9 @@ object Sequence {
       val (stepMonths, stepDays, stepMicros) = splitStep(input3)
 
       if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
-        throw new IllegalArgumentException(s"sequence step must be an ${intervalType.typeName}" +
-          " of day granularity if start and end values are dates")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3242",
+          messageParameters = Map("intervalType" -> intervalType.typeName))
       }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
@@ -3443,9 +3446,10 @@ object Sequence {
       val check = if (scale == MICROS_PER_DAY) {
         s"""
            |if ($stepMonths == 0 && $stepDays == 0) {
-           |  throw new IllegalArgumentException(
-           |    "sequence step must be an ${intervalType.typeName} " +
-           |    "of day granularity if start and end values are dates");
+           |  java.util.Map<String, String> params = new java.util.HashMap<String, String>();
+           |  params.put("intervalType", "${intervalType.typeName}");
+           |  throw new org.apache.spark.SparkIllegalArgumentException(
+           |    "_LEGACY_ERROR_TEMP_3242", params);
            |}
          """.stripMargin
         } else {
@@ -3536,8 +3540,12 @@ object Sequence {
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
        |  ($estimatedStep == 0 && $start == $stop))) {
-       |  throw new IllegalArgumentException(
-       |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
+       |  java.util.Map<String, String> params = new java.util.HashMap<String, String>();
+       |  params.put("start", $start);
+       |  params.put("stop", $stop);
+       |  params.put("step", $step);
+       |  throw new org.apache.spark.SparkIllegalArgumentException(
+       |    "_LEGACY_ERROR_TEMP_3243", params);
        |}
        |int $len = $calcFn((long) $start, (long) $stop, (long) $estimatedStep);
        """.stripMargin

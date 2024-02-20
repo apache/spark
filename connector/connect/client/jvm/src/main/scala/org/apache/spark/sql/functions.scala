@@ -402,7 +402,14 @@ object functions {
    * @group agg_funcs
    * @since 3.4.0
    */
-  def count(e: Column): Column = Column.fn("count", e)
+  def count(e: Column): Column = {
+    val withoutStar = e.expr.getExprTypeCase match {
+      // Turn count(*) into count(1)
+      case proto.Expression.ExprTypeCase.UNRESOLVED_STAR => lit(1)
+      case _ => e
+    }
+    Column.fn("count", withoutStar)
+  }
 
   /**
    * Aggregate function: returns the number of items in a group.
@@ -5952,6 +5959,15 @@ object functions {
    */
   def monthname(timeExp: Column): Column =
     Column.fn("monthname", timeExp)
+
+  /**
+   * Extracts the three-letter abbreviated month name from a given date/timestamp/string.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def dayname(timeExp: Column): Column =
+    Column.fn("dayname", timeExp)
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions

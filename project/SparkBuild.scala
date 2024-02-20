@@ -236,12 +236,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e",
         // SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated:e",
-        // TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
-        //  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.rdd.RDDSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.scheduler.TaskSetManagerSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
@@ -752,14 +746,20 @@ object SparkConnect {
     // Exclude `scala-library` from assembly.
     (assembly / assemblyPackageScala / assembleArtifact) := false,
 
-    // Exclude `pmml-model-*.jar`, `scala-collection-compat_*.jar`,`jsr305-*.jar` and
-    // `netty-*.jar` and `unused-1.0.0.jar` from assembly.
+    // SPARK-46733: Include `spark-connect-*.jar`, `unused-*.jar`,`guava-*.jar`,
+    // `failureaccess-*.jar`, `annotations-*.jar`, `grpc-*.jar`, `protobuf-*.jar`,
+    // `gson-*.jar`, `error_prone_annotations-*.jar`, `j2objc-annotations-*.jar`,
+    // `animal-sniffer-annotations-*.jar`, `perfmark-api-*.jar`,
+    // `proto-google-common-protos-*.jar` in assembly.
+    // This needs to be consistent with the content of `maven-shade-plugin`.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
-      cp filter { v =>
-        val name = v.data.getName
-        name.startsWith("pmml-model-") || name.startsWith("scala-collection-compat_") ||
-          name.startsWith("jsr305-") || name.startsWith("netty-") || name == "unused-1.0.0.jar"
+      val validPrefixes = Set("spark-connect", "unused-", "guava-", "failureaccess-",
+        "annotations-", "grpc-", "protobuf-", "gson", "error_prone_annotations",
+        "j2objc-annotations", "animal-sniffer-annotations", "perfmark-api",
+        "proto-google-common-protos")
+      cp filterNot { v =>
+        validPrefixes.exists(v.data.getName.startsWith)
       }
     },
 
@@ -945,7 +945,7 @@ object Unsafe {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "19.0"
+    dependencyOverrides += "com.google.guava" % "guava" % "33.0.0-jre"
   )
 }
 
@@ -989,8 +989,12 @@ object KubernetesIntegrationTests {
             s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile")
         val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
             s"$bindingsDir/python/Dockerfile")
-        val rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
+        var rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
             s"$bindingsDir/R/Dockerfile")
+        val excludeTags = sys.props.getOrElse("test.exclude.tags", "").split(",")
+        if (excludeTags.exists(_.equalsIgnoreCase("r"))) {
+          rDockerFile = ""
+        }
         val extraOptions = if (javaImageTag.isDefined) {
           Seq("-b", s"java_image_tag=$javaImageTag")
         } else {
@@ -1477,7 +1481,11 @@ object CopyDependencies {
           if (destJar.isFile()) {
             destJar.delete()
           }
-          if (jar.getName.contains("spark-connect") &&
+
+          if (jar.getName.contains("spark-connect-common") &&
+            !SbtPomKeys.profiles.value.contains("noshade-connect")) {
+            // Don't copy the spark connect common JAR as it is shaded in the spark connect.
+          } else if (jar.getName.contains("spark-connect") &&
             !SbtPomKeys.profiles.value.contains("noshade-connect")) {
             Files.copy(fid.toPath, destJar.toPath)
           } else if (jar.getName.contains("connect-client-jvm") &&
@@ -1501,7 +1509,11 @@ object TestSettings {
   import BuildCommons._
   private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest",
     "org.apache.spark.deploy.k8s.integrationtest.YuniKornTag",
-    "org.apache.spark.internal.io.cloud.IntegrationTestSuite")
+    "org.apache.spark.internal.io.cloud.IntegrationTestSuite") ++
+    (if (System.getProperty("os.name").startsWith("Mac OS X") &&
+        System.getProperty("os.arch").equals("aarch64")) {
+      Seq("org.apache.spark.tags.ExtendedLevelDBTest")
+    } else Seq.empty)
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those

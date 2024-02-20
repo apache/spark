@@ -264,7 +264,8 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
     val avroOptions = AvroOptions(options)
     val avroSchema = avroOptions.schema.get
     val sparkSchema = SchemaConverters
-      .toSqlType(avroSchema, avroOptions.useStableIdForUnionType)
+      .toSqlType(avroSchema, avroOptions.useStableIdForUnionType,
+        avroOptions.stableIdPrefixForUnionType)
       .dataType
       .asInstanceOf[StructType]
 
