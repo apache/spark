@@ -394,6 +394,9 @@ class DataSourceStreamReader(ABC):
         this method is required for stream reader. You can initialize any
         non-serializable resources required for reading data from the data source
         within this method.
+
+        Notes
+        -----
         This method is static and stateless. You shouldn't access mutable class member
         or keep in memory state between different invocations of read().
 

@@ -37,7 +37,7 @@ class PythonMicroBatchStream(
     ds.source.createPythonFunction(
       ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)).dataSource)
 
-  val runner: PythonStreamingSourceRunner =
+  private val runner: PythonStreamingSourceRunner =
     new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema)
   runner.init()
 
@@ -51,7 +51,7 @@ class PythonMicroBatchStream(
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    // TODO: fill in the implementation.
+    // TODO(SPARK-47107): fill in the implementation.
     null
   }
 

@@ -32,10 +32,12 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 
 object PythonStreamingSourceRunner {
-  val initialOffsetFuncId = 884
-  val latestOffsetFuncId = 885
-  val partitionsFuncId = 886
-  val commitFuncId = 887
+  // When the python process for python_streaming_source_runner receives one of the
+  // integers below, it will invoke the corresponding function of StreamReader instance.
+  val INITIAL_OFFSET_FUNC_ID = 884
+  val LATEST_OFFSET_FUNC_ID = 885
+  val PARTITIONS_FUNC_ID = 886
+  val COMMIT_FUNC_ID = 887
 }
 
 /**
@@ -51,14 +53,14 @@ class PythonStreamingSourceRunner(
   val workerModule = "pyspark.sql.streaming.python_streaming_source_runner"
 
   private val conf = SparkEnv.get.conf
-  protected val bufferSize: Int = conf.get(BUFFER_SIZE)
-  protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
+  private val bufferSize: Int = conf.get(BUFFER_SIZE)
+  private val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
 
   private val envVars: java.util.Map[String, String] = func.envVars
   private val pythonExec: String = func.pythonExec
   private var pythonWorker: Option[PythonWorker] = None
   private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
-  protected val pythonVer: String = func.pythonVer
+  private val pythonVer: String = func.pythonVer
 
   private var dataOut: DataOutputStream = null
   private var dataIn: DataInputStream = null
@@ -122,7 +124,7 @@ class PythonStreamingSourceRunner(
    * Invokes latestOffset() function of the stream reader and receive the return value.
    */
   def latestOffset(): String = {
-    dataOut.writeInt(latestOffsetFuncId)
+    dataOut.writeInt(LATEST_OFFSET_FUNC_ID)
     dataOut.flush()
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
@@ -137,7 +139,7 @@ class PythonStreamingSourceRunner(
    * Invokes initialOffset() function of the stream reader and receive the return value.
    */
   def initialOffset(): String = {
-    dataOut.writeInt(initialOffsetFuncId)
+    dataOut.writeInt(INITIAL_OFFSET_FUNC_ID)
     dataOut.flush()
     val len = dataIn.readInt()
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
@@ -152,7 +154,7 @@ class PythonStreamingSourceRunner(
    * Invokes partitions(start, end) function of the stream reader and receive the return value.
    */
   def partitions(start: String, end: String): Array[Array[Byte]] = {
-    dataOut.writeInt(partitionsFuncId)
+    dataOut.writeInt(PARTITIONS_FUNC_ID)
     PythonWorkerUtils.writeUTF(start, dataOut)
     PythonWorkerUtils.writeUTF(end, dataOut)
     dataOut.flush()
@@ -175,7 +177,7 @@ class PythonStreamingSourceRunner(
    * Invokes commit(end) function of the stream reader and receive the return value.
    */
   def commit(end: String): Unit = {
-    dataOut.writeInt(commitFuncId)
+    dataOut.writeInt(COMMIT_FUNC_ID)
     PythonWorkerUtils.writeUTF(end, dataOut)
     dataOut.flush()
     val status = dataIn.readInt()

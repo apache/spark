@@ -1120,7 +1120,7 @@ ERROR_CLASSES_JSON = '''
   },
   "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR": {
     "message": [
-      "Failed when Python streaming data source perform <action>: <msg>"
+      "Failed when running Python streaming data source: <msg>"
     ]
   }
 }
