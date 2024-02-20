@@ -180,6 +180,8 @@ class CollationSuite extends QueryTest with SharedSparkSession {
   test("create table with collation") {
     val tableName = "parquet_dummy_tbl"
     val collationName = "UCS_BASIC_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+
     withTable(tableName) {
       sql(
         s"""
@@ -190,13 +192,18 @@ class CollationSuite extends QueryTest with SharedSparkSession {
       sql(s"INSERT INTO $tableName VALUES ('aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA')")
 
-      checkAnswer(sql(s"SELECT DISTINCT collation(c1) FROM $tableName"), Seq(Row(collationName)))
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
+      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+      val dd = sql(s"SELECT c1 FROM $tableName").toDF("c2")
+      dd.write.mode(SaveMode.Overwrite).parquet("/tmp/stefan_tbl")
     }
   }
 
   test("create table with collations inside a struct") {
     val tableName = "struct_collation_tbl"
     val collationName = "UCS_BASIC_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+
     withTable(tableName) {
       sql(
         s"""
@@ -210,6 +217,7 @@ class CollationSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(sql(s"SELECT DISTINCT collation(c1.name) FROM $tableName"),
         Seq(Row(collationName)))
+      assert(sql(s"SELECT c1.name FROM $tableName").schema.head.dataType == StringType(collationId))
     }
   }
 
@@ -217,6 +225,7 @@ class CollationSuite extends QueryTest with SharedSparkSession {
     val tableName = "alter_column_tbl"
     val defaultCollation = "UCS_BASIC"
     val collationName = "UCS_BASIC_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
 
     withTable(tableName) {
       sql(
@@ -249,6 +258,7 @@ class CollationSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName"),
         Seq(Row(collationName)))
+      assert(sql(s"select c2 FROM $tableName").schema.head.dataType == StringType(collationId))
     }
   }
 }
