@@ -31,13 +31,6 @@ import org.apache.spark.util.Utils
 class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[DescribeTableSuiteBase].commandVersion
 
-  // Hive catalog doesn't support ALTER TABLE to add column-level comments.
-  override def excluded: Seq[String] = Seq(
-    s"$command using Hive V1 catalog V1 command: " +
-      "describe a clustered table with comments on clustering columns",
-    s"$command using Hive V1 catalog V2 command: " +
-      "describe a clustered table with comments on clustering columns")
-
   test("Table Ownership") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (c int) $defaultUsing")
