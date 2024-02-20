@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Table}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -206,6 +206,17 @@ class SessionCatalog(
     builder.build[QualifiedTableName, LogicalPlan]()
   }
 
+  private val v2TableCache: Cache[QualifiedTableName, Table] = {
+    // Use the same cache size as V1 table cache.
+    var builder = CacheBuilder.newBuilder().maximumSize(cacheSize)
+
+    if (cacheTTL > 0) {
+      builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
+    }
+
+    builder.build[QualifiedTableName, Table]()
+  }
+
   /** This method provides a way to get a cached plan. */
   def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
     tableRelationCache.get(t, c)
@@ -221,9 +232,20 @@ class SessionCatalog(
     tableRelationCache.put(t, l)
   }
 
+  /** Cache a v2 table. */
+  def cacheV2Table(key: QualifiedTableName, t: Table): Unit = {
+    v2TableCache.put(key, t)
+  }
+
+  /** Get a cached V2 table if the key exists. Otherwise return null. */
+  def getCachedV2Table(key: QualifiedTableName): Table = {
+    v2TableCache.getIfPresent(key)
+  }
+
   /** This method provides a way to invalidate a cached plan. */
   def invalidateCachedTable(key: QualifiedTableName): Unit = {
     tableRelationCache.invalidate(key)
+    v2TableCache.invalidate(key)
   }
 
   /** This method discards any cached table relation plans for the given table identifier. */
@@ -235,6 +257,7 @@ class SessionCatalog(
   /** This method provides a way to invalidate all the cached plans. */
   def invalidateAllCachedTables(): Unit = {
     tableRelationCache.invalidateAll()
+    v2TableCache.invalidateAll()
   }
 
   /**
@@ -1149,6 +1172,7 @@ class SessionCatalog(
       val qualifiedIdent = qualifyIdentifier(name)
       val qualifiedTableName = QualifiedTableName(qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)
+      v2TableCache.invalidate(qualifiedTableName)
     }
   }
 
@@ -1890,6 +1914,7 @@ class SessionCatalog(
     functionRegistry.clear()
     tableFunctionRegistry.clear()
     tableRelationCache.invalidateAll()
+    v2TableCache.invalidateAll()
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>
       val expressionInfo = FunctionRegistry.builtin.lookupFunction(f)

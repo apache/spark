@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -86,6 +86,15 @@ class V2SessionCatalog(catalog: SessionCatalog)
     try {
       val table = catalog.getTableMetadata(ident.asTableIdentifier)
       if (table.provider.isDefined) {
+        val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+        val cachedV2Table = catalog.getCachedV2Table(qualifiedTableName)
+        if (cachedV2Table != null) {
+          return cachedV2Table
+        }
+        // Check if the table is a cached V1 table.
+        if (catalog.getCachedTable(qualifiedTableName) != null) {
+          return V1Table(table)
+        }
         DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
           case Some(provider) =>
             // Get the table properties during creation and append the path option
@@ -94,7 +103,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
             // If the source accepts external table metadata, we can pass the schema and
             // partitioning information stored in Hive to `getTable` to avoid expensive
             // schema/partitioning inference.
-            if (provider.supportsExternalMetadata()) {
+            val v2Table = if (provider.supportsExternalMetadata()) {
               provider.getTable(
                 table.schema,
                 getV2Partitioning(table),
@@ -105,6 +114,8 @@ class V2SessionCatalog(catalog: SessionCatalog)
                 provider.inferPartitioning(dsOptions),
                 dsOptions.asCaseSensitiveMap())
             }
+            catalog.cacheV2Table(qualifiedTableName, v2Table)
+            v2Table
           case _ =>
             V1Table(table)
         }
