@@ -3771,7 +3771,7 @@
     <profile>
       <id>sparkr</id>
     </profile>
-    <!-- use org.openlabtesting.leveldbjni on aarch64 platform -->
+    <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
     <profile>
       <id>aarch64</id>
       <properties>
@@ -3780,6 +3780,18 @@
       <activation>
         <os>
           <family>linux</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+    </profile>
+    <profile>
+      <id>applesilicon</id>
+      <properties>
+        <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest,org.apache.spark.tags.ExtendedLevelDBTest</test.default.exclude.tags>
+      </properties>
+      <activation>
+        <os>
+          <family>mac</family>
           <arch>aarch64</arch>
         </os>
       </activation>
