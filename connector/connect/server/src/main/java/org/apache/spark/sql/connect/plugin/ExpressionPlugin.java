@@ -14,13 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.connect.plugin;
 
-package org.apache.spark.sql.connect.plugin
+import org.apache.spark.sql.catalyst.expressions.Expression;
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner;
 
-import com.google.protobuf
-
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import java.util.Optional;
 
 /**
  * Behavior trait for supporting extension mechanisms for the Spark Connect planner.
@@ -30,6 +29,6 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
  * handling this type it is responsible of constructing the logical expression from this object
  * and if necessary traverse it's children.
  */
-trait ExpressionPlugin {
-  def transform(relation: protobuf.Any, planner: SparkConnectPlanner): Option[Expression]
+public interface ExpressionPlugin {
+    Optional<Expression> transform(byte[] relation, SparkConnectPlanner planner);
 }

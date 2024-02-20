@@ -36,6 +36,11 @@ on:
         required: false
         type: string
         default: hadoop3
+      os:
+        description: OS to run this build.
+        required: false
+        type: string
+        default: ubuntu-22.04
       envs:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
@@ -45,7 +50,7 @@ jobs:
   # Build: build Spark and run the tests for specified modules using maven
   build:
     name: "Build modules using Maven: ${{ matrix.modules }} ${{ matrix.comment }}"
-    runs-on: ubuntu-22.04
+    runs-on: ${{ inputs.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -154,24 +159,27 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ matrix.java }}
-      - name: Install Python 3.9
+      - name: Install Python 3.11
         uses: actions/setup-python@v5
         # We should install one Python that is higher than 3+ for SQL and Yarn because:
         # - SQL component also has Python related tests, for example, IntegratedUDFTestUtils.
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
-        if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
+        # macos (14) already has its Python installed, see also SPARK-47096 and
+        # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-Readme.md
+        if: contains(inputs.os, 'ubuntu') && (contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect'))
         with:
-          python-version: '3.9'
+          python-version: '3.11'
           architecture: x64
-      - name: Install Python packages (Python 3.9)
+      - name: Install Python packages (Python 3.11)
         if: (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
-          python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
-          python3.9 -m pip list
+          python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
+          python3.11 -m pip list
       # Run the tests.
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
-        shell: 'script -q -e -c "bash {0}"'
+        # The command script takes different options ubuntu vs macos-14, see also SPARK-47095.
+        shell: '[[ "${{ inputs.os }}" == *"ubuntu"* ]] && script -q -e -c "bash {0}" || script -q -e "bash {0}"'
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
           export TERM=vt100
