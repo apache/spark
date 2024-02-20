@@ -249,7 +249,7 @@ class Profile:
     .. versionadded: 4.0.0
     """
 
-    def __init__(self, profiler_collector: "ProfilerCollector"):
+    def __init__(self, profiler_collector: ProfilerCollector):
         self.profiler_collector = profiler_collector
 
     def show(self, id: Optional[int] = None, *, type: Optional[str] = None) -> None:

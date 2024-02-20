@@ -47,7 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
-from pyspark.sql.profiler import AccumulatorProfilerCollector
+from pyspark.sql.profiler import AccumulatorProfilerCollector, Profile
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
@@ -76,7 +76,6 @@ if TYPE_CHECKING:
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
     from pyspark.sql.datasource import DataSourceRegistration
-    from pyspark.sql.profiler import Profile
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
@@ -908,9 +907,7 @@ class SparkSession(SparkConversionMixin):
         return DataSourceRegistration(self)
 
     @property
-    def profile(self) -> "Profile":
-        from pyspark.sql.profiler import Profile
-
+    def profile(self) -> Profile:
         return Profile(self._profiler_collector)
 
     def range(
