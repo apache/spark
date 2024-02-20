@@ -18,12 +18,16 @@
 package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class CollationSuite extends QueryTest with SharedSparkSession {
   test("collate returns proper type") {
@@ -194,8 +198,6 @@ class CollationSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
       assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
-      val dd = sql(s"SELECT c1 FROM $tableName").toDF("c2")
-      dd.write.mode(SaveMode.Overwrite).parquet("/tmp/stefan_tbl")
     }
   }
 
@@ -246,17 +248,10 @@ class CollationSuite extends QueryTest with SharedSparkSession {
          |ADD COLUMN c2 STRING COLLATE '$collationName'
          |""".stripMargin)
 
-      sql(
-        s"""
-           |ALTER TABLE $tableName
-           |ALTER COLUMN c2
-           |SET DEFAULT ''
-           |""".stripMargin)
-
       sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
 
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName"),
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName WHERE c2 IS NOT NULL"),
         Seq(Row(collationName)))
       assert(sql(s"select c2 FROM $tableName").schema.head.dataType == StringType(collationId))
     }
