@@ -18,7 +18,7 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.util.{Locale, Map => JMap}
+import java.util.{Map => JMap}
 
 import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
