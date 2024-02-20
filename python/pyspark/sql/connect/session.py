@@ -62,12 +62,13 @@ from pyspark.sql.connect.plan import (
     CachedRelation,
     CachedRemoteRelation,
 )
-from pyspark.sql.connect.profiler import ProfilerCollector, ConnectProfile
+from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
+from pyspark.sql.profile import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -942,8 +943,8 @@ class SparkSession:
         return self._client._profiler_collector
 
     @property
-    def profile(self) -> ConnectProfile:
-        return ConnectProfile(self._client._profiler_collector)
+    def profile(self) -> Profile:
+        return Profile(self._client._profiler_collector)
 
 
 SparkSession.__doc__ = PySparkSession.__doc__
