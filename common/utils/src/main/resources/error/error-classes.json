@@ -1758,6 +1758,19 @@
     ],
     "sqlState" : "42000"
   },
+  "INVALID_CONF_VALUE" : {
+    "message" : [
+      "The value '<confValue>' in the config \"<confName>\" is invalid."
+    ],
+    "subClass" : {
+      "TIME_ZONE" : {
+        "message" : [
+          "Cannot resolve the given timezone."
+        ]
+      }
+    },
+    "sqlState" : "22022"
+  },
   "INVALID_CURSOR" : {
     "message" : [
       "The cursor is invalid."

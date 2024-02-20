@@ -27,7 +27,6 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
-import javax.ws.rs.core.UriBuilder
 
 import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -1157,7 +1156,7 @@ private[spark] class Executor(
           state.currentArchives.getOrElse(name, -1L) < timestamp) {
         logInfo(s"Fetching $name with timestamp $timestamp")
         val sourceURI = new URI(name)
-        val uriToDownload = UriBuilder.fromUri(sourceURI).fragment(null).build()
+        val uriToDownload = Utils.getUriBuilder(sourceURI).fragment(null).build()
         val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
           hadoopConf, timestamp, useCache = !isLocal, shouldUntar = false)
         val dest = new File(
