@@ -46,8 +46,7 @@ private[sql] object SQLUtils extends Logging {
       enableHiveSupport: Boolean): SparkSession = {
     val spark =
       if (enableHiveSupport &&
-          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
-            "hive" &&
+          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive") == "hive" &&
           // Note that the order of conditions here are on purpose.
           // `SparkSession.hiveClassesArePresent` checks if Hive's `HiveConf` is loadable or not;
           // however, `HiveConf` itself has some static logic to check if Hadoop version is
