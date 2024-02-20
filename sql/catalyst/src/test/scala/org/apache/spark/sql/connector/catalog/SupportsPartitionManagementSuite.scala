@@ -21,7 +21,7 @@ import java.util
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
@@ -213,10 +213,12 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(!partTable.partitionExists(InternalRow(-1, "def")))
     assert(!partTable.partitionExists(InternalRow("abc", "def")))
 
-    val errMsg = intercept[IllegalArgumentException] {
-      partTable.partitionExists(InternalRow(0))
-    }.getMessage
-    assert(errMsg.contains("The identifier might not refer to one partition"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        partTable.partitionExists(InternalRow(0))
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3208",
+      parameters = Map("numFields" -> "1", "schemaLen" -> "2"))
   }
 
   test("renamePartition") {

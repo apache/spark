@@ -283,6 +283,11 @@ This file is divided into 3 sections:
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
+  <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">UriBuilder\.fromUri</parameter></parameters>
+    <customMessage>Use Utils.getUriBuilder instead.</customMessage>
+  </check>
+
   <check customId="executioncontextglobal" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">scala\.concurrent\.ExecutionContext\.Implicits\.global</parameter></parameters>
     <customMessage> User queries can use global thread pool, causing starvation and eventual OOM.

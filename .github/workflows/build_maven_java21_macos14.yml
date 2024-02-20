@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Apple Silicon (master, JDK 21)"
+name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, macos-14)"
 
 on:
   schedule:
@@ -28,20 +28,8 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/build_and_test.yml
-    runs-on: macos-14
+    uses: ./.github/workflows/maven_test.yml
     if: github.repository == 'apache/spark'
     with:
       java: 21
-      branch: master
-      hadoop: hadoop3
-      envs: >-
-        {
-          "SKIP_MIMA": "true",
-          "SKIP_UNIDOC": "true",
-          "DEDICATED_JVM_SBT_TESTS": "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormatV1Suite,org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormatV2Suite,org.apache.spark.sql.execution.datasources.orc.OrcSourceV1Suite,org.apache.spark.sql.execution.datasources.orc.OrcSourceV2Suite"
-        }
-      jobs: >-
-        {
-          "build": "true"
-        }
+      os: macos-14

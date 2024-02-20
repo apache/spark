@@ -2256,10 +2256,10 @@ def get_dummies(
             values = values[1:]
 
         def column_name(v: Any) -> Name:
-            if prefix is None or cast(List[str], prefix)[i] == "":
+            if prefix is None or prefix[i] == "":  # type: ignore[index]
                 return v
             else:
-                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, v)
+                return "{}{}{}".format(prefix[i], prefix_sep, v)  # type: ignore[index]
 
         for value in values:
             remaining_columns.append(

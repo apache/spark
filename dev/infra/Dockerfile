@@ -100,7 +100,7 @@ ARG CONNECT_PIP_PKGS="grpcio==1.59.3 grpcio-status==1.59.3 protobuf==4.25.1 goog
 
 # Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
 RUN python3.9 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.9 -m pip install deepspeed torcheval && \
     python3.9 -m pip cache purge
 
@@ -111,7 +111,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.10 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.10 -m pip install deepspeed torcheval && \
     python3.10 -m pip cache purge
 
@@ -122,7 +122,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.11 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.11 -m pip install deepspeed torcheval && \
     python3.11 -m pip cache purge
 
@@ -133,9 +133,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 # TODO(SPARK-46647) Add unittest-xml-reporting into Python 3.12 image when it supports Python 3.12
-# TODO(SPARK-46078) Use official one instead of nightly build when it's ready
 RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml && \
-    python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu && \
-    python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.12 -m pip install torcheval && \
     python3.12 -m pip cache purge
