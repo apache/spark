@@ -52,17 +52,17 @@ class MicroBatchExecution(
    * Keeps track of the latest execution context
    */
   @volatile private var latestExecutionContext: StreamExecutionContext =
-  new MicroBatchExecutionContext(
-    id,
-    runId,
-    name,
-    triggerClock,
-    Seq.empty,
-    sink,
-    progressReporter,
-    -1,
-    sparkSession,
-    previousContext = None)
+    new MicroBatchExecutionContext(
+      id,
+      runId,
+      name,
+      triggerClock,
+      Seq.empty,
+      sink,
+      progressReporter,
+      -1,
+      sparkSession,
+      previousContext = None)
 
   override def getLatestExecutionContext(): StreamExecutionContext = latestExecutionContext
 
@@ -292,7 +292,7 @@ class MicroBatchExecution(
   }
 
   private def initializeExecution(
-    sparkSessionForStream: SparkSession): MicroBatchExecutionContext = {
+      sparkSessionForStream: SparkSession): MicroBatchExecutionContext = {
     AcceptsLatestSeenOffsetHandler.setLatestSeenOffsetOnSources(
       offsetLog.getLatest().map(_._2), sources)
 
@@ -323,9 +323,9 @@ class MicroBatchExecution(
   }
 
   private def executeOneBatch(
-    execCtx: MicroBatchExecutionContext,
-    sparkSessionForStream: SparkSession,
-    noDataBatchesEnabled: Boolean): Boolean = {
+      execCtx: MicroBatchExecutionContext,
+      sparkSessionForStream: SparkSession,
+      noDataBatchesEnabled: Boolean): Boolean = {
     assert(execCtx != null)
 
     if (isActive) {
