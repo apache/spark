@@ -2876,7 +2876,7 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
+  test("SPARK-47101 checks if nested column names do not include invalid characters") {
     Seq(",", ";", "^", "\\", "/", "%").foreach { c =>
       val typ = s"array<struct<`abc${c}xyz`:int>>"
       val replaced = typ.replaceAll("`", "")
@@ -3385,7 +3385,7 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-44911: Create the table with invalid column") {
+  test("SPARK-47101: comma is allowed in column name") {
     val tbl = "t1"
     withTable(tbl) {
       sql(
