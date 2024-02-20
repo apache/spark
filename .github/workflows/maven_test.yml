@@ -166,7 +166,7 @@ jobs:
         # - Yarn has a Python specific test too, for example, YarnClusterSuite.
         # macos (14) already has its Python installed, see also SPARK-47096 and
         # https://github.com/actions/runner-images/blob/main/images/macos/macos-14-Readme.md
-        if: contains(inputs.os, 'ubuntu') && contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
+        if: contains(inputs.os, 'ubuntu') && (contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect'))
         with:
           python-version: '3.11'
           architecture: x64
