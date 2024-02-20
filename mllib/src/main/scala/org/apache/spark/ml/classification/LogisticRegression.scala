@@ -507,8 +507,9 @@ class LogisticRegression @Since("1.2.0") (
         s"then cached during training. Be careful of double caching!")
     }
 
+    val sparkConf = dataset.rdd.sparkContext.getConf
     val intermediateRDDStorageLevel =
-      StorageLevel.fromString(dataset.sqlContext.getConf(DEFAULT_ML_INTERMEDIATE_STORAGE_LEVEL.key))
+      StorageLevel.fromString(sparkConf.get(DEFAULT_ML_INTERMEDIATE_STORAGE_LEVEL))
 
     val instances = dataset.select(
       checkClassificationLabels($(labelCol), None),
