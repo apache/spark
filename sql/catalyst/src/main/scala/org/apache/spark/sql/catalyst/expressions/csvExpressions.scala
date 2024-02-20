@@ -271,7 +271,7 @@ case class StructsToCsv(
       case _ => DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "0",
+          "paramIndex" -> "1",
           "requiredType" -> toSQLType(StructType),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType)
