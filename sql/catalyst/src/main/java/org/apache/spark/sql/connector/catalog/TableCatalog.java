@@ -110,7 +110,8 @@ public interface TableCatalog extends CatalogPlugin {
    * @param namespace a multi-part namespace
    * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
    *                follow regular expression convention, case-insensitive match and white spaces
-   *                on both ends will be ignored. Please refer to regex_pattern in https://spark.apache.org/docs/latest/sql-ref-syntax-aux-show-tables.html#parameters
+   *                on both ends will be ignored. Please refer to regex_pattern in https://
+   *                spark.apache.org/docs/latest/sql-ref-syntax-aux-show-tables.html#parameters
    *                for more details.
    * @return an array of Identifiers for tables
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
