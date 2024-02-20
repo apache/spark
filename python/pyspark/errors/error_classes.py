@@ -286,6 +286,46 @@ ERROR_CLASSES_JSON = '''
       "An error occurred while calling <func_name>: <error_msg>."
     ]
   },
+  "FIELD_DATA_TYPE_UNACCEPTABLE": {
+    "message": [
+      "<data_type> can not accept object <obj> in type <obj_type>."
+    ]
+  },
+  "FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME": {
+    "message": [
+      "<field_name>: <data_type> can not accept object <obj> in type <obj_type>."
+    ]
+  },
+  "FIELD_NOT_NULLABLE": {
+    "message": [
+      "Field is not nullable, but got None."
+    ]
+  },
+  "FIELD_NOT_NULLABLE_WITH_NAME": {
+    "message": [
+      "<field_name>: This field is not nullable, but got None."
+    ]
+  },
+  "FIELD_STRUCT_LENGTH_MISMATCH": {
+    "message": [
+      "Length of object (<object_length>) does not match with length of fields (<field_length>)."
+    ]
+  },
+  "FIELD_STRUCT_LENGTH_MISMATCH_WITH_NAME": {
+    "message": [
+      "<field_name>: Length of object (<object_length>) does not match with length of fields (<field_length>)."
+    ]
+  },
+  "FIELD_TYPE_MISMATCH": {
+    "message": [
+      "<obj> is not an instance of type <data_type>."
+    ]
+  },
+  "FIELD_TYPE_MISMATCH_WITH_NAME": {
+    "message": [
+      "<field_name>: <obj> is not an instance of type <data_type>."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": {
     "message": [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -610,11 +650,6 @@ ERROR_CLASSES_JSON = '''
   "NOT_IMPLEMENTED": {
     "message": [
       "<feature> is not implemented."
-    ]
-  },
-  "NOT_INSTANCE_OF": {
-    "message": [
-      "<value> is not an instance of type <type>."
     ]
   },
   "NOT_INT": {
@@ -1103,9 +1138,9 @@ ERROR_CLASSES_JSON = '''
       "Value for `<arg_name>` must be True, got '<arg_value>'."
     ]
   },
-  "VALUE_OUT_OF_BOUND": {
+  "VALUE_OUT_OF_BOUNDS": {
     "message": [
-      "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
+      "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": {

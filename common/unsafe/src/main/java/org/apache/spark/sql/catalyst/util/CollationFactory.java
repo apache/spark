@@ -112,7 +112,7 @@ public final class CollationFactory {
     collationTable[0] = new Collation(
       "UCS_BASIC",
       null,
-      UTF8String::compareTo,
+      UTF8String::binaryCompare,
       "1.0",
       s -> (long)s.hashCode(),
       true);
@@ -122,7 +122,7 @@ public final class CollationFactory {
     collationTable[1] = new Collation(
       "UCS_BASIC_LCASE",
       null,
-      Comparator.comparing(UTF8String::toLowerCase),
+      (s1, s2) -> s1.toLowerCase().binaryCompare(s2.toLowerCase()),
       "1.0",
       (s) -> (long)s.toLowerCase().hashCode(),
       false);
@@ -131,7 +131,6 @@ public final class CollationFactory {
     collationTable[2] = new Collation(
       "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true);
     collationTable[2].collator.setStrength(Collator.TERTIARY);
-
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(

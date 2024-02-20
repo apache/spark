@@ -182,14 +182,14 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
             "actualType" -> "\"STRING\""))
         checkError(
           exception = intercept[AnalysisException] {
-            sql("create table demos.test_ts_other (a timestamp default '2022-01-02') using parquet")
+            sql("create table demos.test_ts_other (a timestamp default 'invalid') using parquet")
           },
           errorClass = "INVALID_DEFAULT_VALUE.DATA_TYPE",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`a`",
             "expectedType" -> "\"TIMESTAMP\"",
-            "defaultValue" -> "'2022-01-02'",
+            "defaultValue" -> "'invalid'",
             "actualType" -> "\"STRING\""))
         checkError(
           exception = intercept[AnalysisException] {
@@ -254,6 +254,29 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       sql(ddl)
       sql("INSERT INTO t (key) VALUES(1)")
       checkAnswer(sql("select * from t"), Row(1, "apache", "spark "))
+    }
+  }
+
+  test("SPARK-46958: timestamp should have timezone for resolvable if default values castable") {
+    val defaults = Seq("timestamp '2018-11-17'", "CAST(timestamp '2018-11-17' AS STRING)")
+    defaults.foreach { default =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(key int, c STRING DEFAULT $default) " +
+          s"USING parquet")
+        sql("INSERT INTO t (key) VALUES(1)")
+        checkAnswer(sql("select * from t"), Row(1, "2018-11-17 00:00:00"))
+      }
+    }
+  }
+
+  test("SPARK-46958: timestamp should have timezone for resolvable when default values fit") {
+    withTable("t") {
+      // If the provided default value is a literal of a wider type than the target column, but
+      // the literal value fits within the narrower type, just coerce it for convenience.
+      sql(s"CREATE TABLE t(key int, c timestamp DEFAULT '2018-11-17 13:33:33') " +
+        s"USING parquet")
+      sql("INSERT INTO t (key) VALUES(1)")
+      checkAnswer(sql("select CAST(c as STRING) from t"), Row("2018-11-17 13:33:33"))
     }
   }
 }

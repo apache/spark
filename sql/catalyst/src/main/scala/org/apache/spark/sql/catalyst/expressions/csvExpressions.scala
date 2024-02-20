@@ -21,7 +21,7 @@ import java.io.CharArrayWriter
 
 import com.univocity.parsers.csv.CsvParser
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -266,8 +266,9 @@ case class StructsToCsv(
   @transient
   lazy val inputSchema: StructType = child.dataType match {
     case st: StructType => st
-    case other =>
-      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3234",
+      messageParameters = Map("other" -> other.catalogString))
   }
 
   @transient

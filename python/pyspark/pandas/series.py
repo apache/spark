@@ -392,8 +392,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     ):
         assert data is not None
 
-        self._anchor: DataFrame
-        self._col_label: Label
+        self._anchor: DataFrame  # type: ignore[annotation-unchecked]
+        self._col_label: Label  # type: ignore[annotation-unchecked]
         if isinstance(data, DataFrame):
             assert dtype is None
             assert name is None

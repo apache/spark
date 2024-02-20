@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -174,22 +174,18 @@ class HiveDDLSuite
     testAddColumnPartitioned("orc")
   }
 
-  test("SPARK-22431: illegal nested type") {
-    checkError(
-      exception = intercept[SparkException] {
-        spark.sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
-      },
-      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-      parameters = Map("fieldType" -> "\"STRUCT<$A:STRING,B:INT>\"", "fieldName" -> "`q`")
-    )
+  test("SPARK-46934: quote element name before parsing struct") {
+    withTable("t") {
+      sql("CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
+        "q STRUCT<`$a`: STRING, b: INT>"))
+    }
 
-    checkError(
-      exception = intercept[SparkException] {
-        spark.sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
-      },
-      errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-      parameters = Map("fieldType" -> "\"STRUCT<$A:INT,COL2:STRING>\"", "fieldName" -> "`q`")
-    )
+    withTable("t") {
+      sql("CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(
+        "q STRUCT<`$a`:INT, col2:STRING>, i1 INT"))
+    }
 
     withView("v") {
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
@@ -245,19 +241,12 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-22431: negative alter table tests with nested types") {
+  test("SPARK-46934: alter table tests with nested types") {
     withTable("t1") {
-      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
-      checkError(
-        exception = intercept[SparkException] {
-          spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
-        },
-        errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
-        parameters = Map(
-          "fieldType" -> "\"STRUCT<$COL1:STRING,COL2:INT>\"",
-          "fieldName" -> "`newcol1`"
-        )
-      )
+      sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
+      sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
+      assert(spark.table("t1").schema == CatalystSqlParser.parseTableSchema(
+        "q STRUCT<col1:INT, col2:STRING>, i1 INT,newcol1 STRUCT<`$col1`:STRING, col2:Int>"))
     }
   }
 

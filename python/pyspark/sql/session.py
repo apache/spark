@@ -82,7 +82,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
 
 try:
-    import memory_profiler  # type: ignore # noqa: F401
+    import memory_profiler  # noqa: F401
 
     has_memory_profiler = True
 except Exception:
@@ -129,7 +129,7 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
-    RDD.toDF = toDF  # type: ignore[assignment]
+    RDD.toDF = toDF  # type: ignore[method-assign]
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -2144,6 +2144,16 @@ class SparkSession(SparkConversionMixin):
             )
 
     showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
+
+    def dumpPerfProfiles(self, path: str, id: Optional[int] = None) -> None:
+        self._profiler_collector.dump_perf_profiles(path, id)
+
+    dumpPerfProfiles.__doc__ = ProfilerCollector.dump_perf_profiles.__doc__
+
+    def dumpMemoryProfiles(self, path: str, id: Optional[int] = None) -> None:
+        self._profiler_collector.dump_memory_profiles(path, id)
+
+    dumpMemoryProfiles.__doc__ = ProfilerCollector.dump_memory_profiles.__doc__
 
 
 def _test() -> None:

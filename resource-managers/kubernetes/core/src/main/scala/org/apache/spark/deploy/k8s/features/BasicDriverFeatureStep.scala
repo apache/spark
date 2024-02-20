@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import javax.ws.rs.core.UriBuilder
-
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
@@ -171,7 +169,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         conf.get(key).partition(uri => KubernetesUtils.isLocalAndResolvable(uri))
       val value = {
         if (key == ARCHIVES) {
-          localUris.map(UriBuilder.fromUri(_).fragment(null).build()).map(_.toString)
+          localUris.map(Utils.getUriBuilder(_).fragment(null).build()).map(_.toString)
         } else {
           localUris
         }
@@ -180,7 +178,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       if (resolved.nonEmpty) {
         val resolvedValue = if (key == ARCHIVES) {
           localUris.zip(resolved).map { case (uri, r) =>
-            UriBuilder.fromUri(r).fragment(new java.net.URI(uri).getFragment).build().toString
+            Utils.getUriBuilder(r).fragment(new java.net.URI(uri).getFragment).build().toString
           }
         } else {
           resolved

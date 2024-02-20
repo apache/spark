@@ -27,7 +27,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
@@ -190,8 +190,9 @@ object DataType {
       case "timestamp_ltz" => TimestampType
       case other => otherTypes.getOrElse(
         other,
-        throw new IllegalArgumentException(
-          s"Failed to convert the JSON string '$name' to a data type."))
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3251",
+          messageParameters = Map("other" -> name)))
     }
   }
 
@@ -241,9 +242,9 @@ object DataType {
     ("type", JString("udt"))) =>
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
-    case other =>
-      throw new IllegalArgumentException(
-        s"Failed to convert the JSON string '${compact(render(other))}' to a data type.")
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3251",
+      messageParameters = Map("other" -> compact(render(other))))
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -264,9 +265,9 @@ object DataType {
     ("name", JString(name)),
     ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType))
-    case other =>
-      throw new IllegalArgumentException(
-        s"Failed to convert the JSON string '${compact(render(other))}' to a field.")
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3250",
+      messageParameters = Map("other" -> compact(render(other))))
   }
 
   protected[types] def buildFormattedString(
