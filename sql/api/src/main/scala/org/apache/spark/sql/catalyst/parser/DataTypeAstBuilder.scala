@@ -75,8 +75,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {
           case Seq(_) => StringType
-          case Seq(_, ctx: CollateExpressionContext) =>
-            val collationName = visitCollateExpression(ctx)
+          case Seq(_, ctx: CollateClauseContext) =>
+            val collationName = visitCollateClause(ctx)
             val collationId = CollationFactory.collationNameToId(collationName)
             StringType(collationId)
         }
@@ -217,7 +217,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   /**
    * Returns a collation name.
    */
-  override def visitCollateExpression(ctx: CollateExpressionContext): String = withOrigin(ctx) {
+  override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
     string(visitStringLit(ctx.stringLit))
   }
 }
