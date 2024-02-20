@@ -141,7 +141,7 @@ class RocksDB(
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
   private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
-  @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
+  @volatile var loadedVersion = -1L   // -1 = nothing valid is loaded
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
@@ -244,7 +244,8 @@ class RocksDB(
   private def verifyColFamilyExists(colFamilyName: String): Unit = {
     if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
       throw new RuntimeException(s"Column family with name=$colFamilyName" +
-        s" does not exist for partition ${TaskContext.getPartitionId()}")
+        s" does not exist for partition ${TaskContext.getPartitionId()}" +
+        s" and version $loadedVersion")
     }
   }
 
@@ -261,7 +262,7 @@ class RocksDB(
     if (!checkColFamilyExists(colFamilyName)) {
       assert(db != null)
       logError(s"Creating column family $colFamilyName" +
-        s" for partition ${TaskContext.getPartitionId()}")
+        s" for partition ${TaskContext.getPartitionId()} and version $loadedVersion")
       val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)
       val handle = db.createColumnFamily(descriptor)
       colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
@@ -686,10 +687,12 @@ class RocksDB(
       acquiredThreadInfo.threadRef.get.isDefined &&
       newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
 
-    while (isAcquiredByDifferentThread && timeWaitedMs < conf.lockAcquireTimeoutMs) {
+    while (isAcquiredByDifferentThread && timeWaitedMs < 20000) {
       acquireLock.wait(10)
     }
     if (isAcquiredByDifferentThread) {
+      logError(s"Deadlock for version ${loadedVersion} detected. " +
+        s"Acquired by $acquiredThreadInfo, waiting for $newAcquiredThreadInfo")
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
       throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString(),
         acquiredThreadInfo.toString(), timeWaitedMs, stackTraceOutput)

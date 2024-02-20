@@ -325,7 +325,7 @@ trait StateStoreProvider {
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
 
-  def doTTL(): Unit = { }
+  def doTTL(store: StateStore): Unit = { }
 
   /**
    * Optional custom metrics that the implementation may want to report.
@@ -689,7 +689,10 @@ object StateStore extends Logging {
       if (SparkEnv.get != null && !isMaintenanceRunning) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = { doMaintenance() },
+          task = {
+            doMaintenance()
+            doTTL()
+          },
           onError = { loadedProviders.synchronized {
               logInfo("Stopping maintenance task since an error was encountered.")
               stopMaintenanceTask()
@@ -739,7 +742,6 @@ object StateStore extends Logging {
         maintenanceThreadPool.execute(() => {
           val startTime = System.currentTimeMillis()
           try {
-            provider.doTTL()
             provider.doMaintenance()
             if (!verifyIfStoreInstanceActive(id)) {
               unload(id)
@@ -770,6 +772,58 @@ object StateStore extends Logging {
     }
   }
 
+  private def doTTL(): Unit = {
+    logDebug("Doing maintenance")
+    if (SparkEnv.get == null) {
+      throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
+    }
+    loadedProviders.synchronized {
+      loadedProviders.toSeq
+    }.foreach { case (id, provider) =>
+      // check exception
+      provider match {
+        case r: RocksDBStateStoreProvider =>
+          if (threadPoolException.get() != null) {
+            val exception = threadPoolException.get()
+            logWarning("Error in maintenanceThreadPool", exception)
+            throw exception
+          }
+          val loadedVersion = r.loadedVersion()
+          val rocksDBStore = r.getStore(loadedVersion)
+          if (processThisPartition(id)) {
+            maintenanceThreadPool.execute(() => {
+              val startTime = System.currentTimeMillis()
+              try {
+                provider.doTTL(rocksDBStore)
+                if (!verifyIfStoreInstanceActive(id)) {
+                  unload(id)
+                  logInfo(s"Unloaded $provider")
+                }
+              } catch {
+                case NonFatal(e) =>
+                  logWarning(s"Error managing $provider, stopping management thread", e)
+                  threadPoolException.set(e)
+              } finally {
+                val duration = System.currentTimeMillis() - startTime
+                val logMsg = s"Finished maintenance task for provider=$id" +
+                  s" in elapsed_time=$duration\n"
+                if (duration > 5000) {
+                  logInfo(logMsg)
+                } else {
+                  logDebug(logMsg)
+                }
+                maintenanceThreadPoolLock.synchronized {
+                  maintenancePartitions.remove(id)
+                }
+              }
+            })
+          } else {
+            logInfo(s"Not processing partition ${id} for maintenance because it is currently " +
+              s"being processed")
+          }
+      }
+    }
+  }
   private def reportActiveStoreInstance(
       storeProviderId: StateStoreProviderId,
       otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
