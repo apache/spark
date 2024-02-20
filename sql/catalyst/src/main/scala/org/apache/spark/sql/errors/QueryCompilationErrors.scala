@@ -1908,8 +1908,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1175",
-      messageParameters = Map("dataType" -> field.dataType.catalogString))
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> field.dataType.catalogString))
   }
 
   def incompatibleViewSchemaChangeError(
