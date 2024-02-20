@@ -448,8 +448,8 @@ class MicroBatchExecution(
    *  DONE
    */
   protected def populateStartOffsets(
-    execCtx: MicroBatchExecutionContext,
-    sparkSessionToRunBatches: SparkSession): Unit = {
+      execCtx: MicroBatchExecutionContext,
+      sparkSessionToRunBatches: SparkSession): Unit = {
     execCtx.sinkCommitProgress = None
     offsetLog.getLatest() match {
       case Some((latestBatchId, nextOffsets)) =>
@@ -545,8 +545,8 @@ class MicroBatchExecution(
    * latestOffset(startOffset, readLimit)
    */
   private def getStartOffset(
-    execCtx: MicroBatchExecutionContext,
-    dataStream: SparkDataStream): OffsetV2 = {
+      execCtx: MicroBatchExecutionContext,
+      dataStream: SparkDataStream): OffsetV2 = {
     val startOffsetOpt = execCtx.startOffsets.get(dataStream)
     dataStream match {
       case _: Source =>

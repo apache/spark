@@ -94,10 +94,10 @@ class ProgressReporter(
   }
 
   def updateIdleness(
-    id: UUID,
-    runId: UUID,
-    currentTriggerStartTimestamp: Long,
-    newProgress: StreamingQueryProgress): Unit = {
+      id: UUID,
+      runId: UUID,
+      currentTriggerStartTimestamp: Long,
+      newProgress: StreamingQueryProgress): Unit = {
     val now = triggerClock.getTimeMillis()
     if (now - noDataProgressEventInterval >= lastNoExecutionProgressEventTime) {
       addNewProgress(newProgress)
@@ -126,13 +126,13 @@ class ProgressReporter(
  * during the execution lifecycle of a batch that is being processed by the streaming query
  */
 abstract class ProgressContext(
-  id: UUID,
-  runId: UUID,
-  name: String,
-  triggerClock: Clock,
-  sources: Seq[SparkDataStream],
-  sink: Table,
-  progressReporter: ProgressReporter)
+    id: UUID,
+    runId: UUID,
+    name: String,
+    triggerClock: Clock,
+    sources: Seq[SparkDataStream],
+    sink: Table,
+    progressReporter: ProgressReporter)
   extends Logging {
 
   import ProgressContext._
@@ -220,9 +220,9 @@ abstract class ProgressContext(
    * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
    */
   def recordTriggerOffsets(
-    from: StreamProgress,
-    to: StreamProgress,
-    latest: StreamProgress): Unit = {
+      from: StreamProgress,
+      to: StreamProgress,
+      latest: StreamProgress): Unit = {
     currentTriggerStartOffsets = from.transform((_, v) => v.json)
     currentTriggerEndOffsets = to.transform((_, v) => v.json)
     currentTriggerLatestOffsets = latest.transform((_, v) => v.json)
@@ -260,10 +260,10 @@ abstract class ProgressContext(
    * @param hasNewData Whether the sources of this stream had new data for this trigger.
    */
   def finishTrigger(
-    hasNewData: Boolean,
-    sourceToNumInputRowsMap: Map[SparkDataStream, Long],
-    lastExecution: IncrementalExecution,
-    lastEpochId: Long): Unit = {
+      hasNewData: Boolean,
+      sourceToNumInputRowsMap: Map[SparkDataStream, Long],
+      lastExecution: IncrementalExecution,
+      lastEpochId: Long): Unit = {
     assert(
       currentTriggerStartOffsets != null && currentTriggerEndOffsets != null &&
         currentTriggerLatestOffsets != null
@@ -290,10 +290,10 @@ abstract class ProgressContext(
   }
 
   private def constructNewProgress(
-    processingTimeMills: Long,
-    batchId: Long,
-    execStats: Option[ExecutionStats],
-    observedMetrics: Map[String, Row]): StreamingQueryProgress = {
+      processingTimeMills: Long,
+      batchId: Long,
+      execStats: Option[ExecutionStats],
+      observedMetrics: Map[String, Row]): StreamingQueryProgress = {
     val processingTimeSec = Math.max(1L, processingTimeMills).toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
@@ -329,9 +329,9 @@ abstract class ProgressContext(
   }
 
   private def extractSourceProgress(
-    execStats: Option[ExecutionStats],
-    inputTimeSec: Double,
-    processingTimeSec: Double): Seq[SourceProgress] = {
+      execStats: Option[ExecutionStats],
+      inputTimeSec: Double,
+      processingTimeSec: Double): Seq[SourceProgress] = {
     sources.distinct.map { source =>
       val numRecords = execStats.flatMap(_.inputRows.get(source)).getOrElse(0L)
       val sourceMetrics = source match {
@@ -366,17 +366,17 @@ abstract class ProgressContext(
    * Override of finishTrigger to extract the map from IncrementalExecution.
    */
   def finishTrigger(
-    hasNewData: Boolean,
-    lastExecution: IncrementalExecution,
-    lastEpoch: Long): Unit = {
+      hasNewData: Boolean,
+      lastExecution: IncrementalExecution,
+      lastEpoch: Long): Unit = {
     val map: Map[SparkDataStream, Long] =
       if (hasNewData) extractSourceToNumInputRows(lastExecution) else Map.empty
     finishTrigger(hasNewData, map, lastExecution, lastEpoch)
   }
 
   private def warnIfFinishTriggerTakesTooLong(
-    triggerEndTimestamp: Long,
-    processingTimeMills: Long): Unit = {
+      triggerEndTimestamp: Long,
+      processingTimeMills: Long): Unit = {
     // Log a warning message if finishTrigger step takes more time than processing the batch and
     // also longer than min threshold (1 minute).
     val finishTriggerDurationMillis = triggerClock.getTimeMillis() - triggerEndTimestamp
@@ -499,7 +499,7 @@ abstract class ProgressContext(
 
   /** Extract statistics about stateful operators from the executed query plan. */
   private def extractStateOperatorMetrics(
-    lastExecution: IncrementalExecution): Seq[StateOperatorProgress] = {
+      lastExecution: IncrementalExecution): Seq[StateOperatorProgress] = {
     assert(lastExecution != null, "lastExecution is not available")
     lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StateStoreWriter] =>
@@ -509,9 +509,9 @@ abstract class ProgressContext(
 
   /** Extracts statistics from the most recent query execution. */
   private def extractExecutionStats(
-    hasNewData: Boolean,
-    sourceToNumInputRows: Map[SparkDataStream, Long],
-    lastExecution: IncrementalExecution): ExecutionStats = {
+      hasNewData: Boolean,
+      sourceToNumInputRows: Map[SparkDataStream, Long],
+      lastExecution: IncrementalExecution): ExecutionStats = {
     val hasEventTime = progressReporter.logicalPlan().collect {
       case e: EventTimeWatermark => e
     }.nonEmpty
@@ -570,7 +570,7 @@ abstract class ProgressContext(
 
   /** Extracts observed metrics from the most recent query execution. */
   private def extractObservedMetrics(
-    lastExecution: QueryExecution): Map[String, Row] = {
+      lastExecution: QueryExecution): Map[String, Row] = {
     if (lastExecution == null) {
       return Map.empty
     }
