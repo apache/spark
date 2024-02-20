@@ -181,10 +181,9 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("describe a clustered table") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
-      sql(s"CREATE TABLE $tbl (col1 STRING COMMENT 'this is comment', col2 INT) " +
-        s"$defaultUsing CLUSTER BY (col1, col2)")
+      sql(s"CREATE TABLE $tbl (col1 STRING COMMENT 'this is comment', col2 struct<x:int, y:int>) " +
+        s"$defaultUsing CLUSTER BY (col1, col2.x)")
       val descriptionDf = sql(s"DESC $tbl")
-      descriptionDf.show(false)
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("col_name", StringType),
         ("data_type", StringType),
@@ -193,11 +192,11 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         descriptionDf,
         Seq(
           Row("col1", "string", "this is comment"),
-          Row("col2", "int", null),
+          Row("col2", "struct<x:int,y:int>", null),
           Row("# Clustering Information", "", ""),
           Row("# col_name", "data_type", "comment"),
           Row("col1", "string", "this is comment"),
-          Row("col2", "int", null)))
+          Row("col2.x", "int", null)))
     }
   }
 }
