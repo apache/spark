@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.DEFAULT_ML_INTERMEDIATE_STORAGE_LEVEL
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
@@ -506,6 +507,9 @@ class LogisticRegression @Since("1.2.0") (
         s"then cached during training. Be careful of double caching!")
     }
 
+    val intermediateRDDStorageLevel =
+      StorageLevel.fromString(dataset.sqlContext.getConf(DEFAULT_ML_INTERMEDIATE_STORAGE_LEVEL.key))
+
     val instances = dataset.select(
       checkClassificationLabels($(labelCol), None),
       checkNonNegativeWeights(get(weightCol)),
@@ -631,7 +635,7 @@ class LogisticRegression @Since("1.2.0") (
      */
     val (allCoefficients, objectiveHistory) =
       trainImpl(instances, actualBlockSizeInMB, featuresStd, featuresMean, numClasses,
-        initialSolution.toArray, regularization, optimizer)
+        initialSolution.toArray, regularization, optimizer, intermediateRDDStorageLevel)
 
     if (allCoefficients == null) {
       val msg = s"${optimizer.getClass.getName} failed."
@@ -945,7 +949,8 @@ class LogisticRegression @Since("1.2.0") (
       numClasses: Int,
       initialSolution: Array[Double],
       regularization: Option[L2Regularization],
-      optimizer: FirstOrderMinimizer[BDV[Double], DiffFunction[BDV[Double]]]) = {
+      optimizer: FirstOrderMinimizer[BDV[Double], DiffFunction[BDV[Double]]],
+      intermediateRDDStorageLevel: StorageLevel) = {
     val multinomial = checkMultinomial(numClasses)
 
     // for LR, we can center the input vector, if and only if:
@@ -971,7 +976,7 @@ class LogisticRegression @Since("1.2.0") (
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
     val blocks = InstanceBlock.blokifyWithMaxMemUsage(scaled, maxMemUsage)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(intermediateRDDStorageLevel)
       .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val costFun = if (multinomial) {

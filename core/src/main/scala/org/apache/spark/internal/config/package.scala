@@ -29,7 +29,7 @@ import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
-import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
+import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.{MavenUtils, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
@@ -2640,4 +2640,13 @@ package object config {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val DEFAULT_ML_INTERMEDIATE_STORAGE_LEVEL =
+    ConfigBuilder("spark.ml.defaultIntermediateStorageLevel")
+      .doc("The default storage level of intermediate datasets for MLlib. Cannot be 'NONE'.")
+      .version("4.0.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(StorageLevelMapper.values.map(_.name()).toSet - StorageLevelMapper.NONE.toString)
+      .createWithDefault(StorageLevelMapper.MEMORY_AND_DISK.name())
 }
