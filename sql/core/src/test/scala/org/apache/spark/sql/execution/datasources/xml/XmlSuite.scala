@@ -1356,7 +1356,7 @@ class XmlSuite
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"to_xml(value)\"",
-        "paramIndex" -> "0",
+        "paramIndex" -> "1",
         "inputSql" -> "\"value\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
