@@ -580,7 +580,6 @@ class SparkContext(config: SparkConf) extends Logging {
     _env.initializeShuffleManager()
     _env.initializeMemoryManager(SparkContext.numDriverCores(master, conf))
 
-
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
     _schedulerBackend = sched

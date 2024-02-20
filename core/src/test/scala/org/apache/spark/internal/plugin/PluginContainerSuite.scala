@@ -280,7 +280,6 @@ class MemoryOverridePlugin extends SparkPlugin {
 }
 
 object MemoryOverridePlugin {
-  var driverContext: PluginContext = _
   var offHeapMemory: Long = _
 }
 
