@@ -1182,11 +1182,11 @@ The handle `<handle>` is invalid.
 
 For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
 
-### INVALID_HIVE_COLUMN_NAME
+### INVALID_HIVE_COLUMN_TYPE
 
 [SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
+Cannot create the table `<tableName>` having the column `<columnName>` whose type `<columnType>` contains invalid characters, detail message: `<detailMessage>`.
 
 ### INVALID_IDENTIFIER
 

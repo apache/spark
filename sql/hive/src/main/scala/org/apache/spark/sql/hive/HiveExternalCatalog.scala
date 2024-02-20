@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.DDL_TIME
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_FORMAT
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -42,13 +43,13 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLId, toSQLValue}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType, TimestampNTZType}
+import org.apache.spark.sql.types._
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -151,45 +152,35 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Checks the validity of data column names. Hive metastore disallows the table to use some
-   * special characters (',', ':', and ';') in data column names, including nested column names.
-   * Partition columns do not have such a restriction. Views do not have such a restriction.
+   * According to the Hive Document:
+   *   > In Hive 0.13 and later, column names can contain any Unicode character (see HIVE-6013),
+   *     however, dot (.) and colon (:) yield errors on querying, so they are disallowed in
+   *     Hive 1.2.0 (see HIVE-10120). Any column name that is specified within backticks (`) is
+   *     treated literally. Within a backtick string, use double backticks (``) to represent
+   *     a backtick character. Backtick quotation also enables the use of reserved keywords
+   *     for table and column identifiers
+   * In addition, Spark SQL doesn't rely on Hive analysis for column resolution, so dot (.) and
+   * colon (:) yield no errors on querying.
+   *
+   * To sum up, we do not need to check top level column names, and check the nested types that
+   * contain a 'name' field in it.
+   *
    */
   private def verifyDataSchema(
       tableName: TableIdentifier, tableType: CatalogTableType, dataSchema: StructType): Unit = {
     if (tableType != VIEW) {
-      val invalidChars = Seq(",", ":", ";")
-      def verifyNestedColumnNames(schema: StructType): Unit = schema.foreach { f =>
-        f.dataType match {
-          case st: StructType => verifyNestedColumnNames(st)
-          case _ if invalidChars.exists(f.name.contains) =>
-            val invalidCharsString = invalidChars.map(c => s"'$c'").mkString(", ")
-            throw new AnalysisException(
-              errorClass = "INVALID_HIVE_COLUMN_NAME",
-              messageParameters = Map(
-                "invalidChars" -> invalidCharsString,
-                "tableName" -> toSQLId(tableName.nameParts),
-                "columnName" -> toSQLId(f.name)
-              ))
-          case _ =>
-        }
-      }
-
       dataSchema.foreach { f =>
-        f.dataType match {
-          // Checks top-level column names
-          case _ if f.name.contains(",") =>
+        try {
+          TypeInfoUtils.getTypeInfoFromTypeString(f.dataType.catalogString)
+        } catch {
+          case e: IllegalArgumentException =>
             throw new AnalysisException(
-              errorClass = "INVALID_HIVE_COLUMN_NAME",
+              errorClass = "INVALID_HIVE_COLUMN_TYPE",
               messageParameters = Map(
-                "invalidChars" -> toSQLValue(","),
+                "detailMessage" -> e.getMessage,
                 "tableName" -> toSQLId(tableName.nameParts),
-                "columnName" -> toSQLId(f.name)
-              ))
-          // Checks nested column names
-          case st: StructType =>
-            verifyNestedColumnNames(st)
-          case _ =>
+                "columnName" -> toSQLId(f.name),
+                "columnType" -> f.dataType.catalogString))
         }
       }
     }

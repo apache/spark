@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.sql.Timestamp
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
@@ -37,7 +38,6 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
@@ -2877,21 +2877,21 @@ class HiveDDLSuite
   }
 
   test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
-    Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
+    Seq(",", ";", "^", "\\", "/", "%").foreach { c =>
+      val typ = s"array<struct<`abc${c}xyz`:int>>"
+      val replaced = typ.replaceAll("`", "")
       withTable("t") {
+        val msg = s"Error: : expected at the position 16 of '$replaced' but '$c' is found."
         checkError(
           exception = intercept[AnalysisException] {
-            spark.range(1)
-              .select(struct(lit(0).as(nestedColumnName)).as("toplevel"))
-              .write
-              .format("hive")
-              .saveAsTable("t")
+            sql(s"CREATE TABLE t (a $typ) USING hive")
           },
-          errorClass = "INVALID_HIVE_COLUMN_NAME",
+          errorClass = "INVALID_HIVE_COLUMN_TYPE",
           parameters = Map(
-            "invalidChars" -> "',', ':', ';'",
+            "detailMessage" -> msg,
             "tableName" -> "`spark_catalog`.`default`.`t`",
-            "columnName" -> s"`$nestedColumnName`")
+            "columnName" -> "`a`",
+            "columnType" -> replaced)
         )
       }
     }
@@ -3388,21 +3388,13 @@ class HiveDDLSuite
   test("SPARK-44911: Create the table with invalid column") {
     val tbl = "t1"
     withTable(tbl) {
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE t1
-             |STORED AS parquet
-             |SELECT id, DATE'2018-01-01' + MAKE_DT_INTERVAL(0, id) FROM RANGE(0, 10)
+      sql(
+        s"""
+           |CREATE TABLE t1
+           |STORED AS parquet
+           |SELECT id, DATE'2018-11-17' + MAKE_DT_INTERVAL(0, id) FROM RANGE(13, 14)
          """.stripMargin)
-      }
-      checkError(e,
-        errorClass = "INVALID_HIVE_COLUMN_NAME",
-        parameters = Map(
-          "invalidChars" -> "','",
-          "tableName" -> "`spark_catalog`.`default`.`t1`",
-          "columnName" -> "`DATE '2018-01-01' + make_dt_interval(0, id, 0, 0`.`000000)`")
-      )
+      checkAnswer(sql("SELECT * FROM t1"), Row(13, Timestamp.valueOf("2018-11-17 13:00:00")))
     }
   }
 }

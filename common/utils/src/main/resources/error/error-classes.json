@@ -1990,9 +1990,9 @@
     },
     "sqlState" : "HY000"
   },
-  "INVALID_HIVE_COLUMN_NAME" : {
+  "INVALID_HIVE_COLUMN_TYPE" : {
     "message" : [
-      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
+      "Cannot create the table <tableName> having the column <columnName> whose type <columnType> contains invalid characters, detail message: <detailMessage>"
     ],
     "sqlState" : "42K05"
   },
