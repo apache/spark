@@ -2883,7 +2883,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "paramIndex" -> "0",
+        "paramIndex" -> "1",
         "sqlExpr" -> "\"array_prepend(_1, _2)\"",
         "inputSql" -> "\"_1\"",
         "inputType" -> "\"STRING\"",
@@ -5912,7 +5912,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"array_append(a, b)\"",
-        "paramIndex" -> "0",
+        "paramIndex" -> "1",
         "requiredType" -> "\"ARRAY\"",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\""
