@@ -60,7 +60,8 @@ class PythonBatchWrite(
       shortName,
       info.schema(),
       info.options(),
-      isTruncate)
+      isTruncate,
+      false)
 
     pythonDataSourceWriter = writeInfo.writer
 

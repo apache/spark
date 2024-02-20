@@ -33,22 +33,34 @@ class PythonStreamingWrite(
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
+  private def createDataSourceFunc =
+    ds.source.createPythonFunction(
+      ds.getOrCreateDataSourceInPython(shortName, info.options(), Some(info.schema())).dataSource
+    )
+
+  private val pythonStreamingSinkCommitRunner =
+    new PythonStreamingSinkCommitRunner(createDataSourceFunc, info.schema(), isTruncate)
+
   override def createStreamingWriterFactory(
        physicalInfo: PhysicalWriteInfo): StreamingDataWriterFactory = {
     val writeInfo = ds.source.createWriteInfoInPython(
       shortName,
       info.schema(),
       info.options(),
-      isTruncate)
+      isTruncate,
+      true)
 
     pythonDataSourceWriter = writeInfo.writer
 
     new PythonStreamingWriterFactory(ds.source, writeInfo.func, info.schema(), jobArtifactUUID)
   }
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    pythonStreamingSinkCommitRunner.commitOrAbort(messages, epochId, false)
+  }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    pythonStreamingSinkCommitRunner.commitOrAbort(messages, epochId, true)
   }
 }
 

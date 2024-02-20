@@ -152,11 +152,16 @@ def main(infile: IO, outfile: IO) -> None:
         # Receive the `overwrite` flag.
         overwrite = read_bool(infile)
 
+        is_streaming = read_bool(infile)
+
         # Instantiate a data source.
         data_source = data_source_cls(options=options)  # type: ignore
 
-        # Instantiate the data source writer.
-        writer = data_source.streamWriter(schema, overwrite)
+        if is_streaming:
+            # Instantiate the data source writer.
+            writer = data_source.streamWriter(schema, overwrite)
+        else:
+            writer = data_source.writer(schema, overwrite)
 
         # Create a function that can be used in mapInArrow.
         import pyarrow as pa
