@@ -191,7 +191,7 @@
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
-    <commons-codec.version>1.16.0</commons-codec.version>
+    <commons-codec.version>1.16.1</commons-codec.version>
     <commons-compress.version>1.25.0</commons-compress.version>
     <commons-io.version>2.15.1</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
@@ -208,7 +208,7 @@
       Because it transitions Jakarta REST API from javax to jakarta package.
     -->
     <jersey.version>2.41</jersey.version>
-    <joda.version>2.12.6</joda.version>
+    <joda.version>2.12.7</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -412,7 +412,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-4-11_${scala.binary.version}</artifactId>
+      <artifactId>mockito-5-8_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1156,7 +1156,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-4-11_${scala.binary.version}</artifactId>
+        <artifactId>mockito-5-8_${scala.binary.version}</artifactId>
         <version>3.2.17.0</version>
         <scope>test</scope>
       </dependency>
@@ -1175,25 +1175,19 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>4.11.0</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.mockito</groupId>
-        <artifactId>mockito-inline</artifactId>
-        <version>4.11.0</version>
+        <version>5.8.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.14.5</version>
+        <version>1.14.10</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.5</version>
+        <version>1.14.10</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -3777,7 +3771,7 @@
     <profile>
       <id>sparkr</id>
     </profile>
-    <!-- use org.openlabtesting.leveldbjni on aarch64 platform -->
+    <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
     <profile>
       <id>aarch64</id>
       <properties>
@@ -3786,6 +3780,18 @@
       <activation>
         <os>
           <family>linux</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+    </profile>
+    <profile>
+      <id>applesilicon</id>
+      <properties>
+        <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest,org.apache.spark.tags.ExtendedLevelDBTest</test.default.exclude.tags>
+      </properties>
+      <activation>
+        <os>
+          <family>mac</family>
           <arch>aarch64</arch>
         </os>
       </activation>

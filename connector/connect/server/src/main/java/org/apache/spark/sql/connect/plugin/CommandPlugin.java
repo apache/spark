@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.plugin
+package org.apache.spark.sql.connect.plugin;
 
-import com.google.protobuf
-
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner;
 
 /**
  * Behavior trait for supporting extension mechanisms for the Spark Connect planner.
@@ -29,6 +27,6 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
  * handling this type it is responsible of constructing the logical expression from this object
  * and if necessary traverse it's children.
  */
-trait CommandPlugin {
-  def process(command: protobuf.Any, planner: SparkConnectPlanner): Option[Unit]
+public interface CommandPlugin {
+    boolean process(byte[] command, SparkConnectPlanner planner);
 }

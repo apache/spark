@@ -530,6 +530,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udf_profiler",
         "pyspark.sql.tests.test_udtf",
         "pyspark.sql.tests.test_utils",
+        "pyspark.sql.tests.test_resources",
     ],
 )
 

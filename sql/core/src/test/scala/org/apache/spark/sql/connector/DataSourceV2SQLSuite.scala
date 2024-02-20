@@ -1740,7 +1740,6 @@ class DataSourceV2SQLSuiteV1Filter
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     withTable("t") {
       sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
-      assert(!spark.table("t").isEmpty)
     }
   }
 

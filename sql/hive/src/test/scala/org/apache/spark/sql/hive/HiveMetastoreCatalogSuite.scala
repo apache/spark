@@ -415,4 +415,43 @@ class DataSourceWithHiveMetastoreCatalogSuite
       })
     }
   }
+
+  test("SPARK-46934: Handle special characters in struct types") {
+    withTable("t") {
+      val schema =
+        "a struct<" +
+          "`a.a`:int," +
+          "`a.b`:struct<" +
+          "  `a b b`:array<string>," +
+          "  `a b c`:map<int, string>" +
+          "  >" +
+          ">"
+      sql("CREATE TABLE t(" + schema + ")")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+    }
+  }
+
+  test("SPARK-46934: Handle special characters in struct types with CTAS") {
+    withTable("t") {
+      val schema = "`a.b` struct<`a.b.b`:array<string>, `a b c`:map<int, string>>"
+      sql("CREATE TABLE t AS " +
+        "SELECT named_struct('a.b.b', array('a'), 'a b c', map(1, 'a')) AS `a.b`")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+    }
+  }
+
+  test("SPARK-46934: Handle special characters in struct types with hive DDL") {
+    withTable("t") {
+      val schema =
+        "a struct<" +
+          "`a.a`:int," +
+          "`a.b`:struct<" +
+          "  `a.b.b`:array<string>," +
+          "  `a b c`:map<int, string>" +
+          "  >" +
+          ">"
+      sparkSession.metadataHive.runSqlHive(s"CREATE TABLE t($schema)")
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+    }
+  }
 }
