@@ -18,16 +18,12 @@
 package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
-import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
-import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StringType
 
 class CollationSuite extends QueryTest with SharedSparkSession {
   test("collate returns proper type") {
