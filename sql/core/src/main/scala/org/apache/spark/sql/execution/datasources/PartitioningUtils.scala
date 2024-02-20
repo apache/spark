@@ -577,6 +577,8 @@ object PartitioningUtils extends SQLConfHelper {
    * Checks whether a given data type can be used as a partition column.
    */
   def canPartitionOn(dateType: DataType): Boolean = dateType match {
+    // non default collated strings should not be used as partition columns
+    // as it could lead to incorrect results
     case st: StringType => st.isDefaultCollation
     case other => other.isInstanceOf[AtomicType]
   }
