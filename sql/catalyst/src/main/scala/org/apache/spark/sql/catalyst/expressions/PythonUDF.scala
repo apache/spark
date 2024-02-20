@@ -198,6 +198,7 @@ case class PythonUDTF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDTF =
     copy(children = newChildren)
+}
 
 /**
  * Holds zero-based indexes of specific columns within a TABLE argument to a Python UDTF call,
