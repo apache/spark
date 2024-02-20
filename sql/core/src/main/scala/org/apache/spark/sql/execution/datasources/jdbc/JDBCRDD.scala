@@ -190,14 +190,11 @@ class JDBCRDD(
     // talk about a table in a completely portable way.
     var builder = dialect
       .getJdbcSQLQueryBuilder(options)
+      .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
       .withColumns(columns)
       .withSortOrders(sortOrders)
       .withLimit(limit)
       .withOffset(offset)
-
-    if (partition.isDefined) {
-      builder = builder.withPredicates(predicates, partition.get)
-    }
 
     groupByColumns.foreach { groupByKeys =>
       builder = builder.withGroupByColumns(groupByKeys)
