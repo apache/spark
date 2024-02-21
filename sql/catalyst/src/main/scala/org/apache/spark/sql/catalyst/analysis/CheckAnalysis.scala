@@ -567,12 +567,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case e @ (_: Union | _: SetOperation) if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
-            def ordinalNumber(i: Int): String = i match {
-              case 0 => "first"
-              case 1 => "second"
-              case 2 => "third"
-              case i => s"${i + 1}th"
-            }
+
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
               // Check the number of columns

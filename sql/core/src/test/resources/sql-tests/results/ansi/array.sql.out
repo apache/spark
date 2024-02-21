@@ -134,7 +134,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"sort_array(array(b, d), 1)\""
   },
@@ -160,7 +160,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
     "inputType" : "\"BOOLEAN\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"sort_array(array(b, d), CAST(NULL AS BOOLEAN))\""
   },
@@ -456,7 +456,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"map(a, 1, b, 2)\"",
     "inputType" : "\"MAP<STRING, INT>\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY\"",
     "sqlExpr" : "\"array_size(map(a, 1, b, 2))\""
   },
@@ -711,7 +711,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"id\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY\"",
     "sqlExpr" : "\"array_compact(id)\""
   },

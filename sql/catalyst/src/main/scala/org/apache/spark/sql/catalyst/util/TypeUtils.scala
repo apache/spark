@@ -78,7 +78,7 @@ object TypeUtils extends QueryErrorsBase {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> Seq(NumericType, AnsiIntervalType).map(toSQLType).mkString(" or "),
           "inputSql" -> toSQLExpr(input),
           "inputType" -> toSQLType(other)))

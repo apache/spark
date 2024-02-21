@@ -62,7 +62,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"stack(1.1, 1, 2, 3)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"1.1\"",
         "inputType" -> "\"DECIMAL(2,1)\"",
         "requiredType" -> "\"INT\""),
@@ -290,7 +290,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"inline(array())\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"array()\"",
         "inputType" -> "\"ARRAY<VOID>\"",
         "requiredType" -> "\"ARRAY<STRUCT>\""),

@@ -3057,7 +3057,7 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = None,
         parameters = Map(
           "sqlExpr" -> "\"abs(true)\"",
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> "\"true\"",
           "inputType" -> "\"BOOLEAN\"",
           "requiredType" ->
