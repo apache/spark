@@ -18,9 +18,10 @@
 #
 name: "Build / SparkR-only (master, 4.3.2, windows-2019)"
 
-on:
-  schedule:
-    - cron: '0 17 * * *'
+ on:
+   push:
+     branches:
+     - '**'
 
 jobs:
   build:
@@ -65,7 +66,7 @@ jobs:
         rem 2. Ideally we should check the tests related to Hive in SparkR as well (SPARK-31745).
         rem 3. setup-java installs Maven 3.8.7 but does not allow changing its version, so overwrite
         rem   Maven version as a workaround.
-        mvn -DskipTests -Psparkr -Djna.nosys=true package -Dmaven.version=3.8.7
+        mvn -DskipTests -Phive -Psparkr -Djna.nosys=true package -Dmaven.version=3.8.7
       shell: cmd
     - name: Run SparkR tests
       run: |
