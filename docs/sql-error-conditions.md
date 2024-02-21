@@ -2466,9 +2466,9 @@ For more details see [UNSUPPORTED_DESERIALIZER](sql-error-conditions-unsupported
 
 ### UNSUPPORTED_ENCODER
 
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Found unsupported encoder. Try switching to expression encoder.
+Found unsupported encoder. Try switching to an explicit expression encoder (For more information on Encoders, consult: https://spark.apache.org/docs/latest/api/java/index.html?org/apache/spark/sql/Encoder.html)
 
 ### UNSUPPORTED_EXPRESSION_GENERATED_COLUMN
 
