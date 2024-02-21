@@ -574,7 +574,7 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Install Buf
-      uses: bufbuild/buf-setup-action@v1
+      uses: bufbuild/buf-setup-action@v1.29.0-1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
     - name: Protocol Buffers Linter
