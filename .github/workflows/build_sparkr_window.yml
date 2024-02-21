@@ -19,9 +19,8 @@
 name: "Build / SparkR-only (master, 4.3.2, windows-2019)"
 
 on:
-  push:
-    branches:
-    - '**'
+  schedule:
+    - cron: '0 17 * * *'
 
 jobs:
   build:
