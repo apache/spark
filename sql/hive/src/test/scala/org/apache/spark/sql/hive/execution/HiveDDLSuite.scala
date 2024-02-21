@@ -2877,18 +2877,16 @@ class HiveDDLSuite
   }
 
   test("SPARK-47101 checks if nested column names do not include invalid characters") {
-    Seq(",", ";", "^", "\\", "/", "%").foreach { c =>
+    Seq(",", ":", ";", "^", "\\", "/", "%").foreach { c =>
       val typ = s"array<struct<`abc${c}xyz`:int>>"
       val replaced = typ.replaceAll("`", "")
       withTable("t") {
-        val msg = s"Error: : expected at the position 16 of '$replaced' but '$c' is found."
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"CREATE TABLE t (a $typ) USING hive")
           },
           errorClass = "INVALID_HIVE_COLUMN_TYPE",
           parameters = Map(
-            "detailMessage" -> msg,
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "columnName" -> "`a`",
             "columnType" -> replaced)

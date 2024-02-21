@@ -1186,7 +1186,7 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 [SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot create the table `<tableName>` having the column `<columnName>` whose type `<columnType>` contains invalid characters, detail message: `<detailMessage>`.
+Cannot create the table `<tableName>` having the column `<columnName>` whose type `<columnType>` contains invalid characters in Hive Metastore.
 
 ### INVALID_IDENTIFIER
 

@@ -1992,7 +1992,7 @@
   },
   "INVALID_HIVE_COLUMN_TYPE" : {
     "message" : [
-      "Cannot create the table <tableName> having the column <columnName> whose type <columnType> contains invalid characters, detail message: <detailMessage>"
+      "Cannot create the table <tableName> having the column <columnName> whose type <columnType> contains invalid characters in Hive Metastore."
     ],
     "sqlState" : "42K05"
   },

@@ -177,10 +177,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             throw new AnalysisException(
               errorClass = "INVALID_HIVE_COLUMN_TYPE",
               messageParameters = Map(
-                "detailMessage" -> e.getMessage,
                 "tableName" -> toSQLId(tableName.nameParts),
                 "columnName" -> toSQLId(f.name),
-                "columnType" -> f.dataType.catalogString))
+                "columnType" -> f.dataType.catalogString),
+              cause = Some(e))
         }
       }
     }
