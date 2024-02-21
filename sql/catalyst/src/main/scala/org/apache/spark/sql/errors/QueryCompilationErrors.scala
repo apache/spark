@@ -1908,8 +1908,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_DATATYPE",
-      messageParameters = Map("typeName" -> field.dataType.catalogString))
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" ->
+        "Cannot convert Spark data type ${toSQLType(field.dataType.catalogString)} to Parquet."))
   }
 
   def incompatibleViewSchemaChangeError(
