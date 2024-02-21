@@ -27,6 +27,7 @@ import javax.annotation.Nullable
 
 import scala.language.existentials
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
@@ -65,7 +66,7 @@ object CatalystTypeConverters {
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
-      case StringType => StringConverter
+      case _: StringType => StringConverter
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
@@ -174,9 +175,12 @@ object CatalystTypeConverters {
             convertedIterable += elementConverter.toCatalyst(item)
           }
           new GenericArrayData(convertedIterable.toArray)
-        case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + s"cannot be converted to an array of ${elementType.catalogString}")
+        case other => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3220",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "elementType" -> elementType.catalogString))
       }
     }
 
@@ -213,10 +217,13 @@ object CatalystTypeConverters {
       scalaValue match {
         case map: Map[_, _] => ArrayBasedMapData(map, keyFunction, valueFunction)
         case javaMap: JavaMap[_, _] => ArrayBasedMapData(javaMap, keyFunction, valueFunction)
-        case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + "cannot be converted to a map type with "
-            + s"key type (${keyType.catalogString}) and value type (${valueType.catalogString})")
+        case other => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3221",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "keyType" -> keyType.catalogString,
+            "valueType" -> valueType.catalogString))
       }
     }
 
@@ -263,9 +270,12 @@ object CatalystTypeConverters {
           idx += 1
         }
         new GenericInternalRow(ar)
-      case other => throw new IllegalArgumentException(
-        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to ${structType.catalogString}")
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> structType.catalogString))
     }
 
     override def toScala(row: InternalRow): Row = {
@@ -292,9 +302,12 @@ object CatalystTypeConverters {
       case utf8: UTF8String => utf8
       case chr: Char => UTF8String.fromString(chr.toString)
       case ac: Array[Char] => UTF8String.fromString(String.valueOf(ac))
-      case other => throw new IllegalArgumentException(
-        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the string type")
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> StringType.sql))
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString
@@ -306,9 +319,12 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Int = scalaValue match {
       case d: Date => DateTimeUtils.fromJavaDate(d)
       case l: LocalDate => DateTimeUtils.localDateToDays(l)
-      case other => throw new IllegalArgumentException(
-        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the ${DateType.sql} type")
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> DateType.sql))
     }
     override def toScala(catalystValue: Any): Date =
       if (catalystValue == null) null else DateTimeUtils.toJavaDate(catalystValue.asInstanceOf[Int])
@@ -331,9 +347,12 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Long = scalaValue match {
       case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
       case i: Instant => DateTimeUtils.instantToMicros(i)
-      case other => throw new IllegalArgumentException(
-        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the ${TimestampType.sql} type")
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> TimestampType.sql))
     }
     override def toScala(catalystValue: Any): Timestamp =
       if (catalystValue == null) null
@@ -356,9 +375,12 @@ object CatalystTypeConverters {
     extends CatalystTypeConverter[Any, LocalDateTime, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
-      case other => throw new IllegalArgumentException(
-        s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the ${TimestampNTZType.sql} type")
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> TimestampNTZType.sql))
     }
 
     override def toScala(catalystValue: Any): LocalDateTime =
@@ -380,9 +402,12 @@ object CatalystTypeConverters {
         case d: JavaBigDecimal => Decimal(d)
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
-        case other => throw new IllegalArgumentException(
-          s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-            + s"cannot be converted to ${dataType.catalogString}")
+        case other => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          messageParameters = scala.collection.immutable.Map(
+            "other" -> other.toString,
+            "otherClass" -> other.getClass.getCanonicalName,
+            "dataType" -> dataType.catalogString))
       }
       decimal.toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow)
     }

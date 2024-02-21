@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import java.util.Map;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
@@ -67,13 +68,14 @@ final class BufferHolder {
    */
   void grow(int neededSize) {
     if (neededSize < 0) {
-      throw new IllegalArgumentException(
-        "Cannot grow BufferHolder by size " + neededSize + " because the size is negative");
+      throw new SparkIllegalArgumentException(
+        "_LEGACY_ERROR_TEMP_3198",
+        Map.of("neededSize", String.valueOf(neededSize)));
     }
     if (neededSize > ARRAY_MAX - totalSize()) {
-      throw new IllegalArgumentException(
-        "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
-          "exceeds size limitation " + ARRAY_MAX);
+      throw new SparkIllegalArgumentException(
+        "_LEGACY_ERROR_TEMP_3199",
+        Map.of("neededSize", String.valueOf(neededSize), "arrayMax", String.valueOf(ARRAY_MAX)));
     }
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {

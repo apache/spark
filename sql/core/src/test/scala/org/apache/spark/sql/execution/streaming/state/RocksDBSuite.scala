@@ -29,7 +29,7 @@ import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
@@ -689,6 +689,41 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDB: Unsupported Operations" +
+    " with Changelog Checkpointing") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val changelogWriter = fileManager.getChangeLogWriter(1)
+
+    val ex1 = intercept[SparkUnsupportedOperationException] {
+      changelogWriter.put("a", "1", "testColFamily")
+    }
+
+    checkError(
+      ex1,
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Put",
+        "entity" -> "changelog writer v1"
+      ),
+      matchPVals = true
+    )
+    val ex2 = intercept[SparkUnsupportedOperationException] {
+      changelogWriter.delete("a", "testColFamily")
+    }
+
+    checkError(
+      ex2,
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Delete",
+        "entity" -> "changelog writer v1"
+      ),
+      matchPVals = true
+    )
+  }
+
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
@@ -725,6 +760,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     (1 to 5).foreach { i =>
       changelogWriter.put(i.toString, i.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
     }
+    (1 to 5).foreach { i =>
+      changelogWriter.merge(i.toString, i.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
 
     (2 to 4).foreach { j =>
       changelogWriter.delete(j.toString, StateStore.DEFAULT_COL_FAMILY_NAME)
@@ -735,6 +773,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
+    } ++ (1 to 5).map { i =>
+      (RecordType.MERGE_RECORD, i.toString.getBytes,
         i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes,
@@ -757,9 +798,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val changelogWriter = fileManager.getChangeLogWriter(1, true)
     (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString, testColFamily1))
+    (1 to 5).foreach(i => changelogWriter.merge(i.toString, i.toString, testColFamily1))
     (2 to 4).foreach(j => changelogWriter.delete(j.toString, testColFamily1))
 
     (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString, testColFamily2))
+    (1 to 5).foreach(i => changelogWriter.merge(i.toString, i.toString, testColFamily2))
     (2 to 4).foreach(j => changelogWriter.delete(j.toString, testColFamily2))
 
     changelogWriter.commit()
@@ -768,6 +811,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val expectedEntriesForColFamily1 = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes,
         i.toString.getBytes, testColFamily1)
+    } ++ (1 to 5).map { i =>
+      (RecordType.MERGE_RECORD, i.toString.getBytes,
+        i.toString.getBytes, testColFamily1)
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes,
         null, testColFamily1)
@@ -775,6 +821,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
     val expectedEntriesForColFamily2 = (1 to 5).map { i =>
       (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, testColFamily2)
+    } ++ (1 to 5).map { i =>
+      (RecordType.MERGE_RECORD, i.toString.getBytes,
         i.toString.getBytes, testColFamily2)
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes,
@@ -807,6 +856,76 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, Nil, -1)
     } finally {
       Utils.deleteRecursively(dfsRootDir)
+    }
+  }
+
+  test("ensure merge operation is not supported if column families is not enabled") {
+    withTempDir { dir =>
+      val remoteDir = Utils.createTempDir().toString
+      val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      withDB(remoteDir, conf = conf, useColumnFamilies = false) { db =>
+        db.load(0)
+        db.put("a", "1")
+        intercept[RuntimeException](
+          db.merge("a", "2")
+        )
+      }
+    }
+  }
+
+  test("RocksDB: ensure merge operation correctness") {
+    withTempDir { dir =>
+      val remoteDir = Utils.createTempDir().toString
+      // minDeltasForSnapshot being 5 ensures that only changelog files are created
+      // for the 3 commits below
+      val conf = dbConf.copy(minDeltasForSnapshot = 5, compactOnCommit = false)
+      new File(remoteDir).delete() // to make sure that the directory gets created
+      withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
+        db.load(0)
+        db.createColFamilyIfAbsent("cf1")
+        db.createColFamilyIfAbsent("cf2")
+        db.put("a", "1", "cf1")
+        db.merge("a", "2", "cf1")
+        db.put("a", "3", "cf2")
+        db.commit()
+
+        db.load(1)
+        db.put("a", "2")
+        db.merge("a", "3", "cf1")
+        db.merge("a", "4", "cf2")
+        db.commit()
+
+        db.load(2)
+        db.remove("a", "cf1")
+        db.merge("a", "5")
+        db.merge("a", "6", "cf2")
+        db.commit()
+
+        db.load(1)
+        assert(new String(db.get("a", "cf1")) === "1,2")
+        assert(new String(db.get("a", "cf2")) === "3")
+        assert(db.get("a") === null)
+        assert(db.iterator("cf1").map(toStr).toSet === Set(("a", "1,2")))
+        assert(db.iterator("cf2").map(toStr).toSet === Set(("a", "3")))
+        assert(db.iterator().isEmpty)
+
+        db.load(2)
+        assert(new String(db.get("a", "cf1")) === "1,2,3")
+        assert(new String(db.get("a", "cf2")) === "3,4")
+        assert(new String(db.get("a")) === "2")
+        assert(db.iterator("cf1").map(toStr).toSet === Set(("a", "1,2,3")))
+        assert(db.iterator("cf2").map(toStr).toSet === Set(("a", "3,4")))
+        assert(db.iterator().map(toStr).toSet === Set(("a", "2")))
+
+        db.load(3)
+        assert(db.get("a", "cf1") === null)
+        assert(new String(db.get("a", "cf2")) === "3,4,6")
+        assert(new String(db.get("a")) === "2,5")
+        assert(db.iterator("cf1").isEmpty)
+        assert(db.iterator("cf2").map(toStr).toSet === Set(("a", "3,4,6")))
+        assert(db.iterator().map(toStr).toSet === Set(("a", "2,5")))
+      }
     }
   }
 

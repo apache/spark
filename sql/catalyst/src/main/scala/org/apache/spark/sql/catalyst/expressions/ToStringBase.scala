@@ -162,7 +162,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
     case _: DecimalType if useDecimalPlainString =>
       acceptAny[Decimal](d => UTF8String.fromString(d.toPlainString))
-    case StringType => identity
+    case _: StringType => identity
     case _ => o => UTF8String.fromString(o.toString)
   }
 
@@ -257,7 +257,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       // notation if an exponent is needed.
       case _: DecimalType if useDecimalPlainString =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
-      case StringType =>
+      case _: StringType =>
         (c, evPrim) => code"$evPrim = $c;"
       case _ =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"

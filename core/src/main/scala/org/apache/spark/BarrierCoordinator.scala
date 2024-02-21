@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import java.util.{Timer, TimerTask}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.TimerTask
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.function.Consumer
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
@@ -26,6 +26,7 @@ import scala.collection.mutable.{ArrayBuffer, HashSet}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerStageCompleted}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * For each barrier stage attempt, only at most one barrier() call can be active at any time, thus
@@ -51,7 +52,8 @@ private[spark] class BarrierCoordinator(
 
   // TODO SPARK-25030 Create a Timer() in the mainClass submitted to SparkSubmit makes it unable to
   // fetch result, we shall fix the issue.
-  private lazy val timer = new Timer("BarrierCoordinator barrier epoch increment timer")
+  private lazy val timer = ThreadUtils.newSingleThreadScheduledExecutor(
+    "BarrierCoordinator barrier epoch increment timer")
 
   // Listen to StageCompleted event, clear corresponding ContextBarrierState.
   private val listener = new SparkListener {
@@ -77,6 +79,7 @@ private[spark] class BarrierCoordinator(
       states.forEachValue(1, clearStateConsumer)
       states.clear()
       listenerBus.removeListener(listener)
+      ThreadUtils.shutdown(timer)
     } finally {
       super.onStop()
     }
@@ -168,7 +171,7 @@ private[spark] class BarrierCoordinator(
         // we may timeout for the sync.
         if (requesters.isEmpty) {
           initTimerTask(this)
-          timer.schedule(timerTask, timeoutInSecs * 1000)
+          timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS)
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester

@@ -723,12 +723,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Strategy to convert [[TransformWithState]] logical operator to physical operator
    * in streaming plans.
    */
-  object TransformWithStateStrategy extends Strategy {
+  object StreamingTransformWithStateStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
         dataAttributes, statefulProcessor, timeoutMode, outputMode,
-        outputAttr, child) =>
+        keyEncoder, outputAttr, child) =>
         val execPlan = TransformWithStateExec(
           keyDeserializer,
           valueDeserializer,
@@ -737,6 +737,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           statefulProcessor,
           timeoutMode,
           outputMode,
+          keyEncoder,
           outputAttr,
           stateInfo = None,
           batchTimestampMs = None,
@@ -866,10 +867,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.FlatMapCoGroupsInArrowExec(
           f.leftAttributes, f.rightAttributes,
           func, output, planLater(left), planLater(right)) :: Nil
-      case logical.MapInPandas(func, output, child, isBarrier) =>
-        execution.python.MapInPandasExec(func, output, planLater(child), isBarrier) :: Nil
-      case logical.MapInArrow(func, output, child, isBarrier) =>
-        execution.python.MapInArrowExec(func, output, planLater(child), isBarrier) :: Nil
+      case logical.MapInPandas(func, output, child, isBarrier, profile) =>
+        execution.python.MapInPandasExec(func, output, planLater(child), isBarrier, profile) :: Nil
+      case logical.MapInArrow(func, output, child, isBarrier, profile) =>
+        execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
@@ -891,6 +892,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
+      case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
+          dataAttributes, statefulProcessor, timeoutMode, outputMode, keyEncoder,
+          outputObjAttr, child) =>
+        TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
+          groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
+          keyEncoder, outputObjAttr, planLater(child)) :: Nil
+
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
         throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3176")

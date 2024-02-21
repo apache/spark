@@ -577,6 +577,7 @@ object TransformWithState {
       timeoutMode: TimeoutMode,
       outputMode: OutputMode,
       child: LogicalPlan): LogicalPlan = {
+    val keyEncoder = encoderFor[K]
     val mapped = new TransformWithState(
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
@@ -585,6 +586,7 @@ object TransformWithState {
       statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
       timeoutMode,
       outputMode,
+      keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
       CatalystSerde.generateObjAttr[U],
       child
     )
@@ -600,6 +602,7 @@ case class TransformWithState(
     statefulProcessor: StatefulProcessor[Any, Any, Any],
     timeoutMode: TimeoutMode,
     outputMode: OutputMode,
+    keyEncoder: ExpressionEncoder[Any],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
 

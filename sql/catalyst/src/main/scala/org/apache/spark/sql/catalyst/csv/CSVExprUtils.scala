@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.csv
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkIllegalArgumentException
+
 object CSVExprUtils {
 
   /**
@@ -69,14 +71,11 @@ object CSVExprUtils {
    * handles some Java escaped strings and throws exception if given string is longer than one
    * character.
    */
-  @throws[IllegalArgumentException]
+  @throws[SparkIllegalArgumentException]
   def toChar(str: String): Char = {
     (str: Seq[Char]) match {
-      case Seq() => throw new IllegalArgumentException("Delimiter cannot be empty string")
-      case Seq('\\') =>
-        throw new IllegalArgumentException("Single backslash is prohibited." +
-          " It has special meaning as beginning of an escape sequence." +
-          " To get the backslash character, pass a string with two backslashes as the delimiter.")
+      case Seq() => throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3247")
+      case Seq('\\') => throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3248")
       case Seq(c) => c
       case Seq('\\', 't') => '\t'
       case Seq('\\', 'r') => '\r'
@@ -88,9 +87,11 @@ object CSVExprUtils {
       case Seq('\\', '\\') => '\\'
       case _ if str == "\u0000" => '\u0000'
       case Seq('\\', _) =>
-        throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3236", messageParameters = Map("str" -> str))
       case _ =>
-        throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3237", messageParameters = Map("str" -> str))
     }
   }
 
@@ -109,12 +110,9 @@ object CSVExprUtils {
    * </li><li>`.\t.` will result in a dot, then tab, then dot as the separator character sequence
    * </li> </ul>
    *
-   * @param str
-   *   the string representing the sequence of separator characters
-   * @return
-   *   a [[String]] representing the multi-character delimiter
-   * @throws IllegalArgumentException
-   *   if any of the individual input chunks are illegal
+   * @param str the string representing the sequence of separator characters
+   * @return a [[String]] representing the multi-character delimiter
+   * @throws SparkIllegalArgumentException if any of the individual input chunks are illegal
    */
   def toDelimiterStr(str: String): String = {
     var idx = 0

@@ -251,6 +251,12 @@
 
     <!-- Profiles that disable inclusion of certain dependencies. -->
     <profile>
+      <id>derby-provided</id>
+      <properties>
+        <derby.deps.scope>provided</derby.deps.scope>
+      </properties>
+    </profile>
+    <profile>
       <id>hadoop-provided</id>
       <properties>
         <hadoop.deps.scope>provided</hadoop.deps.scope>

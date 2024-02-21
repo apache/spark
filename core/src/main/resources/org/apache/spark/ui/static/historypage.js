@@ -17,7 +17,7 @@
 
 /* global $, Mustache, jQuery, uiRoot */
 
-import {formatDuration, formatTimeMillis} from "./utils.js";
+import {formatDuration, formatTimeMillis, stringAbbreviate} from "./utils.js";
 
 export {setAppLimit};
 
@@ -186,9 +186,13 @@ $(document).ready(function() {
             name: 'appId',
             type: "appid-numeric",
             data: 'id',
-            render:  (id, type, row) => `<span title="${id}"><a href="${row.attemptUrl}">${id}</a></span>`
+            render: (id, type, row) => `<span title="${id}"><a href="${row.attemptUrl}">${id}</a></span>`
           },
-          {name: 'appName', data: 'name' },
+          {
+            name: 'appName',
+            data: 'name',
+            render: (name) => stringAbbreviate(name, 60)
+          },
           {
             name: attemptIdColumnName,
             data: 'attemptId',
@@ -200,7 +204,7 @@ $(document).ready(function() {
             name: durationColumnName,
             type: "title-numeric",
             data: 'duration',
-            render:  (id, type, row) => `<span title="${row.durationMillisec}">${row.duration}</span>`
+            render: (id, type, row) => `<span title="${row.durationMillisec}">${row.duration}</span>`
           },
           {name: 'user', data: 'sparkUser' },
           {name: 'lastUpdated', data: 'lastUpdated' },

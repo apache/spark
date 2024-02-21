@@ -1319,14 +1319,14 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorClass(
       Filter(EqualTo(a, ScalarSubquery(t2.select(sum(c)).where(star("t1") === b))), t1),
       expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Filter")
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `equalto`")
     )
 
     // SELECT * FROM t1 JOIN t2 ON (EXISTS (SELECT 1 FROM t2 WHERE t1.* = b))
     assertAnalysisErrorClass(
       t1.join(t2, condition = Some(Exists(t2.select(1).where(star("t1") === b)))),
       expectedErrorClass = "INVALID_USAGE_OF_STAR_OR_REGEX",
-      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "Filter")
+      expectedMessageParameters = Map("elem" -> "'*'", "prettyName" -> "expression `equalto`")
     )
   }
 

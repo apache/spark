@@ -65,7 +65,8 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
     id = stateStoreId
   }
 
@@ -1622,6 +1623,10 @@ object StateStoreTestsHelper {
 
   def put(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
     store.put(dataToKeyRow(key1, key2), dataToValueRow(value))
+  }
+
+  def merge(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
+    store.merge(dataToKeyRow(key1, key2), dataToValueRow(value))
   }
 
   def get(store: ReadStateStore, key1: String, key2: Int): Option[Int] = {
