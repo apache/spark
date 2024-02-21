@@ -20,8 +20,9 @@
 name: "Build"
 
 on:
-  schedule:
-    - cron: '0 20 * * *'
+  push:
+    branches:
+    - '**'
 
 jobs:
   call-build-and-test:

@@ -20,9 +20,8 @@
 name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, macos-14)"
 
 on:
-  push:
-    branches:
-    - '**'
+  schedule:
+    - cron: '0 20 * * *'
 
 jobs:
   run-build:
@@ -32,4 +31,4 @@ jobs:
     uses: ./.github/workflows/maven_test.yml
     with:
       java: 21
-      os: macos-14-large
+      os: macos-14
