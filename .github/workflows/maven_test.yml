@@ -177,14 +177,15 @@ jobs:
           python3.11 -m pip list
       - name: Create a custom shell
         run: |
-          mkdir ~/custom_scripts
+          mkdir custom_scripts
           echo '#!/bin/bash' > ~/custom_script
-          echo 'script -q -e -c "bash $1" || bash -e $1' >> ~/custom_scripts/custom_script
-          chmod 755 ~/custom_scripts/custom_script
+          echo 'script -q -e -c "bash $1" || bash -e $1' >> custom_scripts/custom_script
+          chmod 755 custom_scripts/custom_script
+          export PATH="$(pwd -P)/custom_scripts":$PATH
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         # The command script takes different options ubuntu vs macos-14, see also SPARK-47095.
-        shell: "~/custom_scripts/custom_script ${0}"
+        shell: "custom_script ${0}"
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
           export TERM=vt100
