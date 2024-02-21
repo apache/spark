@@ -68,7 +68,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
-from pyspark.sql.profile import Profile
+from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
