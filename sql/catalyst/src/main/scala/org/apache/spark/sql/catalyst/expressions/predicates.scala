@@ -1322,7 +1322,8 @@ case class InWithBroadcastVar(
   @transient private lazy val inset: java.util.Set[Object] = this.bcVar.getKeysAsSet()
 
   @transient private lazy val catalystToScalaConverter: Any => Any =
-    if (CatalystTypeConverters.isPrimitive(child.dataType)) {
+    if (CatalystTypeConverters.isPrimitive(child.dataType) ||
+      BroadcastedJoinKeysWrapper.conversionExcludedDataTypes.contains(child.dataType)) {
       null
     } else {
       CatalystTypeConverters.createToScalaConverter(child.dataType)

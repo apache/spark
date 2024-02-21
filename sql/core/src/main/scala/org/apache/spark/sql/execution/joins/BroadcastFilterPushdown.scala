@@ -373,6 +373,12 @@ class ProxyBroadcastVarAndStageIdentifier(
     s" printing:${joiningKeysData.mkString(",")}: proxy identifiers for buildleg" +
     s"=${buildLegProxyBroadcastVarAndStageIdentifiers.mkString(",")}"
 
+  lazy val hashCodeCache = {
+    Objects.hashCode(
+      this.buildLegPlan.canonicalized,
+      this.joiningKeysData,
+      this.buildLegProxyBroadcastVarAndStageIdentifiers.map(_.canonicalized))
+  }
   lazy val canonicalized: ProxyBroadcastVarAndStageIdentifier =
     new ProxyBroadcastVarAndStageIdentifier(
       buildLegPlan.canonicalized,
@@ -389,11 +395,8 @@ class ProxyBroadcastVarAndStageIdentifier(
       case _ => false
     }
 
-  override def hashCode(): Int =
-    Objects.hashCode(
-      this.buildLegPlan.canonicalized,
-      this.joiningKeysData,
-      this.buildLegProxyBroadcastVarAndStageIdentifiers.map(_.canonicalized))
+  override def hashCode(): Int = hashCodeCache
+
 }
 
 case class JoiningKeyData(

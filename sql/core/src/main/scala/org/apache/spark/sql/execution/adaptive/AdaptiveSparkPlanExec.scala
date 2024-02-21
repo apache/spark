@@ -311,8 +311,9 @@ case class AdaptiveSparkPlanExec(
       var consecutiveNoDelayedStagesFound = 0
       orphanBatchScans ++= result.orphanBatchScansWithProxyVar
       var collectOrphans = OrphanBSCollect.no_collect
-      while (!result.allChildStagesMaterialized ||
-        (consecutiveNoDelayedStagesFound < 2 && loopCount > 0)) {
+      while ((!result.allChildStagesMaterialized ||
+        (consecutiveNoDelayedStagesFound < 2 && loopCount > 0)) &&
+        this.currentPhysicalPlan.children.nonEmpty) {
         if (Utils.isTesting) {
           assertBroadcastPushPresenceInBHJ(result.newPlan)
         }
@@ -487,6 +488,11 @@ case class AdaptiveSparkPlanExec(
         postStageCreationRules(supportsColumnar),
         Some((planChangeLogger, "AQE Post Stage Creation")))
       _isFinalPlan = true
+      BroadcastHashJoinUtil
+        .getAllBatchScansForSparkPlan(currentPhysicalPlan)
+        .filter(BroadcastHashJoinUtil.isBatchScanReady).foreach(
+        _.scan.asInstanceOf[SupportsRuntimeV2Filtering].postAllBroadcastVarsPushed())
+
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
     }
@@ -604,8 +610,15 @@ case class AdaptiveSparkPlanExec(
         .filter(stageIdToBuildsideJoinKeys.contains)
         .map(id => {
           val joinLegAndKeysOpt = stageIdToBuildsideJoinKeys.get(id)
+          val bcHashedRel = allStages.getOrElse(id, context.stageCache.find(_._2.id == id)
+            .getOrElse(throw new IllegalStateException(s"Stage with id = $id not found")))
+            .asInstanceOf[BroadcastQueryStageExec]
+            .broadcast
+            .relationFuture
+            .get()
+            .asInstanceOf[Broadcast[HashedRelation]]
           val batchScansToPush = allUnreadyBatchScans.flatMap(bs => {
-            if (!identityHashMap.get(bs).contains(java.lang.Long.valueOf(id))) {
+            if (!identityHashMap.get(bs).contains(java.lang.Long.valueOf(bcHashedRel.id))) {
               val proxyVars = bs.proxyForPushedBroadcastVar.get
               proxyVars.flatMap(proxy => {
                 val buildLegPlan = proxy.buildLegPlan
@@ -637,27 +650,16 @@ case class AdaptiveSparkPlanExec(
               Seq.empty
             }
           })
-          id -> batchScansToPush
+          id -> (bcHashedRel, batchScansToPush)
         })
 
-    stagesAndBatchScanForPush.foreach { case (stageId, data) =>
+    stagesAndBatchScanForPush.foreach { case (stageId, (bcHashedRel, data)) =>
       if (data.nonEmpty) {
-        val hashedRelation = allStages
-          .getOrElse(
-            stageId,
-            context.stageCache
-              .find(_._2.id == stageId)
-              .getOrElse(throw new IllegalStateException(s"Stage with id = $stageId not found")))
-          .asInstanceOf[BroadcastQueryStageExec]
-          .broadcast
-          .relationFuture
-          .get()
-          .asInstanceOf[Broadcast[HashedRelation]]
         val pushData = data.map { case (bs, jkd) =>
           BroadcastHashJoinUtil.convertJoinKeyDataToPushDownData(bs, jkd)
         }
         BroadcastHashJoinUtil.pushBroadcastVar(
-          hashedRelation,
+          bcHashedRel,
           stageIdToBuildsideJoinKeys(stageId)._3,
           pushData)
       }

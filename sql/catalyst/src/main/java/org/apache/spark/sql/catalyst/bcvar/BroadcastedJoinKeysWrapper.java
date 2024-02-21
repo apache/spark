@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.bcvar;
 
+import com.google.common.collect.Sets;
 import java.io.Externalizable;
-
+import java.util.Collections;
 import java.util.Set;
 import org.apache.spark.sql.types.DataType;
-
+import org.apache.spark.sql.types.DateType$;
+import org.apache.spark.sql.types.TimestampType$;
 
 public interface BroadcastedJoinKeysWrapper extends Externalizable {
   DataType getSingleKeyDataType();
@@ -30,9 +32,7 @@ public interface BroadcastedJoinKeysWrapper extends Externalizable {
 
   long getBroadcastVarId();
 
-   int getRelativeKeyIndex();
-
-   int getTupleLength();
+   int getKeyIndex();
 
    int getTotalJoinKeys();
 
@@ -53,4 +53,7 @@ public interface BroadcastedJoinKeysWrapper extends Externalizable {
 
    long CACHE_EXPIRY = Long.parseLong(System.getProperty(CACHED_KEYS_EXPIRY_IN_SECONDS_KEY,
        CACHED_KEYS_EXPIRY_DEFAULT));
+
+  Set<DataType> conversionExcludedDataTypes =
+      Collections.unmodifiableSet(Sets.newHashSet(DateType$.MODULE$, TimestampType$.MODULE$));
 }

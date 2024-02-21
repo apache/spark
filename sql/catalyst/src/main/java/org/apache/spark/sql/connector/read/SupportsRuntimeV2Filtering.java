@@ -91,4 +91,8 @@ public interface SupportsRuntimeV2Filtering extends Scan {
   default int getPushedBroadcastFiltersCount() {
     return 0;
   }
+
+  default NamedReference[] partitionAttributes() {return new NamedReference[0];}
+
+  default void postAllBroadcastVarsPushed() {}
 }

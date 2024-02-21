@@ -18,33 +18,30 @@
 package org.apache.spark.sql.catalyst.bcvar;
 
 public interface ArrayWrapper<T> {
-  Object get(int pos);
+  T get(int pos);
 
   int getLength();
 
   boolean isOneDimensional();
 
-  T[] getBaseArray();
+  Object getBaseArray();
 
   static  ArrayWrapper<? extends Object> wrapArray(Object source, boolean is1Dimensional,
-      int relativeIndex) {
-    return is1Dimensional ? new OneDimensionArrayWrapper((Object[]) source, relativeIndex) :
-      new TwoDimensionArrayWrapper((Object[][]) source, relativeIndex);
+      int index) {
+    return is1Dimensional ? new OneDimensionArrayWrapper((Object[]) source) :
+      new TwoDimensionArrayWrapper((Object[][]) source, index);
   }
 }
 
-class OneDimensionArrayWrapper implements ArrayWrapper<Object> {
+class OneDimensionArrayWrapper<T> implements ArrayWrapper<T> {
   private final Object[] base;
-  private final int relativeIndex;
-
-  OneDimensionArrayWrapper(Object[] base, int relativeIndex) {
+  OneDimensionArrayWrapper(Object[] base) {
     this.base = base;
-    this.relativeIndex = relativeIndex;
   }
 
   @Override
-  public Object get(int pos) {
-    return this.base[pos];
+  public T get(int pos) {
+    return (T)this.base[pos];
   }
 
   @Override
@@ -63,18 +60,18 @@ class OneDimensionArrayWrapper implements ArrayWrapper<Object> {
   }
 }
 
-class TwoDimensionArrayWrapper implements ArrayWrapper<Object[]> {
+class TwoDimensionArrayWrapper<T> implements ArrayWrapper<T> {
   private final Object[][] base;
-  private final int relativeIndex;
+  private final int index;
 
-  TwoDimensionArrayWrapper(Object[][] base, int relativeIndex) {
+  TwoDimensionArrayWrapper(Object[][] base, int index) {
     this.base = base;
-    this.relativeIndex = relativeIndex;
+    this.index = index;
   }
 
   @Override
-  public Object get(int pos) {
-    return this.base[pos][this.relativeIndex];
+  public T get(int pos) {
+    return (T)this.base[pos][this.index];
   }
 
   @Override

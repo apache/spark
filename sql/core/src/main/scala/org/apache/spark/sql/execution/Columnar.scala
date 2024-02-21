@@ -218,13 +218,13 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
       val sr = batchScanOpt.get.scan.asInstanceOf[SupportsRuntimeV2Filtering]
       val allAttribs = sr.allAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
       val partitionColNames =
-        sr.filterAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
+        sr.partitionAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
       val nonPartitionAttribs = batchScanOpt.get.proxyForPushedBroadcastVar
         .fold(Seq.empty[String])(pds =>
           pds
             .flatMap(pd => pd.joiningKeysData.map(jkd => jkd.streamsideLeafJoinAttribIndex))
             .map(allAttribs(_)))
-        .filterNot(name => partitionColNames.exists(_ == name))
+        .filterNot(name => partitionColNames.contains(name))
       if (nonPartitionAttribs.nonEmpty) {
         this.logWarning(
           "Proxy for pushed broadcast var found, but no pushed filter data " +
@@ -256,9 +256,9 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
 
         val allPushedBCvar = sr.getPushedBroadcastFilters.asScala
         val partitionColNames =
-          sr.filterAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
+          sr.partitionAttributes().map(BroadcastHashJoinUtil.convertNameReferencesToString)
         // identify non partition filters
-        allPushedBCvar.filterNot(pd => partitionColNames.exists(_ == pd.columnName))
+        allPushedBCvar.filterNot(pd => partitionColNames.contains(pd.columnName))
       })
       .getOrElse(Seq.empty)
     (batchScanOpt, pushedBroadcastFilters.toSeq)

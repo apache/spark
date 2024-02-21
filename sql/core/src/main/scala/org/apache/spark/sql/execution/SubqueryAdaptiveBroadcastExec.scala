@@ -46,7 +46,7 @@ case class SubqueryAdaptiveBroadcastExec(
 
   protected override def doCanonicalize(): SparkPlan = {
     val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
-    SubqueryBroadcastExec(name = "dpp", index = index, buildKeys = keys,
+    SubqueryBroadcastExec(name = "dpp", indices = indices, buildKeys = keys,
       child = child.canonicalized)
   }
 

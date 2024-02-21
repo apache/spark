@@ -121,7 +121,6 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   def close(): Unit
 
   /**
-   * @param reusableLocation
    * @param key
    * @return
    */
@@ -224,24 +223,15 @@ private[execution] class ValueRowWithKeyIndex {
 private[joins] class UnsafeHashedRelation(
     private var numKeys: Int,
     private var numFields: Int,
-    private var binaryMap: BytesToBytesMap,
-    private var isForSingleThreadUse: Boolean = false)
+    private var binaryMap: BytesToBytesMap)
   extends HashedRelation with Externalizable with KryoSerializable {
-
-  @transient
-  private var (locationLookUpVar, lastLookedKey) = if (isForSingleThreadUse) {
-    val map = this.binaryMap
-    new map.Location -> new UnsafeRow(numFields)
-  } else {
-    (null, null)
-  }
 
   private[joins] def this() = this(0, 0, null)  // Needed for serialization
 
   override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
 
   override def asReadOnlyCopy(): UnsafeHashedRelation = {
-    new UnsafeHashedRelation(numKeys, numFields, binaryMap, isForSingleThreadUse)
+    new UnsafeHashedRelation(numKeys, numFields, binaryMap)
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
@@ -254,22 +244,10 @@ private[joins] class UnsafeHashedRelation(
 
   override def get(key: InternalRow): Iterator[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
-    val map = binaryMap // avoid the compiler error
-    val singleThreadUse = this.isForSingleThreadUse
-    val loc = if (singleThreadUse) {
-      val lastK = this.lastLookedKey
-      val temp = this.locationLookUpVar
-      if (lastK.eq(null) || !lastK.equals(unsafeKey)) {
-        binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-          unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
-      }
-      temp
-    } else {
-      val temp = new map.Location // this could be allocated in stack
-      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
-      temp
-    }
+    val map = binaryMap  // avoid the compiler error
+    val loc = new map.Location  // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       new Iterator[UnsafeRow] {
         private var _hasNext = true
@@ -287,22 +265,10 @@ private[joins] class UnsafeHashedRelation(
 
   def getValue(key: InternalRow): InternalRow = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
-    val map = binaryMap // avoid the compiler error
-    val singleThreadUse = this.isForSingleThreadUse
-    val loc = if (singleThreadUse) {
-      val lastK = this.lastLookedKey
-      val temp = this.locationLookUpVar
-      if (lastK.eq(null) || !lastK.equals(unsafeKey)) {
-        binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-          unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
-      }
-      temp
-    } else {
-      val temp = new map.Location // this could be allocated in stack
-      binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, temp, unsafeKey.hashCode())
-      temp
-    }
+    val map = binaryMap  // avoid the compiler error
+    val loc = new map.Location  // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       resultRow
@@ -313,36 +279,19 @@ private[joins] class UnsafeHashedRelation(
 
   override def containsKey(key: InternalRow): Boolean = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
-    val singleThreadUse = isForSingleThreadUse
     val map = binaryMap // avoid the compiler error
-    val loc = if (singleThreadUse) {
-      this.locationLookUpVar
-    } else {
-      new map.Location // this could be allocated in stack
-    }
+    val loc = new map.Location
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset, unsafeKey.getSizeInBytes,
       loc, unsafeKey.hashCode())
-    if (singleThreadUse) {
-      if (loc.isDefined) {
-        var temp = this.lastLookedKey
-        if (temp.eq(null)) {
-          temp = new UnsafeRow(this.numFields)
-          this.lastLookedKey = temp
-        }
-        temp.copyFrom(unsafeKey)
-      } else {
-        this.lastLookedKey = null
-      }
-    }
     loc.isDefined
   }
 
   override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]
-    val map = binaryMap // avoid the compiler error
-    val loc = new map.Location // this could be allocated in stack
-    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset, unsafeKey.getSizeInBytes,
-      loc, unsafeKey.hashCode())
+    val map = binaryMap  // avoid the compiler error
+    val loc = new map.Location  // this could be allocated in stack
+    binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
+      unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
       valueRowWithKeyIndex.withNewKeyIndex(loc.getKeyIndex)
       new Iterator[ValueRowWithKeyIndex] {
@@ -421,21 +370,19 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    write(out.writeInt, out.writeLong, out.writeBoolean, out.write)
+    write(out.writeInt, out.writeLong, out.write)
   }
 
   override def write(kryo: Kryo, out: Output): Unit = Utils.tryOrIOException {
-    write(out.writeInt, out.writeLong, out.writeBoolean, out.write)
+    write(out.writeInt, out.writeLong, out.write)
   }
 
   private def write(
-      writeInt: (Int) => Unit,
-      writeLong: (Long) => Unit,
-      writeBoolean: (Boolean) => Unit,
+      writeInt: Int => Unit,
+      writeLong: Long => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
     writeInt(numKeys)
     writeInt(numFields)
-    writeBoolean(isForSingleThreadUse)
     // TODO: move these into BytesToBytesMap
     writeLong(binaryMap.numKeys())
     writeLong(binaryMap.numValues())
@@ -461,17 +408,15 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    read(() => in.readInt(), () => in.readLong(), () => in.readBoolean(), in.readFully)
+    read(() => in.readInt(), () => in.readLong(), in.readFully)
   }
 
   private def read(
       readInt: () => Int,
       readLong: () => Long,
-      readBoolean: () => Boolean,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     numKeys = readInt()
     numFields = readInt()
-    this.isForSingleThreadUse = readBoolean()
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
     val nValues = readLong()
@@ -521,15 +466,10 @@ private[joins] class UnsafeHashedRelation(
       }
       i += 1
     }
-    if (isForSingleThreadUse) {
-      val map = binaryMap
-      this.locationLookUpVar = new map.Location
-      this.lastLookedKey = new UnsafeRow(numFields)
-    }
   }
 
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
-    read(() => in.readInt(), () => in.readLong(), () => in.readBoolean(), in.readBytes)
+    read(() => in.readInt(), () => in.readLong(), in.readBytes)
   }
 }
 
@@ -564,7 +504,8 @@ private[joins] object UnsafeHashedRelation {
       if (!key.anyNull || allowsNullKey) {
         val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
         if (!(ignoresDuplicatedKey && loc.isDefined)) {
-          val success = loc.append(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+          val success = loc.append(
+            key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
             row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
           if (!success) {
             binaryMap.free()
@@ -1021,8 +962,8 @@ private[execution] final class LongToUnsafeRowMap(
   }
 
   private def write(
-      writeBoolean: (Boolean) => Unit,
-      writeLong: (Long) => Unit,
+      writeBoolean: Boolean => Unit,
+      writeLong: Long => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     writeBoolean(isDense)
     writeLong(minKey)
