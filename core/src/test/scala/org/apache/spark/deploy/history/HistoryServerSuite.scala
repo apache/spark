@@ -390,6 +390,9 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     // a new conf is used with the background thread set and running at its fastest
     // allowed refresh rate (1Hz)
     stop()
+    // Like 'init()', we need to clear the store directory of previously stopped server.
+    Utils.deleteRecursively(storeDir)
+    assert(storeDir.mkdir())
     val myConf = new SparkConf()
       .set(HISTORY_LOG_DIR, logDir.getAbsolutePath)
       .set(EVENT_LOG_DIR, logDir.getAbsolutePath)
@@ -541,7 +544,6 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     eventually(stdTimeout, stdInterval) {
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
-    val jobcount = getNumJobs("/jobs")
     assert(!isApplicationCompleted(provider.getListing().next()))
 
     listApplications(false) should contain(appId)
@@ -562,7 +564,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     listApplications(false) should not contain(appId)
 
     eventually(stdTimeout, stdInterval) {
-      assert(jobcount === getNumJobs("/jobs"))
+      assert(4 === getNumJobsRestful())
     }
 
     // no need to retain the test dir now the tests complete

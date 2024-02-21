@@ -236,12 +236,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e",
         // SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated:e",
-        // TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
-        //  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.rdd.RDDSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.scheduler.TaskSetManagerSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
@@ -1515,7 +1509,11 @@ object TestSettings {
   import BuildCommons._
   private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest",
     "org.apache.spark.deploy.k8s.integrationtest.YuniKornTag",
-    "org.apache.spark.internal.io.cloud.IntegrationTestSuite")
+    "org.apache.spark.internal.io.cloud.IntegrationTestSuite") ++
+    (if (System.getProperty("os.name").startsWith("Mac OS X") &&
+        System.getProperty("os.arch").equals("aarch64")) {
+      Seq("org.apache.spark.tags.ExtendedLevelDBTest")
+    } else Seq.empty)
 
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those

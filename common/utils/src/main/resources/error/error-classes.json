@@ -1380,6 +1380,24 @@
     ],
     "sqlState" : "42601"
   },
+  "ILLEGAL_STATE_STORE_VALUE" : {
+    "message" : [
+      "Illegal value provided to the State Store"
+    ],
+    "subClass" : {
+      "EMPTY_LIST_VALUE" : {
+        "message" : [
+          "Cannot write empty list values to State Store for StateName <stateName>."
+        ]
+      },
+      "NULL_VALUE" : {
+        "message" : [
+          "Cannot write null values to State Store for StateName <stateName>."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
@@ -1757,6 +1775,19 @@
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
     ],
     "sqlState" : "42000"
+  },
+  "INVALID_CONF_VALUE" : {
+    "message" : [
+      "The value '<confValue>' in the config \"<confName>\" is invalid."
+    ],
+    "subClass" : {
+      "TIME_ZONE" : {
+        "message" : [
+          "Cannot resolve the given timezone."
+        ]
+      }
+    },
+    "sqlState" : "22022"
   },
   "INVALID_CURSOR" : {
     "message" : [
@@ -3363,6 +3394,13 @@
       "'<optionName>' must be specified."
     ],
     "sqlState" : "42601"
+  },
+  "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
+    "message" : [
+      "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.",
+      "Stateful operators in the metadata: [<OpsInMetadataSeq>]; Stateful operators in current batch: [<OpsInCurBatchSeq>]."
+    ],
+    "sqlState" : "42K03"
   },
   "STREAM_FAILED" : {
     "message" : [
@@ -7765,6 +7803,76 @@
   "_LEGACY_ERROR_TEMP_3248" : {
     "message" : [
       "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3249" : {
+    "message" : [
+      "Failed to convert value <value> (class of <valueClass>}) with the type of <dataType> to JSON."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3250" : {
+    "message" : [
+      "Failed to convert the JSON string '<other>' to a field."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3251" : {
+    "message" : [
+      "Failed to convert the JSON string '<other>' to a data type."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3252" : {
+    "message" : [
+      "<name> does not exist. Available: <fieldNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3253" : {
+    "message" : [
+      "<nonExistFields> do(es) not exist. Available: <fieldNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3254" : {
+    "message" : [
+      "<name> does not exist. Available: <fieldNames>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3255" : {
+    "message" : [
+      "Error parsing '<input>' to interval, <msg>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3256" : {
+    "message" : [
+      "Unrecognized datetime pattern: <pattern>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3257" : {
+    "message" : [
+      "All week-based patterns are unsupported since Spark 3.0, detected: <c>, Please use the SQL function EXTRACT instead"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3258" : {
+    "message" : [
+      "Illegal pattern character: <c>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3259" : {
+    "message" : [
+      "Too many pattern letters: <style>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3260" : {
+    "message" : [
+      "'<s>' is an invalid timestamp"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3261" : {
+    "message" : [
+      "Unknown output mode <outputMode>. Accepted output modes are 'append', 'complete', 'update'"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3262" : {
+    "message" : [
+      "Doesn't support month or year interval: <interval>"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

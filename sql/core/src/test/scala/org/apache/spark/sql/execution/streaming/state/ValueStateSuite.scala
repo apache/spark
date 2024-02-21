@@ -140,7 +140,7 @@ class ValueStateSuite extends SharedSparkSession
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
-      testState.remove()
+      testState.clear()
       assert(!testState.exists())
       assert(testState.get() === null)
 
@@ -150,7 +150,7 @@ class ValueStateSuite extends SharedSparkSession
       testState.update(123)
       assert(testState.get() === 123)
 
-      testState.remove()
+      testState.clear()
       assert(!testState.exists())
       assert(testState.get() === null)
     }
@@ -167,13 +167,13 @@ class ValueStateSuite extends SharedSparkSession
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)
-      testState1.remove()
+      testState1.clear()
       assert(!testState1.exists())
       assert(testState1.get() === null)
 
       testState2.update(456)
       assert(testState2.get() === 456)
-      testState2.remove()
+      testState2.clear()
       assert(!testState2.exists())
       assert(testState2.get() === null)
 
@@ -189,11 +189,11 @@ class ValueStateSuite extends SharedSparkSession
       testState2.update(456)
       assert(testState2.get() === 456)
 
-      testState1.remove()
+      testState1.clear()
       assert(!testState1.exists())
       assert(testState1.get() === null)
 
-      testState2.remove()
+      testState2.clear()
       assert(!testState2.exists())
       assert(testState2.get() === null)
     }

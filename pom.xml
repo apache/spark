@@ -179,7 +179,7 @@
     <!-- don't upgrade scala-maven-plugin to version 4.7.2 or higher, see SPARK-45144 for details -->
     <scala-maven-plugin.version>4.7.1</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
-    <versions-maven-plugin.version>2.16.0</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.16.2</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -191,8 +191,8 @@
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
-    <commons-codec.version>1.16.0</commons-codec.version>
-    <commons-compress.version>1.25.0</commons-compress.version>
+    <commons-codec.version>1.16.1</commons-codec.version>
+    <commons-compress.version>1.26.0</commons-compress.version>
     <commons-io.version>2.15.1</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
@@ -208,13 +208,13 @@
       Because it transitions Jakarta REST API from javax to jakarta package.
     -->
     <jersey.version>2.41</jersey.version>
-    <joda.version>2.12.6</joda.version>
+    <joda.version>2.12.7</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.12.1</selenium.version>
+    <selenium.version>4.17.0</selenium.version>
     <htmlunit3-driver.version>4.17.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
@@ -222,8 +222,8 @@
     <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
-    <netty.version>4.1.106.Final</netty.version>
-    <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
+    <netty.version>4.1.107.Final</netty.version>
+    <netty-tcnative.version>2.0.62.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
     <!--
     If you are changing Arrow version specification, please check
@@ -266,6 +266,7 @@
       during compilation if the dependency is transitive (e.g. "graphx/" depending on "core/" and
       needing Hadoop classes in the classpath to compile).
     -->
+    <derby.deps.scope>compile</derby.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>2.8.1</hive.storage.version>
@@ -411,12 +412,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-4-11_${scala.binary.version}</artifactId>
+      <artifactId>mockito-5-10_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-12_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -936,11 +937,13 @@
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
         <version>${derby.version}</version>
+        <scope>${derby.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derbytools</artifactId>
         <version>${derby.version}</version>
+        <scope>${derby.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>io.dropwizard.metrics</groupId>
@@ -1142,25 +1145,25 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.17</version>
+        <version>3.2.18</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
-        <version>3.2.17.0</version>
+        <version>3.2.18.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-4-11_${scala.binary.version}</artifactId>
-        <version>3.2.17.0</version>
+        <artifactId>mockito-5-10_${scala.binary.version}</artifactId>
+        <version>3.2.18.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-12_${scala.binary.version}</artifactId>
-        <version>3.2.17.0</version>
+        <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
+        <version>3.2.18.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1172,25 +1175,19 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>4.11.0</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.mockito</groupId>
-        <artifactId>mockito-inline</artifactId>
-        <version>4.11.0</version>
+        <version>5.10.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.14.5</version>
+        <version>1.14.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.5</version>
+        <version>1.14.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1258,7 +1255,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.7.0</version>
+        <version>42.7.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2852,7 +2849,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.3.0</version>
+          <version>3.4.1</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -2993,14 +2990,6 @@
               <!-- SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3. -->
               <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated:e</arg>
               <!--
-                TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
-                  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
-              -->
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.rdd.RDDSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.scheduler.TaskSetManagerSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s</arg>
-              <!--
                 SPARK-35574 Prevent the recurrence of compilation warnings related to
                 `procedure syntax is deprecated`
               -->
@@ -3035,7 +3024,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.11.0</version>
+          <version>3.12.1</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -3052,7 +3041,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.1.2</version>
+          <version>3.2.5</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -3189,7 +3178,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-clean-plugin</artifactId>
-          <version>3.3.1</version>
+          <version>3.3.2</version>
           <configuration>
             <filesets>
               <fileset>
@@ -3216,7 +3205,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.5.0</version>
+          <version>3.6.3</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -3272,7 +3261,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.5.0</version>
+          <version>3.5.1</version>
           <dependencies>
             <dependency>
               <groupId>org.ow2.asm</groupId>
@@ -3299,7 +3288,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.6.0</version>
+          <version>3.6.1</version>
           <executions>
             <execution>
               <id>default-cli</id>
@@ -3439,7 +3428,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.3.0</version>
+        <version>3.3.1</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
@@ -3760,6 +3749,9 @@
       </properties>
     </profile>
     <profile>
+      <id>derby-provided</id>
+    </profile>
+    <profile>
       <id>hive-provided</id>
     </profile>
     <profile>
@@ -3771,7 +3763,7 @@
     <profile>
       <id>sparkr</id>
     </profile>
-    <!-- use org.openlabtesting.leveldbjni on aarch64 platform -->
+    <!-- use org.openlabtesting.leveldbjni on aarch64 platform except MacOS -->
     <profile>
       <id>aarch64</id>
       <properties>
@@ -3780,6 +3772,18 @@
       <activation>
         <os>
           <family>linux</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+    </profile>
+    <profile>
+      <id>applesilicon</id>
+      <properties>
+        <test.default.exclude.tags>org.apache.spark.tags.ChromeUITest,org.apache.spark.tags.ExtendedLevelDBTest</test.default.exclude.tags>
+      </properties>
+      <activation>
+        <os>
+          <family>mac</family>
           <arch>aarch64</arch>
         </os>
       </activation>

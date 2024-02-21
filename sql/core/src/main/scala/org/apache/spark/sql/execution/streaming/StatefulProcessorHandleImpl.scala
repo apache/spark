@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -181,5 +181,12 @@ class StatefulProcessorHandleImpl(
 
   def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {
     timerState.getTimerRow(keyRow)
+  }
+
+  override def getListState[T](stateName: String): ListState[T] = {
+    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
+      "initialization is complete")
+    val resultState = new ListStateImpl[T](store, stateName, keyEncoder)
+    resultState
   }
 }

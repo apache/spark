@@ -208,11 +208,11 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.transform(extension, this))
+      .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .get()
   }
 
   private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
@@ -549,13 +549,15 @@ class SparkConnectPlanner(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
-              isBarrier)
+              isBarrier,
+              None)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
             logical.MapInArrow(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
-              isBarrier)
+              isBarrier,
+              None)
           case _ =>
             throw InvalidPlanInput(
               s"Function with EvalType: ${pythonUdf.evalType} is not supported")
@@ -1471,11 +1473,11 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.transform(extension, this))
+      .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .get
   }
 
   /**
@@ -2711,10 +2713,9 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.process(extension, this))
+      .map(p => p.process(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_ == true)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
     executeHolder.eventsManager.postFinished()
   }

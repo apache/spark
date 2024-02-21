@@ -481,8 +481,8 @@ class DayTimeIntervalType(AnsiIntervalType):
                 error_class="INVALID_INTERVAL_CASTING",
                 message_parameters={"start_field": str(startField), "end_field": str(endField)},
             )
-        self.startField = cast(int, startField)
-        self.endField = cast(int, endField)
+        self.startField = startField
+        self.endField = endField
 
     def _str_repr(self) -> str:
         fields = DayTimeIntervalType._fields
@@ -539,8 +539,8 @@ class YearMonthIntervalType(AnsiIntervalType):
                 error_class="INVALID_INTERVAL_CASTING",
                 message_parameters={"start_field": str(startField), "end_field": str(endField)},
             )
-        self.startField = cast(int, startField)
-        self.endField = cast(int, endField)
+        self.startField = startField
+        self.endField = endField
 
     def _str_repr(self) -> str:
         fields = YearMonthIntervalType._fields
@@ -1863,9 +1863,9 @@ def _infer_schema(
 
     elif isinstance(row, (tuple, list)):
         if hasattr(row, "__fields__"):  # Row
-            items = zip(row.__fields__, tuple(row))  # type: ignore[union-attr]
+            items = zip(row.__fields__, tuple(row))
         elif hasattr(row, "_fields"):  # namedtuple
-            items = zip(row._fields, tuple(row))  # type: ignore[union-attr]
+            items = zip(row._fields, tuple(row))
         else:
             if names is None:
                 names = ["_%d" % i for i in range(1, len(row) + 1)]
@@ -2196,9 +2196,16 @@ def _make_type_verifier(
             if nullable:
                 return True
             else:
+                if name is not None:
+                    raise PySparkValueError(
+                        error_class="FIELD_NOT_NULLABLE_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                        },
+                    )
                 raise PySparkValueError(
-                    error_class="CANNOT_BE_NONE",
-                    message_parameters={"arg_name": "obj"},
+                    error_class="FIELD_NOT_NULLABLE",
+                    message_parameters={},
                 )
         else:
             return False
@@ -2213,12 +2220,22 @@ def _make_type_verifier(
     def verify_acceptable_types(obj: Any) -> None:
         # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
+            if name is not None:
+                raise PySparkTypeError(
+                    error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+                    message_parameters={
+                        "field_name": str(name),
+                        "data_type": str(dataType),
+                        "obj": repr(obj),
+                        "obj_type": str(type(obj)),
+                    },
+                )
             raise PySparkTypeError(
-                error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
+                error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
                 message_parameters={
                     "data_type": str(dataType),
-                    "obj_name": str(obj),
-                    "obj_type": type(obj).__name__,
+                    "obj": repr(obj),
+                    "obj_type": str(type(obj)),
                 },
             )
 
@@ -2232,11 +2249,20 @@ def _make_type_verifier(
 
         def verify_udf(obj: Any) -> None:
             if not (hasattr(obj, "__UDT__") and obj.__UDT__ == dataType):
+                if name is not None:
+                    raise PySparkValueError(
+                        error_class="FIELD_TYPE_MISMATCH_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                            "obj": str(obj),
+                            "data_type": str(dataType),
+                        },
+                    )
                 raise PySparkValueError(
-                    error_class="NOT_INSTANCE_OF",
+                    error_class="FIELD_TYPE_MISMATCH",
                     message_parameters={
-                        "value": str(obj),
-                        "type": str(dataType),
+                        "obj": str(obj),
+                        "data_type": str(dataType),
                     },
                 )
             verifier(dataType.toInternal(obj))
@@ -2248,13 +2274,15 @@ def _make_type_verifier(
         def verify_byte(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if obj < -128 or obj > 127:
+            lower_bound = -128
+            upper_bound = 127
+            if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
-                        "lower_bound": "127",
-                        "upper_bound": "-127",
+                        "lower_bound": str(lower_bound),
+                        "upper_bound": str(upper_bound),
                         "actual": str(obj),
                     },
                 )
@@ -2266,13 +2294,15 @@ def _make_type_verifier(
         def verify_short(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if obj < -32768 or obj > 32767:
+            lower_bound = -32768
+            upper_bound = 32767
+            if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
-                        "lower_bound": "32767",
-                        "upper_bound": "-32768",
+                        "lower_bound": str(lower_bound),
+                        "upper_bound": str(upper_bound),
                         "actual": str(obj),
                     },
                 )
@@ -2284,13 +2314,15 @@ def _make_type_verifier(
         def verify_integer(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if obj < -2147483648 or obj > 2147483647:
+            lower_bound = -2147483648
+            upper_bound = 2147483647
+            if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
-                        "lower_bound": "2147483647",
-                        "upper_bound": "-2147483648",
+                        "lower_bound": str(lower_bound),
+                        "upper_bound": str(upper_bound),
                         "actual": str(obj),
                     },
                 )
@@ -2302,13 +2334,15 @@ def _make_type_verifier(
         def verify_long(obj: Any) -> None:
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if obj < -9223372036854775808 or obj > 9223372036854775807:
+            lower_bound = -9223372036854775808
+            upper_bound = 9223372036854775807
+            if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUND",
+                    error_class="VALUE_OUT_OF_BOUNDS",
                     message_parameters={
                         "arg_name": "obj",
-                        "lower_bound": "9223372036854775807",
-                        "upper_bound": "-9223372036854775808",
+                        "lower_bound": str(lower_bound),
+                        "upper_bound": str(upper_bound),
                         "actual": str(obj),
                     },
                 )
@@ -2357,13 +2391,20 @@ def _make_type_verifier(
                     verifier(obj.get(f))
             elif isinstance(obj, (tuple, list)):
                 if len(obj) != len(verifiers):
+                    if name is not None:
+                        raise PySparkValueError(
+                            error_class="FIELD_STRUCT_LENGTH_MISMATCH_WITH_NAME",
+                            message_parameters={
+                                "field_name": str(name),
+                                "object_length": str(len(obj)),
+                                "field_length": str(len(verifiers)),
+                            },
+                        )
                     raise PySparkValueError(
-                        error_class="LENGTH_SHOULD_BE_THE_SAME",
+                        error_class="FIELD_STRUCT_LENGTH_MISMATCH",
                         message_parameters={
-                            "arg1": "obj",
-                            "arg2": "fields",
-                            "arg1_length": str(len(obj)),
-                            "arg2_length": str(len(verifiers)),
+                            "object_length": str(len(obj)),
+                            "field_length": str(len(verifiers)),
                         },
                     )
                 for v, (_, verifier) in zip(obj, verifiers):
@@ -2373,12 +2414,22 @@ def _make_type_verifier(
                 for f, verifier in verifiers:
                     verifier(d.get(f))
             else:
+                if name is not None:
+                    raise PySparkTypeError(
+                        error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+                        message_parameters={
+                            "field_name": str(name),
+                            "data_type": str(dataType),
+                            "obj": repr(obj),
+                            "obj_type": str(type(obj)),
+                        },
+                    )
                 raise PySparkTypeError(
-                    error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
+                    error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
                     message_parameters={
-                        "data_type": "StructType",
-                        "obj_name": str(obj),
-                        "obj_type": type(obj).__name__,
+                        "data_type": str(dataType),
+                        "obj": repr(obj),
+                        "obj_type": str(type(obj)),
                     },
                 )
 

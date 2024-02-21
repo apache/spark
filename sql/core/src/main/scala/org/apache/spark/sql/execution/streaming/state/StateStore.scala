@@ -69,6 +69,17 @@ trait ReadStateStore {
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
+   * Provides an iterator containing all values of a non-null key. If key does not exist,
+   * an empty iterator is returned. Implementations should make sure to return an empty
+   * iterator if the key does not exist.
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def valuesIterator(key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRow]
+
+  /**
    * Return an iterator containing all the key-value pairs which are matched with
    * the given prefix key.
    *
@@ -119,6 +130,7 @@ trait StateStore extends ReadStateStore {
       keySchema: StructType,
       numColsPrefixKey: Int,
       valueSchema: StructType,
+      useMultipleValuesPerKey: Boolean = false,
       isInternal: Boolean = false): Unit
 
   /**
@@ -135,6 +147,16 @@ trait StateStore extends ReadStateStore {
    */
   def remove(
       key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Merges the provided value with existing values of a non-null key. If a existing
+   * value does not exist, this operation behaves as [[StateStore.put()]].
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def merge(key: UnsafeRow, value: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
@@ -188,6 +210,10 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def prefixScan(prefixKey: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] =
     store.prefixScan(prefixKey, colFamilyName)
+
+  override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+    store.valuesIterator(key, colFamilyName)
+  }
 }
 
 /**
@@ -297,6 +323,8 @@ trait StateStoreProvider {
    *                          families
    * @param storeConfs Configurations used by the StateStores
    * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
+   * @param useMultipleValuesPerKey Whether the underlying state store needs to support multiple
+   *                                values for a single key.
    */
   def init(
       stateStoreId: StateStoreId,
@@ -305,7 +333,8 @@ trait StateStoreProvider {
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
-      hadoopConf: Configuration): Unit
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit
 
   /**
    * Return the id of the StateStores this provider will generate.
@@ -359,10 +388,11 @@ object StateStoreProvider {
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): StateStoreProvider = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
     provider.init(providerId.storeId, keySchema, valueSchema, numColsPrefixKey,
-      useColumnFamilies, storeConf, hadoopConf)
+      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     provider
   }
 
@@ -555,12 +585,13 @@ object StateStore extends Logging {
       version: Long,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): ReadStateStore = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): ReadStateStore = {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf)
+      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     storeProvider.getReadStore(version)
   }
 
@@ -573,12 +604,13 @@ object StateStore extends Logging {
       version: Long,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): StateStore = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): StateStore = {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf)
+      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     storeProvider.getStore(version)
   }
 
@@ -589,7 +621,8 @@ object StateStore extends Logging {
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): StateStoreProvider = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
 
@@ -623,7 +656,7 @@ object StateStore extends Logging {
           storeProviderId,
           StateStoreProvider.createAndInit(
             storeProviderId, keySchema, valueSchema, numColsPrefixKey,
-            useColumnFamilies, storeConf, hadoopConf)
+            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
         )
       }
 

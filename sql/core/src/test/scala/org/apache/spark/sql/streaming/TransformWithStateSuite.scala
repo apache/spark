@@ -49,7 +49,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
-      _countState.remove()
+      _countState.clear()
       Iterator.empty
     } else {
       _countState.update(count)
@@ -65,7 +65,7 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
   private def handleProcessingTimeBasedTimers(
       key: String,
       expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _countState.remove()
+    _countState.clear()
     Iterator((key, "-1"))
   }
 
@@ -86,7 +86,7 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
 
       val count = currCount + 1
       if (count == 3) {
-        _countState.remove()
+        _countState.clear()
         Iterator.empty
       } else {
         _countState.update(count)
@@ -111,7 +111,7 @@ class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
   private def handleProcessingTimeBasedTimers(
       key: String,
       expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _timerState.remove()
+    _timerState.clear()
     Iterator((key, "-1"))
   }
 
@@ -166,7 +166,7 @@ class MaxEventTimeStatefulProcessor
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
     val timeoutDelaySec = 5
     if (expiredTimerInfo.isValid()) {
-      _maxEventTimeState.remove()
+      _maxEventTimeState.clear()
       Iterator((key, -1))
     } else {
       val valuesSeq = inputRows.toSeq

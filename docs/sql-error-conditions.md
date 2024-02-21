@@ -864,6 +864,14 @@ Sketches have different `lgConfigK` values: `<left>` and `<right>`. Set the `all
 
 `<identifier>` is not a valid identifier as it has more than 2 name parts.
 
+### [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Illegal value provided to the State Store
+
+For more details see [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
+
 ### INCOMPARABLE_PIVOT_COLUMN
 
 [SQLSTATE: 42818](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1079,6 +1087,14 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
+
+### [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-value-error-class.html)
+
+[SQLSTATE: 22022](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The value '`<confValue>`' in the config "`<confName>`" is invalid.
+
+For more details see [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-value-error-class.html)
 
 ### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
@@ -2122,6 +2138,13 @@ The checkpoint seems to be only run with older Spark version(s). Run the streami
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 '`<optionName>`' must be specified.
+
+### STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.
+Stateful operators in the metadata: [`<OpsInMetadataSeq>`]; Stateful operators in current batch: [`<OpsInCurBatchSeq>`].
 
 ### STREAM_FAILED
 

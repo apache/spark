@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.time.ZoneOffset
 import java.util.{Locale, TimeZone}
-import javax.ws.rs.core.UriBuilder
 
 import scala.jdk.CollectionConverters._
 
@@ -42,6 +41,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.StringType
+import org.apache.spark.util.Utils.getUriBuilder
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -862,7 +862,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           throw QueryParsingErrors.unsupportedLocalFileSchemeError(ctx, pathScheme)
         case _ =>
           // force scheme to be file rather than fs.default.name
-          val loc = Some(UriBuilder.fromUri(CatalogUtils.stringToURI(path)).scheme("file").build())
+          val loc = Some(getUriBuilder(CatalogUtils.stringToURI(path)).scheme("file").build())
           storage = storage.copy(locationUri = loc)
       }
     }
