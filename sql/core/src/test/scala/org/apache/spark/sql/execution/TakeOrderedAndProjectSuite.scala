@@ -128,7 +128,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
     }
   }
 
-  test("non-deterministic_issue") {
+  test("SPARK-47104: Non-deterministic expressions in projection") {
     val expected = (input: SparkPlan) => {
       GlobalLimitExec(limit,
         LocalLimitExec(limit,
@@ -140,16 +140,24 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
         Row(2, 3, 0.5234194256885571d),
         Row(3, 4, 0.7604953758285915d)), 1)
     val df = spark.createDataFrame(rdd, schema)
-    df.show()
-    // val projection = df.queryExecution.sparkPlan.output ++ Seq(Alias(Uuid(Some(0)), "_uuid")())
     val projection = df.queryExecution.sparkPlan.output.take(2) :+
       Alias(Rand(Literal(0, IntegerType)), "_uuid")()
+
+    // test executeCollect
     checkThatPlansAgree(
       df,
       input =>
         TakeOrderedAndProjectExec(limit, sortOrder, projection,
           SortExec(sortOrder, false, input)),
+      input => expected(input),
+      sortAnswers = false)
 
+    // test doExecute
+    checkThatPlansAgree(
+      df,
+      input =>
+        noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, projection,
+          SortExec(sortOrder, false, input))),
       input => expected(input),
       sortAnswers = false)
   }
