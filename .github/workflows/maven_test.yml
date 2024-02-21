@@ -177,7 +177,6 @@ jobs:
           python3.11 -m pip list
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
-        shell: 'script -q -e ${0}'
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
           export TERM=vt100
