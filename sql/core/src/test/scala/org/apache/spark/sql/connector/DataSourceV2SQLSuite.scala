@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
-import org.apache.spark.sql.catalyst.util.{CollationFactory, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
@@ -289,37 +289,6 @@ class DataSourceV2SQLSuiteV1Filter
         .loadTable(Identifier.of(Array("default"), "t2")).asInstanceOf[V1Table]
       // Spark should set the default provider as DEFAULT_DATA_SOURCE_NAME for the session catalog.
       assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
-    }
-  }
-
-  test("create v2 table with collation column") {
-    val tableName = "testcat.table_name"
-    val collationName = "UCS_BASIC_LCASE"
-    val collationId = CollationFactory.collationNameToId(collationName)
-
-    withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TABLE $tableName (c1 string COLLATE '$collationName')
-           |USING $v2Source
-           |""".stripMargin)
-
-      val testCatalog = catalog("testcat").asTableCatalog
-      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
-
-      assert(table.name == tableName)
-      assert(table.partitioning.isEmpty)
-      assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
-      assert(table.columns().head.dataType() == StringType(collationId))
-
-      val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
-
-      sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
-
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
-        Seq(Row(collationName)))
-      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
     }
   }
 

@@ -18,14 +18,20 @@
 package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.types.StringType
 
-class CollationSuite extends QueryTest with SharedSparkSession {
+class CollationSuite extends DatasourceV2SQLBase {
+  protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+
   test("collate returns proper type") {
     Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
       checkAnswer(sql(s"select 'aaa' collate '$collationName'"), Row("aaa"))
@@ -250,6 +256,37 @@ class CollationSuite extends QueryTest with SharedSparkSession {
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName WHERE c2 IS NOT NULL"),
         Seq(Row(collationName)))
       assert(sql(s"select c2 FROM $tableName").schema.head.dataType == StringType(collationId))
+    }
+  }
+
+  test("create v2 table with collation column") {
+    val tableName = "testcat.table_name"
+    val collationName = "UCS_BASIC_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 string COLLATE '$collationName')
+           |USING $v2Source
+           |""".stripMargin)
+
+      val testCatalog = catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+
+      assert(table.name == tableName)
+      assert(table.partitioning.isEmpty)
+      assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
+      assert(table.columns().head.dataType() == StringType(collationId))
+
+      val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+
+      sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
+
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
+        Seq(Row(collationName)))
+      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
     }
   }
 }
