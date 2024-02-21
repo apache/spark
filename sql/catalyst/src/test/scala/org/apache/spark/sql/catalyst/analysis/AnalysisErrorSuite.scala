@@ -162,7 +162,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL)\"",
-      "paramIndex" -> "1",
+      "paramIndex" -> "first",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -174,7 +174,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
-      "paramIndex" -> "2",
+      "paramIndex" -> "second",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -186,7 +186,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
-      "paramIndex" -> "1",
+      "paramIndex" -> "first",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -389,7 +389,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"nth_value(b, true)\"",
-      "paramIndex" -> "2",
+      "paramIndex" -> "second",
       "inputSql" -> "\"true\"",
       "inputType" -> "\"BOOLEAN\"",
       "requiredType" -> "\"INT\""))
@@ -1198,7 +1198,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         expectedMessageParameters = Map(
           "sqlExpr" -> sqlExpr,
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> inputSql,
           "inputType" -> inputType,
           "requiredType" -> "(\"INT\" or \"BIGINT\")"),

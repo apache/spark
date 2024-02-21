@@ -117,7 +117,3 @@ The following SQLSTATEs are collated from:
 - Oracle 12 (last published)
 - SQL Server
 - Redshift
-
-## Extra
-
-- Use `ordinalNumber` to uniformly set the value of `paramIndex`(0-based) for the error class `UNEXPECTED_INPUT_TYPE`.
