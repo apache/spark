@@ -83,6 +83,7 @@ jobs:
             java: ${{ inputs.java }}
             hadoop: ${{ inputs.hadoop }}
             hive: hive2.3
+            # TODO(SPARK-47110): Reenble AmmoniteTest tests in Maven builds
             excluded-tags: org.apache.spark.tags.AmmoniteTest
             comment: ""
           # Hive tests
@@ -183,10 +184,6 @@ jobs:
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         run: |
-          # Fix for TTY related issues when launching the Ammonite REPL in tests.
-          export TERM=vt100
-          # `set -e` to make the exit status as expected due to use `script -q -e -c` to run the commands
-          set -e
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
