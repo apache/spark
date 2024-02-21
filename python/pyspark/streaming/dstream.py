@@ -800,9 +800,7 @@ class DStream(Generic[T_co]):
                 b = b.reduceByKey(func, numPartitions)
                 joined = a.leftOuterJoin(b, numPartitions)
                 return joined.mapValues(
-                    lambda kv: invFunc(kv[0], kv[1])  # type: ignore[misc]
-                    if kv[1] is not None
-                    else kv[0]
+                    lambda kv: invFunc(kv[0], kv[1]) if kv[1] is not None else kv[0]
                 )
 
             jreduceFunc = TransformFunction(self._sc, reduceFunc, reduced._jrdd_deserializer)
@@ -849,7 +847,7 @@ class DStream(Generic[T_co]):
             if a is None:
                 g = b.groupByKey(numPartitions).mapValues(lambda vs: (list(vs), None))
             else:
-                g = a.cogroup(b.partitionBy(cast(int, numPartitions)), numPartitions)
+                g = a.cogroup(b.partitionBy(numPartitions), numPartitions)
                 g = g.mapValues(lambda ab: (list(ab[1]), list(ab[0])[0] if len(ab[0]) else None))
             state = g.mapValues(lambda vs_s: updateFunc(vs_s[0], vs_s[1]))
             return state.filter(lambda k_v: k_v[1] is not None)

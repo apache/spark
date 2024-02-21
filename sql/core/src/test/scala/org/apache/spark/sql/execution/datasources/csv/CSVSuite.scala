@@ -29,7 +29,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.Properties
 
 import com.univocity.parsers.common.TextParsingException
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -56,6 +55,7 @@ abstract class CSVSuite
   override protected def dataSourceFormat = "csv"
 
   protected val carsFile = "test-data/cars.csv"
+  protected val productsFile = "test-data/products.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"
   private val carsFile8859 = "test-data/cars_iso-8859-1.csv"
   private val carsTsvFile = "test-data/cars.tsv"
@@ -363,7 +363,7 @@ abstract class CSVSuite
 
   test("test for FAILFAST parsing mode") {
     Seq(false, true).foreach { multiLine =>
-      val exception = intercept[SparkException] {
+      val e1 = intercept[SparkException] {
         spark.read
           .format("csv")
           .option("multiLine", multiLine)
@@ -371,9 +371,11 @@ abstract class CSVSuite
           .load(testFile(carsFile))
           .collect()
       }
-
+      assert(e1.getErrorClass == "FAILED_READ_FILE")
+      val e2 = e1.getCause.asInstanceOf[SparkException]
+      assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
       checkError(
-        exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+        exception = e2.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "MALFORMED_CSV_RECORD",
         parameters = Map("badRecord" -> "2015,Chevy,Volt"))
     }
@@ -1247,13 +1249,15 @@ abstract class CSVSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
-        val err = intercept[SparkException] {
+        val ex = intercept[SparkException] {
           exp.write.format("csv").option("timestampNTZFormat", pattern).save(path.getAbsolutePath)
         }
+        assert(ex.getErrorClass == "TASK_WRITE_FAILED")
+        val msg = ex.getCause.getMessage
         assert(
-          err.getMessage.contains("Unsupported field: OffsetSeconds") ||
-            err.getMessage.contains("Unable to extract value") ||
-            err.getMessage.contains("Unable to extract ZoneId"))
+          msg.contains("Unsupported field: OffsetSeconds") ||
+          msg.contains("Unable to extract value") ||
+          msg.contains("Unable to extract ZoneId"))
       }
     }
   }
@@ -1473,8 +1477,8 @@ abstract class CSVSuite
         val e = intercept[SparkException] {
           spark.read.csv(inputFile.toURI.toString).collect()
         }
-        assert(e.getCause.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
         val e2 = intercept[SparkException] {
           spark.read.option("multiLine", true).csv(inputFile.toURI.toString).collect()
         }
@@ -1495,11 +1499,10 @@ abstract class CSVSuite
       val df = spark.read.option("multiLine", true).csv(csvPath.toString)
       fs.delete(csvPath, true)
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        val e = intercept[SparkException] {
+        val e = intercept[SparkFileNotFoundException] {
           df.collect()
         }
-        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
-        assert(e.getCause.getMessage.contains(".csv does not exist"))
+        assert(e.getMessage.contains(".csv does not exist"))
       }
 
       sampledTestData.write.csv(csvPath.toString)
@@ -1651,7 +1654,7 @@ abstract class CSVSuite
         .csv(Seq("10u12").toDS())
         .collect()
     }
-    assert(exception.getMessage.contains("""input string: "10u12""""))
+    assert(exception.getCause.getMessage.contains("""input string: "10u12""""))
 
     val count = spark.read
       .schema("a FLOAT")
@@ -1912,7 +1915,8 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(exception.getMessage.contains("CSV header does not conform to the schema"))
+        assert(exception.getErrorClass == "FAILED_READ_FILE")
+        assert(exception.getCause.getMessage.contains("CSV header does not conform to the schema"))
 
         val shortSchema = new StructType().add("f1", DoubleType)
         val exceptionForShortSchema = intercept[SparkException] {
@@ -1924,9 +1928,9 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(
-          exceptionForShortSchema.getMessage.contains(
-            "Number of column in CSV header is not equal to number of fields in the schema"))
+        assert(exception.getErrorClass == "FAILED_READ_FILE")
+        assert(exceptionForShortSchema.getCause.getMessage.contains(
+          "Number of column in CSV header is not equal to number of fields in the schema"))
 
         val longSchema = new StructType()
           .add("f1", DoubleType)
@@ -1942,7 +1946,9 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(exceptionForLongSchema.getMessage.contains("Header length: 2, schema size: 3"))
+        assert(exceptionForLongSchema.getErrorClass == "FAILED_READ_FILE")
+        assert(exceptionForLongSchema.getCause.getMessage.contains(
+          "Header length: 2, schema size: 3"))
 
         val caseSensitiveSchema = new StructType().add("F1", DoubleType).add("f2", DoubleType)
         val caseSensitiveException = intercept[SparkException] {
@@ -1954,8 +1960,9 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(
-          caseSensitiveException.getMessage.contains("CSV header does not conform to the schema"))
+        assert(caseSensitiveException.getErrorClass == "FAILED_READ_FILE")
+        assert(caseSensitiveException.getCause.getMessage.contains(
+          "CSV header does not conform to the schema"))
       }
     }
   }
@@ -2676,9 +2683,9 @@ abstract class CSVSuite
       .schema("t timestamp")
       .csv(ds)
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
-      val msg = intercept[SparkException] {
+      val msg = intercept[SparkUpgradeException] {
         csv.collect()
-      }.getCause.getMessage
+      }.getMessage
       assert(msg.contains("Fail to parse"))
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
@@ -3041,10 +3048,9 @@ abstract class CSVSuite
           Row(1, null, null),
           Row(2, Date.valueOf("2020-12-03"), Timestamp.valueOf("2020-12-03 00:00:00"))))
 
-      val err = intercept[SparkException] {
+      intercept[SparkUpgradeException] {
         check("exception", Nil)
-      }.getCause
-      assert(err.isInstanceOf[SparkUpgradeException])
+      }
     }
   }
 
@@ -3275,6 +3281,43 @@ abstract class CSVSuite
       }
     }
   }
+
+  test("SPARK-46890: CSV fails on a column with default and without enforcing schema") {
+    withTable("CarsTable") {
+      spark.sql(
+        s"""
+           |CREATE TABLE CarsTable(
+           |  year INT,
+           |  make STRING,
+           |  model STRING,
+           |  comment STRING DEFAULT '',
+           |  blank STRING DEFAULT '')
+           |USING csv
+           |OPTIONS (
+           |  header "true",
+           |  inferSchema "false",
+           |  enforceSchema "false",
+           |  path "${testFile(carsFile)}"
+           |)
+       """.stripMargin)
+      val expected = Seq(
+        Row("No comment"),
+        Row("Go get one now they are going fast"))
+      checkAnswer(
+        sql("SELECT comment FROM CarsTable WHERE year < 2014"),
+        expected)
+      checkAnswer(
+        spark.read.format("csv")
+          .options(Map(
+            "header" -> "true",
+            "inferSchema" -> "true",
+            "enforceSchema" -> "false"))
+          .load(testFile(carsFile))
+          .select("comment")
+          .where("year < 2014"),
+        expected)
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -3284,7 +3327,7 @@ class CSVv1Suite extends CSVSuite {
 
   test("test for FAILFAST parsing mode on CSV v1") {
     Seq(false, true).foreach { multiLine =>
-      val exception = intercept[SparkException] {
+      val ex = intercept[SparkException] {
         spark.read
           .format("csv")
           .option("multiLine", multiLine)
@@ -3292,9 +3335,9 @@ class CSVv1Suite extends CSVSuite {
           .load(testFile(carsFile))
           .collect()
       }
-
+      assert(ex.getErrorClass == "FAILED_READ_FILE")
       checkError(
-        exception = exception.getCause.asInstanceOf[SparkException],
+        exception = ex.getCause.asInstanceOf[SparkException],
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters =
           Map("badRecord" -> "[2015,Chevy,Volt,null,null]", "failFastMode" -> "FAILFAST"))
@@ -3309,18 +3352,15 @@ class CSVv2Suite extends CSVSuite {
 
   test("test for FAILFAST parsing mode on CSV v2") {
     Seq(false, true).foreach { multiLine =>
-      val exception = intercept[SparkException] {
-        spark.read
-          .format("csv")
-          .option("multiLine", multiLine)
-          .options(Map("header" -> "true", "mode" -> "failfast"))
-          .load(testFile(carsFile))
-          .collect()
-      }
-
       checkError(
-        exception = exception.getCause.asInstanceOf[SparkException],
-        errorClass = "_LEGACY_ERROR_TEMP_2064",
+        exception = intercept[SparkException] {
+          spark.read
+            .format("csv")
+            .option("multiLine", multiLine)
+            .options(Map("header" -> "true", "mode" -> "failfast"))
+            .load(testFile(carsFile)).collect()
+        },
+        errorClass = "FAILED_READ_FILE",
         parameters = Map("path" -> s".*$carsFile"),
         matchPVals = true)
     }

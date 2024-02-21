@@ -571,7 +571,7 @@ SparkR supports the following machine learning algorithms currently:
 #### Frequent Pattern Mining
 
 * [`spark.fpGrowth`](api/R/reference/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
-* [`spark.prefixSpan`](api/R/reference/spark.prefixSpan.html) : [`PrefixSpan`](ml-frequent-pattern-mining.html#prefixSpan)
+* [`spark.prefixSpan`](api/R/reference/spark.prefixSpan.html) : [`PrefixSpan`](ml-frequent-pattern-mining.html#prefixspan)
 
 #### Statistics
 

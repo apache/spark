@@ -439,7 +439,9 @@ class FractionalOps(NumericOps):
                 ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
-                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
+                field=index_ops._internal.data_fields[0].copy(
+                    dtype=dtype, spark_type=spark_type  # type: ignore[arg-type]
+                ),
             )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(np.nan))
@@ -579,7 +581,9 @@ class FractionalExtensionOps(FractionalOps):
                 ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
-                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
+                field=index_ops._internal.data_fields[0].copy(
+                    dtype=dtype, spark_type=spark_type  # type: ignore[arg-type]
+                ),
             )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(np.nan))

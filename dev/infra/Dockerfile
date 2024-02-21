@@ -91,16 +91,16 @@ RUN mkdir -p /usr/local/pypy/pypy3.8 && \
     ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
     ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas<=2.1.4' scipy coverage matplotlib lxml
+RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas<=2.2.0' scipy coverage matplotlib lxml
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=15.0.0 six==1.16.0 pandas<=2.1.4 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=15.0.0 six==1.16.0 pandas<=2.2.0 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.59.3 grpcio-status==1.59.3 protobuf==4.25.1 googleapis-common-protos==1.56.4"
 
 # Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
 RUN python3.9 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.9 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.9 -m pip install deepspeed torcheval && \
     python3.9 -m pip cache purge
 
@@ -111,7 +111,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.10 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.10 -m pip install deepspeed torcheval && \
     python3.10 -m pip cache purge
 
@@ -122,7 +122,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.11 -m pip install 'torch<=2.0.1' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.11 -m pip install deepspeed torcheval && \
     python3.11 -m pip cache purge
 
@@ -133,9 +133,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 # TODO(SPARK-46647) Add unittest-xml-reporting into Python 3.12 image when it supports Python 3.12
-# TODO(SPARK-46078) Use official one instead of nightly build when it's ready
 RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml && \
-    python3.12 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu && \
-    python3.12 -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.12 -m pip install torcheval && \
     python3.12 -m pip cache purge

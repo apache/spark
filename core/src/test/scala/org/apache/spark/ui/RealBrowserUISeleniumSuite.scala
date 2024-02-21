@@ -73,8 +73,8 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
 
         // Open DAG Viz.
         webDriver.findElement(By.id("job-dag-viz")).click()
-        val nodeDesc = webDriver.findElement(By.cssSelector("g[class='node_0 node']"))
-        nodeDesc.getAttribute("name") should include ("collect at &lt;console&gt;:25")
+        val nodeDesc = webDriver.findElement(By.cssSelector("g[id='node_0']"))
+        nodeDesc.getAttribute("innerHTML") should include ("collect at &lt;console&gt;:25")
       }
     }
   }
@@ -109,22 +109,20 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
         goToUi(sc, "/jobs/job/?id=0")
         webDriver.findElement(By.id("job-dag-viz")).click()
 
-        val stage0 = webDriver.findElement(By.cssSelector("g[id='graph_0']"))
-        val stage1 = webDriver.findElement(By.cssSelector("g[id='graph_1']"))
+        val stage0 = webDriver.findElement(By.cssSelector("g[id='graph_stage_0']"))
+          .findElement(By.xpath(".."))
+        val stage1 = webDriver.findElement(By.cssSelector("g[id='graph_stage_1']"))
+          .findElement(By.xpath(".."))
         val barrieredOps = webDriver.findElements(By.className("barrier-rdd")).iterator()
+        val id1 = barrieredOps.next().getAttribute("innerHTML")
+        val id2 = barrieredOps.next().getAttribute("innerHTML")
+        assert(!barrieredOps.hasNext())
 
-        while (barrieredOps.hasNext) {
-          val barrieredOpId = barrieredOps.next().getAttribute("innerHTML")
-          val foundInStage0 =
-            stage0.findElements(
-              By.cssSelector("g.barrier.cluster.cluster_" + barrieredOpId))
-          assert(foundInStage0.size === 1)
-
-          val foundInStage1 =
-            stage1.findElements(
-              By.cssSelector("g.barrier.cluster.cluster_" + barrieredOpId))
-          assert(foundInStage1.size === 0)
-        }
+        val prefix = "g[class='cluster barrier']#cluster_"
+        assert(stage0.findElements(By.cssSelector(s"${prefix}$id1")).size === 1)
+        assert(stage0.findElements(By.cssSelector(s"${prefix}$id2")).size === 1)
+        assert(stage1.findElements(By.cssSelector(s"${prefix}$id1")).size === 0)
+        assert(stage1.findElements(By.cssSelector(s"${prefix}$id2")).size === 1)
       }
     }
   }

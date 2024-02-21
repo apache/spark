@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types._
 
 class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -116,14 +117,22 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
     }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkExceptionInExpression[ArithmeticException](
-        UnaryMinus(Literal(Long.MinValue)), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        UnaryMinus(Literal(Int.MinValue)), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        UnaryMinus(Literal(Short.MinValue)), "overflow")
-      checkExceptionInExpression[ArithmeticException](
-        UnaryMinus(Literal(Byte.MinValue)), "overflow")
+      checkErrorInExpression[SparkArithmeticException](
+        UnaryMinus(Literal(Long.MinValue)), "ARITHMETIC_OVERFLOW",
+        Map("message" -> "long overflow", "alternative" -> "",
+          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+      checkErrorInExpression[SparkArithmeticException](
+        UnaryMinus(Literal(Int.MinValue)), "ARITHMETIC_OVERFLOW",
+        Map("message" -> "integer overflow", "alternative" -> "",
+          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+      checkErrorInExpression[SparkArithmeticException](
+        UnaryMinus(Literal(Short.MinValue)), "ARITHMETIC_OVERFLOW",
+        Map("message" -> "short overflow", "alternative" -> "",
+          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
+      checkErrorInExpression[SparkArithmeticException](
+        UnaryMinus(Literal(Byte.MinValue)), "ARITHMETIC_OVERFLOW",
+        Map("message" -> "byte overflow", "alternative" -> "",
+          "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY)))
       checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
       checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
       checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)

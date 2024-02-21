@@ -19,7 +19,7 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -278,7 +278,11 @@ class FrameReindexMixin:
         )
 
 
-class FrameReindexTests(FrameReindexMixin, ComparisonTestBase, SQLTestUtils):
+class FrameReindexTests(
+    FrameReindexMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

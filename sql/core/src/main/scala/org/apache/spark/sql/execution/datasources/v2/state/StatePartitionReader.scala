@@ -78,7 +78,7 @@ class StatePartitionReader(
 
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, numColsPrefixKey,
-      useColumnFamilies = false, storeConf, hadoopConf.value)
+      useColumnFamilies = false, storeConf, hadoopConf.value, useMultipleValuesPerKey = false)
   }
 
   private lazy val store: ReadStateStore = {

@@ -1271,13 +1271,13 @@ class DataFrameTestsMixin:
 
         # number of fields must match.
         self.assertRaisesRegex(
-            Exception, "LENGTH_SHOULD_BE_THE_SAME", lambda: rdd.toDF("key: int").collect()
+            Exception, "FIELD_STRUCT_LENGTH_MISMATCH", lambda: rdd.toDF("key: int").collect()
         )
 
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
-            "CANNOT_ACCEPT_OBJECT_IN_TYPE",
+            "FIELD_DATA_TYPE_UNACCEPTABLE",
             lambda: rdd.toDF("key: float, value: string").collect(),
         )
 

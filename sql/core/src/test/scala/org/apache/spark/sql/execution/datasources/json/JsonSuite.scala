@@ -1068,15 +1068,14 @@ abstract class JsonSuite
     assert(exceptionOne.contains(
       "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
 
-    val exceptionTwo = intercept[SparkException] {
-      spark.read
-        .option("mode", "FAILFAST")
-        .schema("a string")
-        .json(corruptRecords)
-        .collect()
-    }.getCause
     checkError(
-      exception = exceptionTwo.asInstanceOf[SparkException],
+      exception = intercept[SparkException] {
+        spark.read
+          .option("mode", "FAILFAST")
+          .schema("a string")
+          .json(corruptRecords)
+          .collect()
+      },
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
@@ -1920,8 +1919,8 @@ abstract class JsonSuite
         val e = intercept[SparkException] {
           spark.read.json(inputFile.toURI.toString).collect()
         }
-        assert(e.getCause.getCause.isInstanceOf[EOFException])
-        assert(e.getCause.getCause.getMessage === "Unexpected end of input stream")
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
         val e2 = intercept[SparkException] {
           spark.read.option("multiLine", true).json(inputFile.toURI.toString).collect()
         }
@@ -1942,11 +1941,10 @@ abstract class JsonSuite
       val df = spark.read.option("multiLine", true).json(jsonPath.toString)
       fs.delete(jsonPath, true)
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        val e = intercept[SparkException] {
+        val e = intercept[SparkFileNotFoundException] {
           df.collect()
         }
-        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
-        assert(e.getCause.getMessage.contains(".json does not exist"))
+        assert(e.getMessage.contains(".json does not exist"))
       }
 
       sampledTestData.write.json(jsonPath.toString)
@@ -2032,16 +2030,17 @@ abstract class JsonSuite
       assert(exceptionOne.getMessage.contains("Malformed records are detected in schema " +
         "inference. Parse Mode: FAILFAST."))
 
-      val exceptionTwo = intercept[SparkException] {
+      val ex = intercept[SparkException] {
         spark.read
           .option("multiLine", true)
           .option("mode", "FAILFAST")
           .schema(schema)
           .json(path)
           .collect()
-      }.getCause
+      }
+      assert(ex.getErrorClass == "FAILED_READ_FILE")
       checkError(
-        exception = exceptionTwo.asInstanceOf[SparkException],
+        exception = ex.getCause.asInstanceOf[SparkException],
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[null]",
@@ -2115,7 +2114,7 @@ abstract class JsonSuite
       val lowerCasedJsons = jsons.map(_.toLowerCase(Locale.ROOT))
       // The special floats are case-sensitive so these cases below throw exceptions.
       lowerCasedJsons.foreach { lowerCasedJson =>
-        val e = intercept[SparkException] {
+        val e = intercept[SparkRuntimeException] {
           spark.read
             .option("mode", "FAILFAST")
             .schema(StructType(Seq(StructField("a", dt))))
@@ -2332,8 +2331,9 @@ abstract class JsonSuite
         .json(testFile(fileName))
         .count()
     }
-
-    assert(exception.getMessage.contains("Malformed records are detected in record parsing"))
+    assert(exception.getErrorClass == "FAILED_READ_FILE")
+    assert(exception.getCause.getMessage.contains(
+      "Malformed records are detected in record parsing"))
   }
 
   def checkEncoding(expectedEncoding: String, pathToJsonFiles: String,
@@ -2665,8 +2665,9 @@ abstract class JsonSuite
     val df = spark.read.schema(s"a ${dataType.catalogString}")
       .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
     val e = intercept[SparkException] {df.collect()}
+    assert(e.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
     checkError(
-      exception = e.getCause.getCause.getCause.asInstanceOf[SparkRuntimeException],
+      exception = e.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "EMPTY_JSON_FIELD_VALUE",
       parameters = Map("dataType" -> toSQLType(dataType))
     )
@@ -2804,9 +2805,9 @@ abstract class JsonSuite
       .option("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSz")
       .json(ds)
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
-      val msg = intercept[SparkException] {
+      val msg = intercept[SparkUpgradeException] {
         json.collect()
-      }.getCause.getMessage
+      }.getMessage
       assert(msg.contains("Fail to parse"))
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "legacy") {
@@ -2991,10 +2992,12 @@ abstract class JsonSuite
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern).json(path.getAbsolutePath)
         }
+        assert(err.getErrorClass == "TASK_WRITE_FAILED")
+        val msg = err.getCause.getMessage
         assert(
-          err.getMessage.contains("Unsupported field: OffsetSeconds") ||
-          err.getMessage.contains("Unable to extract value") ||
-          err.getMessage.contains("Unable to extract ZoneId"))
+          msg.contains("Unsupported field: OffsetSeconds") ||
+          msg.contains("Unable to extract value") ||
+          msg.contains("Unable to extract ZoneId"))
       }
     }
   }
@@ -3373,10 +3376,9 @@ abstract class JsonSuite
         )
       )
 
-      val err = intercept[SparkException] {
+      intercept[SparkUpgradeException] {
         check("exception", Nil)
-      }.getCause
-      assert(err.isInstanceOf[SparkUpgradeException])
+      }
     }
   }
 
