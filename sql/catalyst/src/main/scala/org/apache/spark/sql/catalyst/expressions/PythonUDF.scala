@@ -205,7 +205,7 @@ case class PythonUDTF(
  * if applicable. These can refer to partitioning columns or hidden pass-through columns
  * @param childIndexes The indexes of the columns within each TABLE argument.
  */
-case class PythonUDTFColumnIndexes(childIndexes: Set[Int])
+case class PythonUDTFColumnIndexes(childIndexes: Seq[Int])
 
 /**
  * A placeholder of a polymorphic Python table-valued function.

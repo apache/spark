@@ -172,12 +172,12 @@ case class FunctionTableSubqueryArgumentExpression(
     }
   }
 
-  private lazy val extraProjectedPartitioningExpressions: Set[Alias] = {
+  private lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
     partitionByExpressions.filter { e =>
       !subqueryOutputs.contains(e)
     }.zipWithIndex.map { case (expr, index) =>
       Alias(expr, s"partition_by_$index")()
-    }.toSet
+    }
   }
 
   private lazy val subqueryOutputs: Map[Expression, Int] = plan.output.zipWithIndex.toMap

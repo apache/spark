@@ -64,8 +64,7 @@ case class BatchEvalPythonUDTFExec(
 
     // Input iterator to Python.
     val inputIterator =
-      BatchEvalPythonExec.getInputIterator(
-        iter, schema, udtf.forwardHiddenColumnIndexes)
+      BatchEvalPythonExec.getInputIterator(iter, schema, udtf.forwardHiddenColumnIndexes)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -78,18 +77,17 @@ case class BatchEvalPythonUDTFExec(
     val resultType = udtf.dataType
     val fromJava = EvaluatePython.makeFromJava(resultType)
 
-    val result = outputIterator.flatMap { pickedResult =>
+    outputIterator.flatMap { pickedResult =>
       val unpickledBatch = unpickle.loads(pickedResult)
       unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
     }.map { results =>
       assert(results.getClass.isArray)
-      val arrayResult = results.asInstanceOf[Array[_]]
-      pythonMetrics("pythonNumRowsReceived") += arrayResult.length
+      val res = results.asInstanceOf[Array[_]]
+      pythonMetrics("pythonNumRowsReceived") += res.length
       val iteratorResult = fromJava(results).asInstanceOf[GenericArrayData]
         .array.map(_.asInstanceOf[InternalRow]).iterator
       OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, inputIterator)
     }
-    result
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): BatchEvalPythonUDTFExec =

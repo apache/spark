@@ -2194,7 +2194,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           val tvfWithTableColumnIndexes = tvf match {
             case g @ Generate(pyudtf: PythonUDTF, _, _, _, _, _) =>
               def optionalIndexes(indexes: Seq[Int]): Option[PythonUDTFColumnIndexes] =
-                if (indexes.nonEmpty) Some(PythonUDTFColumnIndexes(indexes.toSet)) else None
+                if (indexes.nonEmpty) Some(PythonUDTFColumnIndexes(indexes)) else None
               g.copy(generator = pyudtf.copy(
                 partitionColumnIndexes =
                   optionalIndexes(tableArgs.head._1.partitioningExpressionIndexes),

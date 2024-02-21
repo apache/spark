@@ -54,13 +54,14 @@ case class ArrowEvalPythonUDTFExec(
 
   override protected def evaluate(
       argMetas: Array[ArgumentMetadata],
-      iter: Iterator[InternalRow],
+      internalRowIter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]] = {
 
-    val inputIterator: InputRowIteratorWithForwardedHiddenValues =
+    // Wrap the [[internalRowIter]] with an iterator that can handle the hidden columns.
+    val iter: InputRowIteratorWithForwardedHiddenValues =
       InputRowIteratorWithForwardedHiddenValues(
-        iter.map { internalRow =>
+        internalRowIter.map { internalRow =>
           assert(internalRow.numFields == requiredChildOutput.length,
             "The input row doesn't match the required output of the child plan.")
           val rowValues: Array[Any] = internalRow.toSeq(requiredChildOutput.map(_.dataType)).toArray
@@ -68,16 +69,12 @@ case class ArrowEvalPythonUDTFExec(
             EvalPythonExec.lookupIndexedColumnValuesFromRow(
               udtf.forwardHiddenColumnIndexes, rowValues)
           EvalPythonExec.InternalInputRow(
-            row = internalRow,
+            row = new GenericInternalRow(lookupResult.nonIndexedValues),
             forwardedHiddenValues = lookupResult.indexedValues)
         }
       )
 
-    val batchIter = if (batchSize > 0) {
-      new BatchIterator(inputIterator, batchSize)
-    } else {
-      Iterator(inputIterator)
-    }
+    val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
     val outputTypes = resultAttrs.map(_.dataType)
 
@@ -105,7 +102,7 @@ case class ArrowEvalPythonUDTFExec(
 
       flattenedBatch.setNumRows(batch.numRows())
       val iteratorResult = flattenedBatch.rowIterator().asScala
-      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, inputIterator)
+      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, iter)
     }
   }
 
