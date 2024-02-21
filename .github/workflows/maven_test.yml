@@ -175,11 +175,15 @@ jobs:
         run: |
           python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
           python3.11 -m pip list
-      # Run the tests.
+      - name: Create a custom shell
+        run: |
+          echo '#!/bin/bash' > custom_script
+          echo 'script -q -e -c "bash $1" || bash -e $1' >> custom_script
+          chmod 755 custom_script
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         # The command script takes different options ubuntu vs macos-14, see also SPARK-47095.
-        shell: script -q -e -c "bash ${0}" || echo 'aaaaaaaa'"
+        shell: "custom_script ${0}"
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
           export TERM=vt100
