@@ -1910,7 +1910,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INTERNAL_ERROR",
       messageParameters = Map("message" ->
-        s"Cannot convert Spark data type ${toSQLType(field.dataType.catalogString)} to Parquet."))
+        s"Cannot convert Spark data type ${toSQLType(field.dataType)} to any Parquet type."))
   }
 
   def incompatibleViewSchemaChangeError(
