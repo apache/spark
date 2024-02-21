@@ -214,7 +214,7 @@
     <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.12.1</selenium.version>
+    <selenium.version>4.17.0</selenium.version>
     <htmlunit3-driver.version>4.17.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
@@ -222,8 +222,8 @@
     <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
-    <netty.version>4.1.106.Final</netty.version>
-    <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
+    <netty.version>4.1.107.Final</netty.version>
+    <netty-tcnative.version>2.0.62.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
     <!--
     If you are changing Arrow version specification, please check
@@ -412,12 +412,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-5-8_${scala.binary.version}</artifactId>
+      <artifactId>mockito-5-10_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-12_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -1145,25 +1145,25 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.17</version>
+        <version>3.2.18</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
-        <version>3.2.17.0</version>
+        <version>3.2.18.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-5-8_${scala.binary.version}</artifactId>
-        <version>3.2.17.0</version>
+        <artifactId>mockito-5-10_${scala.binary.version}</artifactId>
+        <version>3.2.18.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-12_${scala.binary.version}</artifactId>
-        <version>3.2.17.0</version>
+        <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
+        <version>3.2.18.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1175,19 +1175,19 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>5.8.0</version>
+        <version>5.10.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.14.10</version>
+        <version>1.14.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.10</version>
+        <version>1.14.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2989,14 +2989,6 @@
               <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e</arg>
               <!-- SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3. -->
               <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated:e</arg>
-              <!--
-                TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
-                  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
-              -->
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.rdd.RDDSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.scheduler.TaskSetManagerSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s</arg>
               <!--
                 SPARK-35574 Prevent the recurrence of compilation warnings related to
                 `procedure syntax is deprecated`

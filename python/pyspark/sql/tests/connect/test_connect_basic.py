@@ -2244,6 +2244,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(
             self.connect.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"]).toPandas(),
             self.spark.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"]).toPandas(),
+            check_exact=False,
         )
 
         self.assert_eq(

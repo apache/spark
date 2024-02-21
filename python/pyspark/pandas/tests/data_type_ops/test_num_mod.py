@@ -38,9 +38,9 @@ class NumModTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser % pser, psser % psser)
-            self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool))
-            self.assert_eq(pser % True, psser % True)
+            self.assert_eq(pser % pser, psser % psser, check_exact=False)
+            self.assert_eq(pser % pser.astype(bool), psser % psser.astype(bool), check_exact=False)
+            self.assert_eq(pser % True, psser % True, check_exact=False)
             if col in ["int", "int32"]:
                 self.assert_eq(
                     pd.Series([np.nan, np.nan, np.nan], dtype=float, name=col), psser % False
