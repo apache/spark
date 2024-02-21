@@ -18,10 +18,10 @@
 #
 name: "Build / SparkR-only (master, 4.3.2, windows-2019)"
 
- on:
-   push:
-     branches:
-     - '**'
+on:
+  push:
+    branches:
+      - '**'
 
 jobs:
   build:
