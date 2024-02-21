@@ -183,7 +183,7 @@ jobs:
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         # The command script takes different options ubuntu vs macos-14, see also SPARK-47095.
-        shell: "$HOME/custom_script ${0}"
+        shell: "bash -c '$HOME/custom_script ${0}'"
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
           export TERM=vt100
