@@ -34,7 +34,8 @@ class MemoryStateStore extends StateStore() {
       colFamilyName: String,
       keySchema: StructType,
       numColsPrefixKey: Int,
-      valueSchema: StructType): Unit = {
+      valueSchema: StructType,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
     throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
@@ -63,5 +64,13 @@ class MemoryStateStore extends StateStore() {
 
   override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String): Iterator[UnsafeRowPair] = {
     throw new UnsupportedOperationException("Doesn't support prefix scan!")
+  }
+
+  override def merge(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support multiple values per key")
+  }
+
+  override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+    throw new UnsupportedOperationException("Doesn't support multiple values per key")
   }
 }
