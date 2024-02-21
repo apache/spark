@@ -165,12 +165,12 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
       val ex = intercept[Exception] {
         handle.registerTimer(10000L)
       }
-      assert(ex.getMessage.contains("Cannot register processing time timers"))
+      assert(ex.getMessage.contains("Cannot register timers"))
 
       val ex2 = intercept[Exception] {
         handle.deleteTimer(10000L)
       }
-      assert(ex2.getMessage.contains("Cannot delete processing time timers"))
+      assert(ex2.getMessage.contains("Cannot delete timers"))
     }
   }
 
@@ -193,6 +193,31 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     }
   }
 
+  test("verify that expired timers are returned in sorted order") {
+    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), keyExprEncoder, TimeoutMode.ProcessingTime())
+      handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
+      assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
+
+      // Generate some random timer timestamps in arbitrary sorted order
+      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L)
+      timerTimestamps.foreach { timestamp =>
+        handle.registerTimer(timestamp)
+      }
+
+      // Ensure that the expired timers are returned in sorted order
+      val expiredTimers = handle.getExpiredTimers().map(_._2).toSeq
+      assert(expiredTimers === timerTimestamps.sorted)
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
+    }
+  }
+
   test("registering processing time timeouts with invalid state should fail") {
     tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
       val store = provider.getStore(0)
@@ -200,17 +225,17 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
         UUID.randomUUID(), keyExprEncoder, TimeoutMode.ProcessingTime())
 
       verifyInvalidOperation(handle, StatefulProcessorHandleState.CREATED,
-        "Cannot register processing time timer") { handle =>
+        "Cannot register timers") { handle =>
         registerTimer(handle)
       }
 
       verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
-        "Cannot register processing time timer") { handle =>
+        "Cannot register timers") { handle =>
         registerTimer(handle)
       }
 
       verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
-        "Cannot register processing time timer") { handle =>
+        "Cannot register timers") { handle =>
         registerTimer(handle)
       }
     }

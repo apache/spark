@@ -17,8 +17,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.Serializable
-
-import org.apache.commons.lang3.SerializationUtils
+import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -62,6 +61,10 @@ class TimerStateImpl[S](
     .add("key", BinaryType)
     .add("expiryTimestampMs", LongType, nullable = false)
 
+  private val keySchemaForSecIndex: StructType = new StructType()
+    .add("expiryTimestampMs", BinaryType, nullable = false)
+    .add("key", BinaryType)
+
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
@@ -73,7 +76,15 @@ class TimerStateImpl[S](
 
   val keyToTsCFName = timerCfName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
   store.createColFamilyIfAbsent(keyToTsCFName,
-    schemaForKeyRow, numColsPrefixKey = 0, schemaForValueRow, true)
+    schemaForKeyRow, numColsPrefixKey = 0,
+    schemaForValueRow, true,
+    isInternal = true)
+
+  val tsToKeyCFName = timerCfName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+  store.createColFamilyIfAbsent(tsToKeyCFName,
+    keySchemaForSecIndex, numColsPrefixKey = 0,
+    schemaForValueRow, true,
+    isInternal = true)
 
   private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
@@ -91,12 +102,23 @@ class TimerStateImpl[S](
     keyRow
   }
 
-  private def encodeValue(value: S): UnsafeRow = {
-    val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
-    val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
-    val valueEncoder = UnsafeProjection.create(schemaForValueRow)
-    val valueRow = valueEncoder(InternalRow(valueByteArr))
-    valueRow
+  private def encodeSecIndexKey(expiryTimestampMs: Long): UnsafeRow = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (!keyOption.isDefined) {
+      throw new UnsupportedOperationException("Implicit key not found for operation on" +
+        s"stateName=$keyToTsCFName")
+    }
+
+    val toRow = keyExprEnc.createSerializer()
+    val keyByteArr = toRow
+      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
+
+    val keyEncoder = UnsafeProjection.create(keySchemaForSecIndex)
+    val bbuf = ByteBuffer.allocate(8)
+    bbuf.order(ByteOrder.BIG_ENDIAN)
+    bbuf.putLong(expiryTimestampMs)
+    val keyRow = keyEncoder(InternalRow(bbuf.array(), keyByteArr))
+    keyRow
   }
 
   /**
@@ -119,6 +141,7 @@ class TimerStateImpl[S](
    */
   def add(expiryTimestampMs: Long, newState: S): Unit = {
     store.put(encodeKey(expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
+    store.put(encodeSecIndexKey(expiryTimestampMs), EMPTY_ROW, tsToKeyCFName)
   }
 
   /**
@@ -127,18 +150,27 @@ class TimerStateImpl[S](
    */
   def remove(expiryTimestampMs: Long): Unit = {
     store.remove(encodeKey(expiryTimestampMs), keyToTsCFName)
+    store.remove(encodeSecIndexKey(expiryTimestampMs), tsToKeyCFName)
   }
 
-  def getExpiredTimers(): Iterator[UnsafeRowPair] = {
-    store.iterator(keyToTsCFName)
+  def getExpiredTimers(): Iterator[(Any, Long)] = {
+    store.iterator(tsToKeyCFName).map { rowPair =>
+      val keyRow = rowPair.key
+      getTimerRow(keyRow)
+    }
   }
 
   def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {
-    val bytes = keyRow.getBinary(0)
+    val keyBytes = keyRow.getBinary(1)
     val retUnsafeRow = new UnsafeRow(1)
-    retUnsafeRow.pointTo(bytes, bytes.length)
-    val key = keyExprEnc.resolveAndBind().createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
-    val expiryTimestampMs = keyRow.getLong(1)
-    (key, expiryTimestampMs)
+    retUnsafeRow.pointTo(keyBytes, keyBytes.length)
+    val keyObj = keyExprEnc.resolveAndBind().
+    createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
+
+    val bytes = keyRow.getBinary(0)
+    val byteBuffer = ByteBuffer.wrap(bytes)
+    byteBuffer.order(ByteOrder.BIG_ENDIAN)
+    val expiryTimestampMs = byteBuffer.getLong
+    (keyObj, expiryTimestampMs)
   }
 }

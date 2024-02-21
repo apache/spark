@@ -137,11 +137,11 @@ case class TransformWithStateExec(
   }
 
   private def handleTimerRows(
-      keyRow: UnsafeRow,
+      keyObj: Any,
       currTimestampMs: Long,
+      expiryTimestampMs: Long,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
-    val (keyObj, expiryTimestampMs) = processorHandle.getTimerRow(keyRow)
     if (expiryTimestampMs < currTimestampMs) {
       ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
       val mappedIterator = statefulProcessor.handleInputRows(
@@ -167,16 +167,16 @@ case class TransformWithStateExec(
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         val procTimeIter = processorHandle.getExpiredTimers()
-        procTimeIter.flatMap { case rowPair =>
-          handleTimerRows(rowPair.key, batchTimestampMs.get, processorHandle)
+        procTimeIter.flatMap { case (keyObj, expiryTimestampMs) =>
+          handleTimerRows(keyObj, batchTimestampMs.get, expiryTimestampMs, processorHandle)
         }
 
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
         val eventTimeIter = processorHandle.getExpiredTimers()
-        eventTimeIter.flatMap { case rowPair =>
-          handleTimerRows(rowPair.key, watermark, processorHandle)
+        eventTimeIter.flatMap { case (keyObj, expiryTimestampMs) =>
+          handleTimerRows(keyObj, watermark, expiryTimestampMs, processorHandle)
         }
 
       case _ => Iterator.empty

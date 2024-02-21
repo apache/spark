@@ -171,7 +171,7 @@ class StatefulProcessorHandleImpl(
     store.removeColFamilyIfExists(stateName)
   }
 
-  def getExpiredTimers(): Iterator[UnsafeRowPair] = {
+  def getExpiredTimers(): Iterator[(Any, Long)] = {
     timerState.getExpiredTimers()
   }
 
