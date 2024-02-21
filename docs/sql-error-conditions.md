@@ -864,6 +864,14 @@ Sketches have different `lgConfigK` values: `<left>` and `<right>`. Set the `all
 
 `<identifier>` is not a valid identifier as it has more than 2 name parts.
 
+### [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Illegal value provided to the State Store
+
+For more details see [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
+
 ### INCOMPARABLE_PIVOT_COLUMN
 
 [SQLSTATE: 42818](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

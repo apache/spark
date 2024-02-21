@@ -14,10 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.streaming
-
-import java.io.Serializable
 
 import org.apache.spark.annotation.{Evolving, Experimental}
 
@@ -25,26 +22,25 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 @Evolving
 /**
  * Interface used for arbitrary stateful operations with the v2 API to capture
- * single value state.
+ * list value state.
  */
-private[sql] trait ValueState[S] extends Serializable {
+private[sql] trait ListState[S] extends Serializable {
 
   /** Whether state exists or not. */
   def exists(): Boolean
 
-  /**
-   * Get the state value if it exists
-   * @throws java.util.NoSuchElementException if the state does not exist
-   */
-  @throws[NoSuchElementException]
-  def get(): S
+  /** Get the state value. An empty iterator is returned if no value exists. */
+  def get(): Iterator[S]
 
-  /** Get the state if it exists as an option and None otherwise */
-  def getOption(): Option[S]
+  /** Update the value of the list. */
+  def put(newState: Array[S]): Unit
 
-  /** Update the value of the state. */
-  def update(newState: S): Unit
+  /** Append an entry to the list */
+  def appendValue(newState: S): Unit
 
-  /** Remove this state. */
+  /** Append an entire list to the existing value */
+  def appendList(newState: Array[S]): Unit
+
+  /** Removes this state for the given grouping key. */
   def clear(): Unit
 }
