@@ -27,6 +27,7 @@ jobs:
     name: "Build module: sparkr"
     runs-on: windows-2019
     timeout-minutes: 300
+    if: github.repository == 'apache/spark'
     steps:
     - name: Download winutils Hadoop binary
       uses: actions/checkout@v4
