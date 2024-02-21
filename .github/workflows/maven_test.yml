@@ -178,10 +178,9 @@ jobs:
       - name: Create a custom shell
         run: |
           mkdir custom_scripts
-          echo '#!/bin/bash' > ~/custom_script
-          echo 'script -q -e -c "bash $1" || bash -e $1' >> custom_scripts/custom_script
-          chmod 755 custom_scripts/custom_script
-          export PATH="$(pwd -P)/custom_scripts":$PATH
+          echo '#!/bin/bash' > /usr/bin/custom_script
+          echo 'script -q -e -c "bash $1" || bash -e $1' >> /usr/bin/custom_script
+          chmod 755 /usr/bin/custom_script
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         # The command script takes different options ubuntu vs macos-14, see also SPARK-47095.
