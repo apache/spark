@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
-import java.sql.Timestamp
 import java.util.Locale
 
 import org.apache.hadoop.fs.Path
@@ -3405,13 +3404,8 @@ class HiveDDLSuite
   test("SPARK-47101: comma is allowed in column name") {
     val tbl = "t1"
     withTable(tbl) {
-      sql(
-        s"""
-           |CREATE TABLE t1
-           |STORED AS parquet
-           |SELECT id, DATE'2018-11-17' + MAKE_DT_INTERVAL(0, id) FROM RANGE(13, 14)
-         """.stripMargin)
-      checkAnswer(sql("SELECT * FROM t1"), Row(13, Timestamp.valueOf("2018-11-17 13:00:00")))
+      sql("CREATE TABLE t1 STORED AS parquet SELECT id as `a,b` FROM range(1)")
+      checkAnswer(sql("SELECT * FROM t1"), Row(0))
     }
   }
 }
