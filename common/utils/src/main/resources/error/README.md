@@ -117,3 +117,7 @@ The following SQLSTATEs are collated from:
 - Oracle 12 (last published)
 - SQL Server
 - Redshift
+
+## Extra
+
+- The parameter `paramIndex` of error class `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE` is 1-based.
