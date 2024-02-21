@@ -23,10 +23,9 @@ import org.apache.spark.sql.catalyst.csv.{CSVExprUtils, CSVOptions}
 import org.apache.spark.sql.functions._
 
 object CSVUtils {
-
   /**
-   * Filter ignorable rows for CSV dataset (lines empty and starting with `comment`). This is
-   * currently being used in CSV schema inference.
+   * Filter ignorable rows for CSV dataset (lines empty and starting with `comment`).
+   * This is currently being used in CSV schema inference.
    */
   def filterCommentAndEmpty(lines: Dataset[String], options: CSVOptions): Dataset[String] = {
     // Note that this was separately made by SPARK-18362. Logically, this should be the same
@@ -44,13 +43,13 @@ object CSVUtils {
   }
 
   /**
-   * Skip the given first line so that only data can remain in a dataset. This is similar with
-   * `dropHeaderLine` below and currently being used in CSV schema inference.
+   * Skip the given first line so that only data can remain in a dataset.
+   * This is similar with `dropHeaderLine` below and currently being used in CSV schema inference.
    */
   def filterHeaderLine(
-      iter: Iterator[String],
-      firstLine: String,
-      options: CSVOptions): Iterator[String] = {
+       iter: Iterator[String],
+       firstLine: String,
+       options: CSVOptions): Iterator[String] = {
     // Note that unlike actual CSV reading path, it simply filters the given first line. Therefore,
     // this skips the line same with the header if exists. One of them might have to be removed
     // in the near future if possible.
@@ -70,8 +69,7 @@ object CSVUtils {
       options: CSVOptions): Array[String] = {
     if (options.headerFlag) {
       val duplicates = {
-        val headerNames = row
-          .filter(_ != null)
+        val headerNames = row.filter(_ != null)
           // scalastyle:off caselocale
           .map(name => if (caseSensitive) name else name.toLowerCase)
         // scalastyle:on caselocale
@@ -108,8 +106,7 @@ object CSVUtils {
    * Sample CSV dataset as configured by `samplingRatio`.
    */
   def sample(csv: Dataset[String], options: CSVOptions): Dataset[String] = {
-    require(
-      options.samplingRatio > 0,
+    require(options.samplingRatio > 0,
       s"samplingRatio (${options.samplingRatio}) should be greater than 0")
     if (options.samplingRatio > 0.99) {
       csv
@@ -122,8 +119,7 @@ object CSVUtils {
    * Sample CSV RDD as configured by `samplingRatio`.
    */
   def sample(csv: RDD[Array[String]], options: CSVOptions): RDD[Array[String]] = {
-    require(
-      options.samplingRatio > 0,
+    require(options.samplingRatio > 0,
       s"samplingRatio (${options.samplingRatio}) should be greater than 0")
     if (options.samplingRatio > 0.99) {
       csv
