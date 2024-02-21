@@ -71,7 +71,7 @@ jobs:
       run: |
         set HADOOP_HOME=%USERPROFILE%\hadoop-3.3.5
         set PATH=%HADOOP_HOME%\bin;%PATH%
-        .\bin\spark-submit2.cmd --driver-java-options "-Dlog4j.configuration=file:///%CD:\=/%/R/log4j2.properties" --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
+        .\bin\spark-submit2.cmd --driver-java-options "-Dlog4j.configurationFile=file:///%CD:\=/%/R/log4j2.properties" --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
       shell: cmd
       env:
         NOT_CRAN: true
