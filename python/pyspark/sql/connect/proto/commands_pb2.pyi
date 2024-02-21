@@ -1849,15 +1849,34 @@ class StreamingQueryListenerBusCommand(google.protobuf.message.Message):
         add_listener_bus_listener: builtins.bool = ...,
         remove_listener_bus_listener: builtins.bool = ...,
     ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "add_listener_bus_listener",
+            b"add_listener_bus_listener",
+            "command",
+            b"command",
+            "remove_listener_bus_listener",
+            b"remove_listener_bus_listener",
+        ],
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
             "add_listener_bus_listener",
             b"add_listener_bus_listener",
+            "command",
+            b"command",
             "remove_listener_bus_listener",
             b"remove_listener_bus_listener",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["command", b"command"]
+    ) -> (
+        typing_extensions.Literal["add_listener_bus_listener", "remove_listener_bus_listener"]
+        | None
+    ): ...
 
 global___StreamingQueryListenerBusCommand = StreamingQueryListenerBusCommand
 

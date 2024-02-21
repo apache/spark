@@ -430,8 +430,10 @@ message StreamingQueryManagerCommandResult {
 // The add_listener_bus_listener command will only be set true in the first case.
 // The remove_listener_bus_listener command will only be set true in the second case.
 message StreamingQueryListenerBusCommand {
-  bool add_listener_bus_listener = 1;
-  bool remove_listener_bus_listener = 2;
+  oneof command {
+    bool add_listener_bus_listener = 1;
+    bool remove_listener_bus_listener = 2;
+  }
 }
 
 // The protocol for the returned events in the long-running response channel.

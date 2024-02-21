@@ -1002,6 +1002,28 @@ class SparkConnectClient(object):
         else:
             return (None, properties)
 
+    def execute_long_running_command(
+        self, command: pb2.Command, observations: Optional[Dict[str, Observation]] = None
+    ) -> Tuple[Optional[pd.DataFrame], Dict[str, Any]]:
+        """
+        Execute given command. Similar to execute_command, but the value is returned using yield.
+        """
+        logger.info(f"Execute long-running command for command {self._proto_to_string(command)}")
+        req = self._execute_plan_request_with_metadata()
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        req.plan.command.CopyFrom(command)
+        for response in self._execute_and_fetch_as_iterator(req, observations):
+            if isinstance(response, dict):
+                yield response
+            else:
+                raise PySparkValueError(
+                    error_class="UNKNOWN_RESPONSE",
+                    message_parameters={
+                        "response": response,
+                    },
+                )
+
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
         return if two plans have the same semantics.
