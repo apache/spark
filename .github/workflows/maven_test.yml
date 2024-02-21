@@ -177,7 +177,7 @@ jobs:
           python3.11 -m pip list
       - name: Create a custom shell
         run: |
-          mkdir custom_scripts
+          mkdir ~/custom_scripts
           echo '#!/bin/bash' > ~/custom_script
           echo 'script -q -e -c "bash $1" || bash -e $1' >> ~/custom_scripts/custom_script
           chmod 755 ~/custom_scripts/custom_script
