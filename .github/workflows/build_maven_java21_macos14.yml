@@ -20,8 +20,9 @@
 name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21, macos-14)"
 
 on:
-  schedule:
-    - cron: '0 20 * * *'
+  push:
+    branches:
+    - '**'
 
 jobs:
   run-build:
@@ -32,4 +33,4 @@ jobs:
     if: github.repository == 'apache/spark'
     with:
       java: 21
-      os: macos-14
+      os: macos-14-large
