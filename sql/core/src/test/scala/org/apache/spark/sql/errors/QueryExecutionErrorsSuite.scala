@@ -1163,8 +1163,11 @@ class QueryExecutionErrorsSuite
       exception = intercept[SparkRuntimeException] {
         Seq(KryoData(1), KryoData(2)).toDS()
       },
-      errorClass = "UNSUPPORTED_ENCODER",
-      parameters = Map.empty
+      errorClass = "INVALID_EXPRESSION_ENCODER",
+      parameters = Map(
+        "encoderType" -> kryoEncoder.getClass.getName,
+        "docroot" -> SPARK_DOC_ROOT
+      )
     )
   }
 }

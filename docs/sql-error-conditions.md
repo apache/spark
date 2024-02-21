@@ -1144,6 +1144,12 @@ SQLSTATE: F0000
 Executor memory `<executorMemory>` must be at least `<minSystemMemory>`.
 Please increase executor memory using the --executor-memory option or "`<config>`" in Spark configuration.
 
+### INVALID_EXPRESSION_ENCODER
+
+[SQLSTATE: 42001](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Found an invalid expression encoder. Expects an instance of `ExpressionEncoder` but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
+
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2463,14 +2469,6 @@ For more details see [UNSUPPORTED_DEFAULT_VALUE](sql-error-conditions-unsupporte
 The deserializer is not supported:
 
 For more details see [UNSUPPORTED_DESERIALIZER](sql-error-conditions-unsupported-deserializer-error-class.html)
-
-### UNSUPPORTED_ENCODER
-
-[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Found unsupported encoder. Try switching to an explicit expression encoder.
-
-For more details see [Encoders](https://spark.apache.org/docs/latest/api/java/index.html?org/apache/spark/sql/Encoder.html)
 
 ### UNSUPPORTED_EXPRESSION_GENERATED_COLUMN
 

@@ -1877,6 +1877,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_EXPRESSION_ENCODER" : {
+    "message" : [
+      "Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
+    ],
+    "sqlState" : "42001"
+  },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
       "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
@@ -3779,12 +3785,6 @@
       }
     },
     "sqlState" : "0A000"
-  },
-  "UNSUPPORTED_ENCODER" : {
-    "message" : [
-      "Found unsupported encoder. Try switching to an expression encoder. (For more information consult: '<docroot>/sql-error-conditions.html')"
-    ],
-    "sqlState" : "42000"
   },
   "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
     "message" : [
