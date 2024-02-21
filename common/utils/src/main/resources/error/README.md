@@ -120,4 +120,4 @@ The following SQLSTATEs are collated from:
 
 ## Extra
 
-- The parameter `paramIndex` of error class `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE` is 1-based.
+- Use `ordinalNumber` to uniformly set the value of `paramIndex`(0-based) for the error class `UNEXPECTED_INPUT_TYPE`.
