@@ -969,7 +969,7 @@ class QueryCompilationErrorsSuite
     val dummyDataType = new DataType {
       override def defaultSize: Int = 0
 
-      override def catalogString: String = "Dummy"
+      override def simpleString: String = "Dummy"
 
       override private[spark] def asNullable = NullType
     }
@@ -978,7 +978,7 @@ class QueryCompilationErrorsSuite
         converter.convertField(StructField("test", dummyDataType))
       },
       errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to Parquet.")
+      parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")
     )
   }
 }
