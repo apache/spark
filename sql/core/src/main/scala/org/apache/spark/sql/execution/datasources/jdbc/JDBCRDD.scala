@@ -72,13 +72,25 @@ object JDBCRDD extends Logging {
           JdbcUtils.getSchema(rs, dialect, alwaysNullable = true,
             isTimestampNTZ = options.preferTimestampNTZ)
         } finally {
-          rs.close()
+          try {
+            rs.close()
+          } catch {
+            case e: Exception => logWarning("Exception closing ResultSet", e)
+          }
         }
       } finally {
-        statement.close()
+        try {
+          statement.close()
+        } catch {
+          case e: Exception => logWarning("Exception closing statement", e)
+        }
       }
     } finally {
-      conn.close()
+      try {
+        conn.close()
+      } catch {
+        case e: Exception => logWarning("Exception closing connection", e)
+      }
     }
   }
 
