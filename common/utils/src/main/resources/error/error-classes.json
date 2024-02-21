@@ -3062,6 +3062,12 @@
     ],
     "sqlState" : "XXKD0"
   },
+  "PRIMARY_CONSTRUCTOR_NOT_FOUND" : {
+    "message" : [
+      "Couldn't find a primary constructor on <cls>."
+    ],
+    "sqlState" : "40000"
+  },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."
@@ -5688,11 +5694,6 @@
   "_LEGACY_ERROR_TEMP_2020" : {
     "message" : [
       "Couldn't find a valid constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2021" : {
-    "message" : [
-      "Couldn't find a primary constructor on <cls>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2023" : {

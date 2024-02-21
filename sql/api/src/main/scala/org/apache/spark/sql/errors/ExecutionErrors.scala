@@ -202,7 +202,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2021",
+      errorClass = "PRIMARY_CONSTRUCTOR_NOT_FOUND",
       messageParameters = Map("cls" -> cls.toString))
   }
 
