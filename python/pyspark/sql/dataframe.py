@@ -3526,8 +3526,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Returns
         -------
-        If n is greater than 1, return a list of :class:`Row`.
-        If n is 1, return a single Row.
+        If n is supplied, return a list of :class:`Row`.
+        If n is missing, return a single Row.
 
         Examples
         --------
