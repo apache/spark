@@ -3782,7 +3782,7 @@
   },
   "UNSUPPORTED_ENCODER" : {
     "message" : [
-      "Found unsupported encoder. Try switching to an expression encoder. (For more information on Encoders, consult: https://spark.apache.org/docs/latest/api/java/index.html?org/apache/spark/sql/Encoder.html)"
+      "Found unsupported encoder. Try switching to an expression encoder. (For more information consult: '<docroot>/sql-error-conditions.html')"
     ],
     "sqlState" : "42000"
   },
