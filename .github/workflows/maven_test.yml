@@ -179,8 +179,9 @@ jobs:
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         # The command script takes different options ubuntu vs macos-14, see also SPARK-47095.
-        shell: ${{ (contains(inputs.os, 'ubuntu') && 'script -q -e -c "bash {0}"' || 'script -q -e "bash {0}"' }}
+        shell: '[[ "$TEST_OS" == *"ubuntu"* ]] && script -q -e -c "bash {0}" || script -q -e "bash {0}"'
         run: |
+          export TEST_OS="${{ inputs.os }}"
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
           export TERM=vt100
           # `set -e` to make the exit status as expected due to use `script -q -e -c` to run the commands
