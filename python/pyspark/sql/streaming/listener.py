@@ -24,7 +24,7 @@ from py4j.java_gateway import JavaObject
 from pyspark.sql import Row
 from pyspark import cloudpickle
 
-__all__ = ["StreamingQueryListener", "QueryStartedEvent", "QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent"]
+__all__ = ["StreamingQueryListener"]
 
 
 class StreamingQueryListener(ABC):

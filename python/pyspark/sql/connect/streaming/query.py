@@ -22,8 +22,6 @@ import json
 import sys
 import pickle
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
-from itertools import chain
-import threading
 
 from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
@@ -31,12 +29,6 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect import proto
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.streaming import StreamingQueryListener
-from pyspark.sql.streaming.listener import (
-    QueryStartedEvent,
-    QueryProgressEvent,
-    QueryIdleEvent,
-    QueryTerminatedEvent
-)
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
     StreamingQueryManager as PySparkStreamingQueryManager,
@@ -192,7 +184,6 @@ class StreamingQuery:
 class StreamingQueryManager:
     def __init__(self, session: "SparkSession") -> None:
         self._session = session
-        self._sqlb = StreamingQueryListenerBus(self)
 
     @property
     def active(self) -> List[StreamingQuery]:
@@ -246,22 +237,20 @@ class StreamingQueryManager:
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 
     def addListener(self, listener: StreamingQueryListener) -> None:
-        print("wei-- addListener")
-        self._sqlb.append(listener)
-        # listener._init_listener_id()
-        # cmd = pb2.StreamingQueryManagerCommand()
-        # expr = proto.PythonUDF()
-        # try:
-        #     expr.command = CloudPickleSerializer().dumps(listener)
-        # except pickle.PicklingError:
-        #     raise PySparkPicklingError(
-        #         error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
-        #         message_parameters={"name": "addListener"},
-        #     )
-        # expr.python_ver = get_python_ver()
-        # cmd.add_listener.python_listener_payload.CopyFrom(expr)
-        # cmd.add_listener.id = listener._id
-        # self._execute_streaming_query_manager_cmd(cmd)
+        listener._init_listener_id()
+        cmd = pb2.StreamingQueryManagerCommand()
+        expr = proto.PythonUDF()
+        try:
+            expr.command = CloudPickleSerializer().dumps(listener)
+        except pickle.PicklingError:
+            raise PySparkPicklingError(
+                error_class="STREAMING_CONNECT_SERIALIZATION_ERROR",
+                message_parameters={"name": "addListener"},
+            )
+        expr.python_ver = get_python_ver()
+        cmd.add_listener.python_listener_payload.CopyFrom(expr)
+        cmd.add_listener.id = listener._id
+        self._execute_streaming_query_manager_cmd(cmd)
 
     addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
@@ -283,74 +272,6 @@ class StreamingQueryManager:
             properties["streaming_query_manager_command_result"],
         )
 
-class StreamingQueryListenerBus:
-    def __init__(self, manager: "StreamingQueryManager"):
-        self._sqm = manager
-        self._listener_bus = []
-        self._active_query_run_ids = {} # TODO: this
-        self._execution_thread = None
-
-    def append(self, listener: StreamingQueryListener):
-        # This list lives on the main thread so no need to lock.
-        self._listener_bus.append(listener)
-        # should add a attach listener command
-        if len(self._listener_bus) == 1: # TODO: Should add this after server response, it servers as " in memory WAL"
-            print("wei== new listener added, starting new long running thread")
-            # TODO: what if gracefully exit on removeListneer,
-            #  i.e. removeListener followed by addListener, the _execution_thread is still waiting?
-            assert self._execution_thread is None
-            cmd = pb2.StreamingQueryListenerBusCommand()
-            cmd.add_listener_bus_listener = True
-            # self._execute_streaming_query_listener_bus_cmd(cmd)
-            print("wei====starting execution thread")
-            self._execution_thread = threading.Thread(
-                target=self._execute_streaming_query_listener_bus_cmd, args=(cmd,))
-            self._execution_thread.start()
-            print("wei==== now back to main thread: " + str(threading.get_ident()))
-
-    def _execute_streaming_query_listener_bus_cmd(
-        self, cmd: pb2.StreamingQueryListenerBusCommand
-    ) -> pb2.StreamingQueryListenerEventsResult:
-        exec_cmd = pb2.Command()
-        exec_cmd.streaming_query_listener_bus_command.CopyFrom(cmd)
-
-        print("wei --- _execute_streaming_query_listener_bus_cmd on thread: " + str(threading.get_ident()))
-
-        for properties in self._sqm._session.client.execute_long_running_command(exec_cmd):
-            response = cast(
-                pb2.StreamingQueryListenerEventsResult,
-                properties["streaming_query_listener_events_result"],
-            )
-            if response.HasField("events"):
-                print("wei== events received")
-                events = self._deserialize(response.listener_events)
-            for event in events:
-                for listener in self._listener_bus:
-                    self.do_post_event(listener, event)
-
-    # TODO: onQueryInit() in query.start()
-
-    def _deserialize(self, events):
-        queryStartedEvents = (QueryStartedEvent.fromJson(json.loads(e)) for e in events.query_started_event)
-        queryProgressEvents = (QueryProgressEvent.fromJson(json.loads(e)) for e in events.query_progress_event)
-        queryTerminatedEvents = (QueryTerminatedEvent.fromJson(json.loads(e)) for e in events.query_terminated_event)
-        queryIdleEvents = (QueryIdleEvent.fromJson(json.loads(e)) for e in events.query_idle_event)
-        return chain(queryStartedEvents, queryProgressEvents, queryIdleEvents, queryTerminatedEvents)
-
-    def do_post_event(self, listener, event):
-        # List[Union["QueryStartedEvent", "QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent"]]
-        # print("wei== do_post_event, event class is: " + str(type(event)))
-        # print("wei== do_post_event, listener class is: " + str(type(listener)))
-        if isinstance(event, QueryStartedEvent):
-            listener.onQueryStarted(event)
-        elif isinstance(event, QueryProgressEvent):
-            listener.onQueryProgress(event)
-        elif isinstance(event, QueryIdleEvent):
-            listener.onQueryIdle(event)
-        elif isinstance(event, QueryTerminatedEvent):
-            listener.onQueryTerminated(event)
-        else:
-            pass  # should not happen
 
 def _test() -> None:
     import doctest
