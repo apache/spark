@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.execution
 
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd}
 
@@ -34,16 +36,18 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
    * executed through the connect API.
    */
   class ExecutionTracker(var tag: String) {
+    // The set of jobs that are being tracked by this tracker. We always only add to this list
+    // but never remove. This is to avoid concurrency issues.
     private[ConnectProgressExecutionListener] var jobs: Set[Int] = Set()
+    // The set of stages that are being tracked by this tracker. We always only add to this list
+    // but never remove. This is to avoid concurrency issues.
     private[ConnectProgressExecutionListener] var stages: Set[Int] = Set()
-    private[ConnectProgressExecutionListener] var totalTasks = 0
-    private[ConnectProgressExecutionListener] var completedTasks = 0
-    private[ConnectProgressExecutionListener] var completedStages = 0
-    private[ConnectProgressExecutionListener] var inputBytesRead = 0L
-    // The tracker is marked as dirty if it has new progress to report. This variable does
-    // not need to be protected by a mutex even if multiple threads would read the same dirty
-    // state the output is expected to be identical.
-    @volatile private[ConnectProgressExecutionListener] var dirty = false
+    private[ConnectProgressExecutionListener] val totalTasks = new AtomicInteger(0)
+    private[ConnectProgressExecutionListener] val completedTasks = new AtomicInteger(0)
+    private[ConnectProgressExecutionListener] val completedStages = new AtomicInteger(0)
+    private[ConnectProgressExecutionListener] val inputBytesRead = new AtomicLong(0)
+    // The tracker is marked as dirty if it has new progress to report.
+    private[ConnectProgressExecutionListener] val dirty = new AtomicBoolean(false)
 
     /**
      * Yield the current state of the tracker if it is dirty. A consumer of the tracker can
@@ -53,20 +57,25 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
      * If the tracker was marked as dirty, the state is reset after.
      */
     def yieldWhenDirty(thunk: (Int, Int, Int, Int, Long) => Unit): Unit = {
-      if (dirty) {
-        thunk(totalTasks, completedTasks, stages.size, completedStages, inputBytesRead)
-        dirty = false
+      if (dirty.get()) {
+        thunk(
+          totalTasks.get(),
+          completedTasks.get(),
+          stages.size,
+          completedStages.get(),
+          inputBytesRead.get())
+        dirty.set(false)
       }
     }
 
     /**
      * Add a job to the tracker. This will add the job to the list of jobs that are being tracked
      */
-    def addJob(job: SparkListenerJobStart): Unit = {
+    def addJob(job: SparkListenerJobStart): Unit = synchronized {
       jobs = jobs + job.jobId
       stages = stages ++ job.stageIds
-      totalTasks += job.stageInfos.map(_.numTasks).sum
-      dirty = true
+      totalTasks.updateAndGet(_ + job.stageInfos.map(_.numTasks).sum)
+      dirty.set(true)
     }
 
     def jobCount(): Int = {
@@ -78,15 +87,15 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
     }
   }
 
-  val trackedTags = collection.mutable.Map[String, ExecutionTracker]()
+  val trackedTags = collection.concurrent.TrieMap[String, ExecutionTracker]()
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     val tags = jobStart.properties.getProperty("spark.job.tags")
     if (tags != null) {
       val thisJobTags = tags.split(",").map(_.trim).toSet
       thisJobTags.foreach { tag =>
-        if (trackedTags.contains(tag)) {
-          trackedTags(tag).addJob(jobStart)
+        trackedTags.get(tag).foreach { tracker =>
+          tracker.addJob(jobStart)
         }
       }
     }
@@ -96,9 +105,9 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
     // Check if the task belongs to a job that we are tracking.
     trackedTags.foreach({ case (tag, tracker) =>
       if (tracker.stages.contains(taskEnd.stageId)) {
-        tracker.completedTasks += 1
-        tracker.inputBytesRead += taskEnd.taskMetrics.inputMetrics.bytesRead
-        tracker.dirty = true
+        tracker.completedTasks.incrementAndGet()
+        tracker.inputBytesRead.updateAndGet(_ + taskEnd.taskMetrics.inputMetrics.bytesRead)
+        tracker.dirty.set(true)
       }
     })
   }
@@ -106,8 +115,8 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
     trackedTags.foreach({ case (tag, tracker) =>
       if (tracker.stages.contains(stageCompleted.stageInfo.stageId)) {
-        tracker.completedStages += 1
-        tracker.dirty = true
+        tracker.completedStages.incrementAndGet()
+        tracker.dirty.set(true)
       }
     })
   }
@@ -115,8 +124,7 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     trackedTags.foreach({ case (tag, tracker) =>
       if (tracker.jobs.contains(jobEnd.jobId)) {
-        tracker.jobs -= jobEnd.jobId
-        tracker.dirty = true
+        tracker.dirty.set(true)
       }
     })
   }
