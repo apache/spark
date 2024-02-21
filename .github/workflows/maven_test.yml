@@ -73,13 +73,18 @@ jobs:
             connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro
           - >-
             sql#api,sql#catalyst,resource-managers#yarn,resource-managers#kubernetes#core
-          - >-
-            connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [ "" ]
         excluded-tags: [ "" ]
         comment: [ "" ]
         include:
+          # Connect tests
+          - modules: connect
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            excluded-tags: org.apache.spark.tags.AmmoniteTest
+            comment: ""
           # Hive tests
           - modules: sql#hive
             java: ${{ inputs.java }}
