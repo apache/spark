@@ -179,7 +179,7 @@ jobs:
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
         # The command script takes different options ubuntu vs macos-14, see also SPARK-47095.
-        shell: 'script -q -e -c "bash {0}" || echo {0}'
+        shell: bash -c 'script -q -e -c "bash {0}" || script -q -e "bash {0}"'
         run: |
           # Fix for TTY related issues when launching the Ammonite REPL in tests.
           export TERM=vt100
