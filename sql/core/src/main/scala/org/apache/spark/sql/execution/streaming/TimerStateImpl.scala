@@ -58,6 +58,9 @@ class TimerStateImpl[S](
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
+  private val schemaForPrefixKey: StructType = new StructType()
+    .add("key", BinaryType)
+
   private val schemaForKeyRow: StructType = new StructType()
     .add("key", BinaryType)
     .add("expiryTimestampMs", LongType, nullable = false)
@@ -69,6 +72,14 @@ class TimerStateImpl[S](
   private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
+  private val keySerializer = keyExprEnc.createSerializer()
+
+  private val prefixKeyEncoder = UnsafeProjection.create(schemaForPrefixKey)
+
+  private val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
+
+  private val secIndexKeyEncoder = UnsafeProjection.create(keySchemaForSecIndex)
+
   val timerCfName = if (timeoutMode == TimeoutMode.ProcessingTime) {
     TimerStateUtils.PROC_TIMERS_STATE_NAME
   } else {
@@ -77,7 +88,7 @@ class TimerStateImpl[S](
 
   val keyToTsCFName = timerCfName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
   store.createColFamilyIfAbsent(keyToTsCFName,
-    schemaForKeyRow, numColsPrefixKey = 0,
+    schemaForKeyRow, numColsPrefixKey = 1,
     schemaForValueRow, true,
     isInternal = true)
 
@@ -94,11 +105,7 @@ class TimerStateImpl[S](
         s"stateName=$keyToTsCFName")
     }
 
-    val toRow = keyExprEnc.createSerializer()
-    val keyByteArr = toRow
-      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
-
-    val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
+    val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
     val keyRow = keyEncoder(InternalRow(keyByteArr, expiryTimestampMs))
     keyRow
   }
@@ -110,15 +117,11 @@ class TimerStateImpl[S](
         s"stateName=$keyToTsCFName")
     }
 
-    val toRow = keyExprEnc.createSerializer()
-    val keyByteArr = toRow
-      .apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
-
-    val keyEncoder = UnsafeProjection.create(keySchemaForSecIndex)
+    val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
     val bbuf = ByteBuffer.allocate(8)
     bbuf.order(ByteOrder.BIG_ENDIAN)
     bbuf.putLong(expiryTimestampMs)
-    val keyRow = keyEncoder(InternalRow(bbuf.array(), keyByteArr))
+    val keyRow = secIndexKeyEncoder(InternalRow(bbuf.array(), keyByteArr))
     keyRow
   }
 
@@ -152,6 +155,22 @@ class TimerStateImpl[S](
   def remove(expiryTimestampMs: Long): Unit = {
     store.remove(encodeKey(expiryTimestampMs), keyToTsCFName)
     store.remove(encodeSecIndexKey(expiryTimestampMs), tsToKeyCFName)
+  }
+
+  def listTimers(): Iterator[Long] = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (!keyOption.isDefined) {
+      throw new UnsupportedOperationException("Implicit key not found for operation on" +
+        s"stateName=$keyToTsCFName")
+    }
+
+    val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
+    val keyRow = prefixKeyEncoder(InternalRow(keyByteArr))
+    val iter = store.prefixScan(keyRow, keyToTsCFName)
+    iter.map { kv =>
+      val keyRow = kv.key
+      keyRow.getLong(1)
+    }
   }
 
   private def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {

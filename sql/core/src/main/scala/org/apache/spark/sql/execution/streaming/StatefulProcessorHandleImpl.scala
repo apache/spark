@@ -180,6 +180,14 @@ class StatefulProcessorHandleImpl(
   }
 
   /**
+   * Function to list all the registered timers for given implicit key
+   * @return - iterator of all the registered timers
+   */
+  def listTimers(): Iterator[Long] = {
+    timerState.listTimers()
+  }
+
+  /**
    * Function to remove expired timer based on the expiryTimestampMs
    * @param expiryTimestampMs - expiry timestamp in milliseconds
    */

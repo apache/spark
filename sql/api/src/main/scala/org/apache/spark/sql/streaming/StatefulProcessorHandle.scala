@@ -65,6 +65,12 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   def deleteTimer(expiryTimestampMs: Long): Unit
 
   /**
+   * Function to list all the timers registered for the implicit key
+   * @return - list of all the registered timers
+   */
+   def listTimers(): Iterator[Long]
+
+  /**
    * Function to delete and purge state variable if defined previously
    * @param stateName - name of the state variable
    */
