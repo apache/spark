@@ -441,7 +441,7 @@ message StreamingQueryListenerBusCommand {
 // for QueryTerminatedEvent is 2; for QueryIdleEvent is 3;
 // There is no QueryStartedEvent defined here,
 // it is added as a field in WriteStreamOperationStartResult
-message StreamingQueryListenerEvents {
+message StreamingQueryListenerEvent {
   string event_json = 1;
   int32 event_type = 2;
 }
