@@ -186,8 +186,8 @@ case class PythonUDTF(
     evalType: Int,
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId,
-    partitionColumnIndexes: Option[PythonUDTFColumnIndexes] = None,
-    forwardHiddenColumnIndexes: Option[PythonUDTFColumnIndexes] = None)
+    partitionColumnIndexes: Option[Seq[PythonUDTF.ColumnIndex]],
+    forwardHiddenColumnIndexes: Option[Seq[PythonUDTF.ColumnIndex]])
   extends UnevaluableGenerator with PythonFuncExpression {
 
   override lazy val canonicalized: Expression = {
@@ -200,12 +200,19 @@ case class PythonUDTF(
     copy(children = newChildren)
 }
 
-/**
- * Holds zero-based indexes of specific columns within a TABLE argument to a Python UDTF call,
- * if applicable. These can refer to partitioning columns or hidden pass-through columns
- * @param childIndexes The indexes of the columns within each TABLE argument.
- */
-case class PythonUDTFColumnIndexes(childIndexes: Seq[Int])
+object PythonUDTF {
+  /**
+   * Holds the zero-based index of a specific column within a TABLE argument to a Python UDTF call.
+   * Each of these can refer to a partitioning column or a hidden pass-through column.
+   */
+  case class ColumnIndex(index: Int)
+
+  /**
+   * Holds the value and zero-based index of a specific column within a TABLE argument to a Python
+   * UDTF call. Each of these can refer to a partitioning column or a hidden pass-through column.
+   */
+  case class ColumnValueWithIndex(value: Any, index: Int)
+}
 
 /**
  * A placeholder of a polymorphic Python table-valued function.

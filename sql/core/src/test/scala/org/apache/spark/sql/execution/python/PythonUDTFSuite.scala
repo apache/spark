@@ -271,7 +271,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
     def partitionChildIndexes(udtfArguments: Seq[Expression]): Seq[Int] =
       udtfArguments.flatMap {
         case f: FunctionTableSubqueryArgumentExpression =>
-          f.partitioningExpressionIndexes
+          f.partitioningExpressionIndexes.map(_.index)
         case _ =>
           Seq()
       }

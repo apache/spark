@@ -69,7 +69,7 @@ case class ArrowEvalPythonUDTFExec(
             EvalPythonExec.lookupIndexedColumnValuesFromRow(
               udtf.forwardHiddenColumnIndexes, rowValues)
           EvalPythonExec.InternalInputRow(
-            row = new GenericInternalRow(lookupResult.nonIndexedValues),
+            row = new GenericInternalRow(lookupResult.updatedRow),
             forwardedHiddenValues = lookupResult.indexedValues)
         }
       )
@@ -102,7 +102,7 @@ case class ArrowEvalPythonUDTFExec(
 
       flattenedBatch.setNumRows(batch.numRows())
       val iteratorResult = flattenedBatch.rowIterator().asScala
-      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, iter)
+      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, iter, schema)
     }
   }
 

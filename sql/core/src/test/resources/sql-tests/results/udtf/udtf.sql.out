@@ -347,19 +347,19 @@ struct<partition_col:int,count:int,total:int,last:int>
 -- !query
 SELECT * FROM UDTFPartitionByOrderBySelectExpr(TABLE(t2))
 -- !query schema
-struct<partition_col:int,count:int,total:int,last:int>
+struct<>
 -- !query output
-0	1	1	1
-1	2	5	3
+java.lang.NegativeArraySizeException
+-2
 
 
 -- !query
 SELECT * FROM UDTFPartitionByOrderBySelectComplexExpr(TABLE(t2))
 -- !query schema
-struct<partition_col:int,count:int,total:int,last:int>
+struct<>
 -- !query output
-0	1	2	2
-1	2	7	4
+java.lang.NegativeArraySizeException
+-2
 
 
 -- !query
@@ -367,12 +367,8 @@ SELECT * FROM UDTFPartitionByOrderBySelectExprOnlyPartitionColumn(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-ValueError: 'input' is not in list
-
-During handling of the above exception, another exception occurred:
-
-pyspark.errors.exceptions.base.PySparkValueError: input
+java.lang.NegativeArraySizeException
+-2
 
 
 -- !query
@@ -380,22 +376,8 @@ SELECT * FROM UDTFInvalidSelectExprParseError(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`unparsable`",
-    "proposal" : "`t2`.`input`, `partition_by_0`, `t2`.`partition_col`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 10,
-    "fragment" : "unparsable"
-  } ]
-}
+java.lang.NegativeArraySizeException
+-2
 
 
 -- !query
@@ -425,21 +407,8 @@ SELECT * FROM UDTFInvalidComplexSelectExprMissingAlias(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS",
-  "sqlState" : "42802",
-  "messageParameters" : {
-    "expression" : "(input + 1)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 65,
-    "fragment" : "UDTFInvalidComplexSelectExprMissingAlias(TABLE(t2))"
-  } ]
-}
+java.lang.NegativeArraySizeException
+-2
 
 
 -- !query
@@ -1067,6 +1036,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "unparsable"
   } ]
 }
+
+
+-- !query
+SELECT * FROM UDTFForwardHiddenColumnsSimple(TABLE(t2))
+-- !query schema
+struct<>
+-- !query output
+java.lang.NegativeArraySizeException
+-2
 
 
 -- !query

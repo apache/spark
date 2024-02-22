@@ -241,7 +241,7 @@ def main(infile: IO, outfile: IO) -> None:
         for col in result.select:
             write_with_length(col.name.encode("utf-8"), outfile)
             write_with_length(col.alias.encode("utf-8"), outfile)
-            write_with_length(1 if col.forwardHidden else 0, outfile)
+            write_int(1 if col.forwardHidden else 0, outfile)
 
     except BaseException as e:
         handle_worker_exception(e, outfile)

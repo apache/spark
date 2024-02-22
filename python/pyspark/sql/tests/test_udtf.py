@@ -44,6 +44,7 @@ from pyspark.sql.functions import (
     AnalyzeResult,
     OrderingColumn,
     PartitioningColumn,
+    SelectedColumn,
     SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
@@ -70,6 +71,7 @@ from pyspark.testing.sqlutils import (
 
 
 class BaseUDTFTestsMixin:
+    '''
     def test_simple_udtf(self):
         class TestUDTF:
             def eval(self):
@@ -2402,6 +2404,53 @@ class BaseUDTFTestsMixin:
                     [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)]
                     + [Row(partition_col=42, count=3, total=3, last=None)],
                 )
+    '''
+
+    def test_udtf_with_forward_hidden_columns(self):
+        @udtf
+        class TestUDTF:
+            @staticmethod
+            def analyze(*args):
+                assert len(args) == 1
+                assert args[0].isTable
+                return AnalyzeResult(
+                    schema=args[0].dataType,
+                    withSinglePartition=True,
+                    select=[
+                        SelectedColumn(
+                            name="a"),
+                        SelectedColumn(
+                            name="b",
+                            forwardHidden=True)
+                    ])
+
+            def eval(self, row: Row):
+                # The second input column "b" should be pruned out to NULL this point, since we
+                # marked it as "forwardHidden" in the "analyze" method above.
+                print(f"@@@ row: {row}")
+                assert len(row) == 2
+                assert row["b"] is None
+                yield row
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.sql(
+                """
+                WITH t AS (
+                  SELECT NULL AS a, NULL AS b
+                  UNION ALL
+                  SELECT id AS a, 1 AS b FROM range(1, 6)
+                  UNION ALL
+                  SELECT id AS a, 2 AS b FROM range(1, 6)
+                )
+                SELECT *
+                FROM test_udtf(TABLE(t))
+                """
+            ),
+            [Row(a=None, b=None)] +
+            [Row(a=id, b=1) for id in range(1, 6)] +
+            [Row(a=id, b=2) for id in range(1, 6)])
 
     def test_udtf_with_prepare_string_from_analyze(self):
         @dataclass

@@ -132,7 +132,7 @@ class SelectedColumn:
 
     name: str
     alias: str = ""
-    forwardHidden: str = False
+    forwardHidden: bool = False
 
 
 # Note: this class is a "dataclass" for purposes of convenience, but it is not marked "frozen"

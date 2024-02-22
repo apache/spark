@@ -660,6 +660,31 @@ object IntegratedUDFTestUtils extends SQLHelper {
       orderBy = "OrderingColumn(\"input\")",
       select = "SelectedColumn(\"partition_col\")")
 
+
+  object UDTFForwardHiddenColumnsSimple extends TestUDTF {
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, SelectedColumn
+         |
+         |class $name:
+         |    @staticmethod
+         |    def analyze(*args):
+         |        assert len(args) == 1
+         |        assert args[0].isTable
+         |        return AnalyzeResult(
+         |            schema=args[0].dataType,
+         |            withSinglePartition=True,
+         |            select=[
+         |              SelectedColumn(
+         |                name="input",
+         |                forwardHidden=True)
+         |            ])
+         |
+         |    def eval(self, *args):
+         |      yield args
+         |""".stripMargin
+  }
+
   object UDTFInvalidPartitionByOrderByParseError
     extends TestPythonUDTFPartitionByOrderByBase(
       partitionBy = "PartitioningColumn(\"unparsable\")",
@@ -1216,6 +1241,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFPartitionByOrderBySelectExpr,
     UDTFPartitionByOrderBySelectComplexExpr,
     UDTFPartitionByOrderBySelectExprOnlyPartitionColumn,
+    UDTFForwardHiddenColumnsSimple,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,

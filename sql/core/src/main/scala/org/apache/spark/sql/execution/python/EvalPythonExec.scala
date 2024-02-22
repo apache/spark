@@ -23,6 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnaryExecNode
+import org.apache.spark.sql.types.StructType
 
 object EvalPythonExec {
   /**
@@ -36,16 +37,20 @@ object EvalPythonExec {
   /**
    * Represents one row sent as input to a Python UDF.
    * The [[forwardedHiddenValues]] is an optional array of other values forwarded from the input
-   * row to the output row unchanged.
+   * row to the output row unchanged, along with their associated column indexes from the input row.
    */
-  abstract class InputRow(val forwardedHiddenValues: Array[Any])
+  abstract class InputRow(val forwardedHiddenValues: Array[PythonUDTF.ColumnValueWithIndex])
 
   /** Represents one row sent as input to a Python UDF comprising discrete input row values. */
-  case class InternalInputRow(row: InternalRow, override val forwardedHiddenValues: Array[Any])
+  case class InternalInputRow(
+      row: InternalRow,
+      override val forwardedHiddenValues: Array[PythonUDTF.ColumnValueWithIndex])
     extends InputRow(forwardedHiddenValues)
 
   /** Represents one row sent as input to a Python UDF comprising serialized input row bytes. */
-  case class SerializedInputRow(bytes: Array[Byte], override val forwardedHiddenValues: Array[Any])
+  case class SerializedInputRow(
+      bytes: Array[Byte],
+      override val forwardedHiddenValues: Array[PythonUDTF.ColumnValueWithIndex])
     extends InputRow(forwardedHiddenValues)
 
   /**
@@ -72,8 +77,8 @@ object EvalPythonExec {
       mostRecentValues = result.forwardedHiddenValues
       result
     }
-    def forwardedHiddenValues: Array[Any] = mostRecentValues
-    private var mostRecentValues: Array[Any] = Array.empty
+    def forwardedHiddenValues: Array[PythonUDTF.ColumnValueWithIndex] = mostRecentValues
+    private var mostRecentValues: Array[PythonUDTF.ColumnValueWithIndex] = Array.empty
   }
 
   /**
@@ -85,49 +90,67 @@ object EvalPythonExec {
   case class OutputRowIteratorWithForwardedHiddenValues(
       udtf: PythonUDTF,
       internalRowIterator: Iterator[InternalRow],
-      inputIterator: InputRowIteratorWithForwardedHiddenValues)
+      inputIterator: InputRowIteratorWithForwardedHiddenValues,
+      inputSchema: StructType)
     extends Iterator[InternalRow] {
     override def hasNext: Boolean = internalRowIterator.hasNext
+
     override def next(): InternalRow = {
       val inputRow: InternalRow = internalRowIterator.next()
-      if (inputIterator.forwardedHiddenValues.isEmpty) {
-        inputRow
-      } else {
-        val forwarded = new GenericInternalRow(inputIterator.forwardedHiddenValues)
-        new JoinedRow(inputRow, forwarded)
+      if (inputIterator.forwardedHiddenValues.nonEmpty) {
+        inputRow.toSeq(inputSchema) match {
+          case Seq(g: GenericRow) =>
+            val newFields = mutable.ArrayBuffer.empty[Any]
+            newFields.appendAll(g.values)
+            inputIterator.forwardedHiddenValues.foreach { hv =>
+              newFields(hv.index) = hv.value
+            }
+            inputRow.update(0, new GenericInternalRow(newFields.toArray))
+          case _ =>
+            assert(false, s"The input row is not a struct value as expected: $inputRow")
+        }
       }
+      inputRow
     }
   }
 
   /**
    * This method looks up values from a row by the child indexes of the [[PythonUDTFColumnIndexes]].
-   * It returns a [[LookupFromRowResult]] containing the indexed values and the remaining values.
+   * It returns a [[LookupFromRowResult]] containing the indexed values and the original row with
+   * indexes values replaced by NULL.
    * This is useful for separating forwarded hidden column values from rows so that we can avoid
    * sending them to/from the JVM and Python worker, for efficiency.
    */
   case class LookupFromRowResult(
-      indexedValues: Array[Any],
-      nonIndexedValues: Array[Any])
+      updatedRow: Array[Any],
+      indexedValues: Array[PythonUDTF.ColumnValueWithIndex])
   def lookupIndexedColumnValuesFromRow(
-      indexes: Option[PythonUDTFColumnIndexes],
+      optionalIndexes: Option[Seq[PythonUDTF.ColumnIndex]],
       rowValues: Array[Any]): LookupFromRowResult = {
-    indexes.map { p =>
-      val indexedBuffer = mutable.ArrayBuffer.empty[Any]
-      val remainingBuffer = mutable.ArrayBuffer.empty[Any]
-      rowValues.zipWithIndex.foreach { case (value: Any, index: Int) =>
-        if (p.childIndexes.contains(index)) {
-          indexedBuffer += value
-        } else {
-          remainingBuffer += value
-        }
+    optionalIndexes.map { columnIndexes: Seq[PythonUDTF.ColumnIndex] =>
+      val indexedValues = mutable.ArrayBuffer.empty[PythonUDTF.ColumnValueWithIndex]
+      val newRowValues: Array[Any] = rowValues.map {
+        case g: GenericRowWithSchema =>
+          val newFields = mutable.ArrayBuffer.empty[Any]
+          g.values.zipWithIndex.foreach { case (value: Any, index: Int) =>
+            if (columnIndexes.map(_.index).contains(index)) {
+              newFields += null
+              // TODO: Since the input row is an array of GenericRowWithSchema, we should make the
+              // [[indexedValues]] a 2D array of values as well.
+              indexedValues += PythonUDTF.ColumnValueWithIndex(value, index)
+            } else {
+              newFields += value
+            }
+          }
+          new GenericRowWithSchema(newFields.toArray, g.schema)
+        case other =>
+          assert(false, s"The input row is not a struct value as expected: $other")
       }
-      LookupFromRowResult(
-        indexedBuffer.toArray,
-        remainingBuffer.toArray)
+      LookupFromRowResult(newRowValues, indexedValues.toArray)
     }.getOrElse {
       LookupFromRowResult(
-        indexedValues = Array.empty,
-        nonIndexedValues = rowValues)
+        updatedRow = rowValues,
+        indexedValues = Array.empty)
     }
   }
 }

@@ -110,7 +110,7 @@ object BatchEvalPythonExec {
       iter: Iterator[InternalRow],
       schema: StructType,
       forwardHiddenColumnIndexes:
-        Option[PythonUDTFColumnIndexes]): InputRowIteratorWithForwardedHiddenValues = {
+        Option[Seq[PythonUDTF.ColumnIndex]]): InputRowIteratorWithForwardedHiddenValues = {
     val dataTypes = schema.map(_.dataType)
     val needConversion = dataTypes.exists(EvaluatePython.needConversionInPython)
 
@@ -148,7 +148,7 @@ object BatchEvalPythonExec {
       val lookupResult: EvalPythonExec.LookupFromRowResult =
         EvalPythonExec.lookupIndexedColumnValuesFromRow(forwardHiddenColumnIndexes, x.toArray)
       EvalPythonExec.SerializedInputRow(
-        bytes = pickle.dumps(lookupResult.nonIndexedValues),
+        bytes = pickle.dumps(lookupResult.updatedRow),
         forwardedHiddenValues = lookupResult.indexedValues)
     }
     // Wrap the result in an iterator that returns the input rows while saving any forwarded hidden

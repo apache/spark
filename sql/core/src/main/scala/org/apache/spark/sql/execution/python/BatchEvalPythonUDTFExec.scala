@@ -86,7 +86,7 @@ case class BatchEvalPythonUDTFExec(
       pythonMetrics("pythonNumRowsReceived") += res.length
       val iteratorResult = fromJava(results).asInstanceOf[GenericArrayData]
         .array.map(_.asInstanceOf[InternalRow]).iterator
-      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, inputIterator)
+      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, inputIterator, schema)
     }
   }
 
@@ -131,9 +131,9 @@ object PythonUDTFRunner {
     // the TABLE argument of the Python UDTF call, if applicable.
     udtf.partitionColumnIndexes match {
       case Some(partitionColumnIndexes) =>
-        dataOut.writeInt(partitionColumnIndexes.childIndexes.size)
-        assert(partitionColumnIndexes.childIndexes.nonEmpty)
-        partitionColumnIndexes.childIndexes.foreach(dataOut.writeInt)
+        dataOut.writeInt(partitionColumnIndexes.size)
+        assert(partitionColumnIndexes.nonEmpty)
+        partitionColumnIndexes.foreach(p => dataOut.writeInt(p.index))
       case None =>
         dataOut.writeInt(0)
     }
@@ -142,7 +142,7 @@ object PythonUDTFRunner {
     udtf.pickledAnalyzeResult.foreach(PythonWorkerUtils.writeBytes(_, dataOut))
     // Write the contents of the Python script itself.
     PythonWorkerUtils.writePythonFunction(udtf.func, dataOut)
-    // Write the result schema of the UDTF call.
+    // Then write the result schema of the UDTF call.
     PythonWorkerUtils.writeUTF(udtf.elementSchema.json, dataOut)
     // Write the UDTF name.
     PythonWorkerUtils.writeUTF(udtf.name, dataOut)

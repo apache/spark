@@ -2193,8 +2193,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           // Propagate the column indexes for TABLE arguments to the PythonUDTF instance.
           val tvfWithTableColumnIndexes = tvf match {
             case g @ Generate(pyudtf: PythonUDTF, _, _, _, _, _) =>
-              def optionalIndexes(indexes: Seq[Int]): Option[PythonUDTFColumnIndexes] =
-                if (indexes.nonEmpty) Some(PythonUDTFColumnIndexes(indexes)) else None
+              def optionalIndexes(
+                  indexes: Seq[PythonUDTF.ColumnIndex]): Option[Seq[PythonUDTF.ColumnIndex]] =
+                if (indexes.nonEmpty) Some(indexes) else None
               g.copy(generator = pyudtf.copy(
                 partitionColumnIndexes =
                   optionalIndexes(tableArgs.head._1.partitioningExpressionIndexes),
@@ -2272,7 +2273,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             }
             PythonUDTF(
               u.name, u.func, analyzeResult.schema, Some(analyzeResult.pickledAnalyzeResult),
-              newChildren, u.evalType, u.udfDeterministic, u.resultId)
+              newChildren, u.evalType, u.udfDeterministic, u.resultId, None, None)
           }
         }
     }

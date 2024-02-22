@@ -121,7 +121,7 @@ case class FunctionTableSubqueryArgumentExpression(
       subquery = Project(
         projectList = subquery.output ++ extraProjectedPartitioningExpressions,
         child = subquery)
-      val partitioningAttributes = partitioningExpressionIndexes.map(i => subquery.output(i))
+      val partitioningAttributes = partitioningExpressionIndexes.map(p => subquery.output(p.index))
       subquery = Sort(
         order = partitioningAttributes.map(e => SortOrder(e, Ascending)) ++ orderByExpressions,
         global = false,
@@ -144,11 +144,19 @@ case class FunctionTableSubqueryArgumentExpression(
     }
     // If instructed, add a projection to compute the specified input expressions.
     if (selectedInputExpressions.nonEmpty) {
-      val projectList: Seq[NamedExpression] = selectedInputExpressions.map {
-        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String), _) =>
+      val projectList = selectedInputExpressions.map {
+        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String), false) =>
           Alias(expression, alias)()
-        case PythonUDTFSelectedExpression(a: Attribute, None, _) =>
+        case PythonUDTFSelectedExpression(a: Attribute, None, false) =>
           a
+        // If the UDTF is marking an expression as 'forwardHidden', we project it as a literal null
+        // and give it an alias so that the UDTF evaluator can find it in the output row.
+        // In this way, we save the cost of computing the expression and sending its value to the
+        // Python interpreter.
+        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String), true) =>
+          Alias(Literal(null), alias)()
+        case PythonUDTFSelectedExpression(a: Attribute, None, true) =>
+          Alias(Literal(null), a.name)()
         case PythonUDTFSelectedExpression(other: Expression, None, _) =>
           throw QueryCompilationErrors
             .invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(other.sql)
@@ -164,11 +172,13 @@ case class FunctionTableSubqueryArgumentExpression(
    * the Python UDTF evaluator so it knows which expressions to compare on adjacent rows to know
    * when the partition has changed.
    */
-  lazy val partitioningExpressionIndexes: Seq[Int] = {
+  lazy val partitioningExpressionIndexes: Seq[PythonUDTF.ColumnIndex] = {
     val extraPartitionByExpressionsToIndexes: Map[Expression, Int] =
       extraProjectedPartitioningExpressions.map(_.child).zipWithIndex.toMap
     partitionByExpressions.map { e =>
-      subqueryOutputs.getOrElse(e, plan.output.length + extraPartitionByExpressionsToIndexes(e))
+      val index: Int =
+        subqueryOutputs.getOrElse(e, plan.output.length + extraPartitionByExpressionsToIndexes(e))
+      PythonUDTF.ColumnIndex(index)
     }
   }
 
@@ -187,11 +197,11 @@ case class FunctionTableSubqueryArgumentExpression(
    * marked as 'forwardHidden', which means that the UDTF is specifying for Catalyst to pass the
    * expression through to the output table without making it visible to the 'eval' method.
    */
-  lazy val forwardHiddenExpressionIndexes: Seq[Int] = {
-    val results = ArrayBuffer.empty[Int]
+  lazy val forwardHiddenExpressionIndexes: Seq[PythonUDTF.ColumnIndex] = {
+    val results = ArrayBuffer.empty[PythonUDTF.ColumnIndex]
     selectedInputExpressions.zipWithIndex.foreach {
       case (p: PythonUDTFSelectedExpression, index: Int) if p.forwardHidden =>
-        results.append(plan.output.length + index)
+        results.append(PythonUDTF.ColumnIndex(index))
       case _ =>
     }
     results.toSeq

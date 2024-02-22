@@ -123,7 +123,9 @@ case class UserDefinedPythonTableFunction(
           pickledAnalyzeResult = None,
           children = exprs,
           evalType = pythonEvalType,
-          udfDeterministic = udfDeterministic)
+          udfDeterministic = udfDeterministic,
+          partitionColumnIndexes = None,
+          forwardHiddenColumnIndexes = None)
       case _ =>
         // Check which argument is a table argument here since it will be replaced with
         // `UnresolvedAttribute` to construct lateral join.
