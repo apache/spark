@@ -386,6 +386,12 @@ For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-availa
 
 Cannot find a short name for the codec `<codecName>`.
 
+### COLLATION_SUPPORT_DISABLED
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Collation feature is under development and not all features are supported. To enable existing features toggle `COLLATION_ENABLED` flag to true.
+
 ### COLLATION_INVALID_NAME
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

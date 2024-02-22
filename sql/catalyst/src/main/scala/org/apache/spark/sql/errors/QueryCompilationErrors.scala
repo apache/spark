@@ -289,11 +289,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def namedArgumentsNotEnabledError(functionName: String, argumentName: String): Throwable = {
-    new AnalysisException(
+    new SparkUnsupportedOperationException(
       errorClass = "NAMED_PARAMETER_SUPPORT_DISABLED",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "argument" -> toSQLId(argumentName))
+    )
+  }
+
+  def collationDisabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "COLLATION_SUPPORT_DISABLED",
+      messageParameters = Map.empty
     )
   }
 

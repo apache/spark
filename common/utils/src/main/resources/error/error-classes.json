@@ -463,6 +463,12 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_SUPPORT_DISABLED" : {
+    "message" : [
+      "Collation feature is under development and not all features are supported. To enable existing features toggle `COLLATION_ENABLED` flag to true."
+    ],
+    "sqlState" : "0A000"
+  },
   "COLLATION_INVALID_NAME" : {
     "message" : [
       "The value <collationName> does not represent a correct collation name. Suggested valid collation name: [<proposal>]."
