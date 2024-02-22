@@ -1043,7 +1043,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   /**
    * Replaces unresolved relations (tables and views) with concrete relations from the catalog.
    */
-  // scalastyle:off println
   object ResolveRelations extends Rule[LogicalPlan] {
     // The current catalog and namespace may be different from when the view was created, we must
     // resolve the view logical plan here, with the catalog and namespace stored in view metadata.
@@ -1260,10 +1259,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def resolveRelation(
         u: UnresolvedRelation,
         timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
-      println()
-      println(s"resolving $u with id = ${u.getTagValue(LogicalPlan.PLAN_ID_TAG)}")
-      println()
-
       val timeTravelSpecFromOptions = TimeTravelSpec.fromOptions(
         u.options,
         conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),

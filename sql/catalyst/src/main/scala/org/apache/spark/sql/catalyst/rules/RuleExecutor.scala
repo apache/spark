@@ -45,7 +45,6 @@ object RuleExecutor {
   }
 }
 
-// scalastyle:off println
 class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
 
   private val logLevel = SQLConf.get.planChangeLogLevel
@@ -65,7 +64,6 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
         }
 
         logBasedOnLevel(message())
-        println(message())
       }
     }
   }
@@ -84,7 +82,6 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
       }
 
       logBasedOnLevel(message())
-      println(message())
     }
   }
 
@@ -101,7 +98,6 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
       """.stripMargin
 
     logBasedOnLevel(message)
-    println(message)
   }
 
   private def logBasedOnLevel(f: => String): Unit = {
