@@ -18,9 +18,12 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
+
 import scala.util.control.NonFatal
+
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
