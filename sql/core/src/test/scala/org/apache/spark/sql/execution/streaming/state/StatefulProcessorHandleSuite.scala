@@ -205,14 +205,21 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
 
       // Generate some random timer timestamps in arbitrary sorted order
-      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L)
+      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
       timerTimestamps.foreach { timestamp =>
         handle.registerTimer(timestamp)
       }
 
       // Ensure that the expired timers are returned in sorted order
-      val expiredTimers = handle.getExpiredTimers().map(_._2).toSeq
+      var expiredTimers = handle.getExpiredTimers(1000000L).map(_._2).toSeq
       assert(expiredTimers === timerTimestamps.sorted)
+
+      expiredTimers = handle.getExpiredTimers(5L).map(_._2).toSeq
+      assert(expiredTimers === Seq(1L, 2L, 3L, 5L))
+
+      expiredTimers = handle.getExpiredTimers(10L).map(_._2).toSeq
+      assert(expiredTimers === Seq(1L, 2L, 3L, 5L, 6L, 8L, 9L))
+
       ImplicitGroupingKeyTracker.removeImplicitKey()
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
     }

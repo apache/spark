@@ -138,26 +138,21 @@ case class TransformWithStateExec(
 
   private def handleTimerRows(
       keyObj: Any,
-      currTimestampMs: Long,
       expiryTimestampMs: Long,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
-    if (expiryTimestampMs < currTimestampMs) {
-      ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-      val mappedIterator = statefulProcessor.handleInputRows(
-        keyObj,
-        Iterator.empty,
-        new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents),
-        new ExpiredTimerInfoImpl(true, Some(expiryTimestampMs), timeoutMode)
-      ).map { obj =>
-        getOutputRow(obj)
-      }
-      processorHandle.removeExpiredTimer(expiryTimestampMs)
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-      mappedIterator
-    } else {
-      Iterator.empty
+    ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
+    val mappedIterator = statefulProcessor.handleInputRows(
+      keyObj,
+      Iterator.empty,
+      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents),
+      new ExpiredTimerInfoImpl(true, Some(expiryTimestampMs), timeoutMode)
+    ).map { obj =>
+      getOutputRow(obj)
     }
+    processorHandle.removeExpiredTimer(expiryTimestampMs)
+    ImplicitGroupingKeyTracker.removeImplicitKey()
+    mappedIterator
   }
 
   private def processTimers(
@@ -166,17 +161,17 @@ case class TransformWithStateExec(
     timeoutMode match {
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
-        val procTimeIter = processorHandle.getExpiredTimers()
+        val procTimeIter = processorHandle.getExpiredTimers(batchTimestampMs.get)
         procTimeIter.flatMap { case (keyObj, expiryTimestampMs) =>
-          handleTimerRows(keyObj, batchTimestampMs.get, expiryTimestampMs, processorHandle)
+          handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
         }
 
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        val eventTimeIter = processorHandle.getExpiredTimers()
+        val eventTimeIter = processorHandle.getExpiredTimers(watermark)
         eventTimeIter.flatMap { case (keyObj, expiryTimestampMs) =>
-          handleTimerRows(keyObj, watermark, expiryTimestampMs, processorHandle)
+          handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
         }
 
       case _ => Iterator.empty

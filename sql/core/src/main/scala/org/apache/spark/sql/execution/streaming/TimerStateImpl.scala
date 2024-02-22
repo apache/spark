@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.TimeoutMode
 import org.apache.spark.sql.types._
+import org.apache.spark.util.NextIterator
 
 /**
  * Singleton utils class used primarily while interacting with TimerState
@@ -153,24 +154,49 @@ class TimerStateImpl[S](
     store.remove(encodeSecIndexKey(expiryTimestampMs), tsToKeyCFName)
   }
 
-  def getExpiredTimers(): Iterator[(Any, Long)] = {
-    store.iterator(tsToKeyCFName).map { rowPair =>
-      val keyRow = rowPair.key
-      getTimerRow(keyRow)
-    }
-  }
-
-  def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {
+  private def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {
+    // Decode the key object from the UnsafeRow
     val keyBytes = keyRow.getBinary(1)
     val retUnsafeRow = new UnsafeRow(1)
     retUnsafeRow.pointTo(keyBytes, keyBytes.length)
     val keyObj = keyExprEnc.resolveAndBind().
     createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
 
+    // Decode the expiry timestamp from the UnsafeRow encoded as BIG_ENDIAN
     val bytes = keyRow.getBinary(0)
     val byteBuffer = ByteBuffer.wrap(bytes)
     byteBuffer.order(ByteOrder.BIG_ENDIAN)
     val expiryTimestampMs = byteBuffer.getLong
     (keyObj, expiryTimestampMs)
+  }
+
+  /**
+   * Function to get all the timers that have expired till the given expiryTimestampThreshold
+   * @param expiryTimestampThreshold - threshold timestamp for expiry
+   * @return - iterator of all the timers that have expired till the given threshold
+   */
+  def getExpiredTimers(expiryTimestampThreshold: Long): Iterator[(Any, Long)] = {
+    val iter = store.iterator(tsToKeyCFName)
+
+    new NextIterator[(Any, Long)] {
+      override protected def getNext(): (Any, Long) = {
+        if (iter.hasNext) {
+          val rowPair = iter.next()
+          val keyRow = rowPair.key
+          val result = getTimerRow(keyRow)
+          if (result._2 <= expiryTimestampThreshold) {
+            result
+          } else {
+            finished = true
+            null.asInstanceOf[(Any, Long)]
+          }
+        } else {
+          finished = true
+          null.asInstanceOf[(Any, Long)]
+        }
+      }
+
+      override protected def close(): Unit = { }
+    }
   }
 }

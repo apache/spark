@@ -21,7 +21,6 @@ import java.util.UUID
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
@@ -171,16 +170,21 @@ class StatefulProcessorHandleImpl(
     store.removeColFamilyIfExists(stateName)
   }
 
-  def getExpiredTimers(): Iterator[(Any, Long)] = {
-    timerState.getExpiredTimers()
+  /**
+   * Function to retrieve expired timers based on the expiryTimestampThreshold
+   * @param expiryTimestampThreshold - threshold for expiry timestamp
+   * @return - iterator of expired timers
+   */
+  def getExpiredTimers(expiryTimestampThreshold: Long): Iterator[(Any, Long)] = {
+    timerState.getExpiredTimers(expiryTimestampThreshold)
   }
 
+  /**
+   * Function to remove expired timer based on the expiryTimestampMs
+   * @param expiryTimestampMs - expiry timestamp in milliseconds
+   */
   def removeExpiredTimer(expiryTimestampMs: Long): Unit = {
     timerState.remove(expiryTimestampMs)
-  }
-
-  def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {
-    timerState.getTimerRow(keyRow)
   }
 
   override def getListState[T](stateName: String): ListState[T] = {
