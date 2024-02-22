@@ -257,13 +257,7 @@ class RocksDB(
    * @param cfName - column family name
    * @return - true if the column family is for internal use, false otherwise
    */
-  private def checkInternalColumnFamilies(cfName: String): Boolean = {
-    if (cfName.charAt(0) == '_') {
-      true
-    } else {
-      false
-    }
-  }
+  private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
 
   /**
    * Create RocksDB column family, if not created already
@@ -279,8 +273,7 @@ class RocksDB(
     }
 
     if (!isInternal && cfName.charAt(0) == '_') {
-      throw new UnsupportedOperationException("Failed to create column family with unsupported " +
-        s"starting character. State variables starting with '_' are reserved for internal use.")
+      throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(cfName)
     }
 
     if (!checkColFamilyExists(colFamilyName)) {

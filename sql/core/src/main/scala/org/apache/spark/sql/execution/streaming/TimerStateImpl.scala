@@ -89,20 +89,19 @@ class TimerStateImpl[S](
   val keyToTsCFName = timerCfName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
   store.createColFamilyIfAbsent(keyToTsCFName,
     schemaForKeyRow, numColsPrefixKey = 1,
-    schemaForValueRow, true,
+    schemaForValueRow, useMultipleValuesPerKey = false,
     isInternal = true)
 
   val tsToKeyCFName = timerCfName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
   store.createColFamilyIfAbsent(tsToKeyCFName,
     keySchemaForSecIndex, numColsPrefixKey = 0,
-    schemaForValueRow, true,
+    schemaForValueRow, useMultipleValuesPerKey = false,
     isInternal = true)
 
   private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      throw new UnsupportedOperationException("Implicit key not found for operation on" +
-        s"stateName=$keyToTsCFName")
+      throw StateStoreErrors.implicitKeyNotFound(keyToTsCFName)
     }
 
     val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
@@ -113,8 +112,7 @@ class TimerStateImpl[S](
   private def encodeSecIndexKey(expiryTimestampMs: Long): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      throw new UnsupportedOperationException("Implicit key not found for operation on" +
-        s"stateName=$keyToTsCFName")
+      throw StateStoreErrors.implicitKeyNotFound(tsToKeyCFName)
     }
 
     val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
@@ -160,8 +158,7 @@ class TimerStateImpl[S](
   def listTimers(): Iterator[Long] = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      throw new UnsupportedOperationException("Implicit key not found for operation on" +
-        s"stateName=$keyToTsCFName")
+      throw StateStoreErrors.implicitKeyNotFound(keyToTsCFName)
     }
 
     val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()

@@ -63,6 +63,11 @@ object StateStoreErrors {
       errorClass = "ILLEGAL_STATE_STORE_VALUE.EMPTY_LIST_VALUE",
       messageParameters = Map("stateName" -> stateName))
   }
+
+  def cannotCreateColumnFamilyWithReservedChars(colFamilyName: String):
+    StateStoreCannotCreateColumnFamilyWithReservedChars = {
+      new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
+    }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -82,6 +87,11 @@ class StateStoreCannotRemoveDefaultColumnFamily(colFamilyName: String)
     messageParameters = Map("colFamilyName" -> colFamilyName)
   )
 
+class StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+    messageParameters = Map("colFamilyName" -> colFamilyName)
+  )
 
 class StateStoreUnsupportedOperationException(operationType: String, entity: String)
   extends SparkUnsupportedOperationException(

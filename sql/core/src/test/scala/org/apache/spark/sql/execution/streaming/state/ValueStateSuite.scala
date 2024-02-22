@@ -210,7 +210,7 @@ class ValueStateSuite extends SharedSparkSession
         handle.getValueState[Long]("_testState")
       }
       assert(ex.isInstanceOf[UnsupportedOperationException])
-      assert(ex.getMessage.contains("reserved for internal use"))
+      assert(ex.getMessage.contains("unsupported starting character"))
     }
   }
 
