@@ -447,7 +447,7 @@ message StreamingQueryListenerEvent {
 }
 
 message StreamingQueryListenerEventsResult {
-  repeated StreamingQueryListenerEvents events = 1;
+  repeated StreamingQueryListenerEvent events = 1;
 }
 
 // Command to get the output of 'SparkContext.resources'

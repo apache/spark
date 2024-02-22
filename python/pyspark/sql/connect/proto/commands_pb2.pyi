@@ -1880,7 +1880,7 @@ class StreamingQueryListenerBusCommand(google.protobuf.message.Message):
 
 global___StreamingQueryListenerBusCommand = StreamingQueryListenerBusCommand
 
-class StreamingQueryListenerEvents(google.protobuf.message.Message):
+class StreamingQueryListenerEvent(google.protobuf.message.Message):
     """The protocol for the returned events in the long-running response channel.
     The event_type for QueryProgressEvent is 1;
     for QueryTerminatedEvent is 2; for QueryIdleEvent is 3;
@@ -1907,7 +1907,7 @@ class StreamingQueryListenerEvents(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___StreamingQueryListenerEvents = StreamingQueryListenerEvents
+global___StreamingQueryListenerEvent = StreamingQueryListenerEvent
 
 class StreamingQueryListenerEventsResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1917,12 +1917,12 @@ class StreamingQueryListenerEventsResult(google.protobuf.message.Message):
     def events(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___StreamingQueryListenerEvents
+        global___StreamingQueryListenerEvent
     ]: ...
     def __init__(
         self,
         *,
-        events: collections.abc.Iterable[global___StreamingQueryListenerEvents] | None = ...,
+        events: collections.abc.Iterable[global___StreamingQueryListenerEvent] | None = ...,
     ) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["events", b"events"]) -> None: ...
 
