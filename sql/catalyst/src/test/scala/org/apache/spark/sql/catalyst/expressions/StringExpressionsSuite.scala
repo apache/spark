@@ -231,9 +231,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(c1 contains Collate("B", "UCS_BASIC_LCASE"), true, row)
     checkEvaluation(c1 contains Collate("b", "UNICODE_CI"), true, row)
     checkEvaluation(c1 contains Collate("B", "UNICODE_CI"), true, row)
-//    checkEvaluation(c1 contains Collate("Ć", "SR_CI_AI"), true, row)
-//    checkEvaluation(c1 contains Collate("C", "SR_CI_AS"), true, row)
-//    checkEvaluation(c1 contains Collate("c", "SR_CS_AS"), true, row)
 
     checkEvaluation(c1 startsWith "a", true, row)
     checkEvaluation(c1 startsWith "A", false, row)
@@ -243,9 +240,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(c1 startsWith Collate("A", "UCS_BASIC_LCASE"), true, row)
     checkEvaluation(c1 startsWith Collate("a", "UNICODE_CI"), true, row)
     checkEvaluation(c1 startsWith Collate("A", "UNICODE_CI"), true, row)
-//    checkEvaluation(c1 startsWith Collate("Ä", "DE_CI_AI"), true, row)
-//    checkEvaluation(c1 startsWith Collate("A", "DE_CI_AS"), true, row)
-//    checkEvaluation(c1 startsWith Collate("a", "DE_CS_AS"), true, row)
 
     checkEvaluation(c1 endsWith "c", true, row)
     checkEvaluation(c1 endsWith "C", false, row)
@@ -255,9 +249,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(c1 endsWith Collate("C", "UCS_BASIC_LCASE"), true, row)
     checkEvaluation(c1 endsWith Collate("c", "UNICODE_CI"), true, row)
     checkEvaluation(c1 endsWith Collate("C", "UNICODE_CI"), true, row)
-//    checkEvaluation(c1 endsWith Collate("Ć", "SR_CI_AI"), true, row)
-//    checkEvaluation(c1 endsWith Collate("C", "SR_CI_AS"), true, row)
-//    checkEvaluation(c1 endsWith Collate("c", "SR_CS_AS"), true, row)
   }
 
   test("Substring") {
