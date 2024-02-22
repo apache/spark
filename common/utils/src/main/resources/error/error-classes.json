@@ -2008,12 +2008,6 @@
     },
     "sqlState" : "HY000"
   },
-  "INVALID_HIVE_COLUMN_NAME" : {
-    "message" : [
-      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
-    ],
-    "sqlState" : "42K05"
-  },
   "INVALID_IDENTIFIER" : {
     "message" : [
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
