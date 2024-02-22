@@ -1914,7 +1914,9 @@ class StreamingQueryListenerEvent(google.protobuf.message.Message):
     EVENT_JSON_FIELD_NUMBER: builtins.int
     EVENT_TYPE_FIELD_NUMBER: builtins.int
     event_json: builtins.str
+    """(Required) The json serialized event, all StreamingQueryListener events have a json method"""
     event_type: global___StreamingQueryEventType.ValueType
+    """(Required) Query event type used by client to decide how to deserialize the event_json"""
     def __init__(
         self,
         *,

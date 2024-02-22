@@ -447,7 +447,9 @@ enum StreamingQueryEventType {
 
 // The protocol for the returned events in the long-running response channel.
 message StreamingQueryListenerEvent {
+  // (Required) The json serialized event, all StreamingQueryListener events have a json method
   string event_json = 1;
+  // (Required) Query event type used by client to decide how to deserialize the event_json
   StreamingQueryEventType event_type = 2;
 }
 
