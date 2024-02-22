@@ -174,4 +174,16 @@ class CollationSuite extends QueryTest with SharedSparkSession {
           Row(expected))
     }
   }
+
+  test("aggregates respect collation") {
+    checkAnswer(sql(
+      """
+      WITH t AS (
+        SELECT collate(col1, 'UCS_BASIC_LCASE') as c
+        FROM
+        VALUES ('aaa'), ('bbb'), ('AAA'), ('BBB')
+      )
+      SELECT COUNT(*), c FROM t GROUP BY c
+      """), Seq(Row(2, "aaa"), Row(2, "bbb")))
+  }
 }

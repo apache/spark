@@ -30,6 +30,7 @@ import com.esotericsoftware.kryo.io.Output;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.types.*;
+import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -93,6 +94,20 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     PhysicalDataType pdt = PhysicalDataType.apply(dt);
     return pdt instanceof PhysicalPrimitiveType || pdt instanceof PhysicalDecimalType ||
       pdt instanceof PhysicalCalendarIntervalType;
+  }
+
+  /**
+   * True if comparisons, equality and hashing can be done purely on binary representation.
+   * i.e. binary(e1) = binary(e2) <=> e1 = e2.
+   * e.g. this is not true for non-binary collations (any case/accent insensitive collation
+   * can lead to rows being semantically equal even though their binary representations differ).
+   */
+  public static boolean isBinaryStable(DataType dt) {
+    if (dt instanceof StringType st) {
+      return CollationFactory.fetchCollation(st.collationId()).isBinaryCollation;
+    }
+
+    return true;
   }
 
   //////////////////////////////////////////////////////////////////////////////
