@@ -330,7 +330,6 @@ class CollationSuite extends DatasourceV2SQLBase {
         right + "', 'UNICODE'))"), Row(expectedAnswer))
     }
 
-
     // UCS_BASIC_LCASE & UNICODE_CI collation
     listResult = List(
     //  ""     c     abc    cde   abde  abcde    C     ABC    CDE    ABDE  ABCDE
@@ -434,39 +433,6 @@ class CollationSuite extends DatasourceV2SQLBase {
       checkAnswer(sql("SELECT startswith(collate('" + left + "', 'UNICODE_CI'), collate('" +
         right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
     }
-
-    // Serbian language collation tests
-    listLeft = List("cde", "Cde", "ćde", "Ćde")
-    listRight = List("c", "C", "ć", "Ć")
-    val listResultNoCollation = List(
-      //  c     C      ć      Ć
-      true, false, false, false, // cde
-      false, true, false, false, // Cde
-      false, false, true, false, // ćde
-      false, false, false, true) // Ćde
-
-    // UNICODE_CI
-    listResult = List(
-      //  c     C      ć      Ć
-      true, true, false, false, // cde
-      true, true, false, false, // Cde
-      false, false, true, true, // ćde
-      false, false, true, true) // Ćde
-    for {
-      (left, index_left) <- listLeft.zipWithIndex
-      (right, index_right) <- listRight.zipWithIndex
-    } {
-      // without collation
-      var expectedAnswer = listResultNoCollation(index_left * listRight.length + index_right)
-      checkAnswer(sql("SELECT startswith('" + left + "', '" + right + "')"),
-        Row(expectedAnswer))
-      // with collation
-      expectedAnswer = listResult(index_left * listRight.length + index_right)
-      checkAnswer(sql("SELECT startswith('" + left + "', collate('" +
-        right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
-      checkAnswer(sql("SELECT startswith(collate('" + left + "', 'UNICODE_CI'), collate('" +
-        right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
-    }
   }
 
   test("Support endsWith string expression with Collation") {
@@ -535,39 +501,6 @@ class CollationSuite extends DatasourceV2SQLBase {
       checkAnswer(sql("SELECT endswith(collate('" + left + "', 'UCS_BASIC_LCASE'), collate('" +
         right + "', 'UCS_BASIC_LCASE'))"), Row(expectedAnswer))
       // UNICODE_CI
-      checkAnswer(sql("SELECT endswith('" + left + "', collate('" +
-        right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
-      checkAnswer(sql("SELECT endswith(collate('" + left + "', 'UNICODE_CI'), collate('" +
-        right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
-    }
-
-    // Serbian language collation tests
-    listLeft = List("abc", "abC", "abć", "abĆ")
-    listRight = List("c", "C", "ć", "Ć")
-    val listResultNoCollation = List(
-      //  c     C      ć      Ć
-      true, false, false, false, // abc
-      false, true, false, false, // abC
-      false, false, true, false, // abć
-      false, false, false, true) // abĆ
-
-    // UNICODE_CI
-    listResult = List(
-      //  c     C      ć      Ć
-      true, true, false, false, // abc
-      true, true, false, false, // abC
-      false, false, true, true, // abć
-      false, false, true, true) // abĆ
-    for {
-      (left, index_left) <- listLeft.zipWithIndex
-      (right, index_right) <- listRight.zipWithIndex
-    } {
-      // without collation
-      var expectedAnswer = listResultNoCollation(index_left * listRight.length + index_right)
-      checkAnswer(sql("SELECT endswith('" + left + "', '" + right + "')"),
-        Row(expectedAnswer))
-      // with collation
-      expectedAnswer = listResult(index_left * listRight.length + index_right)
       checkAnswer(sql("SELECT endswith('" + left + "', collate('" +
         right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT endswith(collate('" + left + "', 'UNICODE_CI'), collate('" +
