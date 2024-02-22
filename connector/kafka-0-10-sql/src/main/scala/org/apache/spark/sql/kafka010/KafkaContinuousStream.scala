@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -92,13 +93,14 @@ class KafkaContinuousStream(
 
     val deletedPartitions = oldStartPartitionOffsets.keySet.diff(currentPartitionSet)
     if (deletedPartitions.nonEmpty) {
-      val message = if (
-        offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}"
+      if (offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+        reportDataLoss(s"$deletedPartitions are gone.${CUSTOM_GROUP_ID_ERROR_MESSAGE}",
+          () => QueryExecutionErrors.partitionsDeletedAndGroupIdConfigPresentKafkaError(
+            deletedPartitions.toString, ConsumerConfig.GROUP_ID_CONFIG))
       } else {
-        s"$deletedPartitions are gone. Some data may have been missed."
+        reportDataLoss(s"$deletedPartitions are gone. Some data may have been missed.",
+          () => QueryExecutionErrors.partitionsDeletedKafkaError(deletedPartitions.toString))
       }
-      reportDataLoss(message)
     }
 
     val startOffsets = newPartitionOffsets ++
@@ -137,12 +139,12 @@ class KafkaContinuousStream(
   override def toString(): String = s"KafkaSource[$offsetReader]"
 
   /**
-   * If `failOnDataLoss` is true, this method will throw an `IllegalStateException`.
+   * If `failOnDataLoss` is true, this method will throw the exception.
    * Otherwise, just log a warning.
    */
-  private def reportDataLoss(message: String): Unit = {
+  private def reportDataLoss(message: String, getException: () => Throwable): Unit = {
     if (failOnDataLoss) {
-      throw new IllegalStateException(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE")
+      throw getException()
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }

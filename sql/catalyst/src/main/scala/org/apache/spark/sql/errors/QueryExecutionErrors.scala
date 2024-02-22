@@ -2715,4 +2715,70 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "numFields" -> numFields.toString,
         "schemaLen" -> schemaLen.toString))
   }
+
+  def couldNotReadOffsetRangeInKafkaError(startOffset: Long,
+                                          endOffset: Long,
+                                          topicPartition: String,
+                                          groupId: String,
+                                          cause: Throwable): SparkException = {
+    new SparkException(
+      errorClass = "KAFKA_DATA_LOSS.COULD_NOT_READ_OFFSET_RANGE",
+      messageParameters = Map("startOffset" -> startOffset.toString,
+        "endOffset" -> endOffset.toString, "topicPartition" -> topicPartition,
+        "groupId" -> groupId),
+      cause = cause)
+  }
+
+  def startOffsetResetKafkaError(topicPartition: String,
+                                 offset: Long,
+                                 fetchedOffset: Long): SparkException = {
+    new SparkException(
+      errorClass = "KAFKA_DATA_LOSS.START_OFFSET_RESET",
+      messageParameters = Map("topicPartition" -> topicPartition, "offset" -> offset.toString,
+        "fetchedOffset" -> fetchedOffset.toString),
+      cause = null)
+  }
+
+  def initialOffsetNotFoundForPartitionsKafkaError(partitions: String): SparkException = {
+    new SparkException(
+      errorClass = "KAFKA_DATA_LOSS.INITIAL_OFFSET_NOT_FOUND_FOR_PARTITIONS",
+      messageParameters = Map("partitions" -> partitions),
+      cause = null)
+  }
+
+  def addedPartitionDoesNotStartFromZeroKafkaError(topicPartition: String,
+                                                   startOffset: Long): SparkException = {
+    new SparkException(
+      errorClass = "KAFKA_DATA_LOSS.ADDED_PARTITION_DOES_NOT_START_FROM_OFFSET_ZERO",
+      messageParameters = Map("topicPartition" -> topicPartition,
+        "startOffset" -> startOffset.toString),
+      cause = null)
+  }
+
+  def partitionsDeletedKafkaError(partitions: String): SparkException = {
+    new SparkException(
+      errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
+      messageParameters = Map("partitions" -> partitions),
+      cause = null)
+  }
+
+  def partitionsDeletedAndGroupIdConfigPresentKafkaError(partitions: String,
+                                                         groupIdConfig: String
+                                                        ): SparkException = {
+    new SparkException(
+      errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED_AND_GROUP_ID_CONFIG_PRESENT",
+      messageParameters = Map("partitions" -> partitions, "groupIdConfig" -> groupIdConfig),
+      cause = null)
+  }
+
+  def partitionOffsetChangedKafkaError(topicPartition: String,
+                                       prevOffset: Long,
+                                       newOffset: Long): SparkException = {
+    new SparkException(
+      errorClass = "KAFKA_DATA_LOSS.PARTITION_OFFSET_CHANGED",
+      messageParameters = Map("topicPartition" -> topicPartition,
+        "prevOffset" -> prevOffset.toString,
+        "newOffset" -> newOffset.toString),
+      cause = null)
+  }
 }

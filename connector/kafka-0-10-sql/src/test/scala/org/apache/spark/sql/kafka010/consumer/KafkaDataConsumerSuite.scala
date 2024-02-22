@@ -31,6 +31,7 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{TaskContext, TaskContextImpl}
+import org.apache.spark.SparkException
 import org.apache.spark.kafka010.KafkaDelegationTokenTest
 import org.apache.spark.sql.kafka010.{KafkaTestUtils, RecordBuilder}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
@@ -89,11 +90,12 @@ class KafkaDataConsumerSuite
     consumerPool.reset()
   }
 
-  test("SPARK-19886: Report error cause correctly in reportDataLoss") {
+  test("SPARK-19886: Report error cause correctly in throwOnDataLoss") {
     val cause = new Exception("D'oh!")
-    val reportDataLoss = PrivateMethod[Unit](Symbol("reportDataLoss0"))
-    val e = intercept[IllegalStateException] {
-      KafkaDataConsumer.invokePrivate(reportDataLoss(true, "message", cause))
+    val throwOnDataLoss = PrivateMethod[Unit](Symbol("throwOnDataLoss"))
+    val consumer = KafkaDataConsumer.acquire(topicPartition, getKafkaParams())
+    val e = intercept[SparkException] {
+      consumer.invokePrivate(throwOnDataLoss(0L, 1L, topicPartition, groupId, cause))
     }
     assert(e.getCause === cause)
   }
