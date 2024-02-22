@@ -1043,6 +1043,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   /**
    * Replaces unresolved relations (tables and views) with concrete relations from the catalog.
    */
+  // scalastyle:off println
   object ResolveRelations extends Rule[LogicalPlan] {
     // The current catalog and namespace may be different from when the view was created, we must
     // resolve the view logical plan here, with the catalog and namespace stored in view metadata.
@@ -1259,6 +1260,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     private def resolveRelation(
         u: UnresolvedRelation,
         timeTravelSpec: Option[TimeTravelSpec] = None): Option[LogicalPlan] = {
+      println()
+      println(s"resolving $u with id = ${u.getTagValue(LogicalPlan.PLAN_ID_TAG)}")
+      println()
+
       val timeTravelSpecFromOptions = TimeTravelSpec.fromOptions(
         u.options,
         conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
@@ -1275,16 +1280,29 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val key =
               ((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq,
               finalTimeTravelSpec)
-            AnalysisContext.get.relationCache.get(key).map(_.transform {
-              case multi: MultiInstanceRelation =>
-                val newRelation = multi.newInstance()
-                newRelation.copyTagsFrom(multi)
-                newRelation
-            }).orElse {
+            AnalysisContext.get.relationCache.get(key).map { cache =>
+              val cachedRelation = cache.transform {
+                case multi: MultiInstanceRelation =>
+                  val newRelation = multi.newInstance()
+                  newRelation.copyTagsFrom(multi)
+                  newRelation
+              }
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                val cachedConnectRelation = cachedRelation.clone()
+                cachedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                cachedConnectRelation
+              }.getOrElse(cachedRelation)
+            }.orElse {
               val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec)
               val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-              loaded
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                loaded.map { loadedRelation =>
+                  val loadedConnectRelation = loadedRelation.clone()
+                  loadedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                  loadedConnectRelation
+                }
+              }.getOrElse(loaded)
             }
           case _ => None
         }

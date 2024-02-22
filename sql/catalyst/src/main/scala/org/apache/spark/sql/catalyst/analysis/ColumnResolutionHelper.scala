@@ -518,6 +518,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     case _ => e
   }
 
+  // scalastyle:off println
   private def resolveDataFrameColumn(
       u: UnresolvedAttribute,
       q: Seq[LogicalPlan]): Option[NamedExpression] = {
@@ -533,6 +534,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
       //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
       //  df1.select(df2.a)   <-   illegal reference df2.a
+      println()
+      println()
+      println()
+      println(s"Can not resolve $u with plan $planId")
+      println()
+      println()
+      println()
       throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
     }
     resolved
