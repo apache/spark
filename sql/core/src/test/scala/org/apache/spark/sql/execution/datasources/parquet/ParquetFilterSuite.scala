@@ -2220,6 +2220,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       Seq("=", ">", ">=", "<", "<=", "!=").foreach { op =>
         checkAnswer(sql(s"select * from t1 where 1=1 and d $op (select d from t2)"), Seq.empty)
       }
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        s"org.apache.spark.sql.catalyst.optimizer.NullPropagation") {
+        Seq("=", ">", ">=", "<", "<=", "!=").foreach { op =>
+          checkAnswer(sql(s"select * from t1 where d ${op} null"), Seq.empty)
+        }
+      }
     }
   }
 }

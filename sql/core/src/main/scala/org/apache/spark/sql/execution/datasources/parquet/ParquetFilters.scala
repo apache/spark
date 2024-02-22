@@ -609,8 +609,8 @@ class ParquetFilters(
 
   // Parquet's type in the given file should be matched to the value's type
   // in the pushed filter in order to push down the filter to Parquet.
-  private def valueCanMakeFilterOn(name: String, value: Any): Boolean = {
-    value == null || (nameToParquetField(name).fieldType match {
+  private def valueCanMakeFilterOn(name: String, value: Any, allowNull: Boolean): Boolean = {
+    (value == null && allowNull) || (nameToParquetField(name).fieldType match {
       case ParquetBooleanType => value.isInstanceOf[JBoolean]
       case ParquetIntegerType if value.isInstanceOf[Period] => true
       case ParquetByteType | ParquetShortType | ParquetIntegerType => value match {
@@ -649,8 +649,8 @@ class ParquetFilters(
     case _ => false
   }
 
-  private def canMakeFilterOn(name: String, value: Any): Boolean = {
-    nameToParquetField.contains(name) && valueCanMakeFilterOn(name, value)
+  private def canMakeFilterOn(name: String, value: Any, allowNull: Boolean = true): Boolean = {
+    nameToParquetField.contains(name) && valueCanMakeFilterOn(name, value, allowNull)
   }
 
   /**
@@ -700,17 +700,19 @@ class ParquetFilters(
         makeNotEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
-      case sources.LessThan(name, value) if canMakeFilterOn(name, value) =>
+      case sources.LessThan(name, value) if canMakeFilterOn(name, value, allowNull = false) =>
         makeLt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
-      case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
+      case sources.LessThanOrEqual(name, value)
+        if canMakeFilterOn(name, value, allowNull = false) =>
         makeLtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
-      case sources.GreaterThan(name, value) if canMakeFilterOn(name, value) =>
+      case sources.GreaterThan(name, value) if canMakeFilterOn(name, value, allowNull = false) =>
         makeGt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
-      case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
+      case sources.GreaterThanOrEqual(name, value)
+        if canMakeFilterOn(name, value, allowNull = false) =>
         makeGtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
