@@ -964,6 +964,18 @@ class QueryCompilationErrorsSuite
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
   }
 
+  test("SPARK-47102: Collation query when COLLATION_ENABLED is false") {
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql(s"select 'aaa' collate 'UNICODE_ci'")
+        },
+        errorClass = "COLLATION_SUPPORT_DISABLED",
+        parameters = Map.empty
+      )
+    }
+  }
+
   test("INTERNAL_ERROR: Convert unsupported data type from Spark to Parquet") {
     val converter = new SparkToParquetSchemaConverter
     val dummyDataType = new DataType {
