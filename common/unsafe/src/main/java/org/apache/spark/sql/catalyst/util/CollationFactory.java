@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
