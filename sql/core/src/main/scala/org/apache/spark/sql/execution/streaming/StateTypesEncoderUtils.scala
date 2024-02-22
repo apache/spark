@@ -99,9 +99,9 @@ class StateTypesEncoder[GK](
     ttlValueRowEncoder(InternalRow(null))
   }
 
-  def encodeValue[S](value: S): UnsafeRow = {
+  def encodeValue[S](value: S, expirationTimestamp: Long): UnsafeRow = {
     val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
-    val valueRow = valueProjection(InternalRow(valueByteArr))
+    val valueRow = valueProjection(InternalRow(valueByteArr, expirationTimestamp))
     valueRow
   }
 

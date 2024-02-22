@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.{StateKeyValueRowSchema, StateTypesEncoder}
+import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 

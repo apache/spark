@@ -91,8 +91,12 @@ class ValueStateImpl[S](
 
   /** Function to update and overwrite state associated with given key */
   override def update(newState: S): Unit = {
+    val expirationTimestamp = ttlMode match {
+      case NoTTL => -1L
+      case ProcessingTimeTTL => System.currentTimeMillis() + ttl.toMillis
+    }
     store.put(stateTypesEncoder.encodeGroupingKey(),
-      stateTypesEncoder.encodeValue(newState), stateName)
+      stateTypesEncoder.encodeValue(newState, expirationTimestamp), stateName)
     ttlMode match {
       case NoTTL =>
       case ProcessingTimeTTL =>
