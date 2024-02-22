@@ -109,18 +109,22 @@ class CollationSuite extends DatasourceV2SQLBase {
   }
 
   test("collate function invalid input data type") {
-    checkError(
-      exception = intercept[ExtendedAnalysisException] { sql(s"select collate(1, 'UCS_BASIC')") },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-      sqlState = "42K09",
-      parameters = Map(
-        "sqlExpr" -> "\"collate(1)\"",
-        "paramIndex" -> "first",
-        "inputSql" -> "\"1\"",
-        "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRING\""),
-      context = ExpectedContext(
-        fragment = s"collate(1, 'UCS_BASIC')", start = 7, stop = 29))
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[ExtendedAnalysisException] {
+          sql(s"select collate(1, 'UCS_BASIC')")
+        },
+        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        sqlState = "42K09",
+        parameters = Map(
+          "sqlExpr" -> "\"collate(1)\"",
+          "paramIndex" -> "first",
+          "inputSql" -> "\"1\"",
+          "inputType" -> "\"INT\"",
+          "requiredType" -> "\"STRING\""),
+        context = ExpectedContext(
+          fragment = s"collate(1, 'UCS_BASIC')", start = 7, stop = 29))
+    }
   }
 
   test("collation expression returns default collation") {

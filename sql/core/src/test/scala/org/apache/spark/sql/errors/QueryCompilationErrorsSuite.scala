@@ -967,7 +967,7 @@ class QueryCompilationErrorsSuite
   test("SPARK-47102: Collation query when COLLATION_ENABLED is false") {
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
       checkError(
-        exception = intercept[SparkUnsupportedOperationException] {
+        exception = intercept[AnalysisException] {
           sql(s"select 'aaa' collate 'UNICODE_ci'")
         },
         errorClass = "COLLATION_SUPPORT_DISABLED",
