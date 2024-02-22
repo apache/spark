@@ -2880,6 +2880,7 @@ class HiveDDLSuite
     // delimiter characters
     Seq(",", ":").foreach { c =>
       val typ = s"array<struct<`abc${c}xyz`:int>>"
+      // The regex is from HiveClientImpl.getSparkSQLDataType, please keep them in sync.
       val replaced = typ.replaceAll("`", "").replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
       withTable("t") {
         checkError(
