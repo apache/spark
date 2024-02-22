@@ -19,7 +19,6 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -35,13 +34,7 @@ class FeatherMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    def test_disabled(self):
-        with self.assertRaises(PandasNotImplementedError):
-            self.psdf.to_feather("/tmp/f.feather")
-
     def test_to_feather(self):
-        ps.set_option("compute.pandas_fallback", True)
-
         with self.temp_dir() as dirpath:
             path1 = f"{dirpath}/file1.feather"
             path2 = f"{dirpath}/file2.feather"
@@ -53,8 +46,6 @@ class FeatherMixin:
                 pd.read_feather(path1),
                 pd.read_feather(path2),
             )
-
-        ps.reset_option("compute.pandas_fallback")
 
 
 class FeatherTests(
