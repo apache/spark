@@ -250,7 +250,8 @@ class MavenUtilsSuite
 
     val settingsFile = Paths.get(tempIvyPath, "ivysettings.xml")
     Files.write(settingsFile, settingsText.getBytes(StandardCharsets.UTF_8))
-    val settings = MavenUtils.loadIvySettings(settingsFile.toString, None, Some(tempIvyPath))
+    val settings = MavenUtils.loadIvySettings(settingsFile.toString, None, None)
+    settings.setDefaultIvyUserDir(new File(tempIvyPath)) // NOTE - can't set this through file
 
     val testUtilSettings = new IvySettings
     testUtilSettings.setDefaultIvyUserDir(new File(tempIvyPath))
