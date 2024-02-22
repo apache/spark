@@ -25,7 +25,6 @@ import java.util.concurrent.CopyOnWriteArrayList
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 

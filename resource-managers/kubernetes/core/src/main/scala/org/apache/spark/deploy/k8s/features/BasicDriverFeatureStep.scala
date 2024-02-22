@@ -20,7 +20,6 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
-import jakarta.ws.rs.core.UriBuilder
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
