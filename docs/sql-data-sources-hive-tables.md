@@ -185,7 +185,9 @@ The following options can be used to configure the version of Hive that is used 
   </tr>
   <tr>
     <td><code>spark.sql.hive.metastore.sharedPrefixes</code></td>
-    <td><code>com.mysql.jdbc,<br/>org.postgresql,<br/>com.microsoft.sqlserver,<br/>oracle.jdbc</code></td>
+    <td><code>com.ibm.db2,<br/>com.microsoft.sqlserver,<br/>com.mysql.jdbc,
+      <br/>com.oracle.database.jdbc,<br/>oracle.jdbc,<br/>org.mariadb.jdbc,<br/>org.postgresql</code>
+    </td>
     <td>
       <p>
         A comma-separated list of class prefixes that should be loaded using the classloader that is
