@@ -436,14 +436,19 @@ message StreamingQueryListenerBusCommand {
   }
 }
 
-// The protocol for the returned events in the long-running response channel.
-// The event_type for QueryProgressEvent is 1;
-// for QueryTerminatedEvent is 2; for QueryIdleEvent is 3;
+// The enum used for client side streaming query listener event
 // There is no QueryStartedEvent defined here,
 // it is added as a field in WriteStreamOperationStartResult
+enum StreamingQueryEventType {
+  QUERY_PROGRESS_EVENT = 0;
+  QUERY_TERMINATED_EVENT = 1;
+  QUERY_IDLE_EVENT = 2;
+}
+
+// The protocol for the returned events in the long-running response channel.
 message StreamingQueryListenerEvent {
   string event_json = 1;
-  int32 event_type = 2;
+  StreamingQueryEventType event_type = 2;
 }
 
 message StreamingQueryListenerEventsResult {

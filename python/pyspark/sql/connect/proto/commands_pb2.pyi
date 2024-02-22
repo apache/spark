@@ -53,6 +53,32 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+class _StreamingQueryEventType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _StreamingQueryEventTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_StreamingQueryEventType.ValueType],
+    builtins.type,
+):  # noqa: F821
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    QUERY_PROGRESS_EVENT: _StreamingQueryEventType.ValueType  # 0
+    QUERY_TERMINATED_EVENT: _StreamingQueryEventType.ValueType  # 1
+    QUERY_IDLE_EVENT: _StreamingQueryEventType.ValueType  # 2
+
+class StreamingQueryEventType(
+    _StreamingQueryEventType, metaclass=_StreamingQueryEventTypeEnumTypeWrapper
+):
+    """The enum used for client side streaming query listener event
+    There is no QueryStartedEvent defined here,
+    it is added as a field in WriteStreamOperationStartResult
+    """
+
+QUERY_PROGRESS_EVENT: StreamingQueryEventType.ValueType  # 0
+QUERY_TERMINATED_EVENT: StreamingQueryEventType.ValueType  # 1
+QUERY_IDLE_EVENT: StreamingQueryEventType.ValueType  # 2
+global___StreamingQueryEventType = StreamingQueryEventType
+
 class Command(google.protobuf.message.Message):
     """A [[Command]] is an operation that is executed by the server that does not directly consume or
     produce a relational result.
@@ -1881,24 +1907,19 @@ class StreamingQueryListenerBusCommand(google.protobuf.message.Message):
 global___StreamingQueryListenerBusCommand = StreamingQueryListenerBusCommand
 
 class StreamingQueryListenerEvent(google.protobuf.message.Message):
-    """The protocol for the returned events in the long-running response channel.
-    The event_type for QueryProgressEvent is 1;
-    for QueryTerminatedEvent is 2; for QueryIdleEvent is 3;
-    There is no QueryStartedEvent defined here,
-    it is added as a field in WriteStreamOperationStartResult
-    """
+    """The protocol for the returned events in the long-running response channel."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     EVENT_JSON_FIELD_NUMBER: builtins.int
     EVENT_TYPE_FIELD_NUMBER: builtins.int
     event_json: builtins.str
-    event_type: builtins.int
+    event_type: global___StreamingQueryEventType.ValueType
     def __init__(
         self,
         *,
         event_json: builtins.str = ...,
-        event_type: builtins.int = ...,
+        event_type: global___StreamingQueryEventType.ValueType = ...,
     ) -> None: ...
     def ClearField(
         self,
