@@ -217,7 +217,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bitmap_count(a)\"",
-        "paramIndex" -> "0",
+        "paramIndex" -> "first",
         "requiredType" -> "\"BINARY\"",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"INT\""
@@ -239,7 +239,7 @@ class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"bitmap_or_agg(a)\"",
-        "paramIndex" -> "0",
+        "paramIndex" -> "first",
         "requiredType" -> "\"BINARY\"",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"INT\""

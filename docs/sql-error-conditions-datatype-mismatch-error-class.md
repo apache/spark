@@ -221,7 +221,7 @@ class `<className>` not found.
 
 ## UNEXPECTED_INPUT_TYPE
 
-Parameter `<paramIndex>` requires the `<requiredType>` type, however `<inputSql>` has the type `<inputType>`.
+The `<paramIndex>` parameter requires the `<requiredType>` type, however `<inputSql>` has the type `<inputType>`.
 
 ## UNEXPECTED_NULL
 
