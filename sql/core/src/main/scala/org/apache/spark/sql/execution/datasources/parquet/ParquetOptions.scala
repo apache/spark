@@ -52,14 +52,13 @@ class ParquetOptions(
       .get(COMPRESSION)
       .orElse(parquetCompressionConf)
       .getOrElse(sqlConf.parquetCompressionCodec)
-      .toLowerCase(Locale.ROOT)
-    if (!shortParquetCompressionCodecNames.contains(codecName)) {
-      val availableCodecs =
-        shortParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
+    val lowerCasedCodecName = if (codecName != null) codecName.toLowerCase(Locale.ROOT) else null
+    if (!shortParquetCompressionCodecNames.contains(lowerCasedCodecName)) {
+      val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
       throw QueryExecutionErrors.codecNotAvailableError(
-        codecName, availableCodecs.mkString(", "))
+        lowerCasedCodecName, availableCodecs.mkString(", "))
     }
-    shortParquetCompressionCodecNames(codecName).name()
+    shortParquetCompressionCodecNames(lowerCasedCodecName).name()
   }
 
   /**

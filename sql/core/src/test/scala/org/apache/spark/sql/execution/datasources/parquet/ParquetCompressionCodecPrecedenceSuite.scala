@@ -127,7 +127,7 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
         },
         errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
         parameters = Map(
-          "codecName" -> "aa",
+          "codecName" -> "'aa'",
           "availableCodecs" -> ("brotli, uncompressed, lzo, snappy, " +
             "lz4_raw, none, zstd, lz4, gzip")))
     }

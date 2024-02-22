@@ -51,12 +51,13 @@ class OrcOptions(
       .get(COMPRESSION)
       .orElse(orcCompressionConf)
       .getOrElse(sqlConf.orcCompressionCodec)
-      .toLowerCase(Locale.ROOT)
-    if (!shortOrcCompressionCodecNames.contains(codecName)) {
+    val lowerCasedCodecName = if (codecName != null) codecName.toLowerCase(Locale.ROOT) else null
+    if (!shortOrcCompressionCodecNames.contains(lowerCasedCodecName)) {
       val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
-      throw QueryExecutionErrors.codecNotAvailableError(codecName, availableCodecs.mkString(", "))
+      throw QueryExecutionErrors.codecNotAvailableError(
+        lowerCasedCodecName, availableCodecs.mkString(", "))
     }
-    shortOrcCompressionCodecNames(codecName)
+    shortOrcCompressionCodecNames(lowerCasedCodecName)
   }
 
   /**
