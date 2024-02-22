@@ -66,13 +66,6 @@ public final class CollationFactory {
      */
     public final boolean isBinaryCollation;
 
-    /**
-     * Built-in string functions with collation support.
-     */
-    public final BiFunction<UTF8String, UTF8String, Boolean> containsFunction;
-    public final BiFunction<UTF8String, UTF8String, Boolean> startsWithFunction;
-    public final BiFunction<UTF8String, UTF8String, Boolean> endsWithFunction;
-
     public Collation(
         String collationName,
         Collator collator,
@@ -89,20 +82,8 @@ public final class CollationFactory {
 
       if (isBinaryCollation) {
         this.equalsFunction = UTF8String::equals;
-        this.containsFunction = Collation::containsBinary;
-        this.startsWithFunction = Collation::startsWithBinary;
-        this.endsWithFunction = Collation::endsWithBinary;
       } else {
         this.equalsFunction = (s1, s2) -> this.comparator.compare(s1, s2) == 0;
-        if (collationName.equals("UCS_BASIC_LCASE")) {
-          this.containsFunction = Collation::containsLcase;
-          this.startsWithFunction = Collation::startsWithLcase;
-          this.endsWithFunction = Collation::endsWithLcase;
-        } else {
-          this.containsFunction = this::containsCollated;
-          this.startsWithFunction = this::startsWithCollated;
-          this.endsWithFunction = this::endsWithCollated;
-        }
       }
     }
 
@@ -118,53 +99,6 @@ public final class CollationFactory {
         version,
         s -> (long)collator.getCollationKey(s.toString()).hashCode(),
         isBinaryCollation);
-    }
-
-    /**
-     * Built-in string functions implementations for different collations.
-     */
-    private static Boolean containsBinary(UTF8String l, UTF8String r) {
-      return l.contains(r);
-    }
-    private static Boolean containsLcase(UTF8String l, UTF8String r) {
-      return l.toLowerCase().contains(r.toLowerCase());
-    }
-    private Boolean containsCollated(UTF8String l, UTF8String r) {
-      String lStr = l.toString();
-      String rStr = r.toString();
-      boolean result = false;
-      for (int i = 0; i <= lStr.length() - rStr.length() && !result; i++) {
-        if (collator.compare(lStr.substring(i, i + rStr.length()), rStr) == 0) {
-          result = true;
-        }
-      }
-      return result;
-    }
-
-    private static Boolean startsWithBinary(UTF8String l, UTF8String r) {
-      return l.startsWith(r);
-    }
-    private static Boolean startsWithLcase(UTF8String l, UTF8String r) {
-      return l.toLowerCase().startsWith(r.toLowerCase());
-    }
-    private Boolean startsWithCollated(UTF8String l, UTF8String r) {
-      String lStr = l.toString();
-      String rStr = r.toString();
-      return lStr.length() >= rStr.length() && collator.compare(
-              lStr.substring(0, rStr.length()), rStr) == 0;
-    }
-
-    private static Boolean endsWithBinary(UTF8String l, UTF8String r) {
-      return l.endsWith(r);
-    }
-    private static Boolean endsWithLcase(UTF8String l, UTF8String r) {
-      return l.toLowerCase().endsWith(r.toLowerCase());
-    }
-    private Boolean endsWithCollated(UTF8String l, UTF8String r) {
-      String lStr = l.toString();
-      String rStr = r.toString();
-      return lStr.length() >= rStr.length() && collator.compare(
-              lStr.substring(lStr.length() - rStr.length()), rStr) == 0;
     }
   }
 

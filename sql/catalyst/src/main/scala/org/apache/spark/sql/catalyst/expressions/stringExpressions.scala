@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -586,15 +586,11 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     val collationID = right.dataType.asInstanceOf[StringType].collationId
-    CollationFactory.fetchCollation(collationID).containsFunction.apply(l, r)
+    l.contains(r, collationID)
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationID = right.dataType.asInstanceOf[StringType].collationId
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      s"""
-         |(Boolean) org.apache.spark.sql.catalyst.util.CollationFactory.fetchCollation
-         |($collationID).containsFunction.apply($c1, $c2)
-         |""".stripMargin)
+    defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2, $collationID)")
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
@@ -631,16 +627,12 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     val collationID = right.dataType.asInstanceOf[StringType].collationId
-    CollationFactory.fetchCollation(collationID).startsWithFunction.apply(l, r)
+    l.startsWith(r, collationID)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationID = right.dataType.asInstanceOf[StringType].collationId
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      s"""
-         |(Boolean) org.apache.spark.sql.catalyst.util.CollationFactory.fetchCollation
-         |($collationID).startsWithFunction.apply($c1, $c2)
-         |""".stripMargin)
+    defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2, $collationID)")
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -677,16 +669,12 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     val collationID = right.dataType.asInstanceOf[StringType].collationId
-    CollationFactory.fetchCollation(collationID).endsWithFunction.apply(l, r)
+    l.endsWith(r, collationID)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationID = right.dataType.asInstanceOf[StringType].collationId
-    defineCodeGen(ctx, ev, (c1, c2) =>
-      s"""
-         |(Boolean) org.apache.spark.sql.catalyst.util.CollationFactory.fetchCollation
-         |($collationID).endsWithFunction.apply($c1, $c2)
-         |""".stripMargin)
+    defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2, $collationID)")
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
