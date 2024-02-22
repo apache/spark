@@ -68,6 +68,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
+from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -941,32 +942,9 @@ class SparkSession:
     def _profiler_collector(self) -> ProfilerCollector:
         return self._client._profiler_collector
 
-    def showPerfProfiles(self, id: Optional[int] = None) -> None:
-        self._profiler_collector.show_perf_profiles(id)
-
-    showPerfProfiles.__doc__ = PySparkSession.showPerfProfiles.__doc__
-
-    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
-        if has_memory_profiler:
-            self._profiler_collector.show_memory_profiles(id)
-        else:
-            warnings.warn(
-                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
-                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
-                UserWarning,
-            )
-
-    showMemoryProfiles.__doc__ = PySparkSession.showMemoryProfiles.__doc__
-
-    def dumpPerfProfiles(self, path: str, id: Optional[int] = None) -> None:
-        self._profiler_collector.dump_perf_profiles(path, id)
-
-    dumpPerfProfiles.__doc__ = PySparkSession.dumpPerfProfiles.__doc__
-
-    def dumpMemoryProfiles(self, path: str, id: Optional[int] = None) -> None:
-        self._profiler_collector.dump_memory_profiles(path, id)
-
-    dumpMemoryProfiles.__doc__ = PySparkSession.dumpMemoryProfiles.__doc__
+    @property
+    def profile(self) -> Profile:
+        return Profile(self._client._profiler_collector)
 
 
 SparkSession.__doc__ = PySparkSession.__doc__
