@@ -186,7 +186,6 @@ private[spark] object HiveUtils extends Logging {
     "com.ibm.db2",
     "com.microsoft.sqlserver",
     "com.mysql.jdbc",
-    "com.oracle.database.jdbc",
     "oracle.jdbc",
     "org.mariadb.jdbc",
     "org.postgresql")
