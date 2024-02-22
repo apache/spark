@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, FailFastMode, MapData, sideBySide}
+import org.apache.spark.sql.catalyst.util.{sideBySide, DateTimeUtils, FailFastMode, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
