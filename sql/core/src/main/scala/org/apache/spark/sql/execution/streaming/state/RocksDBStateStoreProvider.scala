@@ -18,15 +18,14 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
-
 import scala.util.control.NonFatal
-
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.{StateKeyValueRowSchema, StateTypesEncoder}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -158,8 +157,38 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+
+    def ttlFunc(rocksDB: RocksDB): Unit = {
+      val ttlEncoder = keyValueEncoderMap.get("ttl")
+      val expiredKeyStateNames =
+        rocksDB.iterator("ttl").flatMap { kv =>
+          val key = ttlEncoder._1.decodeKey(kv.key)
+          val ttl = key.getLong(0)
+          if (ttl <= System.currentTimeMillis()) {
+            Some(key)
+          } else {
+            None
+          }
+        }
+
+      expiredKeyStateNames.foreach { keyStateName =>
+        val stateName = SerializationUtils.deserialize(
+          keyStateName.getBinary(1)).asInstanceOf[String]
+        val groupingKey = keyStateName.getBinary(2)
+        val keyRow = StateKeyValueRowSchema.encodeGroupingKeyBytes(groupingKey)
+        val row = get(keyRow, stateName)
+        if (row != null) {
+          val ttl = row.getLong(1)
+          if (ttl <= System.currentTimeMillis()) {
+            remove(keyRow, stateName)
+          }
+        }
+      }
+    }
+
     override def commit(): Long = synchronized {
       try {
+        rocksDB.doTTL(ttlFunc)
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         val newVersion = rocksDB.commit()
         state = COMMITTED

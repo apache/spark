@@ -18,6 +18,8 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
@@ -37,6 +39,8 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * @return - instance of ValueState of type T that can be used to store state persistently
    */
   def getValueState[T](stateName: String): ValueState[T]
+
+  def getValueState[T](stateName: String, ttlMode: TTLMode, ttl: Duration): ValueState[T]
 
   /**
    * Creates new or returns existing list state associated with stateName.

@@ -22,12 +22,29 @@ import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Serializer
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.streaming.TTLStateKeyValueRowSchema.{TTL_KEY_ROW_SCHEMA, TTL_VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.{BinaryType, LongType, StructType}
 
 object StateKeyValueRowSchema {
   val KEY_ROW_SCHEMA: StructType = new StructType().add("key", BinaryType)
   val VALUE_ROW_SCHEMA: StructType = new StructType().add("value", BinaryType)
+    .add("ttl", LongType)
+
+  def encodeGroupingKeyBytes(keyBytes: Array[Byte]): UnsafeRow = {
+    val keyProjection = UnsafeProjection.create(KEY_ROW_SCHEMA)
+    val keyRow = keyProjection(InternalRow(keyBytes))
+    keyRow
+  }
+}
+
+object TTLStateKeyValueRowSchema {
+  val TTL_KEY_ROW_SCHEMA: StructType = new StructType()
+    .add("ttl", LongType)
+    .add("stateName", BinaryType)
+    .add("groupingKey", BinaryType)
+    .add("userKey", BinaryType)
+  val TTL_VALUE_ROW_SCHEMA: StructType = new StructType().add("value", BinaryType)
 }
 
 /**
@@ -52,18 +69,34 @@ class StateTypesEncoder[GK](
   private val keyProjection = UnsafeProjection.create(KEY_ROW_SCHEMA)
   private val valueProjection = UnsafeProjection.create(VALUE_ROW_SCHEMA)
 
+  private val ttlKeyRowEncoder = UnsafeProjection.create(TTL_KEY_ROW_SCHEMA)
+  private val ttlValueRowEncoder = UnsafeProjection.create(TTL_VALUE_ROW_SCHEMA)
+
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
   def encodeGroupingKey(): UnsafeRow = {
+    val keyRow = keyProjection(InternalRow(getGroupingKeyBytes()))
+    keyRow
+  }
+  def getGroupingKeyBytes(): Array[Byte] = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (keyOption.isEmpty) {
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
-
     val groupingKey = keyOption.get.asInstanceOf[GK]
-    val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
-    val keyRow = keyProjection(InternalRow(keyByteArr))
-    keyRow
+    keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
+  }
+
+  def getTTLRowKey(expirationTimestamp: Long): UnsafeRow = {
+    val stateNameArr = SerializationUtils.serialize(stateName.asInstanceOf[Serializable])
+    val groupingKeyArr = getGroupingKeyBytes()
+
+    ttlKeyRowEncoder(
+      InternalRow(expirationTimestamp, stateNameArr, groupingKeyArr, null))
+  }
+
+  def getTTLRowValue(): UnsafeRow = {
+    ttlValueRowEncoder(InternalRow(null))
   }
 
   def encodeValue[S](value: S): UnsafeRow = {

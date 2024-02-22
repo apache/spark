@@ -16,12 +16,16 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.plans.logical.{NoTTL, ProcessingTimeTTL}
 import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
+import org.apache.spark.sql.execution.streaming.TTLStateKeyValueRowSchema.{TTL_KEY_ROW_SCHEMA, TTL_VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.ValueState
+import org.apache.spark.sql.streaming.{TTLMode, ValueState}
 
 /**
  * Class that provides a concrete implementation for a single value state associated with state
@@ -34,7 +38,9 @@ import org.apache.spark.sql.streaming.ValueState
 class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
-    keyExprEnc: ExpressionEncoder[Any]) extends ValueState[S] with Logging {
+    keyExprEnc: ExpressionEncoder[Any],
+    ttlMode: TTLMode = TTLMode.NoTTL(),
+    ttl: Duration = Duration.Zero) extends ValueState[S] with Logging {
 
   private val keySerializer = keyExprEnc.createSerializer()
 
@@ -43,9 +49,12 @@ class ValueStateImpl[S](
   store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, numColsPrefixKey = 0,
     VALUE_ROW_SCHEMA)
 
+  store.createColFamilyIfAbsent("ttl", TTL_KEY_ROW_SCHEMA, numColsPrefixKey = 0,
+    TTL_VALUE_ROW_SCHEMA)
+
   /** Function to check if state exists. Returns true if present and false otherwise */
   override def exists(): Boolean = {
-    getImpl() != null
+    get() != null
   }
 
   /** Function to return Option of value if exists and None otherwise */
@@ -57,7 +66,20 @@ class ValueStateImpl[S](
   override def get(): S = {
     val retRow = getImpl()
     if (retRow != null) {
-      stateTypesEncoder.decodeValue[S](retRow)
+      val resState = stateTypesEncoder.decodeValue[S](retRow)
+      ttlMode match {
+        case NoTTL =>
+          resState
+        case ProcessingTimeTTL =>
+          val ttlForVal = retRow.getLong(1)
+          if (ttlForVal <= System.currentTimeMillis()) {
+            logDebug(s"Value is expired for state $stateName")
+            store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+            null.asInstanceOf[S]
+          } else {
+            resState
+          }
+      }
     } else {
       null.asInstanceOf[S]
     }
@@ -71,6 +93,13 @@ class ValueStateImpl[S](
   override def update(newState: S): Unit = {
     store.put(stateTypesEncoder.encodeGroupingKey(),
       stateTypesEncoder.encodeValue(newState), stateName)
+    ttlMode match {
+      case NoTTL =>
+      case ProcessingTimeTTL =>
+        val ttlExpiration = System.currentTimeMillis() + ttl.toMillis
+        store.put(stateTypesEncoder.getTTLRowKey(ttlExpiration),
+          stateTypesEncoder.getTTLRowValue(), "ttl")
+    }
   }
 
   /** Function to remove state for given key */
