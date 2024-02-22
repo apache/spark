@@ -103,6 +103,7 @@ class PythonStreamingSinkCommitRunner(
     }
   }
 
+  init()
 
   def commitOrAbort(
       messages: Array[WriterCommitMessage],

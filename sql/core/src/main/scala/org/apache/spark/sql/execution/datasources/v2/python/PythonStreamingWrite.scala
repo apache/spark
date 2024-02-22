@@ -38,7 +38,7 @@ class PythonStreamingWrite(
       ds.getOrCreateDataSourceInPython(shortName, info.options(), Some(info.schema())).dataSource
     )
 
-  private val pythonStreamingSinkCommitRunner =
+  private lazy val pythonStreamingSinkCommitRunner =
     new PythonStreamingSinkCommitRunner(createDataSourceFunc, info.schema(), isTruncate)
 
   override def createStreamingWriterFactory(

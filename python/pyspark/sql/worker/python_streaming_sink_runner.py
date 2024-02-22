@@ -31,7 +31,7 @@ from pyspark.serializers import (
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource, DataSourceStreamWriter
+from pyspark.sql.datasource import DataSource, DataSourceStreamWriter, WriterCommitMessage
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
@@ -69,7 +69,6 @@ def main(infile: IO, outfile: IO) -> None:
                     "actual": f"'{type(data_source).__name__}'",
                 },
             )
-
         # Receive the data source output schema.
         schema_json = utf8_deserializer.loads(infile)
         schema = _parse_datatype_json_string(schema_json)
@@ -81,7 +80,6 @@ def main(infile: IO, outfile: IO) -> None:
                     "actual": f"'{type(schema).__name__}'",
                 },
             )
-
         # Receive the `overwrite` flag.
         overwrite = read_bool(infile)
         # Instantiate data source reader.
