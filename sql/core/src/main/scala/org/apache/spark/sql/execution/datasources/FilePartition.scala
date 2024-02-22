@@ -24,6 +24,7 @@ import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.InputPartition
+import org.apache.spark.sql.execution.ScanFileListing
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -107,6 +108,20 @@ object FilePartition extends Logging {
   }
 
   def maxSplitBytes(
+      sparkSession: SparkSession,
+      selectedPartitions: ScanFileListing): Long = {
+    val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
+    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    val minPartitionNum = sparkSession.sessionState.conf.filesMinPartitionNum
+      .getOrElse(sparkSession.leafNodeDefaultParallelism)
+    // val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+    val totalBytes = selectedPartitions.calculateTotalPartitionBytes(openCostInBytes)
+    val bytesPerCore = totalBytes / minPartitionNum
+
+    Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+  }
+
+    def maxSplitBytes(
       sparkSession: SparkSession,
       selectedPartitions: Seq[PartitionDirectory]): Long = {
     val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
