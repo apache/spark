@@ -214,6 +214,11 @@ ERROR_CLASSES_JSON = '''
       "Expected <expected>, but got <actual>."
     ]
   },
+  "DATA_SOURCE_CREATE_ERROR": {
+    "message": [
+      "Failed to create python data source instance, error: <error>."
+    ]
+  },
   "DIFFERENT_PANDAS_DATAFRAME": {
     "message": [
       "DataFrames are not almost equal:",
