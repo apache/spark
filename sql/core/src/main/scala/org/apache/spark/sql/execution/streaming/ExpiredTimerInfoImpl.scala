@@ -19,10 +19,12 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.streaming.{ExpiredTimerInfo, TimeoutMode}
 
 /**
- * Class that provides a concrete implementation for TimerValues used for fetching
- * processing time and event time (watermark).
- * @param currentProcessingTimeOpt - option to current processing time
- * @param currentWatermarkOpt - option to current watermark
+ * Class that provides a concrete implementation that can be used to provide access to expired
+ * timer's expiry time and timeout mode. These values are only relevant if the ExpiredTimerInfo
+ * is valid.
+ * @param isValid - boolean to check if the provided ExpiredTimerInfo is valid
+ * @param expiryTimeInMsOpt - option to expired timer's expiry time as milliseconds in epoch time
+ * @param timeoutMode - timeout mode of the expired timer
  */
 class ExpiredTimerInfoImpl(
     isValid: Boolean,

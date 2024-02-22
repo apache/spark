@@ -22,8 +22,8 @@ import java.io.Serializable
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
- * Class used to provide access to timer values for processing and event time populated
- * before method invocations using the arbitrary state API v2.
+ * Class used to provide access to expired timer's expiry time and timeout mode. These values
+ * are only relevant if the ExpiredTimerInfo is valid.
  */
 @Experimental
 @Evolving

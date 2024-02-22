@@ -67,7 +67,7 @@ object StateStoreErrors {
   def cannotCreateColumnFamilyWithReservedChars(colFamilyName: String):
     StateStoreCannotCreateColumnFamilyWithReservedChars = {
       new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
-    }
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -75,6 +75,7 @@ class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: 
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
   )
+
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_REMOVING_COLUMN_FAMILIES",
