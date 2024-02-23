@@ -374,7 +374,8 @@ private[spark] object IvyTestUtils {
       f(repo.toURI.toString)
     } finally {
       // Clean up
-      if (repo.toString.contains(".m2") || repo.toString.contains(".ivy2")) {
+      if (repo.toString.contains(".m2") || repo.toString.contains(".ivy2") ||
+          repo.toString.contains(".ivy2.5.2")) {
         val groupDir = getBaseGroupDirectory(artifact, useIvyLayout)
         FileUtils.deleteDirectory(new File(repo, groupDir + File.separator + artifact.artifactId))
         deps.foreach { _.foreach { dep =>
