@@ -169,12 +169,10 @@
     <dependency>
       <groupId>javax.servlet</groupId>
       <artifactId>javax.servlet-api</artifactId>
-      <version>${javaxservlet.version}</version>
     </dependency>
     <dependency>
       <groupId>jakarta.servlet</groupId>
       <artifactId>jakarta.servlet-api</artifactId>
-      <version>${jakartaservlet.version}</version>
     </dependency>
     <dependency>
       <groupId>commons-codec</groupId>
