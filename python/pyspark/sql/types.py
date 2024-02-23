@@ -244,10 +244,33 @@ class FractionalType(NumericType):
     """Fractional data types."""
 
 
-class StringType(AtomicType, metaclass=DataTypeSingleton):
-    """String data type."""
+class StringType(AtomicType):
+    """String data type.
 
-    pass
+    Parameters
+    ----------
+    collationId : int
+        the collation id number.
+    """
+
+    collationNames = [
+        "UCS_BASIC",
+        "UCS_BASIC_LCASE",
+        "UNICODE",
+        "UNICODE_CI"
+    ]
+
+    def __init__(self, collationId: int = 0):
+        self.collationId = collationId
+
+    def simpleString(self) -> str:
+        return "string(%s)" % (StringType.collationNames[self.collationId])
+
+    def jsonValue(self) -> str:
+        return "string(%s)" % (StringType.collationNames[self.collationId])
+
+    def __repr__(self) -> str:
+        return "StringType(%s)" % (StringType.collationNames[self.collationId])
 
 
 class CharType(AtomicType):
@@ -1445,6 +1468,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
+_COLLATION_STRING = re.compile(f"string\\(({'|'.join(StringType.collationNames)})\\)")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
@@ -1610,6 +1634,9 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return YearMonthIntervalType(first_field, second_field)
         elif json_value == "interval":
             return CalendarIntervalType()
+        elif _COLLATION_STRING.match(json_value):
+            m = _COLLATION_STRING.match(json_value)
+            return StringType(StringType.collationNames.index(m.group(1)))
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
