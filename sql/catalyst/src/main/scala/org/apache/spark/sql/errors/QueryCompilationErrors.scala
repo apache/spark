@@ -1966,7 +1966,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "paramIndex" -> paramIndex.toString,
+        "paramIndex" -> ordinalNumber(paramIndex - 1),
         "functionName" -> toSQLId(functionName),
         "requiredType" -> toSQLType(dataType),
         "inputSql" -> toSQLExpr(expression),

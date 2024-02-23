@@ -80,7 +80,7 @@ class CollationSuite extends QueryTest with SharedSparkSession {
       sqlState = "42K09",
       Map(
         "functionName" -> "`collate`",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"123\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRING\""),
