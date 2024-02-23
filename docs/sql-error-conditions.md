@@ -1148,7 +1148,7 @@ Please increase executor memory using the --executor-memory option or "`<config>
 
 [SQLSTATE: 42001](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Found an invalid expression encoder. Expects an instance of `ExpressionEncoder` but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
+Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
 
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
