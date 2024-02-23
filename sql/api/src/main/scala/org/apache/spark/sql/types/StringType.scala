@@ -63,4 +63,6 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 case object StringType extends StringType(0) {
   val DEFAULT_COLLATION_ID = 0
   def apply(collationId: Int): StringType = new StringType(collationId)
+
+  def unapply(s: StringType): Option[Int] = Some(s.collationId)
 }

@@ -45,7 +45,7 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.DOUBLE => DoubleType
       case proto.DataType.KindCase.DECIMAL => toCatalystDecimalType(t.getDecimal)
 
-      case proto.DataType.KindCase.STRING => StringType
+      case proto.DataType.KindCase.STRING => toCatalystStringType(t.getString)
       case proto.DataType.KindCase.CHAR => CharType(t.getChar.getLength)
       case proto.DataType.KindCase.VAR_CHAR => VarcharType(t.getVarChar.getLength)
 
@@ -77,6 +77,9 @@ object DataTypeProtoConverter {
       case _ => new DecimalType()
     }
   }
+
+  private def toCatalystStringType(t: proto.DataType.String): StringType =
+    StringType(t.getCollationId)
 
   private def toCatalystYearMonthIntervalType(t: proto.DataType.YearMonthInterval) = {
     (t.hasStartField, t.hasEndField) match {
@@ -170,7 +173,11 @@ object DataTypeProtoConverter {
             proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
           .build()
 
-      case StringType => ProtoDataTypes.StringType
+      case StringType(collationId) =>
+        proto.DataType
+          .newBuilder()
+          .setString(proto.DataType.String.newBuilder().setCollationId(collationId).build())
+          .build()
 
       case CharType(length) =>
         proto.DataType
