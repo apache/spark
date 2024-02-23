@@ -47,7 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
-from pyspark.sql.profiler import AccumulatorProfilerCollector, ProfilerCollector
+from pyspark.sql.profiler import AccumulatorProfilerCollector, Profile
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
@@ -82,7 +82,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
 
 try:
-    import memory_profiler  # type: ignore # noqa: F401
+    import memory_profiler  # noqa: F401
 
     has_memory_profiler = True
 except Exception:
@@ -129,7 +129,7 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
-    RDD.toDF = toDF  # type: ignore[assignment]
+    RDD.toDF = toDF  # type: ignore[method-assign]
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -905,6 +905,10 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.datasource import DataSourceRegistration
 
         return DataSourceRegistration(self)
+
+    @property
+    def profile(self) -> Profile:
+        return Profile(self._profiler_collector)
 
     def range(
         self,
@@ -2127,23 +2131,6 @@ class SparkSession(SparkConversionMixin):
             error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
             message_parameters={"feature": "SparkSession.clearTags"},
         )
-
-    def showPerfProfiles(self, id: Optional[int] = None) -> None:
-        self._profiler_collector.show_perf_profiles(id)
-
-    showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
-
-    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
-        if has_memory_profiler:
-            self._profiler_collector.show_memory_profiles(id)
-        else:
-            warnings.warn(
-                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
-                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
-                UserWarning,
-            )
-
-    showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
 
 
 def _test() -> None:

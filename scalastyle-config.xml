@@ -283,6 +283,11 @@ This file is divided into 3 sections:
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
+  <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">UriBuilder\.fromUri</parameter></parameters>
+    <customMessage>Use Utils.getUriBuilder instead.</customMessage>
+  </check>
+
   <check customId="executioncontextglobal" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">scala\.concurrent\.ExecutionContext\.Implicits\.global</parameter></parameters>
     <customMessage> User queries can use global thread pool, causing starvation and eventual OOM.
@@ -460,6 +465,21 @@ This file is divided into 3 sections:
     <customMessage>Avoid using com.google.common.io.Files.createTempDir due to CVE-2020-8908.
       Use org.apache.spark.util.Utils.createTempDir instead.
     </customMessage>
+  </check>
+
+  <check customId="GuavaFileBackedOutputStream" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileBackedOutputStream</parameter></parameters>
+    <customMessage>Avoid using FileBackedOutputStream due to CVE-2023-2976.</customMessage>
+  </check>
+
+  <check customId="GuavaAtomicDoubleArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">AtomicDoubleArray</parameter></parameters>
+    <customMessage>Avoid using AtomicDoubleArray due to CVE-2018-10237.</customMessage>
+  </check>
+
+  <check customId="GuavaCompoundOrdering" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">CompoundOrdering</parameter></parameters>
+    <customMessage>Avoid using CompoundOrdering due to CVE-2018-10237.</customMessage>
   </check>
 
   <check customId="pathfromuri" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">

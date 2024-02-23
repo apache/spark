@@ -1711,8 +1711,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- InMemoryTableScan ...
+        InMemoryTableScan ...
         """
         self.is_cached = True
         self._jdf.cache()
@@ -1754,8 +1753,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- InMemoryTableScan ...
+        InMemoryTableScan ...
 
         Persists the data in the disk by specifying the storage level.
 
@@ -3528,8 +3526,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Returns
         -------
-        If n is greater than 1, return a list of :class:`Row`.
-        If n is 1, return a single Row.
+        If n is supplied, return a list of :class:`Row` of length n
+        or less if the DataFrame has fewer elements.
+        If n is missing, return a single Row.
 
         Examples
         --------
@@ -3539,6 +3538,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Row(age=2, name='Alice')
         >>> df.head(1)
         [Row(age=2, name='Alice')]
+        >>> df.head(0)
+        []
         """
         if n is None:
             rs = self.head(1)

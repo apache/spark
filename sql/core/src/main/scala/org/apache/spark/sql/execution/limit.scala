@@ -294,6 +294,7 @@ case class TakeOrderedAndProjectExec(
     val data = if (offset > 0) limited.drop(offset) else limited
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
+      proj.initialize(0)
       data.map(r => proj(r).copy())
     } else {
       data
@@ -335,11 +336,12 @@ case class TakeOrderedAndProjectExec(
             writeMetrics),
           readMetrics)
       }
-      singlePartitionRDD.mapPartitionsInternal { iter =>
+      singlePartitionRDD.mapPartitionsWithIndexInternal { (idx, iter) =>
         val limited = Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
         val topK = if (offset > 0) limited.drop(offset) else limited
         if (projectList != child.output) {
           val proj = UnsafeProjection.create(projectList, child.output)
+          proj.initialize(idx)
           topK.map(r => proj(r))
         } else {
           topK

@@ -107,7 +107,7 @@ case class CallMethodViaReflection(
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> (idx + 1).toString,
+              "paramIndex" -> ordinalNumber(idx),
               "requiredType" -> toSQLType(
                 TypeCollection(BooleanType, ByteType, ShortType,
                   IntegerType, LongType, FloatType, DoubleType, StringType)),

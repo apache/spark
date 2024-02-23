@@ -38,8 +38,13 @@ select date_format('2018-11-17 13:33:33.333', 'qqqqq')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Too many pattern letters: q
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3259",
+  "messageParameters" : {
+    "style" : "q"
+  }
+}
 
 
 -- !query
@@ -47,8 +52,13 @@ select date_format('2018-11-17 13:33:33.333', 'QQQQQ')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Too many pattern letters: Q
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3259",
+  "messageParameters" : {
+    "style" : "Q"
+  }
+}
 
 
 -- !query
@@ -364,8 +374,13 @@ select date_format('2018-11-17 13:33:33.333', 'A')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: A
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "messageParameters" : {
+    "c" : "A"
+  }
+}
 
 
 -- !query
@@ -373,8 +388,13 @@ select date_format('2018-11-17 13:33:33.333', 'n')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: n
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "messageParameters" : {
+    "c" : "n"
+  }
+}
 
 
 -- !query
@@ -382,8 +402,13 @@ select date_format('2018-11-17 13:33:33.333', 'N')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: N
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "messageParameters" : {
+    "c" : "N"
+  }
+}
 
 
 -- !query
@@ -391,8 +416,13 @@ select date_format('2018-11-17 13:33:33.333', 'p')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: p
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "messageParameters" : {
+    "c" : "p"
+  }
+}
 
 
 -- !query
@@ -468,8 +498,13 @@ select date_format('2018-11-17 13:33:33.333', 'e')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-All week-based patterns are unsupported since Spark 3.0, detected: e, Please use the SQL function EXTRACT instead
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3257",
+  "messageParameters" : {
+    "c" : "e"
+  }
+}
 
 
 -- !query
@@ -477,8 +512,13 @@ select date_format('2018-11-17 13:33:33.333', 'c')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-All week-based patterns are unsupported since Spark 3.0, detected: c, Please use the SQL function EXTRACT instead
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3257",
+  "messageParameters" : {
+    "c" : "c"
+  }
+}
 
 
 -- !query
@@ -486,8 +526,13 @@ select date_format('2018-11-17 13:33:33.333', 'B')
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Illegal pattern character: B
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "messageParameters" : {
+    "c" : "B"
+  }
+}
 
 
 -- !query

@@ -186,7 +186,7 @@ class StateMetadataPartitionReader(
     } else Array.empty
   }
 
-  private def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
+  private[sql] def allOperatorStateMetadata: Array[OperatorStateMetadata] = {
     val stateDir = new Path(checkpointLocation, "state")
     val opIds = fileManager
       .list(stateDir, pathNameCanBeParsedAsLongFilter).map(f => pathToLong(f.getPath)).sorted

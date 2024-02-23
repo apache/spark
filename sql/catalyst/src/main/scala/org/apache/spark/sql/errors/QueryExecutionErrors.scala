@@ -32,7 +32,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.apache.spark._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode, MapData}
+import org.apache.spark.sql.catalyst.util.{sideBySide, DateTimeUtils, FailFastMode, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -289,10 +289,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def ansiIllegalArgumentError(e: IllegalArgumentException): IllegalArgumentException = {
-    ansiIllegalArgumentError(e.getMessage)
-  }
-
   def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in sum of decimals", context = context)
   }
@@ -463,10 +459,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("attr" -> attr.toString()))
   }
 
-  def unsupportedEncoderError(): SparkRuntimeException = {
+  def invalidExpressionEncoderError(encoderType: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2024",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_EXPRESSION_ENCODER",
+      messageParameters = Map(
+        "encoderType" -> encoderType,
+        "docroot" -> SPARK_DOC_ROOT
+      )
+    )
   }
 
   def notOverrideExpectedMethodsError(
@@ -656,15 +656,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def dataPathNotSpecifiedError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2047",
-      messageParameters = Map.empty)
+    new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2047")
   }
 
   def createStreamingSourceNotSpecifySchemaError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2048",
-      messageParameters = Map.empty)
+    new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2048")
   }
 
   def streamedOperatorUnsupportedByDataSourceError(
@@ -836,7 +832,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       e: Throwable,
       path: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2064",
+      errorClass = "FAILED_READ_FILE",
       messageParameters = Map("path" -> path),
       cause = e)
   }
@@ -862,9 +858,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def missingDatabaseLocationError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2068",
-      messageParameters = Map.empty)
+    new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2068")
   }
 
   def cannotRemoveReservedPropertyError(property: String): SparkUnsupportedOperationException = {
@@ -977,9 +971,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def nestedArraysUnsupportedError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2085",
-      messageParameters = Map.empty)
+    new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2085")
   }
 
   def cannotTranslateNonNullValueForFieldError(pos: Int): SparkIllegalArgumentException = {
@@ -1501,7 +1493,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def malformedRecordsDetectedInRecordParsingError(
-      badRecord: String, e: BadRecordException): Throwable = {
+      badRecord: String, e: Throwable): Throwable = {
     new SparkException(
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       messageParameters = Map(
@@ -1692,6 +1684,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def stateNotDefinedOrAlreadyRemovedError(): Throwable = {
       new NoSuchElementException("State is either not defined or has already been removed")
+  }
+
+  def statefulOperatorNotMatchInStateMetadataError(
+      opsInMetadataSeq: Map[Long, String],
+      opsInCurBatchSeq: Map[Long, String]): SparkRuntimeException = {
+    def formatPairString(pair: (Long, String)): String
+    = s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+    new SparkRuntimeException(
+      errorClass = s"STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA",
+      messageParameters = Map(
+        "OpsInMetadataSeq" -> opsInMetadataSeq.map(formatPairString).mkString(", "),
+        "OpsInCurBatchSeq" -> opsInCurBatchSeq.map(formatPairString).mkString(", "))
+    )
   }
 
   def cannotSetTimeoutDurationError(): SparkUnsupportedOperationException = {
@@ -2718,5 +2723,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "codecName" -> codecName,
         "availableCodecs" -> availableCodecs))
+  }
+
+  def partitionNumMismatchError(numFields: Int, schemaLen: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3208",
+      messageParameters = Map(
+        "numFields" -> numFields.toString,
+        "schemaLen" -> schemaLen.toString))
   }
 }

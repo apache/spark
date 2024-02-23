@@ -24,6 +24,7 @@ import java.time._
 import java.util
 import java.util.{List => JList, Locale, Map => JMap}
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -46,6 +47,7 @@ import org.apache.spark.sql.types.Decimal
  */
 object ArrowDeserializers {
   import ArrowEncoderUtils._
+  import org.apache.spark.util.ArrayImplicits._
 
   /**
    * Create an Iterator of `T`. This iterator takes an Iterator of Arrow IPC Streams, and
@@ -220,6 +222,13 @@ object ArrowDeserializers {
             def value(i: Int): mutable.ArraySeq[Any] = {
               val array = getArray(vector, i, deserializer)(element.clsTag)
               ScalaCollectionUtils.wrap(array)
+            }
+          }
+        } else if (isSubClass(Classes.IMMUTABLE_ARRAY_SEQ, tag)) {
+          new VectorFieldDeserializer[immutable.ArraySeq[Any], ListVector](v) {
+            def value(i: Int): immutable.ArraySeq[Any] = {
+              val array = getArray(vector, i, deserializer)(element.clsTag)
+              array.asInstanceOf[Array[_]].toImmutableArraySeq
             }
           }
         } else if (isSubClass(Classes.ITERABLE, tag)) {

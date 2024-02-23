@@ -802,12 +802,16 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       Seq("20").toDF("col").select(udf(f1).apply(Column("col"))).collect()
     }
-    assert(e1.getMessage.contains("UDFSuite$MalformedClassObject$MalformedNonPrimitiveFunction"))
+    assert(e1.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e1.getCause.getStackTrace.head.toString.contains(
+      "UDFSuite$MalformedClassObject$MalformedNonPrimitiveFunction"))
 
     val e2 = intercept[SparkException] {
       Seq(20).toDF("col").select(udf(f2).apply(Column("col"))).collect()
     }
-    assert(e2.getMessage.contains("UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
+    assert(e2.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e2.getCause.getStackTrace.head.toString.contains(
+      "UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
   }
 
   test("SPARK-32307: Aggregation that use map type input UDF as group expression") {
@@ -914,8 +918,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val overflowFunc = udf((l: java.time.LocalDateTime) => l.plusDays(Long.MaxValue))
     val e = intercept[SparkException] {
       input.select(overflowFunc($"dateTime")).collect()
-    }.getCause.getCause
-    assert(e.isInstanceOf[java.lang.ArithmeticException])
+    }
+    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
   test("SPARK-34663, SPARK-35730: using java.time.Duration in UDF") {
@@ -1028,8 +1033,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val overflowFunc = udf((d: java.time.Duration) => d.plusDays(Long.MaxValue))
     val e = intercept[SparkException] {
       input.select(overflowFunc($"d")).collect()
-    }.getCause.getCause
-    assert(e.isInstanceOf[java.lang.ArithmeticException])
+    }
+    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
   test("SPARK-34663, SPARK-35777: using java.time.Period in UDF") {
@@ -1075,8 +1081,9 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val overflowFunc = udf((p: java.time.Period) => p.plusYears(Long.MaxValue))
     val e = intercept[SparkException] {
       input.select(overflowFunc($"p")).collect()
-    }.getCause.getCause
-    assert(e.isInstanceOf[java.lang.ArithmeticException])
+    }
+    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
   test("SPARK-43099: UDF className is correctly populated") {

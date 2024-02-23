@@ -689,6 +689,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("aliasName" -> aliasName))
   }
 
+  def invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(expression: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS",
+      messageParameters = Map("expression" -> expression))
+  }
+
   def windowAggregateFunctionWithFilterNotSupportedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1030",
@@ -1902,8 +1908,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1175",
-      messageParameters = Map("dataType" -> field.dataType.catalogString))
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" ->
+        s"Cannot convert Spark data type ${toSQLType(field.dataType)} to any Parquet type."))
   }
 
   def incompatibleViewSchemaChangeError(
@@ -1959,7 +1966,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "paramIndex" -> paramIndex.toString,
+        "paramIndex" -> ordinalNumber(paramIndex - 1),
         "functionName" -> toSQLId(functionName),
         "requiredType" -> toSQLType(dataType),
         "inputSql" -> toSQLExpr(expression),
@@ -2631,7 +2638,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def alterTableChangeColumnNotSupportedForColumnTypeError(
       tableName: String,
       originColumn: StructField,
-      newColumn: StructField): Throwable = {
+      newColumn: StructField,
+      origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       messageParameters = Map(
@@ -2639,7 +2647,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "originName" -> toSQLId(originColumn.name),
         "originType" -> toSQLType(originColumn.dataType),
         "newName" -> toSQLId(newColumn.name),
-        "newType"-> toSQLType(newColumn.dataType)))
+        "newType"-> toSQLType(newColumn.dataType)),
+      origin = origin
+    )
   }
 
   def cannotAlterPartitionColumn(

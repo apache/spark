@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -594,9 +594,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   def checkExceptionMessage(df: DataFrame): Unit = {
-    val message = intercept[SparkException] {
+    val message = intercept[SparkUpgradeException] {
       df.collect()
-    }.getCause.getMessage
+    }.getMessage
     assert(message.contains("Fail to parse"))
   }
 

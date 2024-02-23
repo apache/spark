@@ -15,21 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.plugin
+package org.apache.spark.tags;
 
-import com.google.protobuf
+import java.lang.annotation.*;
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.scalatest.TagAnnotation;
 
-/**
- * Behavior trait for supporting extension mechanisms for the Spark Connect planner.
- *
- * Classes implementing the trait must be trivially constructable and should not rely on internal
- * state. Every registered extension will be passed the Any instance. If the plugin supports
- * handling this type it is responsible of constructing the logical catalyst plan from this object
- * and if necessary traverse it's children.
- */
-trait RelationPlugin {
-  def transform(relation: protobuf.Any, planner: SparkConnectPlanner): Option[LogicalPlan]
-}
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface WebBrowserTest { }
