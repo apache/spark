@@ -112,7 +112,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`range`",
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BIGINT\""
   },
   "queryContext" : [ {
@@ -138,7 +138,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`range`",
     "inputSql" : "\"array(1, 2, 3)\"",
     "inputType" : "\"ARRAY<INT>\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BIGINT\""
   },
   "queryContext" : [ {
