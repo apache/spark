@@ -35,11 +35,6 @@ case class ListingPartition(
  * classes that need a way to represent the selected partitions and dynamically selected partitions.
  */
 trait ScanFileListing {
-  /**
-   * Returns an iterator for the size of each file contained in the partitions of the current
-   * scan file listing representation, and the total number of files across all partitions.
-   */
-  // def fileSizeIteratorAndFileCount: (Iterator[Long], Long)
 
   /**
    * Returns the number of partitions for the current partition representation.
@@ -66,13 +61,6 @@ trait ScanFileListing {
   def filterAndPruneFiles(
       boundPredicate: BasePredicate, dynamicFileFilters: Seq[Expression]): ScanFileListing
 
-
-  /**
-   * Returns the sequence of absolute paths for the files contained in the partitions of the
-   * current scan file listing representation.
-   */
-  // def selectedPartitionFilesAbsolutePaths: Seq[String]
-
   /**
    * Returns an [[Array[PartitionedFile]] from the current ScanFileListing representation.
    */
@@ -81,7 +69,7 @@ trait ScanFileListing {
   /**
    * Returns the total partition size in bytes for the current ScanFileListing representation.
    */
-  def calculateTotalPartitionBytes(openCostInBytes: Long) : Long
+  def calculateTotalPartitionBytes : Long
 
   /**
    * Returns an iterator of over the partitions and their files for the file listing representation.

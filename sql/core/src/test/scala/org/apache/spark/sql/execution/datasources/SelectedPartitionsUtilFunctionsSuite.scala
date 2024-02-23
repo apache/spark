@@ -83,7 +83,7 @@ class SelectedPartitionsUtilFunctionsSuite extends QueryTest with SharedSparkSes
       .collectFirst { case p: FileSourceScanLike => p }
       .getOrElse(fail("FileSourceScanLike node not found"))
 
-    assert(scan.totalNumOfFilesInSelectedPartitions == numOfPartitions)
+    assert(scan.selectedPartitions.totalNumberOfFiles == numOfPartitions)
     assert(scan.selectedPartitions.totalFileSize == filesTotalSize(tableName))
 
     // Test the same thing for count distinct. It should have the same result.
@@ -91,7 +91,7 @@ class SelectedPartitionsUtilFunctionsSuite extends QueryTest with SharedSparkSes
       .collectFirst { case p: FileSourceScanLike => p }
       .getOrElse(fail("FileSourceScanLike node not found"))
 
-    assert(scan2.totalNumOfFilesInSelectedPartitions == numOfPartitions)
+    assert(scan2.selectedPartitions.totalNumberOfFiles == numOfPartitions)
     assert(scan2.selectedPartitions.totalFileSize == filesTotalSize(tableName))
   }
 
@@ -101,7 +101,7 @@ class SelectedPartitionsUtilFunctionsSuite extends QueryTest with SharedSparkSes
       .collectFirst { case p: FileSourceScanLike => p }
       .getOrElse(fail("FileSourceScanLike node not found"))
 
-    assert(scan.totalNumOfFilesInSelectedPartitions == 0)
+    assert(scan.selectedPartitions.totalNumberOfFiles == 0)
     val totalSizeInBytes = scan.selectedPartitions.totalFileSize
     assert(totalSizeInBytes == 0L)
     assert(totalSizeInBytes == filesTotalSize(tableName))
@@ -111,7 +111,7 @@ class SelectedPartitionsUtilFunctionsSuite extends QueryTest with SharedSparkSes
       .collectFirst { case p: FileSourceScanLike => p }
       .getOrElse(fail("FileSourceScanLike node not found"))
 
-    assert(scan2.totalNumOfFilesInSelectedPartitions == 0)
+    assert(scan2.selectedPartitions.totalNumberOfFiles == 0)
     assert(scan2.selectedPartitions.totalFileSize == filesTotalSize(tableName))
   }
 
@@ -123,14 +123,14 @@ class SelectedPartitionsUtilFunctionsSuite extends QueryTest with SharedSparkSes
         .collectFirst { case p: FileSourceScanLike => p }
         .getOrElse(fail("FileSourceScanLike node not found"))
 
-      assert(scan.totalNumOfFilesInSelectedPartitions == numPartition)
+      assert(scan.selectedPartitions.totalNumberOfFiles == numPartition)
       assert(scan.selectedPartitions.totalFileSize == filesTotalSize(tableName))
 
       // Test the same thing for count distinct. It should have the same result.
       val scan2 = sql(s"SELECT COUNT(DISTINCT *) FROM $tableName").queryExecution.sparkPlan
         .collectFirst { case p: FileSourceScanLike => p }
         .getOrElse(fail("FileSourceScanLike node not found"))
-      assert(scan2.totalNumOfFilesInSelectedPartitions == numPartition)
+      assert(scan2.selectedPartitions.totalNumberOfFiles == numPartition)
       assert(scan2.selectedPartitions.totalFileSize == filesTotalSize(tableName))
     }
   }

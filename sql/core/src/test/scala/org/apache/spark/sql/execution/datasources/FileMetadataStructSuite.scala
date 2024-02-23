@@ -971,8 +971,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           case p: FileSourceScanExec => p
         }.get
         // Assert that there's 1 selected partition with 1 file.
-        assert(fileSourceScan2.selectedPartitionCount == 1)
-        assert(fileSourceScan2.totalNumOfFilesInSelectedPartitions == 1)
+        assert(fileSourceScan2.selectedPartitions.partitionCount == 1)
+        assert(fileSourceScan2.selectedPartitions.totalNumberOfFiles == 1)
         val res2 = df2.collect()
         assert(res2.length == 1)
         assert(res2.head.getLong(0) == 1L) // id
@@ -987,8 +987,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           case p: FileSourceScanExec => p
         }.get
         // Assert that there's 1 selected partition with no files.
-        assert(fileSourceScan3.selectedPartitionCount == 1)
-        assert(fileSourceScan3.totalNumOfFilesInSelectedPartitions == 0)
+        assert(fileSourceScan3.selectedPartitions.partitionCount == 1)
+        assert(fileSourceScan3.selectedPartitions.totalNumberOfFiles == 0)
         assert(df3.collect().isEmpty)
       }
     }

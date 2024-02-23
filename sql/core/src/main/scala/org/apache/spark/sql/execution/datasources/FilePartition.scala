@@ -107,30 +107,38 @@ object FilePartition extends Logging {
     }
   }
 
-  def maxSplitBytes(
-      sparkSession: SparkSession,
-      selectedPartitions: ScanFileListing): Long = {
+  /**
+   * Returns the max split bytes, given the total number of bytes taken by the selected
+   * partitions.
+   */
+  def maxSplitBytes(sparkSession: SparkSession, calculateTotalBytes: => Long): Long = {
     val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
     val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
     val minPartitionNum = sparkSession.sessionState.conf.filesMinPartitionNum
       .getOrElse(sparkSession.leafNodeDefaultParallelism)
-    // val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-    val totalBytes = selectedPartitions.calculateTotalPartitionBytes(openCostInBytes)
+    val totalBytes = calculateTotalBytes
     val bytesPerCore = totalBytes / minPartitionNum
 
     Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
   }
 
-    def maxSplitBytes(
-      sparkSession: SparkSession,
-      selectedPartitions: Seq[PartitionDirectory]): Long = {
-    val defaultMaxSplitBytes = sparkSession.sessionState.conf.filesMaxPartitionBytes
-    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
-    val minPartitionNum = sparkSession.sessionState.conf.filesMinPartitionNum
-      .getOrElse(sparkSession.leafNodeDefaultParallelism)
-    val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-    val bytesPerCore = totalBytes / minPartitionNum
+  /**
+   * Returns the max split bytes, given the selected partitions represented using the
+   * [[ScanFileListing]] type.
+   */
+  def maxSplitBytes(sparkSession: SparkSession, selectedPartitions: ScanFileListing): Long = {
+    val byteNum = selectedPartitions.calculateTotalPartitionBytes
+    maxSplitBytes(sparkSession, byteNum)
+  }
 
-    Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+  /**
+   * Returns the max split bytes, given the selected partitions represented as a sequence of
+   * [[PartitionDirectory]]s.
+   */
+  def maxSplitBytes(
+      sparkSession: SparkSession, selectedPartitions: Seq[PartitionDirectory]): Long = {
+    val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
+    val byteNum = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+    maxSplitBytes(sparkSession, byteNum)
   }
 }
