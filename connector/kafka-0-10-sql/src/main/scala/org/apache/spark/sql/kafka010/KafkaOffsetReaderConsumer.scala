@@ -191,7 +191,8 @@ private[kafka010] class KafkaOffsetReaderConsumer(
           if (fetched(tp) != off) {
             reportDataLoss(
               s"startingOffsets for $tp was $off but consumer reset to ${fetched(tp)}",
-              () => QueryExecutionErrors.startOffsetResetKafkaError(tp.toString, off, fetched(tp)))
+              () =>
+                QueryExecutionErrors.startOffsetResetKafkaError(tp.toString, off, fetched(tp)))
           }
         case _ =>
         // no real way to check that beginning or end is reasonable
@@ -453,10 +454,10 @@ private[kafka010] class KafkaOffsetReaderConsumer(
         offsetRangesBase.map(range => (range.topicPartition, range.untilOffset)).toMap
 
       // No need to report data loss here
-      val resolvedFromOffsets = fetchSpecificOffsets(
-        fromOffsetsMap, (_, _) => ()).partitionToOffsets
-      val resolvedUntilOffsets = fetchSpecificOffsets(untilOffsetsMap,
-        (_, _) => ()).partitionToOffsets
+      val resolvedFromOffsets =
+        fetchSpecificOffsets(fromOffsetsMap, (_, _) => ()).partitionToOffsets
+      val resolvedUntilOffsets =
+        fetchSpecificOffsets(untilOffsetsMap, (_, _) => ()).partitionToOffsets
       val ranges = offsetRangesBase.map(_.topicPartition).map { tp =>
         KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
       }
@@ -504,8 +505,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       val deletedPartitions = newPartitions.diff(newPartitionInitialOffsets.keySet)
       reportDataLoss(
         s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed",
-        () => QueryExecutionErrors.initialOffsetNotFoundForPartitionsKafkaError(
-          deletedPartitions.toString))
+        () =>
+          QueryExecutionErrors.initialOffsetNotFoundForPartitionsKafkaError(
+            deletedPartitions.toString))
     }
     logInfo(s"Partitions added: $newPartitionInitialOffsets")
     newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
@@ -517,12 +519,16 @@ private[kafka010] class KafkaOffsetReaderConsumer(
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
       if (driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        reportDataLoss(s"$deletedPartitions are gone." +
-          s" ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}",
-          () => QueryExecutionErrors.partitionsDeletedAndGroupIdConfigPresentKafkaError(
-            deletedPartitions.toString, ConsumerConfig.GROUP_ID_CONFIG))
+        reportDataLoss(
+          s"$deletedPartitions are gone." +
+            s" ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}",
+          () =>
+            QueryExecutionErrors.partitionsDeletedAndGroupIdConfigPresentKafkaError(
+              deletedPartitions.toString,
+              ConsumerConfig.GROUP_ID_CONFIG))
       } else {
-        reportDataLoss(s"$deletedPartitions are gone. Some data may have been missed.",
+        reportDataLoss(
+          s"$deletedPartitions are gone. Some data may have been missed.",
           () => QueryExecutionErrors.partitionsDeletedKafkaError(deletedPartitions.toString))
       }
     }
@@ -541,10 +547,14 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       val fromOffset = fromOffsets(tp)
       val untilOffset = untilOffsets(tp)
       if (untilOffset < fromOffset) {
-        reportDataLoss(s"Partition $tp's offset was changed from " +
-          s"$fromOffset to $untilOffset, some data may have been missed",
-          () => QueryExecutionErrors.partitionOffsetChangedKafkaError(tp.toString,
-            fromOffset, untilOffset))
+        reportDataLoss(
+          s"Partition $tp's offset was changed from " +
+            s"$fromOffset to $untilOffset, some data may have been missed",
+          () =>
+            QueryExecutionErrors.partitionOffsetChangedKafkaError(
+              tp.toString,
+              fromOffset,
+              untilOffset))
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }

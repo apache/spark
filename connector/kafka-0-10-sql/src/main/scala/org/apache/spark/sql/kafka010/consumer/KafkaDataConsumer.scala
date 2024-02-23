@@ -635,32 +635,31 @@ private[kafka010] class KafkaDataConsumer(
   }
 
   /**
-   * Throw an exception when Data loss is detected.
+   * Throw an exception when data loss is detected.
    */
   private def throwOnDataLoss(
-                               startOffset: Long,
-                               endOffset: Long,
-                               topicPartition: TopicPartition,
-                               groupId: String,
-                               cause: Throwable = null): Unit = {
+      startOffset: Long,
+      endOffset: Long,
+      topicPartition: TopicPartition,
+      groupId: String,
+      cause: Throwable = null): Unit = {
     dataLoss += 1
     throw QueryExecutionErrors.couldNotReadOffsetRangeInKafkaError(
       startOffset,
       endOffset,
       topicPartition.toString,
       groupId,
-      cause
-    )
+      cause)
   }
 
   /**
-   * Log a warning when Data loss is detected.
+   * Log a warning when data loss is detected.
    */
   private def logOnDataLoss(
-                              topicPartition: TopicPartition,
-                              groupId: String,
-                              message: String,
-                              cause: Throwable = null): Unit = {
+      topicPartition: TopicPartition,
+      groupId: String,
+      message: String,
+      cause: Throwable = null): Unit = {
     val finalMessage = s"$message ${additionalWarningMessage(topicPartition, groupId)}"
 
     dataLoss += 1
