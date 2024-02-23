@@ -426,7 +426,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
     assert(partitions.length == 1) // 1 partition
     assert(partitions.head.numFiles == 1) // 1 file in that partition
-    assert(partitions.head.files.toSeq.head.getPath == f0(METADATA_FILE_PATH)) // the file is f0
+    // The file is f0.
+    assert(partitions.head.files.toSeq.head.getPath.toString == f0(METADATA_FILE_PATH))
 
     // check result
     checkAnswer(
@@ -471,7 +472,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
     assert(partitions.length == 1) // 1 partition
     assert(partitions.head.numFiles == 1) // 1 file in that partition
-    assert(partitions.head.files.toSeq.head.getPath == f1(METADATA_FILE_PATH)) // the file is f0
+    // The file is f0.
+    assert(partitions.head.files.toSeq.head.getPath.toString == f1(METADATA_FILE_PATH))
 
     // check result
     checkAnswer(
