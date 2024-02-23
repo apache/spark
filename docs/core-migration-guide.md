@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Core 3.5 to 4.0
 
-- Since Spark 4.0, Spark will migrate its internal reference of servlet API from `Javax` to `Jakarta`, and it applies to all 
+- Since Spark 4.0, Spark migrated all its internal reference of servlet API from `javax` to `jakarta` 
 
 - Since Spark 4.0, Spark will roll event logs to archive them incrementally. To restore the behavior before Spark 4.0, you can set `spark.eventLog.rolling.enabled` to `false`.
 
