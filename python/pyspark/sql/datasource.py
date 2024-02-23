@@ -346,7 +346,6 @@ class DataSourceStreamReader(ABC):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
 
-
         ...
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
