@@ -327,7 +327,8 @@ private[spark] object MavenUtils extends Logging {
       if (ivySettings.getDefaultIvyUserDir == null && ivySettings.getDefaultCache == null) {
         // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
         // `processIvyPathArg` can overwrite these later.
-        val alternateIvyDir = System.getProperty("user.home") + File.separator + ".ivy2.5.2"
+        val alternateIvyDir = System.getProperty("ivy.home",
+          System.getProperty("user.home") + File.separator + ".ivy2.5.2")
         ivySettings.setDefaultIvyUserDir(new File(alternateIvyDir))
         ivySettings.setDefaultCache(new File(alternateIvyDir, "cache"))
       }
@@ -344,7 +345,8 @@ private[spark] object MavenUtils extends Logging {
   private def processIvyPathArg(ivySettings: IvySettings, ivyPath: Option[String]): Unit = {
     val alternateIvyDir = ivyPath.filterNot(_.trim.isEmpty).getOrElse {
       // To protect old Ivy-based systems like old Spark from Apache Ivy 2.5.2's incompatibility.
-      System.getProperty("user.home") + File.separator + ".ivy2.5.2"
+      System.getProperty("ivy.home",
+        System.getProperty("user.home") + File.separator + ".ivy2.5.2")
     }
     ivySettings.setDefaultIvyUserDir(new File(alternateIvyDir))
     ivySettings.setDefaultCache(new File(alternateIvyDir, "cache"))
