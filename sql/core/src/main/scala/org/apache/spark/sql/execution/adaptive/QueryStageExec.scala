@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.concurrent.Future
 
@@ -52,12 +52,29 @@ abstract class QueryStageExec extends LeafExecNode {
   val plan: SparkPlan
 
   /**
+   * Name of this query stage which is unique in the entire query plan.
+   */
+  val name: String = s"${this.getClass.getSimpleName}-$id"
+
+  /**
+   * This flag aims to detect if the stage materialization is started. This helps
+   * to avoid unnecessary stage materialization when the stage is canceled.
+   */
+  private val materializationStarted = new AtomicBoolean()
+
+  /**
+   * Exposes status if the materialization is started
+   */
+  def isMaterializationStarted(): Boolean = materializationStarted.get()
+
+  /**
    * Materialize this query stage, to prepare for the execution, like submitting map stages,
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
    * stage is ready.
    */
   final def materialize(): Future[Any] = {
-    logDebug(s"Materialize query stage ${this.getClass.getSimpleName}: $id")
+    logDebug(s"Materialize query stage: $name")
+    materializationStarted.set(true)
     doMaterialize()
   }
 
@@ -198,10 +215,15 @@ case class ShuffleQueryStageExec(
     reuse
   }
 
-  override def cancel(): Unit = shuffleFuture match {
-    case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>
-      action.cancel()
-    case _ =>
+  override def cancel(): Unit = {
+    if (isMaterializationStarted()) {
+      shuffleFuture match {
+        case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>
+          action.cancel()
+          logInfo(s"$name is cancelled.")
+        case _ =>
+      }
+    }
   }
 
   /**
@@ -209,7 +231,7 @@ case class ShuffleQueryStageExec(
    * this method returns None, as there is no map statistics.
    */
   def mapStats: Option[MapOutputStatistics] = {
-    assert(resultOption.get().isDefined, s"${getClass.getSimpleName} should already be ready")
+    assert(resultOption.get().isDefined, s"$name should already be ready")
     val stats = resultOption.get().get.asInstanceOf[MapOutputStatistics]
     Option(stats)
   }
@@ -251,9 +273,10 @@ case class BroadcastQueryStageExec(
   }
 
   override def cancel(): Unit = {
-    if (!broadcast.relationFuture.isDone) {
+    if (isMaterializationStarted() && !broadcast.relationFuture.isDone) {
       sparkContext.cancelJobsWithTag(broadcast.jobTag)
       broadcast.relationFuture.cancel(true)
+      logInfo(s"$name is cancelled.")
     }
   }
 
