@@ -278,9 +278,11 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
       val artifacts =
         Artifact.newIvyArtifacts(URI.create(s"ivy://my.artifactsuite.lib:mylib:0.1?repos=$repo"))
-      assert(artifacts.exists(_.path.toString.contains("jars/my.artifactsuite.lib_mylib-0.1.jar")))
+      assert(
+        artifacts.exists(_.path.toString.contains("jars/my.artifactsuite.lib_mylib-0.1.jar")))
       // transitive dependency
-      assert(artifacts.exists(_.path.toString.contains("jars/my.artifactsuite.dep_mydep-0.5.jar")))
+      assert(
+        artifacts.exists(_.path.toString.contains("jars/my.artifactsuite.dep_mydep-0.5.jar")))
     }
 
   }
