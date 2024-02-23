@@ -62,9 +62,10 @@ class _StreamingQueryEventTypeEnumTypeWrapper(
     builtins.type,
 ):  # noqa: F821
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-    QUERY_PROGRESS_EVENT: _StreamingQueryEventType.ValueType  # 0
-    QUERY_TERMINATED_EVENT: _StreamingQueryEventType.ValueType  # 1
-    QUERY_IDLE_EVENT: _StreamingQueryEventType.ValueType  # 2
+    QUERY_PROGRESS_UNSPECIFIED: _StreamingQueryEventType.ValueType  # 0
+    QUERY_PROGRESS_EVENT: _StreamingQueryEventType.ValueType  # 1
+    QUERY_TERMINATED_EVENT: _StreamingQueryEventType.ValueType  # 2
+    QUERY_IDLE_EVENT: _StreamingQueryEventType.ValueType  # 3
 
 class StreamingQueryEventType(
     _StreamingQueryEventType, metaclass=_StreamingQueryEventTypeEnumTypeWrapper
@@ -74,9 +75,10 @@ class StreamingQueryEventType(
     it is added as a field in WriteStreamOperationStartResult
     """
 
-QUERY_PROGRESS_EVENT: StreamingQueryEventType.ValueType  # 0
-QUERY_TERMINATED_EVENT: StreamingQueryEventType.ValueType  # 1
-QUERY_IDLE_EVENT: StreamingQueryEventType.ValueType  # 2
+QUERY_PROGRESS_UNSPECIFIED: StreamingQueryEventType.ValueType  # 0
+QUERY_PROGRESS_EVENT: StreamingQueryEventType.ValueType  # 1
+QUERY_TERMINATED_EVENT: StreamingQueryEventType.ValueType  # 2
+QUERY_IDLE_EVENT: StreamingQueryEventType.ValueType  # 3
 global___StreamingQueryEventType = StreamingQueryEventType
 
 class Command(google.protobuf.message.Message):

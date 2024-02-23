@@ -440,9 +440,10 @@ message StreamingQueryListenerBusCommand {
 // There is no QueryStartedEvent defined here,
 // it is added as a field in WriteStreamOperationStartResult
 enum StreamingQueryEventType {
-  QUERY_PROGRESS_EVENT = 0;
-  QUERY_TERMINATED_EVENT = 1;
-  QUERY_IDLE_EVENT = 2;
+  QUERY_PROGRESS_UNSPECIFIED = 0;
+  QUERY_PROGRESS_EVENT = 1;
+  QUERY_TERMINATED_EVENT = 2;
+  QUERY_IDLE_EVENT = 3;
 }
 
 // The protocol for the returned events in the long-running response channel.
