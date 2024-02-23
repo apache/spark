@@ -454,7 +454,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def notExpectedUnresolvedEncoderError(attr: AttributeReference): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2023",
+      errorClass = "NOT_A_UNRESOLVED_ENCODER",
       messageParameters = Map("attr" -> attr.toString()))
   }
 
@@ -471,7 +471,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def notOverrideExpectedMethodsError(
       className: String, m1: String, m2: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2025",
+      errorClass = "CLASS_NOT_OVERRIDE_EXPECTED_METHOD",
       messageParameters = Map("className" -> className, "m1" -> m1, "m2" -> m2))
   }
 
