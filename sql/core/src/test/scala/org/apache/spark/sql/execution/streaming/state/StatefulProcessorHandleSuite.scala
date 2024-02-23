@@ -88,23 +88,24 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     }
   }
 
-  test("value state creation with no timeouts should succeed") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
-      val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeoutMode.NoTimeouts())
-      assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
-      handle.getValueState[Long]("testState")
+  private def getTimeoutMode(timeoutMode: String): TimeoutMode = {
+    timeoutMode match {
+      case "NoTimeouts" => TimeoutMode.NoTimeouts()
+      case "ProcessingTime" => TimeoutMode.ProcessingTime()
+      case "EventTime" => TimeoutMode.EventTime()
+      case _ => throw new IllegalArgumentException(s"Invalid timeoutMode=$timeoutMode")
     }
   }
 
-  test("value state creation with processing time timeout should succeed") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
-      val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeoutMode.ProcessingTime())
-      assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
-      handle.getValueState[Long]("testState")
+  Seq("NoTimeouts", "ProcessingTime", "EventTime").foreach { timeoutMode =>
+    test(s"value state creation with timeoutMode=$timeoutMode should succeed") {
+      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+        val store = provider.getStore(0)
+        val handle = new StatefulProcessorHandleImpl(store,
+          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+        assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
+        handle.getValueState[Long]("testState")
+      }
     }
   }
 
@@ -128,36 +129,38 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     handle.registerTimer(1000L)
   }
 
-  test("value state creation with processing time " +
-    "timeout and invalid state should fail") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
-      val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeoutMode.ProcessingTime())
+  Seq("NoTimeouts", "ProcessingTime", "EventTime").foreach { timeoutMode =>
+    test(s"value state creation with timeoutMode=$timeoutMode " +
+      "and invalid state should fail") {
+      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+        val store = provider.getStore(0)
+        val handle = new StatefulProcessorHandleImpl(store,
+          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
 
-      verifyInvalidOperation(handle, StatefulProcessorHandleState.INITIALIZED,
-        "Cannot create state variable") { handle =>
-        createValueStateInstance(handle)
-      }
+        verifyInvalidOperation(handle, StatefulProcessorHandleState.INITIALIZED,
+          "Cannot create state variable") { handle =>
+          createValueStateInstance(handle)
+        }
 
-      verifyInvalidOperation(handle, StatefulProcessorHandleState.DATA_PROCESSED,
-        "Cannot create state variable") { handle =>
-        createValueStateInstance(handle)
-      }
+        verifyInvalidOperation(handle, StatefulProcessorHandleState.DATA_PROCESSED,
+          "Cannot create state variable") { handle =>
+          createValueStateInstance(handle)
+        }
 
-      verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
-        "Cannot create state variable") { handle =>
-        createValueStateInstance(handle)
-      }
+        verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
+          "Cannot create state variable") { handle =>
+          createValueStateInstance(handle)
+        }
 
-      verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
-        "Cannot create state variable") { handle =>
-        createValueStateInstance(handle)
+        verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
+          "Cannot create state variable") { handle =>
+          createValueStateInstance(handle)
+        }
       }
     }
   }
 
-  test("registering processing time timeouts with NoTimeout mode should fail") {
+  test("registering processing/event time timeouts with NoTimeout mode should fail") {
     tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
@@ -174,113 +177,122 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
     }
   }
 
-  test("registering processing time timeouts with ProcessingTime mode should succeed") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
-      val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeoutMode.ProcessingTime())
-      handle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
-      assert(handle.getHandleState === StatefulProcessorHandleState.INITIALIZED)
+  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
+    test(s"registering timeouts with timeoutMode=$timeoutMode should succeed") {
+      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+        val store = provider.getStore(0)
+        val handle = new StatefulProcessorHandleImpl(store,
+          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+        handle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+        assert(handle.getHandleState === StatefulProcessorHandleState.INITIALIZED)
 
-      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
+        ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
 
-      handle.registerTimer(10000L)
-      handle.deleteTimer(10000L)
+        handle.registerTimer(10000L)
+        handle.deleteTimer(10000L)
 
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
+      }
     }
   }
 
-  test("verify listing of registered timers") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
-      val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeoutMode.ProcessingTime())
-      handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
-      assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
+  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
+    test(s"verify listing of registered timers with timeoutMode=$timeoutMode") {
+      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+        val store = provider.getStore(0)
+        val handle = new StatefulProcessorHandleImpl(store,
+          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+        handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
+        assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
 
-      ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
-      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
+        ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
+        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
 
-      // Generate some random timer timestamps in arbitrary sorted order
-      val timerTimestamps1 = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
-      timerTimestamps1.foreach { timestamp =>
-        handle.registerTimer(timestamp)
+        // Generate some random timer timestamps in arbitrary sorted order
+        val timerTimestamps1 = Seq(931L, 8000L, 452300L, 4200L, 90L,
+          1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
+        timerTimestamps1.foreach { timestamp =>
+          handle.registerTimer(timestamp)
+        }
+
+        val timers1 = handle.listTimers()
+        assert(timers1.toSeq.sorted === timerTimestamps1.sorted)
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+
+        ImplicitGroupingKeyTracker.setImplicitKey("test_key2")
+        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
+
+        // Generate some random timer timestamps in arbitrary sorted order
+        val timerTimestamps2 = Seq(12000L, 14500L, 16000L)
+        timerTimestamps2.foreach { timestamp =>
+          handle.registerTimer(timestamp)
+        }
+
+        val timers2 = handle.listTimers()
+        assert(timers2.toSeq.sorted === timerTimestamps2.sorted)
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       }
-
-      val timers1 = handle.listTimers()
-      assert(timers1.toSeq.sorted === timerTimestamps1.sorted)
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-
-      ImplicitGroupingKeyTracker.setImplicitKey("test_key2")
-      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
-
-      // Generate some random timer timestamps in arbitrary sorted order
-      val timerTimestamps2 = Seq(12000L, 14500L, 16000L)
-      timerTimestamps2.foreach { timestamp =>
-        handle.registerTimer(timestamp)
-      }
-
-      val timers2 = handle.listTimers()
-      assert(timers2.toSeq.sorted === timerTimestamps2.sorted)
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
     }
   }
 
-  test("verify that expired timers are returned in sorted order") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
-      val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeoutMode.ProcessingTime())
-      handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
-      assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
+  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
+    test(s"verify that expired timers are returned in sorted order with timeoutMode=$timeoutMode") {
+      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+        val store = provider.getStore(0)
+        val handle = new StatefulProcessorHandleImpl(store,
+          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
+        handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
+        assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
 
-      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
+        ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
 
-      // Generate some random timer timestamps in arbitrary sorted order
-      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
-      timerTimestamps.foreach { timestamp =>
-        handle.registerTimer(timestamp)
+        // Generate some random timer timestamps in arbitrary sorted order
+        val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
+        timerTimestamps.foreach { timestamp =>
+          handle.registerTimer(timestamp)
+        }
+
+        // Ensure that the expired timers are returned in sorted order
+        var expiredTimers = handle.getExpiredTimers(1000000L).map(_._2).toSeq
+        assert(expiredTimers === timerTimestamps.sorted)
+
+        expiredTimers = handle.getExpiredTimers(5L).map(_._2).toSeq
+        assert(expiredTimers === Seq(1L, 2L, 3L, 5L))
+
+        expiredTimers = handle.getExpiredTimers(10L).map(_._2).toSeq
+        assert(expiredTimers === Seq(1L, 2L, 3L, 5L, 6L, 8L, 9L))
+
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       }
-
-      // Ensure that the expired timers are returned in sorted order
-      var expiredTimers = handle.getExpiredTimers(1000000L).map(_._2).toSeq
-      assert(expiredTimers === timerTimestamps.sorted)
-
-      expiredTimers = handle.getExpiredTimers(5L).map(_._2).toSeq
-      assert(expiredTimers === Seq(1L, 2L, 3L, 5L))
-
-      expiredTimers = handle.getExpiredTimers(10L).map(_._2).toSeq
-      assert(expiredTimers === Seq(1L, 2L, 3L, 5L, 6L, 8L, 9L))
-
-      ImplicitGroupingKeyTracker.removeImplicitKey()
-      assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
     }
   }
 
-  test("registering processing time timeouts with invalid state should fail") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
-      val store = provider.getStore(0)
-      val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), keyExprEncoder, TimeoutMode.ProcessingTime())
+  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
+    test(s"registering timeouts with timeoutMode=$timeoutMode and invalid state should fail") {
+      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+        val store = provider.getStore(0)
+        val handle = new StatefulProcessorHandleImpl(store,
+          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
 
-      verifyInvalidOperation(handle, StatefulProcessorHandleState.CREATED,
-        "Cannot register timers") { handle =>
-        registerTimer(handle)
-      }
+        verifyInvalidOperation(handle, StatefulProcessorHandleState.CREATED,
+          "Cannot register timers") { handle =>
+          registerTimer(handle)
+        }
 
-      verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
-        "Cannot register timers") { handle =>
-        registerTimer(handle)
-      }
+        verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
+          "Cannot register timers") { handle =>
+          registerTimer(handle)
+        }
 
-      verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
-        "Cannot register timers") { handle =>
-        registerTimer(handle)
+        verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
+          "Cannot register timers") { handle =>
+          registerTimer(handle)
+        }
       }
     }
   }
