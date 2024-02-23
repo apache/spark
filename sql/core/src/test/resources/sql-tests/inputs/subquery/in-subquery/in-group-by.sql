@@ -255,12 +255,12 @@ FROM t1
 GROUP BY t1.t1a;
 
 -- Correlated in-subquery with a top-level aggregation
--- TODO: this fails, but it should work...
+-- TODO: this fails, but it should work (it does in POSTGRESQL)
 SELECT
-  t1.t1a,
-  t1.t1a IN (SELECT t2a FROM t2 WHERE length(t2a) = length(t1a)) as v1
+  t1.t1b,
+  t1.t1b IN (SELECT t2.t2b FROM t2 WHERE t2.t2c = t1.t1b) as v1
 FROM t1
-GROUP BY t1.t1a;
+GROUP BY t1.t1b;
 
 -- Aggregate function over expression with subquery, without explicit GROUP BY
 SELECT
