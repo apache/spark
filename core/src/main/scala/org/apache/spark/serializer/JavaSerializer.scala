@@ -118,22 +118,24 @@ private[spark] class JavaSerializerInstance(
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     val bos = new ByteBufferOutputStream()
-    val out = serializeStream(bos)
-    out.writeObject(t)
-    out.close()
+    Utils.tryWithResource(serializeStream(bos)) { out =>
+      out.writeObject(t)
+    }
     bos.toByteBuffer
   }
 
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     val bis = new ByteBufferInputStream(bytes)
-    val in = deserializeStream(bis)
-    in.readObject()
+    Utils.tryWithResource(deserializeStream(bis)) { in =>
+      in.readObject()
+    }
   }
 
   override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T = {
     val bis = new ByteBufferInputStream(bytes)
-    val in = deserializeStream(bis, loader)
-    in.readObject()
+    Utils.tryWithResource(deserializeStream(bis, loader)) { in =>
+      in.readObject()
+    }
   }
 
   override def serializeStream(s: OutputStream): SerializationStream = {
