@@ -221,40 +221,40 @@ Input [8]: [ss_ticket_number#5, bought_city#28, extended_price#29, list_price#30
 Arguments: [c_current_addr_sk#33 ASC NULLS FIRST], false, 0
 
 (38) Scan parquet spark_catalog.default.customer_address
-Output [2]: [ca_address_sk#36, ca_city#37]
+Output [2]: [ca_address_sk#17, ca_city#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_city)]
 ReadSchema: struct<ca_address_sk:int,ca_city:string>
 
 (39) ColumnarToRow [codegen id : 9]
-Input [2]: [ca_address_sk#36, ca_city#37]
+Input [2]: [ca_address_sk#17, ca_city#18]
 
 (40) Filter [codegen id : 9]
-Input [2]: [ca_address_sk#36, ca_city#37]
-Condition : (isnotnull(ca_address_sk#36) AND isnotnull(ca_city#37))
+Input [2]: [ca_address_sk#17, ca_city#18]
+Condition : (isnotnull(ca_address_sk#17) AND isnotnull(ca_city#18))
 
 (41) Exchange
-Input [2]: [ca_address_sk#36, ca_city#37]
-Arguments: hashpartitioning(ca_address_sk#36, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+Input [2]: [ca_address_sk#17, ca_city#18]
+Arguments: hashpartitioning(ca_address_sk#17, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (42) Sort [codegen id : 10]
-Input [2]: [ca_address_sk#36, ca_city#37]
-Arguments: [ca_address_sk#36 ASC NULLS FIRST], false, 0
+Input [2]: [ca_address_sk#17, ca_city#18]
+Arguments: [ca_address_sk#17 ASC NULLS FIRST], false, 0
 
 (43) SortMergeJoin [codegen id : 11]
 Left keys [1]: [c_current_addr_sk#33]
-Right keys [1]: [ca_address_sk#36]
+Right keys [1]: [ca_address_sk#17]
 Join type: Inner
-Join condition: NOT (ca_city#37 = bought_city#28)
+Join condition: NOT (ca_city#18 = bought_city#28)
 
 (44) Project [codegen id : 11]
-Output [8]: [c_last_name#35, c_first_name#34, ca_city#37, bought_city#28, ss_ticket_number#5, extended_price#29, extended_tax#31, list_price#30]
-Input [10]: [ss_ticket_number#5, bought_city#28, extended_price#29, list_price#30, extended_tax#31, c_current_addr_sk#33, c_first_name#34, c_last_name#35, ca_address_sk#36, ca_city#37]
+Output [8]: [c_last_name#35, c_first_name#34, ca_city#18, bought_city#28, ss_ticket_number#5, extended_price#29, extended_tax#31, list_price#30]
+Input [10]: [ss_ticket_number#5, bought_city#28, extended_price#29, list_price#30, extended_tax#31, c_current_addr_sk#33, c_first_name#34, c_last_name#35, ca_address_sk#17, ca_city#18]
 
 (45) TakeOrderedAndProject
-Input [8]: [c_last_name#35, c_first_name#34, ca_city#37, bought_city#28, ss_ticket_number#5, extended_price#29, extended_tax#31, list_price#30]
-Arguments: 100, [c_last_name#35 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#35, c_first_name#34, ca_city#37, bought_city#28, ss_ticket_number#5, extended_price#29, extended_tax#31, list_price#30]
+Input [8]: [c_last_name#35, c_first_name#34, ca_city#18, bought_city#28, ss_ticket_number#5, extended_price#29, extended_tax#31, list_price#30]
+Arguments: 100, [c_last_name#35 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#35, c_first_name#34, ca_city#18, bought_city#28, ss_ticket_number#5, extended_price#29, extended_tax#31, list_price#30]
 
 ===== Subqueries =====
 
@@ -267,22 +267,22 @@ BroadcastExchange (50)
 
 
 (46) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#11, d_year#38, d_dom#39]
+Output [3]: [d_date_sk#11, d_year#36, d_dom#37]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_dom), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1999,2000,2001]), In(d_date_sk, [2451180,2451181,2451211,2451212,2451239,2451240,2451270,2451271,2451300,2451301,2451331,2451332,2451361,2451362,2451392,2451393,2451423,2451424,2451453,2451454,2451484,2451485,2451514,2451515,2451545,2451546,2451576,2451577,2451605,2451606,2451636,2451637,2451666,2451667,2451697,2451698,2451727,2451728,2451758,2451759,2451789,2451790,2451819,2451820,2451850,2451851,2451880,2451881,2451911,2451912,2451942,2451943,2451970,2451971,2452001,2452002,2452031,2452032,2452062,2452063,2452092,2452093,2452123,2452124,2452154,2452155,2452184,2452185,2452215,2452216,2452245,2452246]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
 
 (47) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#38, d_dom#39]
+Input [3]: [d_date_sk#11, d_year#36, d_dom#37]
 
 (48) Filter [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#38, d_dom#39]
-Condition : (((((isnotnull(d_dom#39) AND (d_dom#39 >= 1)) AND (d_dom#39 <= 2)) AND d_year#38 IN (1999,2000,2001)) AND d_date_sk#11 INSET 2451180, 2451181, 2451211, 2451212, 2451239, 2451240, 2451270, 2451271, 2451300, 2451301, 2451331, 2451332, 2451361, 2451362, 2451392, 2451393, 2451423, 2451424, 2451453, 2451454, 2451484, 2451485, 2451514, 2451515, 2451545, 2451546, 2451576, 2451577, 2451605, 2451606, 2451636, 2451637, 2451666, 2451667, 2451697, 2451698, 2451727, 2451728, 2451758, 2451759, 2451789, 2451790, 2451819, 2451820, 2451850, 2451851, 2451880, 2451881, 2451911, 2451912, 2451942, 2451943, 2451970, 2451971, 2452001, 2452002, 2452031, 2452032, 2452062, 2452063, 2452092, 2452093, 2452123, 2452124, 2452154, 2452155, 2452184, 2452185, 2452215, 2452216, 2452245, 2452246) AND isnotnull(d_date_sk#11))
+Input [3]: [d_date_sk#11, d_year#36, d_dom#37]
+Condition : (((((isnotnull(d_dom#37) AND (d_dom#37 >= 1)) AND (d_dom#37 <= 2)) AND d_year#36 IN (1999,2000,2001)) AND d_date_sk#11 INSET 2451180, 2451181, 2451211, 2451212, 2451239, 2451240, 2451270, 2451271, 2451300, 2451301, 2451331, 2451332, 2451361, 2451362, 2451392, 2451393, 2451423, 2451424, 2451453, 2451454, 2451484, 2451485, 2451514, 2451515, 2451545, 2451546, 2451576, 2451577, 2451605, 2451606, 2451636, 2451637, 2451666, 2451667, 2451697, 2451698, 2451727, 2451728, 2451758, 2451759, 2451789, 2451790, 2451819, 2451820, 2451850, 2451851, 2451880, 2451881, 2451911, 2451912, 2451942, 2451943, 2451970, 2451971, 2452001, 2452002, 2452031, 2452032, 2452062, 2452063, 2452092, 2452093, 2452123, 2452124, 2452154, 2452155, 2452184, 2452185, 2452215, 2452216, 2452245, 2452246) AND isnotnull(d_date_sk#11))
 
 (49) Project [codegen id : 1]
 Output [1]: [d_date_sk#11]
-Input [3]: [d_date_sk#11, d_year#38, d_dom#39]
+Input [3]: [d_date_sk#11, d_year#36, d_dom#37]
 
 (50) BroadcastExchange
 Input [1]: [d_date_sk#11]

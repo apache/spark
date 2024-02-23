@@ -118,84 +118,84 @@ Output [1]: [substr(ca_zip#9, 1, 5) AS ca_zip#10]
 Input [1]: [ca_zip#9]
 
 (17) Scan parquet spark_catalog.default.customer_address
-Output [2]: [ca_address_sk#11, ca_zip#12]
+Output [2]: [ca_address_sk#11, ca_zip#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_zip:string>
 
 (18) ColumnarToRow [codegen id : 4]
-Input [2]: [ca_address_sk#11, ca_zip#12]
+Input [2]: [ca_address_sk#11, ca_zip#9]
 
 (19) Filter [codegen id : 4]
-Input [2]: [ca_address_sk#11, ca_zip#12]
+Input [2]: [ca_address_sk#11, ca_zip#9]
 Condition : isnotnull(ca_address_sk#11)
 
 (20) Scan parquet spark_catalog.default.customer
-Output [2]: [c_current_addr_sk#13, c_preferred_cust_flag#14]
+Output [2]: [c_current_addr_sk#12, c_preferred_cust_flag#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_preferred_cust_flag), EqualTo(c_preferred_cust_flag,Y), IsNotNull(c_current_addr_sk)]
 ReadSchema: struct<c_current_addr_sk:int,c_preferred_cust_flag:string>
 
 (21) ColumnarToRow [codegen id : 3]
-Input [2]: [c_current_addr_sk#13, c_preferred_cust_flag#14]
+Input [2]: [c_current_addr_sk#12, c_preferred_cust_flag#13]
 
 (22) Filter [codegen id : 3]
-Input [2]: [c_current_addr_sk#13, c_preferred_cust_flag#14]
-Condition : ((isnotnull(c_preferred_cust_flag#14) AND (c_preferred_cust_flag#14 = Y)) AND isnotnull(c_current_addr_sk#13))
+Input [2]: [c_current_addr_sk#12, c_preferred_cust_flag#13]
+Condition : ((isnotnull(c_preferred_cust_flag#13) AND (c_preferred_cust_flag#13 = Y)) AND isnotnull(c_current_addr_sk#12))
 
 (23) Project [codegen id : 3]
-Output [1]: [c_current_addr_sk#13]
-Input [2]: [c_current_addr_sk#13, c_preferred_cust_flag#14]
+Output [1]: [c_current_addr_sk#12]
+Input [2]: [c_current_addr_sk#12, c_preferred_cust_flag#13]
 
 (24) BroadcastExchange
-Input [1]: [c_current_addr_sk#13]
+Input [1]: [c_current_addr_sk#12]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (25) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ca_address_sk#11]
-Right keys [1]: [c_current_addr_sk#13]
+Right keys [1]: [c_current_addr_sk#12]
 Join type: Inner
 Join condition: None
 
 (26) Project [codegen id : 4]
-Output [1]: [ca_zip#12]
-Input [3]: [ca_address_sk#11, ca_zip#12, c_current_addr_sk#13]
+Output [1]: [ca_zip#9]
+Input [3]: [ca_address_sk#11, ca_zip#9, c_current_addr_sk#12]
 
 (27) HashAggregate [codegen id : 4]
-Input [1]: [ca_zip#12]
-Keys [1]: [ca_zip#12]
+Input [1]: [ca_zip#9]
+Keys [1]: [ca_zip#9]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#15]
-Results [2]: [ca_zip#12, count#16]
+Aggregate Attributes [1]: [count#14]
+Results [2]: [ca_zip#9, count#15]
 
 (28) Exchange
-Input [2]: [ca_zip#12, count#16]
-Arguments: hashpartitioning(ca_zip#12, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+Input [2]: [ca_zip#9, count#15]
+Arguments: hashpartitioning(ca_zip#9, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (29) HashAggregate [codegen id : 5]
-Input [2]: [ca_zip#12, count#16]
-Keys [1]: [ca_zip#12]
+Input [2]: [ca_zip#9, count#15]
+Keys [1]: [ca_zip#9]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#17]
-Results [2]: [substr(ca_zip#12, 1, 5) AS ca_zip#18, count(1)#17 AS cnt#19]
+Aggregate Attributes [1]: [count(1)#16]
+Results [2]: [substr(ca_zip#9, 1, 5) AS ca_zip#17, count(1)#16 AS cnt#18]
 
 (30) Filter [codegen id : 5]
-Input [2]: [ca_zip#18, cnt#19]
-Condition : (cnt#19 > 10)
+Input [2]: [ca_zip#17, cnt#18]
+Condition : (cnt#18 > 10)
 
 (31) Project [codegen id : 5]
-Output [1]: [ca_zip#18]
-Input [2]: [ca_zip#18, cnt#19]
+Output [1]: [ca_zip#17]
+Input [2]: [ca_zip#17, cnt#18]
 
 (32) BroadcastExchange
-Input [1]: [ca_zip#18]
+Input [1]: [ca_zip#17]
 Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true])),false), [plan_id=4]
 
 (33) BroadcastHashJoin [codegen id : 6]
 Left keys [2]: [coalesce(ca_zip#10, ), isnull(ca_zip#10)]
-Right keys [2]: [coalesce(ca_zip#18, ), isnull(ca_zip#18)]
+Right keys [2]: [coalesce(ca_zip#17, ), isnull(ca_zip#17)]
 Join type: LeftSemi
 Join condition: None
 
@@ -235,23 +235,23 @@ Input [4]: [ss_net_profit#2, s_store_name#7, s_zip#8, ca_zip#10]
 Input [2]: [ss_net_profit#2, s_store_name#7]
 Keys [1]: [s_store_name#7]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_profit#2))]
-Aggregate Attributes [1]: [sum#20]
-Results [2]: [s_store_name#7, sum#21]
+Aggregate Attributes [1]: [sum#19]
+Results [2]: [s_store_name#7, sum#20]
 
 (41) Exchange
-Input [2]: [s_store_name#7, sum#21]
+Input [2]: [s_store_name#7, sum#20]
 Arguments: hashpartitioning(s_store_name#7, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (42) HashAggregate [codegen id : 9]
-Input [2]: [s_store_name#7, sum#21]
+Input [2]: [s_store_name#7, sum#20]
 Keys [1]: [s_store_name#7]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#2))#22]
-Results [2]: [s_store_name#7, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#22,17,2) AS sum(ss_net_profit)#23]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#2))#21]
+Results [2]: [s_store_name#7, MakeDecimal(sum(UnscaledValue(ss_net_profit#2))#21,17,2) AS sum(ss_net_profit)#22]
 
 (43) TakeOrderedAndProject
-Input [2]: [s_store_name#7, sum(ss_net_profit)#23]
-Arguments: 100, [s_store_name#7 ASC NULLS FIRST], [s_store_name#7, sum(ss_net_profit)#23]
+Input [2]: [s_store_name#7, sum(ss_net_profit)#22]
+Arguments: 100, [s_store_name#7 ASC NULLS FIRST], [s_store_name#7, sum(ss_net_profit)#22]
 
 ===== Subqueries =====
 
@@ -264,22 +264,22 @@ BroadcastExchange (48)
 
 
 (44) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#5, d_year#24, d_qoy#25]
+Output [3]: [d_date_sk#5, d_year#23, d_qoy#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_qoy), IsNotNull(d_year), EqualTo(d_qoy,2), EqualTo(d_year,1998), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_qoy:int>
 
 (45) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#5, d_year#24, d_qoy#25]
+Input [3]: [d_date_sk#5, d_year#23, d_qoy#24]
 
 (46) Filter [codegen id : 1]
-Input [3]: [d_date_sk#5, d_year#24, d_qoy#25]
-Condition : ((((isnotnull(d_qoy#25) AND isnotnull(d_year#24)) AND (d_qoy#25 = 2)) AND (d_year#24 = 1998)) AND isnotnull(d_date_sk#5))
+Input [3]: [d_date_sk#5, d_year#23, d_qoy#24]
+Condition : ((((isnotnull(d_qoy#24) AND isnotnull(d_year#23)) AND (d_qoy#24 = 2)) AND (d_year#23 = 1998)) AND isnotnull(d_date_sk#5))
 
 (47) Project [codegen id : 1]
 Output [1]: [d_date_sk#5]
-Input [3]: [d_date_sk#5, d_year#24, d_qoy#25]
+Input [3]: [d_date_sk#5, d_year#23, d_qoy#24]
 
 (48) BroadcastExchange
 Input [1]: [d_date_sk#5]

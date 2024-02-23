@@ -124,89 +124,89 @@ Input [3]: [ss_item_sk#13, ss_sales_price#14, ss_sold_date_sk#15]
 Condition : isnotnull(ss_item_sk#13)
 
 (19) ReusedExchange [Reuses operator id: 42]
-Output [2]: [d_date_sk#16, d_date#17]
+Output [2]: [d_date_sk#5, d_date#6]
 
 (20) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ss_sold_date_sk#15]
-Right keys [1]: [d_date_sk#16]
+Right keys [1]: [d_date_sk#5]
 Join type: Inner
 Join condition: None
 
 (21) Project [codegen id : 8]
-Output [3]: [ss_item_sk#13, ss_sales_price#14, d_date#17]
-Input [5]: [ss_item_sk#13, ss_sales_price#14, ss_sold_date_sk#15, d_date_sk#16, d_date#17]
+Output [3]: [ss_item_sk#13, ss_sales_price#14, d_date#6]
+Input [5]: [ss_item_sk#13, ss_sales_price#14, ss_sold_date_sk#15, d_date_sk#5, d_date#6]
 
 (22) HashAggregate [codegen id : 8]
-Input [3]: [ss_item_sk#13, ss_sales_price#14, d_date#17]
-Keys [2]: [ss_item_sk#13, d_date#17]
+Input [3]: [ss_item_sk#13, ss_sales_price#14, d_date#6]
+Keys [2]: [ss_item_sk#13, d_date#6]
 Functions [1]: [partial_sum(UnscaledValue(ss_sales_price#14))]
-Aggregate Attributes [1]: [sum#18]
-Results [3]: [ss_item_sk#13, d_date#17, sum#19]
+Aggregate Attributes [1]: [sum#16]
+Results [3]: [ss_item_sk#13, d_date#6, sum#17]
 
 (23) Exchange
-Input [3]: [ss_item_sk#13, d_date#17, sum#19]
-Arguments: hashpartitioning(ss_item_sk#13, d_date#17, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+Input [3]: [ss_item_sk#13, d_date#6, sum#17]
+Arguments: hashpartitioning(ss_item_sk#13, d_date#6, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
 (24) HashAggregate [codegen id : 9]
-Input [3]: [ss_item_sk#13, d_date#17, sum#19]
-Keys [2]: [ss_item_sk#13, d_date#17]
+Input [3]: [ss_item_sk#13, d_date#6, sum#17]
+Keys [2]: [ss_item_sk#13, d_date#6]
 Functions [1]: [sum(UnscaledValue(ss_sales_price#14))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#14))#20]
-Results [4]: [ss_item_sk#13 AS item_sk#21, d_date#17, MakeDecimal(sum(UnscaledValue(ss_sales_price#14))#20,17,2) AS _w0#22, ss_item_sk#13]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_sales_price#14))#18]
+Results [4]: [ss_item_sk#13 AS item_sk#19, d_date#6, MakeDecimal(sum(UnscaledValue(ss_sales_price#14))#18,17,2) AS _w0#20, ss_item_sk#13]
 
 (25) Exchange
-Input [4]: [item_sk#21, d_date#17, _w0#22, ss_item_sk#13]
+Input [4]: [item_sk#19, d_date#6, _w0#20, ss_item_sk#13]
 Arguments: hashpartitioning(ss_item_sk#13, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (26) Sort [codegen id : 10]
-Input [4]: [item_sk#21, d_date#17, _w0#22, ss_item_sk#13]
-Arguments: [ss_item_sk#13 ASC NULLS FIRST, d_date#17 ASC NULLS FIRST], false, 0
+Input [4]: [item_sk#19, d_date#6, _w0#20, ss_item_sk#13]
+Arguments: [ss_item_sk#13 ASC NULLS FIRST, d_date#6 ASC NULLS FIRST], false, 0
 
 (27) Window
-Input [4]: [item_sk#21, d_date#17, _w0#22, ss_item_sk#13]
-Arguments: [sum(_w0#22) windowspecdefinition(ss_item_sk#13, d_date#17 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS cume_sales#23], [ss_item_sk#13], [d_date#17 ASC NULLS FIRST]
+Input [4]: [item_sk#19, d_date#6, _w0#20, ss_item_sk#13]
+Arguments: [sum(_w0#20) windowspecdefinition(ss_item_sk#13, d_date#6 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS cume_sales#21], [ss_item_sk#13], [d_date#6 ASC NULLS FIRST]
 
 (28) Project [codegen id : 11]
-Output [3]: [item_sk#21, d_date#17, cume_sales#23]
-Input [5]: [item_sk#21, d_date#17, _w0#22, ss_item_sk#13, cume_sales#23]
+Output [3]: [item_sk#19, d_date#6 AS d_date#22, cume_sales#21]
+Input [5]: [item_sk#19, d_date#6, _w0#20, ss_item_sk#13, cume_sales#21]
 
 (29) Exchange
-Input [3]: [item_sk#21, d_date#17, cume_sales#23]
-Arguments: hashpartitioning(item_sk#21, d_date#17, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+Input [3]: [item_sk#19, d_date#22, cume_sales#21]
+Arguments: hashpartitioning(item_sk#19, d_date#22, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (30) Sort [codegen id : 12]
-Input [3]: [item_sk#21, d_date#17, cume_sales#23]
-Arguments: [item_sk#21 ASC NULLS FIRST, d_date#17 ASC NULLS FIRST], false, 0
+Input [3]: [item_sk#19, d_date#22, cume_sales#21]
+Arguments: [item_sk#19 ASC NULLS FIRST, d_date#22 ASC NULLS FIRST], false, 0
 
 (31) SortMergeJoin [codegen id : 13]
 Left keys [2]: [item_sk#10, d_date#6]
-Right keys [2]: [item_sk#21, d_date#17]
+Right keys [2]: [item_sk#19, d_date#22]
 Join type: FullOuter
 Join condition: None
 
 (32) Project [codegen id : 13]
-Output [4]: [CASE WHEN isnotnull(item_sk#10) THEN item_sk#10 ELSE item_sk#21 END AS item_sk#24, CASE WHEN isnotnull(d_date#6) THEN d_date#6 ELSE d_date#17 END AS d_date#25, cume_sales#12 AS web_sales#26, cume_sales#23 AS store_sales#27]
-Input [6]: [item_sk#10, d_date#6, cume_sales#12, item_sk#21, d_date#17, cume_sales#23]
+Output [4]: [CASE WHEN isnotnull(item_sk#10) THEN item_sk#10 ELSE item_sk#19 END AS item_sk#23, CASE WHEN isnotnull(d_date#6) THEN d_date#6 ELSE d_date#22 END AS d_date#24, cume_sales#12 AS web_sales#25, cume_sales#21 AS store_sales#26]
+Input [6]: [item_sk#10, d_date#6, cume_sales#12, item_sk#19, d_date#22, cume_sales#21]
 
 (33) Exchange
-Input [4]: [item_sk#24, d_date#25, web_sales#26, store_sales#27]
-Arguments: hashpartitioning(item_sk#24, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+Input [4]: [item_sk#23, d_date#24, web_sales#25, store_sales#26]
+Arguments: hashpartitioning(item_sk#23, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (34) Sort [codegen id : 14]
-Input [4]: [item_sk#24, d_date#25, web_sales#26, store_sales#27]
-Arguments: [item_sk#24 ASC NULLS FIRST, d_date#25 ASC NULLS FIRST], false, 0
+Input [4]: [item_sk#23, d_date#24, web_sales#25, store_sales#26]
+Arguments: [item_sk#23 ASC NULLS FIRST, d_date#24 ASC NULLS FIRST], false, 0
 
 (35) Window
-Input [4]: [item_sk#24, d_date#25, web_sales#26, store_sales#27]
-Arguments: [max(web_sales#26) windowspecdefinition(item_sk#24, d_date#25 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS web_cumulative#28, max(store_sales#27) windowspecdefinition(item_sk#24, d_date#25 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS store_cumulative#29], [item_sk#24], [d_date#25 ASC NULLS FIRST]
+Input [4]: [item_sk#23, d_date#24, web_sales#25, store_sales#26]
+Arguments: [max(web_sales#25) windowspecdefinition(item_sk#23, d_date#24 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS web_cumulative#27, max(store_sales#26) windowspecdefinition(item_sk#23, d_date#24 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS store_cumulative#28], [item_sk#23], [d_date#24 ASC NULLS FIRST]
 
 (36) Filter [codegen id : 15]
-Input [6]: [item_sk#24, d_date#25, web_sales#26, store_sales#27, web_cumulative#28, store_cumulative#29]
-Condition : ((isnotnull(web_cumulative#28) AND isnotnull(store_cumulative#29)) AND (web_cumulative#28 > store_cumulative#29))
+Input [6]: [item_sk#23, d_date#24, web_sales#25, store_sales#26, web_cumulative#27, store_cumulative#28]
+Condition : ((isnotnull(web_cumulative#27) AND isnotnull(store_cumulative#28)) AND (web_cumulative#27 > store_cumulative#28))
 
 (37) TakeOrderedAndProject
-Input [6]: [item_sk#24, d_date#25, web_sales#26, store_sales#27, web_cumulative#28, store_cumulative#29]
-Arguments: 100, [item_sk#24 ASC NULLS FIRST, d_date#25 ASC NULLS FIRST], [item_sk#24, d_date#25, web_sales#26, store_sales#27, web_cumulative#28, store_cumulative#29]
+Input [6]: [item_sk#23, d_date#24, web_sales#25, store_sales#26, web_cumulative#27, store_cumulative#28]
+Arguments: 100, [item_sk#23 ASC NULLS FIRST, d_date#24 ASC NULLS FIRST], [item_sk#23, d_date#24, web_sales#25, store_sales#26, web_cumulative#27, store_cumulative#28]
 
 ===== Subqueries =====
 
@@ -219,22 +219,22 @@ BroadcastExchange (42)
 
 
 (38) Scan parquet spark_catalog.default.date_dim
-Output [3]: [d_date_sk#5, d_date#6, d_month_seq#30]
+Output [3]: [d_date_sk#5, d_date#6, d_month_seq#29]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_month_seq:int>
 
 (39) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#5, d_date#6, d_month_seq#30]
+Input [3]: [d_date_sk#5, d_date#6, d_month_seq#29]
 
 (40) Filter [codegen id : 1]
-Input [3]: [d_date_sk#5, d_date#6, d_month_seq#30]
-Condition : (((isnotnull(d_month_seq#30) AND (d_month_seq#30 >= 1200)) AND (d_month_seq#30 <= 1211)) AND isnotnull(d_date_sk#5))
+Input [3]: [d_date_sk#5, d_date#6, d_month_seq#29]
+Condition : (((isnotnull(d_month_seq#29) AND (d_month_seq#29 >= 1200)) AND (d_month_seq#29 <= 1211)) AND isnotnull(d_date_sk#5))
 
 (41) Project [codegen id : 1]
 Output [2]: [d_date_sk#5, d_date#6]
-Input [3]: [d_date_sk#5, d_date#6, d_month_seq#30]
+Input [3]: [d_date_sk#5, d_date#6, d_month_seq#29]
 
 (42) BroadcastExchange
 Input [2]: [d_date_sk#5, d_date#6]

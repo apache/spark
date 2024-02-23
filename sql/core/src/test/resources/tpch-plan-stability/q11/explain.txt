@@ -145,61 +145,61 @@ Subquery:1 Hosting operator id = 20 Hosting Expression = Subquery scalar-subquer
 
 
 (23) Scan parquet spark_catalog.default.partsupp
-Output [3]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19]
+Output [3]: [ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/partsupp]
 PushedFilters: [IsNotNull(ps_suppkey)]
 ReadSchema: struct<ps_suppkey:bigint,ps_availqty:int,ps_supplycost:decimal(10,0)>
 
 (24) ColumnarToRow [codegen id : 3]
-Input [3]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19]
+Input [3]: [ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
 
 (25) Filter [codegen id : 3]
-Input [3]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19]
-Condition : isnotnull(ps_suppkey#17)
+Input [3]: [ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
+Condition : isnotnull(ps_suppkey#2)
 
 (26) ReusedExchange [Reuses operator id: 7]
-Output [2]: [s_suppkey#20, s_nationkey#21]
+Output [2]: [s_suppkey#5, s_nationkey#6]
 
 (27) BroadcastHashJoin [codegen id : 3]
-Left keys [1]: [ps_suppkey#17]
-Right keys [1]: [s_suppkey#20]
+Left keys [1]: [ps_suppkey#2]
+Right keys [1]: [s_suppkey#5]
 Join type: Inner
 Join condition: None
 
 (28) Project [codegen id : 3]
-Output [3]: [ps_availqty#18, ps_supplycost#19, s_nationkey#21]
-Input [5]: [ps_suppkey#17, ps_availqty#18, ps_supplycost#19, s_suppkey#20, s_nationkey#21]
+Output [3]: [ps_availqty#3, ps_supplycost#4, s_nationkey#6]
+Input [5]: [ps_suppkey#2, ps_availqty#3, ps_supplycost#4, s_suppkey#5, s_nationkey#6]
 
 (29) ReusedExchange [Reuses operator id: 14]
-Output [1]: [n_nationkey#22]
+Output [1]: [n_nationkey#7]
 
 (30) BroadcastHashJoin [codegen id : 3]
-Left keys [1]: [s_nationkey#21]
-Right keys [1]: [n_nationkey#22]
+Left keys [1]: [s_nationkey#6]
+Right keys [1]: [n_nationkey#7]
 Join type: Inner
 Join condition: None
 
 (31) Project [codegen id : 3]
-Output [2]: [ps_availqty#18, ps_supplycost#19]
-Input [4]: [ps_availqty#18, ps_supplycost#19, s_nationkey#21, n_nationkey#22]
+Output [2]: [ps_availqty#3, ps_supplycost#4]
+Input [4]: [ps_availqty#3, ps_supplycost#4, s_nationkey#6, n_nationkey#7]
 
 (32) HashAggregate [codegen id : 3]
-Input [2]: [ps_availqty#18, ps_supplycost#19]
+Input [2]: [ps_availqty#3, ps_supplycost#4]
 Keys: []
-Functions [1]: [partial_sum((ps_supplycost#19 * cast(ps_availqty#18 as decimal(10,0))))]
-Aggregate Attributes [2]: [sum#23, isEmpty#24]
-Results [2]: [sum#25, isEmpty#26]
+Functions [1]: [partial_sum((ps_supplycost#4 * cast(ps_availqty#3 as decimal(10,0))))]
+Aggregate Attributes [2]: [sum#17, isEmpty#18]
+Results [2]: [sum#19, isEmpty#20]
 
 (33) Exchange
-Input [2]: [sum#25, isEmpty#26]
+Input [2]: [sum#19, isEmpty#20]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=5]
 
 (34) HashAggregate [codegen id : 4]
-Input [2]: [sum#25, isEmpty#26]
+Input [2]: [sum#19, isEmpty#20]
 Keys: []
-Functions [1]: [sum((ps_supplycost#19 * cast(ps_availqty#18 as decimal(10,0))))]
-Aggregate Attributes [1]: [sum((ps_supplycost#19 * cast(ps_availqty#18 as decimal(10,0))))#27]
-Results [1]: [(sum((ps_supplycost#19 * cast(ps_availqty#18 as decimal(10,0))))#27 * 0.0001000000) AS (sum((ps_supplycost * ps_availqty)) * 0.0001000000)#28]
+Functions [1]: [sum((ps_supplycost#4 * cast(ps_availqty#3 as decimal(10,0))))]
+Aggregate Attributes [1]: [sum((ps_supplycost#4 * cast(ps_availqty#3 as decimal(10,0))))#21]
+Results [1]: [(sum((ps_supplycost#4 * cast(ps_availqty#3 as decimal(10,0))))#21 * 0.0001000000) AS (sum((ps_supplycost * ps_availqty)) * 0.0001000000)#22]
 
 

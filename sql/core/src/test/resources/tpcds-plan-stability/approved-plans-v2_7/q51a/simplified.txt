@@ -73,7 +73,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                         InputAdapter
                                           Exchange [item_sk,d_date] #8
                                             WholeStageCodegen (23)
-                                              HashAggregate [item_sk,d_date,sumss,sum,isEmpty] [sum(sumss),cume_sales,sum,isEmpty]
+                                              HashAggregate [item_sk,d_date,sumss,sum,isEmpty] [sum(sumss),d_date,cume_sales,sum,isEmpty]
                                                 InputAdapter
                                                   Exchange [item_sk,d_date,sumss] #9
                                                     WholeStageCodegen (22)
