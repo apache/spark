@@ -34,10 +34,10 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetCompressionCodec, ParquetFooterReader}
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
@@ -2876,22 +2876,39 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-24681 checks if nested column names do not include ',', ':', and ';'") {
-    Seq("nested,column", "nested:column", "nested;column").foreach { nestedColumnName =>
+  test("SPARK-47101 checks if nested column names do not include invalid characters") {
+    // delimiter characters
+    Seq(",", ":").foreach { c =>
+      val typ = s"array<struct<`abc${c}xyz`:int>>"
+      // The regex is from HiveClientImpl.getSparkSQLDataType, please keep them in sync.
+      val replaced = typ.replaceAll("`", "").replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
+      withTable("t") {
+        checkError(
+          exception = intercept[SparkException] {
+            sql(s"CREATE TABLE t (a $typ) USING hive")
+          },
+          errorClass = "CANNOT_RECOGNIZE_HIVE_TYPE",
+          parameters = Map(
+            "fieldType" -> toSQLType(replaced),
+            "fieldName" -> "`a`")
+        )
+      }
+    }
+    // other special characters
+    Seq(";", "^", "\\", "/", "%").foreach { c =>
+      val typ = s"array<struct<`abc${c}xyz`:int>>"
+      val replaced = typ.replaceAll("`", "")
+      val msg = s"java.lang.IllegalArgumentException: Error: : expected at the position " +
+        s"16 of '$replaced' but '$c' is found."
       withTable("t") {
         checkError(
           exception = intercept[AnalysisException] {
-            spark.range(1)
-              .select(struct(lit(0).as(nestedColumnName)).as("toplevel"))
-              .write
-              .format("hive")
-              .saveAsTable("t")
+            sql(s"CREATE TABLE t (a $typ) USING hive")
           },
-          errorClass = "INVALID_HIVE_COLUMN_NAME",
+          errorClass = "_LEGACY_ERROR_TEMP_3065",
           parameters = Map(
-            "invalidChars" -> "',', ':', ';'",
-            "tableName" -> "`spark_catalog`.`default`.`t`",
-            "columnName" -> s"`$nestedColumnName`")
+            "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
+            "msg" -> msg)
         )
       }
     }
@@ -3385,24 +3402,11 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-44911: Create the table with invalid column") {
+  test("SPARK-47101: comma is allowed in column name") {
     val tbl = "t1"
     withTable(tbl) {
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE t1
-             |STORED AS parquet
-             |SELECT id, DATE'2018-01-01' + MAKE_DT_INTERVAL(0, id) FROM RANGE(0, 10)
-         """.stripMargin)
-      }
-      checkError(e,
-        errorClass = "INVALID_HIVE_COLUMN_NAME",
-        parameters = Map(
-          "invalidChars" -> "','",
-          "tableName" -> "`spark_catalog`.`default`.`t1`",
-          "columnName" -> "`DATE '2018-01-01' + make_dt_interval(0, id, 0, 0`.`000000)`")
-      )
+      sql("CREATE TABLE t1 STORED AS parquet SELECT id as `a,b` FROM range(1)")
+      checkAnswer(sql("SELECT * FROM t1"), Row(0))
     }
   }
 }

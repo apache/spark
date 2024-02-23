@@ -42,13 +42,12 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLId, toSQLValue}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType, TimestampNTZType}
+import org.apache.spark.sql.types._
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -150,51 +149,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  /**
-   * Checks the validity of data column names. Hive metastore disallows the table to use some
-   * special characters (',', ':', and ';') in data column names, including nested column names.
-   * Partition columns do not have such a restriction. Views do not have such a restriction.
-   */
-  private def verifyDataSchema(
-      tableName: TableIdentifier, tableType: CatalogTableType, dataSchema: StructType): Unit = {
-    if (tableType != VIEW) {
-      val invalidChars = Seq(",", ":", ";")
-      def verifyNestedColumnNames(schema: StructType): Unit = schema.foreach { f =>
-        f.dataType match {
-          case st: StructType => verifyNestedColumnNames(st)
-          case _ if invalidChars.exists(f.name.contains) =>
-            val invalidCharsString = invalidChars.map(c => s"'$c'").mkString(", ")
-            throw new AnalysisException(
-              errorClass = "INVALID_HIVE_COLUMN_NAME",
-              messageParameters = Map(
-                "invalidChars" -> invalidCharsString,
-                "tableName" -> toSQLId(tableName.nameParts),
-                "columnName" -> toSQLId(f.name)
-              ))
-          case _ =>
-        }
-      }
-
-      dataSchema.foreach { f =>
-        f.dataType match {
-          // Checks top-level column names
-          case _ if f.name.contains(",") =>
-            throw new AnalysisException(
-              errorClass = "INVALID_HIVE_COLUMN_NAME",
-              messageParameters = Map(
-                "invalidChars" -> toSQLValue(","),
-                "tableName" -> toSQLId(tableName.nameParts),
-                "columnName" -> toSQLId(f.name)
-              ))
-          // Checks nested column names
-          case st: StructType =>
-            verifyNestedColumnNames(st)
-          case _ =>
-        }
-      }
-    }
-  }
-
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -260,8 +214,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val table = tableDefinition.identifier.table
     requireDbExists(db)
     verifyTableProperties(tableDefinition)
-    verifyDataSchema(
-      tableDefinition.identifier, tableDefinition.tableType, tableDefinition.dataSchema)
 
     if (tableExists(db, table) && !ignoreIfExists) {
       throw new TableAlreadyExistsException(db = db, table = table)
@@ -711,7 +663,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       newDataSchema: StructType): Unit = withClient {
     requireTableExists(db, table)
     val oldTable = getTable(db, table)
-    verifyDataSchema(oldTable.identifier, oldTable.tableType, newDataSchema)
     val schemaProps =
       tableMetaToTableProps(oldTable, StructType(newDataSchema ++ oldTable.partitionSchema)).toMap
 

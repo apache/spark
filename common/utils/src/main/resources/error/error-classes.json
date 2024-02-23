@@ -875,7 +875,7 @@
       },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
-          "Parameter <paramIndex> requires the <requiredType> type, however <inputSql> has the type <inputType>."
+          "The <paramIndex> parameter requires the <requiredType> type, however <inputSql> has the type <inputType>."
         ]
       },
       "UNEXPECTED_NULL" : {
@@ -1385,6 +1385,24 @@
     ],
     "sqlState" : "42601"
   },
+  "ILLEGAL_STATE_STORE_VALUE" : {
+    "message" : [
+      "Illegal value provided to the State Store"
+    ],
+    "subClass" : {
+      "EMPTY_LIST_VALUE" : {
+        "message" : [
+          "Cannot write empty list values to State Store for StateName <stateName>."
+        ]
+      },
+      "NULL_VALUE" : {
+        "message" : [
+          "Cannot write null values to State Store for StateName <stateName>."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [
       "Invalid pivot column <columnName>. Pivot columns must be comparable."
@@ -1864,6 +1882,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_EXPRESSION_ENCODER" : {
+    "message" : [
+      "Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
+    ],
+    "sqlState" : "42001"
+  },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
       "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
@@ -1994,12 +2018,6 @@
       }
     },
     "sqlState" : "HY000"
-  },
-  "INVALID_HIVE_COLUMN_NAME" : {
-    "message" : [
-      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
-    ],
-    "sqlState" : "42K05"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
@@ -3381,6 +3399,13 @@
       "'<optionName>' must be specified."
     ],
     "sqlState" : "42601"
+  },
+  "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
+    "message" : [
+      "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.",
+      "Stateful operators in the metadata: [<OpsInMetadataSeq>]; Stateful operators in current batch: [<OpsInCurBatchSeq>]."
+    ],
+    "sqlState" : "42K03"
   },
   "STREAM_FAILED" : {
     "message" : [
@@ -5104,11 +5129,6 @@
       "Unrecognized Parquet type: <field>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1175" : {
-    "message" : [
-      "Unsupported data type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
       "Stream-stream join without equality predicate is not supported."
@@ -5703,11 +5723,6 @@
   "_LEGACY_ERROR_TEMP_2023" : {
     "message" : [
       "Unresolved encoder expected, but <attr> was found."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2024" : {
-    "message" : [
-      "Only expression encoders are supported for now."
     ]
   },
   "_LEGACY_ERROR_TEMP_2025" : {

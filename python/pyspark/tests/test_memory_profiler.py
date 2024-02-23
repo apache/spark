@@ -233,16 +233,16 @@ class MemoryProfiler2TestsMixin:
         self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
 
         with self.trap_stdout() as io_all:
-            self.spark.showMemoryProfiles()
+            self.spark.profile.show(type="memory")
 
         with tempfile.TemporaryDirectory() as d:
-            self.spark.dumpMemoryProfiles(d)
+            self.spark.profile.dump(d, type="memory")
 
             for id in self.profile_results:
                 self.assertIn(f"Profile of UDF<id={id}>", io_all.getvalue())
 
                 with self.trap_stdout() as io:
-                    self.spark.showMemoryProfiles(id)
+                    self.spark.profile.show(id, type="memory")
 
                 self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
                 self.assertRegex(
@@ -262,7 +262,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -281,7 +281,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -302,7 +302,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -332,7 +332,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -365,7 +365,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -412,7 +412,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -441,7 +441,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -469,7 +469,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -504,7 +504,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -535,7 +535,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(
@@ -564,7 +564,7 @@ class MemoryProfiler2TestsMixin:
 
         for id in self.profile_results:
             with self.trap_stdout() as io:
-                self.spark.showMemoryProfiles(id)
+                self.spark.profile.show(id, type="memory")
 
             self.assertIn(f"Profile of UDF<id={id}>", io.getvalue())
             self.assertRegex(

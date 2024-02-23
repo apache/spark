@@ -836,7 +836,7 @@ case class MapFromEntries(child: Expression)
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> s"${toSQLType(ArrayType)} of pair ${toSQLType(StructType)}",
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType)
@@ -1066,7 +1066,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> "2",
+              "paramIndex" -> ordinalNumber(1),
               "requiredType" -> toSQLType(BooleanType),
               "inputSql" -> toSQLExpr(ascendingOrder),
               "inputType" -> toSQLType(ascendingOrder.dataType))
@@ -1084,7 +1084,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(ArrayType),
           "inputSql" -> toSQLExpr(base),
           "inputType" -> toSQLType(base.dataType))
@@ -1320,7 +1320,7 @@ case class ArrayContains(left: Expression, right: Expression)
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(ArrayType),
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
@@ -1427,7 +1427,7 @@ trait ArrayPendBase extends RuntimeReplaceable
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "0",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(ArrayType),
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType)
@@ -2221,7 +2221,7 @@ case class ArrayPosition(left: Expression, right: Expression)
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(ArrayType),
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
@@ -2381,7 +2381,7 @@ case class ElementAt(
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "2",
+            "paramIndex" -> ordinalNumber(1),
             "requiredType" -> toSQLType(IntegerType),
             "inputSql" -> toSQLExpr(right),
             "inputType" -> toSQLType(right.dataType))
@@ -2400,7 +2400,7 @@ case class ElementAt(
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(TypeCollection(ArrayType, MapType)),
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
@@ -2606,7 +2606,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> (idx + 1).toString,
+              "paramIndex" -> ordinalNumber(idx),
               "requiredType" -> toSQLType(TypeCollection(allowedTypes: _*)),
               "inputSql" -> toSQLExpr(e),
               "inputType" -> toSQLType(e.dataType))
@@ -2823,7 +2823,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> s"${toSQLType(ArrayType)} of ${toSQLType(ArrayType)}",
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType))
@@ -4747,7 +4747,7 @@ case class ArrayInsert(
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "2",
+            "paramIndex" -> ordinalNumber(1),
             "requiredType" -> toSQLType(IntegerType),
             "inputSql" -> toSQLExpr(second),
             "inputType" -> toSQLType(second.dataType))

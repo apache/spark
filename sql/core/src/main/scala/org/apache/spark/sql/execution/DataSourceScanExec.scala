@@ -127,6 +127,16 @@ case class RowDataSourceScanExec(
     }
   }
 
+  override def verboseStringWithOperatorId(): String = {
+    super.verboseStringWithOperatorId() + (rdd match {
+      case externalEngineDatasourceRdd: ExternalEngineDatasourceRDD =>
+        "External engine query: " +
+          externalEngineDatasourceRdd.getExternalEngineQuery +
+          System.lineSeparator()
+      case _ => ""
+    })
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 

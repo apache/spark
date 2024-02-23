@@ -1156,7 +1156,7 @@ class DataFrameAggregateSuite extends QueryTest
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"count_if(x)\"",
-            "paramIndex" -> "1",
+            "paramIndex" -> "first",
             "inputSql" -> "\"x\"",
             "inputType" -> "\"STRING\"",
             "requiredType" -> "\"BOOLEAN\""),
@@ -1319,7 +1319,7 @@ class DataFrameAggregateSuite extends QueryTest
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"col[a]\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"INTEGRAL\""),
@@ -1970,7 +1970,7 @@ class DataFrameAggregateSuite extends QueryTest
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"hll_sketch_agg(value, text)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> "second",
         "inputSql" -> "\"text\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"INT\""
@@ -1999,7 +1999,7 @@ class DataFrameAggregateSuite extends QueryTest
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"hll_union_agg(sketch, Hll_4)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> "second",
         "inputSql" -> "\"Hll_4\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"BOOLEAN\""
