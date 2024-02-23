@@ -3296,15 +3296,15 @@
     ],
     "sqlState" : "0A000"
   },
-  "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
-    "message" : [
-      "Failed to remove default column family with reserved name=<colFamilyName>."
-    ],
-    "sqlState" : "42802"
-  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
+    "message" : [
+      "Failed to remove default column family with reserved name=<colFamilyName>."
     ],
     "sqlState" : "42802"
   },

@@ -2055,17 +2055,17 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
-### STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Failed to remove default column family with reserved name=`<colFamilyName>`.
-
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to create column family with unsupported starting character and name=`<colFamilyName>`.
+
+### STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to remove default column family with reserved name=`<colFamilyName>`.
 
 ### STATE_STORE_MULTIPLE_VALUES_PER_KEY
 
