@@ -488,10 +488,13 @@ case class AdaptiveSparkPlanExec(
         postStageCreationRules(supportsColumnar),
         Some((planChangeLogger, "AQE Post Stage Creation")))
       _isFinalPlan = true
-      BroadcastHashJoinUtil
-        .getAllBatchScansForSparkPlan(currentPhysicalPlan)
-        .filter(BroadcastHashJoinUtil.isBatchScanReady).foreach(
-        _.scan.asInstanceOf[SupportsRuntimeV2Filtering].postAllBroadcastVarsPushed())
+      if (doBroadcastVarPush) {
+        BroadcastHashJoinUtil
+          .getAllBatchScansForSparkPlan(currentPhysicalPlan)
+          .filter(bs => bs.isInstanceOf[SupportsRuntimeV2Filtering] &&
+            BroadcastHashJoinUtil.isBatchScanReady(bs)).foreach(
+          _.scan.asInstanceOf[SupportsRuntimeV2Filtering].postAllBroadcastVarsPushed())
+      }
 
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan

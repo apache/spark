@@ -28,8 +28,12 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
+import java.util.function.Function;
+import org.apache.spark.sql.catalyst.CatalystTypeConverters;
+import org.apache.spark.sql.types.DateType$;
 import org.junit.jupiter.api.Disabled;
 
+import scala.Function1;
 import scala.reflect.ClassTag;
 
 import org.apache.spark.sql.catalyst.bcvar.ArrayWrapper;
@@ -188,10 +192,12 @@ public class BroadcastedJoinKeysWrapperTest {
   public void testDateTypeForSingleKeyHashedRelation() {
     int count = 10;
     DummyBroadcast bc = new DummyBroadcast(6);
-    Date[] expectedKeys = new Date[count];
-
+    Object[] expectedKeys = new Object[count];
+    Function1<Object, Object> converter =
+        CatalystTypeConverters.createToCatalystConverter(DateType$.MODULE$);
     for (int i = 0; i < count; ++i) {
-      expectedKeys[i] = java.sql.Date.valueOf(now.minusDays(i).toLocalDate());
+      expectedKeys[i] =
+           converter.apply(java.sql.Date.valueOf(now.minusDays(i).toLocalDate()));
     }
     this.testDataTypeForSingleKeyHashedRelation(DataTypes.DateType,
         new HashSet<>(Arrays.asList(expectedKeys)), 1000, bc);
@@ -260,7 +266,7 @@ public class BroadcastedJoinKeysWrapperTest {
         new BroadcastedJoinKeysWrapperImpl(bc, new DataType[]{dataType}, 0, 1);
     ArrayWrapper<? extends Object> keys = wrapper.getKeysArray();
     assert (keys.getLength() == expectedObjArrLengt);
-    HashSet<Object> uniqueKeys =  new HashSet<>(Arrays.asList(keys.getBaseArray()));
+    HashSet<Object> uniqueKeys =  new HashSet<>(Arrays.asList((Object[])keys.getBaseArray()));
     assert(uniqueKeys.size() == expectedKeys.size());
     for (Object key : uniqueKeys) {
       assert (expectedKeys.contains(key));
