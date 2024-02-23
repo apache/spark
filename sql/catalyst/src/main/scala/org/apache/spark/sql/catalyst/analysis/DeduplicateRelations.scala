@@ -113,7 +113,8 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         existingRelations,
         p,
         newProject => findAliases(newProject.projectList).map(_.exprId.id).toSeq,
-        newProject => newProject.copy(newAliases(newProject.projectList)))
+        newProject => newProject.copy(newAliases(newProject.projectList)),
+        true)
 
     case a: Aggregate =>
       deduplicateAndRenew[Aggregate](
@@ -121,7 +122,8 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         a,
         newAggregate => findAliases(newAggregate.aggregateExpressions).map(_.exprId.id).toSeq,
         newAggregate => newAggregate.copy(aggregateExpressions =
-          newAliases(newAggregate.aggregateExpressions)))
+          newAliases(newAggregate.aggregateExpressions)),
+        true)
 
     case s: SerializeFromObject =>
       deduplicateAndRenew[SerializeFromObject](
@@ -280,8 +282,10 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
   private def deduplicateAndRenew[T <: LogicalPlan](
       existingRelations: mutable.HashSet[RelationWrapper], plan: T,
       getExprIds: T => Seq[Long],
-      copyNewPlan: T => T): (LogicalPlan, Boolean) = {
-    var (newPlan, planChanged) = deduplicate(existingRelations, plan)
+      copyNewPlan: T => T,
+      projection: Boolean = false): (LogicalPlan, Boolean) = {
+    var (newPlan, planChanged) =
+      deduplicate(if (projection) mutable.HashSet.empty else existingRelations, plan)
     if (newPlan.resolved) {
       val exprIds = getExprIds(newPlan.asInstanceOf[T])
       if (exprIds.nonEmpty) {

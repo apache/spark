@@ -3776,6 +3776,16 @@ class DataFrameSuite extends QueryTest
     val expected = getQueryResult(false).map(_.getTimestamp(0).toString).sorted
     assert(actual == expected)
   }
+
+  test("SPARK-???: DeduplicateRelations keeps original expressions if possible") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    val df2 = df.select(df("a").as("aa"), df("b").as("bb"))
+    val df3 = df2.join(df, df2("bb") === df("b")).select(df2("aa"), df("a"))
+
+    checkAnswer(
+      df3,
+      Row(1, 1) :: Nil)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
