@@ -252,20 +252,28 @@ SELECT
   t1.t1a,
   t1.t1a IN (SELECT t2a FROM t2) as v1
 FROM t1
-GROUP BY t1.t1a;
+GROUP BY t1.t1a ORDER BY t1.t1a;
 
--- Aggregate function over expression with subquery, without explicit GROUP BY
+-- Aggregate function over expression with subquery, without explicit GROUP BY, with NOT IN
 SELECT
   count(cast(t1.t1a IN (SELECT t2a FROM t2) as INT)),
-  sum(cast(t1.t1b IN (SELECT t2b FROM t2) as INT))
+  sum(cast(t1.t1b NOT IN (SELECT t2b FROM t2) as INT))
 FROM t1;
+
+-- Correlated subquery with a top-level aggregation
+SELECT
+  t1.t1b,
+  t1.t1b IN (SELECT t2.t2b FROM t2 WHERE t2.t2c = t1.t1b) as v1
+FROM t1
+GROUP BY t1.t1b
+ORDER BY t1.t1b;
 
 -- Derived table from subquery
 SELECT
     agg_results.t1a,
     COUNT(*)
     FROM (SELECT t1.t1a FROM t1 WHERE t1.t1a IN (SELECT t2a FROM t2)) AS agg_results
-GROUP BY agg_results.t1a;
+GROUP BY agg_results.t1a ORDER BY agg_results.t1a;
 
 -- CASE statement with an in-subquery and aggregation
 SELECT
@@ -275,7 +283,8 @@ SELECT
     ELSE -10
   END AS v1
 FROM t1
-GROUP BY t1.t1a;
+GROUP BY t1.t1a
+ORDER BY t1.t1a;
 
 -- CASE statement with an in-subquery inside an agg function
 SELECT
@@ -295,7 +304,8 @@ SELECT
   count(t1.t1c) as ct,
   count(t1.t1d)
 FROM t1
-GROUP BY t1.t1c;
+GROUP BY t1.t1c
+ORDER BY t1.t1c;
 
 -- CASE statement with an in-subquery inside an agg function, without group-by
 SELECT

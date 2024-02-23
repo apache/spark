@@ -135,3 +135,33 @@ WHERE EXISTS (
   from EMP as tt2
   where tt1.emp_name is null
 );
+
+-- Plain exists subquery with a top-level aggregation
+SELECT
+  emp.dept_id,
+  EXISTS (SELECT dept.dept_id FROM dept)
+FROM emp
+GROUP BY emp.dept_id ORDER BY emp.dept_id;
+
+-- Correlated exists subquery with a top-level aggregation
+SELECT
+  emp.dept_id,
+  EXISTS (SELECT dept.dept_id FROM dept WHERE dept.dept_id = emp.dept_id)
+FROM emp
+GROUP BY emp.dept_id ORDER BY emp.dept_id;
+
+-- Correlated exists subquery with a top-level aggregation
+SELECT
+  emp.dept_id,
+  NOT EXISTS (SELECT dept.dept_id FROM dept WHERE dept.dept_id = emp.dept_id)
+FROM emp
+GROUP BY emp.dept_id ORDER BY emp.dept_id;
+
+-- Correlated exists subquery with a top-level aggregation
+SELECT
+  emp.dept_id,
+  SUM(
+    CASE WHEN EXISTS (SELECT dept.dept_id FROM dept WHERE dept.dept_id = emp.dept_id) THEN 1
+    ELSE 0 END)
+FROM emp
+GROUP BY emp.dept_id ORDER BY emp.dept_id;
