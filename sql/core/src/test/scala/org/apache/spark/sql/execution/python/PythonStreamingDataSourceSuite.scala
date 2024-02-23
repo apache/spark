@@ -31,11 +31,13 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |
       |class SimpleDataStreamReader(DataSourceStreamReader):
       |    def initialOffset(self):
-      |        return {"offset": "0"}
+      |        return {"offset": {"partition-1": 0}}
       |    def latestOffset(self):
-      |        return {"offset": "2"}
+      |        return {"offset": {"partition-1": 2}}
       |    def partitions(self, start: dict, end: dict):
-      |        return [InputPartition(i) for i in range(int(start["offset"]))]
+      |        start_index = start["offset"]["partition-1"]
+      |        end_index = end["offset"]["partition-1"]
+      |        return [InputPartition(i) for i in range(start_index, end_index)]
       |    def commit(self, end: dict):
       |        1 + 2
       |    def read(self, partition):
@@ -86,11 +88,11 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       pythonDs, dataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
 
     val initialOffset = stream.initialOffset()
-    assert(initialOffset.json == "{\"offset\": \"0\"}")
+    assert(initialOffset.json == "{\"offset\": {\"partition-1\": 0}}")
     for (_ <- 1 to 50) {
       val offset = stream.latestOffset()
-      assert(offset.json == "{\"offset\": \"2\"}")
-      assert(stream.planInputPartitions(offset, offset).size == 2)
+      assert(offset.json == "{\"offset\": {\"partition-1\": 2}}")
+      assert(stream.planInputPartitions(initialOffset, offset).size == 2)
       stream.commit(offset)
     }
     stream.stop()

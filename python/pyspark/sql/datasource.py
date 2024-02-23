@@ -338,8 +338,15 @@ class DataSourceStreamReader(ABC):
         Returns
         -------
         dict
-            A dict whose key and values are str type.
+            A dict or recursive dict whose key and value are primitive types(Integer, String, Boolean).
+
+        Examples
+        --------
+        >>> def initialOffset(self):
+        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
+
+
         ...
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
@@ -353,7 +360,12 @@ class DataSourceStreamReader(ABC):
         Returns
         -------
         dict
-            A dict whose key and values are str type.
+            A dict or recursive dict whose key and value are primitive types(Integer, String, Boolean).
+
+        Examples
+        --------
+        >>> def latestOffset(self):
+        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
         ...
         raise PySparkNotImplementedError(
