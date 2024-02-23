@@ -247,8 +247,45 @@ from t1
 where t1f IN (SELECT RANK() OVER (partition by t3c  order by t2b) as s
                              FROM t2, t3 where t2.t2c = t3.t3c and t2.t2a < t1.t1a);
 
--- In-subquery with CASE statement and a top-level aggregation
+-- Plain in-subquery with a top-level aggregation
 SELECT
+  t1.t1a,
+  t1.t1a IN (SELECT t2a FROM t2) as v1
+FROM t1
+GROUP BY t1.t1a;
+
+-- Correlated in-subquery with a top-level aggregation
+-- TODO: this fails, but it should work...
+SELECT
+  t1.t1a,
+  t1.t1a IN (SELECT t2a FROM t2 WHERE length(t2a) = length(t1a)) as v1
+FROM t1
+GROUP BY t1.t1a;
+
+-- Aggregate function over expression with subquery, without explicit GROUP BY
+SELECT
+  count(cast(t1.t1a IN (SELECT t2a FROM t2) as INT)),
+  sum(cast(t1.t1b IN (SELECT t2b FROM t2) as INT))
+FROM t1;
+
+-- Nested subqueries
+SELECT
+   t1.t1a,
+   t1.t1a IN
+       (SELECT t2a FROM t2 WHERE t2a IN (SELECT t3a FROM t3 WHERE t3b > 0)) as v1
+FROM t1
+GROUP BY t1.t1a;
+
+-- Derived table from subquery
+SELECT
+    agg_results.t1a,
+    COUNT(*)
+    FROM (SELECT t1.t1a FROM t1 WHERE t1.t1a IN (SELECT t2a FROM t2)) AS agg_results
+GROUP BY agg_results.t1a;
+
+-- CASE statement with an in-subquery and aggregation
+SELECT
+  t1.t1a,
   CASE
     WHEN t1.t1a IN (SELECT t2a FROM t2) THEN 10
     ELSE -10
@@ -256,16 +293,32 @@ SELECT
 FROM t1
 GROUP BY t1.t1a;
 
--- In-subquery with CASE statement inside an aggregate function, and a top-level aggregation
+-- CASE statement with an in-subquery inside an agg function
+SELECT
+  t1.t1c,
+  -- sums over t1.t1c
+  SUM(CASE
+    WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
+    ELSE -10
+  END) AS v1,
+  -- sums over t1.t1d
+  SUM(CASE
+      WHEN t1.t1d IN (SELECT t2c FROM t2) THEN 10
+      ELSE -10
+    END) AS v2,
+  -- no agg function, uses t1.t1c
+  t1.t1c + 10 IN (SELECT t2c + 2 FROM t2) AS v3,
+  count(t1.t1c) as ct,
+  count(t1.t1d)
+FROM t1
+GROUP BY t1.t1c;
+
+-- CASE statement with an in-subquery inside an agg function, without group-by
 SELECT
   SUM(CASE
     WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
     ELSE -10
   END) AS v1,
-  CASE
-    WHEN t1.t1c + 10 IN (SELECT t2c + 2 FROM t2) THEN 10
-    ELSE 20
-  END AS v2,
   count(t1.t1c) as ct
-FROM t1
-GROUP BY t1.t1c;
+FROM t1;
+

@@ -372,6 +372,85 @@ t1e
 
 -- !query
 SELECT
+  t1.t1a,
+  t1.t1a IN (SELECT t2a FROM t2) as v1
+FROM t1
+GROUP BY t1.t1a
+-- !query schema
+struct<t1a:string,v1:boolean>
+-- !query output
+t1a	false
+t1b	true
+t1c	true
+t1d	false
+t1e	true
+
+
+-- !query
+SELECT
+  t1.t1a,
+  t1.t1a IN (SELECT t2a FROM t2 WHERE length(t2a) = length(t1a)) as v1
+FROM t1
+GROUP BY t1.t1a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
+  "sqlState" : "XXKD0",
+  "messageParameters" : {
+    "batch" : "Pullup Correlated Expressions",
+    "reason" : "Aggregate: Aggregate [t1a#x], [t1a#x, t1a#x IN (list#x [t1a#x && (length(t2a#x) = length(t1a#x))]) AS v1#x]\n:  +- Project [t2a#x]\n:     +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n:        +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n:           +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n+- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as decimal(4,0)) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]\n   +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]\n is not a valid aggregate expression: [MISSING_AGGREGATION] The non-aggregating expression \"t2a\" is based on columns which are not participating in the GROUP BY clause.\nAdd the columns or the expression to the GROUP BY, aggregate the expression, or use \"any_value(t2a)\" if you do not care which of the values within a group is returned. SQLSTATE: 42803\nPrevious schema:t1a#x, v1#x\nPrevious plan: Aggregate [t1a#x], [t1a#x, t1a#x IN (list#x [t1a#x]) AS v1#x]\n:  +- Project [t2a#x]\n:     +- Filter (length(t2a#x) = length(outer(t1a#x)))\n:        +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as decimal(4,0)) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]\n:           +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n:              +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]\n+- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as decimal(4,0)) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]\n   +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]\n",
+    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
+  }
+}
+
+
+-- !query
+SELECT
+  count(cast(t1.t1a IN (SELECT t2a FROM t2) as INT)),
+  sum(cast(t1.t1b IN (SELECT t2b FROM t2) as INT))
+FROM t1
+-- !query schema
+struct<count(CAST((t1a IN (listquery())) AS INT)):bigint,sum(CAST((t1b IN (listquery())) AS INT)):bigint>
+-- !query output
+12	8
+
+
+-- !query
+SELECT
+   t1.t1a,
+   t1.t1a IN
+       (SELECT t2a FROM t2 WHERE t2a IN (SELECT t3a FROM t3 WHERE t3b > 0)) as v1
+FROM t1
+GROUP BY t1.t1a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_2169"
+}
+
+
+-- !query
+SELECT
+    agg_results.t1a,
+    COUNT(*)
+    FROM (SELECT t1.t1a FROM t1 WHERE t1.t1a IN (SELECT t2a FROM t2)) AS agg_results
+GROUP BY agg_results.t1a
+-- !query schema
+struct<t1a:string,count(1):bigint>
+-- !query output
+t1b	1
+t1c	1
+t1e	3
+
+
+-- !query
+SELECT
+  t1.t1a,
   CASE
     WHEN t1.t1a IN (SELECT t2a FROM t2) THEN 10
     ELSE -10
@@ -379,13 +458,38 @@ SELECT
 FROM t1
 GROUP BY t1.t1a
 -- !query schema
-struct<v1:int>
+struct<t1a:string,v1:int>
 -- !query output
--10
--10
-10
-10
-10
+t1a	-10
+t1b	10
+t1c	10
+t1d	-10
+t1e	10
+
+
+-- !query
+SELECT
+  t1.t1c,
+  SUM(CASE
+    WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
+    ELSE -10
+  END) AS v1,
+  SUM(CASE
+      WHEN t1.t1d IN (SELECT t2c FROM t2) THEN 10
+      ELSE -10
+    END) AS v2,
+  t1.t1c + 10 IN (SELECT t2c + 2 FROM t2) AS v3,
+  count(t1.t1c) as ct,
+  count(t1.t1d)
+FROM t1
+GROUP BY t1.t1c
+-- !query schema
+struct<t1c:int,v1:bigint,v2:bigint,v3:boolean,ct:bigint,count(t1d):bigint>
+-- !query output
+12	20	-20	false	2	2
+16	40	-40	false	4	4
+8	-20	-20	true	2	2
+NULL	-40	-20	false	0	4
 
 
 -- !query
@@ -394,17 +498,9 @@ SELECT
     WHEN t1.t1c IN (SELECT t2c FROM t2) THEN 10
     ELSE -10
   END) AS v1,
-  CASE
-    WHEN t1.t1c + 10 IN (SELECT t2c + 2 FROM t2) THEN 10
-    ELSE 20
-  END AS v2,
   count(t1.t1c) as ct
 FROM t1
-GROUP BY t1.t1c
 -- !query schema
-struct<v1:bigint,v2:int,ct:bigint>
+struct<v1:bigint,ct:bigint>
 -- !query output
--20	10	2
--40	20	0
-20	20	2
-40	20	4
+0	8
