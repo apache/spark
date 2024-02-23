@@ -386,7 +386,7 @@ For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-availa
 
 Cannot find a short name for the codec `<codecName>`.
 
-### COLLATION_SUPPORT_NOT_ENABLE
+### COLLATION_SUPPORT_NOT_ENABLED
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
