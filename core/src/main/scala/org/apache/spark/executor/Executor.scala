@@ -589,6 +589,7 @@ private[spark] class Executor(
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
         task.localProperties = taskDescription.properties
         task.setTaskMemoryManager(taskMemoryManager)
+        task.setEnv(env)
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.

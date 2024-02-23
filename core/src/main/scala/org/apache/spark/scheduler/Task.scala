@@ -126,7 +126,7 @@ private[spark] abstract class Task[T](
 
     new CallerContext(
       "TASK",
-      SparkEnv.get.conf.get(APP_CALLER_CONTEXT),
+      env.conf.get(APP_CALLER_CONTEXT),
       appId,
       appAttemptId,
       jobId,
@@ -143,15 +143,14 @@ private[spark] abstract class Task[T](
       try {
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(
-            MemoryMode.OFF_HEAP)
+          env.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+          env.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
           // Notify any tasks waiting for execution memory to be freed to wake up and try to
           // acquire memory again. This makes impossible the scenario where a task sleeps forever
           // because there are no other tasks left to notify it. Since this is safe to do but may
           // not be strictly necessary, we should revisit whether we can remove this in the
           // future.
-          val memoryManager = SparkEnv.get.memoryManager
+          val memoryManager = env.memoryManager
           memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
@@ -164,9 +163,14 @@ private[spark] abstract class Task[T](
   }
 
   private var taskMemoryManager: TaskMemoryManager = _
+  private var env: SparkEnv = _
 
   def setTaskMemoryManager(taskMemoryManager: TaskMemoryManager): Unit = {
     this.taskMemoryManager = taskMemoryManager
+  }
+
+  def setEnv(env: SparkEnv): Unit = {
+    this.env = env
   }
 
   def runTask(context: TaskContext): T
