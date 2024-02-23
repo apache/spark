@@ -21,6 +21,7 @@ import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
@@ -28,6 +29,12 @@ import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.types.StringType
+
+class CollationSuite extends QueryTest with SharedSparkSession {
+  protected override def beforeAll(): Unit = {
+    System.setProperty(IS_TESTING.key, "true")
+    super.beforeAll()
+  }
 
 class CollationSuite extends DatasourceV2SQLBase {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -109,22 +116,20 @@ class CollationSuite extends DatasourceV2SQLBase {
   }
 
   test("collate function invalid input data type") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "true") {
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          sql(s"select collate(1, 'UCS_BASIC')")
-        },
-        errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-        sqlState = "42K09",
-        parameters = Map(
-          "sqlExpr" -> "\"collate(1)\"",
-          "paramIndex" -> "first",
-          "inputSql" -> "\"1\"",
-          "inputType" -> "\"INT\"",
-          "requiredType" -> "\"STRING\""),
-        context = ExpectedContext(
-          fragment = s"collate(1, 'UCS_BASIC')", start = 7, stop = 29))
-    }
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        sql(s"select collate(1, 'UCS_BASIC')")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      sqlState = "42K09",
+      parameters = Map(
+        "sqlExpr" -> "\"collate(1)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"1\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRING\""),
+      context = ExpectedContext(
+        fragment = s"collate(1, 'UCS_BASIC')", start = 7, stop = 29))
   }
 
   test("collation expression returns default collation") {

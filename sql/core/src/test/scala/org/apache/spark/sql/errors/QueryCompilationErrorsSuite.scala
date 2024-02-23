@@ -970,7 +970,7 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           sql(s"select 'aaa' collate 'UNICODE_ci'")
         },
-        errorClass = "COLLATION_SUPPORT_DISABLED",
+        errorClass = "COLLATION_SUPPORT_NOT_ENABLED",
         parameters = Map.empty
       )
     }

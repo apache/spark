@@ -463,9 +463,9 @@
     ],
     "sqlState" : "42704"
   },
-  "COLLATION_SUPPORT_DISABLED" : {
+  "COLLATION_SUPPORT_NOT_ENABLED" : {
     "message" : [
-      "Collation feature is under development and not all features are supported. To enable existing features toggle `COLLATION_ENABLED` flag to true."
+      "Collation support is under development and not all features are supported. To enable existing features set `spark.sql.collation.enabled` flag to `true`."
     ],
     "sqlState" : "0A000"
   },

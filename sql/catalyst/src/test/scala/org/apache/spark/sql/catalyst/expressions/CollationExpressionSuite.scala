@@ -19,75 +19,62 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("validate default collation") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "true") {
-      val collationId = CollationFactory.collationNameToId("UCS_BASIC")
-      assert(collationId == 0)
-      val collateExpr = Collate(Literal("abc"), "UCS_BASIC")
-      assert(collateExpr.dataType === StringType(collationId))
-      collateExpr.dataType.asInstanceOf[StringType].collationId == 0
-      checkEvaluation(collateExpr, "abc")
-    }
+    val collationId = CollationFactory.collationNameToId("UCS_BASIC")
+    assert(collationId == 0)
+    val collateExpr = Collate(Literal("abc"), "UCS_BASIC")
+    assert(collateExpr.dataType === StringType(collationId))
+    collateExpr.dataType.asInstanceOf[StringType].collationId == 0
+    checkEvaluation(collateExpr, "abc")
   }
 
   test("collate against literal") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "true") {
-      val collateExpr = Collate(Literal("abc"), "UCS_BASIC_LCASE")
-      val collationId = CollationFactory.collationNameToId("UCS_BASIC_LCASE")
-      assert(collateExpr.dataType == StringType(collationId))
-      checkEvaluation(collateExpr, "abc")
-    }
+    val collateExpr = Collate(Literal("abc"), "UCS_BASIC_LCASE")
+    val collationId = CollationFactory.collationNameToId("UCS_BASIC_LCASE")
+    assert(collateExpr.dataType == StringType(collationId))
+    checkEvaluation(collateExpr, "abc")
   }
 
   test("check input types") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "true") {
-      val collateExpr = Collate(Literal("abc"), "UCS_BASIC")
-      assert(collateExpr.checkInputDataTypes().isSuccess)
+    val collateExpr = Collate(Literal("abc"), "UCS_BASIC")
+    assert(collateExpr.checkInputDataTypes().isSuccess)
 
-      val collateExprExplicitDefault =
-        Collate(Literal.create("abc", StringType(0)), "UCS_BASIC")
-      assert(collateExprExplicitDefault.checkInputDataTypes().isSuccess)
+    val collateExprExplicitDefault =
+      Collate(Literal.create("abc", StringType(0)), "UCS_BASIC")
+    assert(collateExprExplicitDefault.checkInputDataTypes().isSuccess)
 
-      val collateExprExplicitNonDefault =
-        Collate(Literal.create("abc", StringType(1)), "UCS_BASIC")
-      assert(collateExprExplicitNonDefault.checkInputDataTypes().isSuccess)
+    val collateExprExplicitNonDefault =
+      Collate(Literal.create("abc", StringType(1)), "UCS_BASIC")
+    assert(collateExprExplicitNonDefault.checkInputDataTypes().isSuccess)
 
-      val collateOnNull = Collate(Literal.create(null, StringType(1)), "UCS_BASIC")
-      assert(collateOnNull.checkInputDataTypes().isSuccess)
+    val collateOnNull = Collate(Literal.create(null, StringType(1)), "UCS_BASIC")
+    assert(collateOnNull.checkInputDataTypes().isSuccess)
 
-      val collateOnInt = Collate(Literal(1), "UCS_BASIC")
-      assert(collateOnInt.checkInputDataTypes().isFailure)
-    }
+    val collateOnInt = Collate(Literal(1), "UCS_BASIC")
+    assert(collateOnInt.checkInputDataTypes().isFailure)
   }
 
   test("collate on non existing collation") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "true") {
-      checkError(
-        exception = intercept[SparkException] {
-          Collate(Literal("abc"), "UCS_BASIS")
-        },
-        errorClass = "COLLATION_INVALID_NAME",
-        sqlState = "42704",
-        parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
-    }
+    checkError(
+      exception = intercept[SparkException] {
+        Collate(Literal("abc"), "UCS_BASIS")
+      },
+      errorClass = "COLLATION_INVALID_NAME",
+      sqlState = "42704",
+      parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
   }
 
   test("collation on non-explicit default collation") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "true") {
-      checkEvaluation(Collation(Literal("abc")).replacement, "UCS_BASIC")
-    }
+    checkEvaluation(Collation(Literal("abc")).replacement, "UCS_BASIC")
   }
 
   test("collation on explicitly collated string") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "true") {
-      checkEvaluation(
-        Collation(Literal.create("abc", StringType(1))).replacement, "UCS_BASIC_LCASE")
-      checkEvaluation(
-        Collation(Collate(Literal("abc"), "UCS_BASIC_LCASE")).replacement, "UCS_BASIC_LCASE")
-    }
+    checkEvaluation(
+      Collation(Literal.create("abc", StringType(1))).replacement, "UCS_BASIC_LCASE")
+    checkEvaluation(
+      Collation(Collate(Literal("abc"), "UCS_BASIC_LCASE")).replacement, "UCS_BASIC_LCASE")
   }
 }

@@ -759,7 +759,7 @@ object SQLConf {
         "feature flag.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(Utils.isTesting)
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
@@ -4970,9 +4970,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
-  def collationEnabled: Boolean = {
-    getConf(COLLATION_ENABLED)
-  }
+  def collationEnabled: Boolean = getConf(COLLATION_ENABLED)
+
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)

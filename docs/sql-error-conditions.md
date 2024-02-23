@@ -386,11 +386,11 @@ For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-availa
 
 Cannot find a short name for the codec `<codecName>`.
 
-### COLLATION_SUPPORT_DISABLED
+### COLLATION_SUPPORT_NOT_ENABLE
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
-Collation feature is under development and not all features are supported. To enable existing features toggle `COLLATION_ENABLED` flag to true.
+Collation support is under development and not all features are supported. To enable existing features set `spark.sql.collation.enabled` to `true`.
 
 ### COLLATION_INVALID_NAME
 
