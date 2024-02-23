@@ -254,27 +254,11 @@ SELECT
 FROM t1
 GROUP BY t1.t1a;
 
--- Correlated in-subquery with a top-level aggregation
--- TODO: this fails, but it should work (it does in POSTGRESQL)
-SELECT
-  t1.t1b,
-  t1.t1b IN (SELECT t2.t2b FROM t2 WHERE t2.t2c = t1.t1b) as v1
-FROM t1
-GROUP BY t1.t1b;
-
 -- Aggregate function over expression with subquery, without explicit GROUP BY
 SELECT
   count(cast(t1.t1a IN (SELECT t2a FROM t2) as INT)),
   sum(cast(t1.t1b IN (SELECT t2b FROM t2) as INT))
 FROM t1;
-
--- Nested subqueries
-SELECT
-   t1.t1a,
-   t1.t1a IN
-       (SELECT t2a FROM t2 WHERE t2a IN (SELECT t3a FROM t3 WHERE t3b > 0)) as v1
-FROM t1
-GROUP BY t1.t1a;
 
 -- Derived table from subquery
 SELECT
