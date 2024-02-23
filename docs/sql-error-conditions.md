@@ -1467,6 +1467,18 @@ For more details see [INVALID_WRITE_DISTRIBUTION](sql-error-conditions-invalid-w
 
 The join condition `<joinCondition>` has the invalid type `<conditionType>`, expected "BOOLEAN".
 
+### [KAFKA_DATA_LOSS](sql-error-conditions-kafka-data-loss-error-class.html)
+
+[SQLSTATE: 22000](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Some data may have been lost because they are not available in Kafka any more;
+either the data was aged out by Kafka or the topic may have been deleted before all the data in the
+topic was processed.
+If you don't want your streaming query to fail on such cases, set the source option failOnDataLoss to false.
+Reason:
+
+For more details see [KAFKA_DATA_LOSS](sql-error-conditions-kafka-data-loss-error-class.html)
+
 ### KRYO_BUFFER_OVERFLOW
 
 [SQLSTATE: 54006](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
