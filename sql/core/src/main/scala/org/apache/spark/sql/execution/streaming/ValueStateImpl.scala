@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.{NoTTL, ProcessingTimeTTL}
 import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.TTLStateKeyValueRowSchema.{TTL_KEY_ROW_SCHEMA, TTL_VALUE_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, StateStore}
+import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{TTLMode, ValueState}
 
 /**
@@ -68,17 +68,17 @@ class ValueStateImpl[S](
     if (retRow != null) {
       val resState = stateTypesEncoder.decodeValue[S](retRow)
       ttlMode match {
-        case NoTTL =>
+        case _ =>
           resState
-        case ProcessingTimeTTL =>
-          val ttlForVal = retRow.getLong(1)
-          if (ttlForVal <= System.currentTimeMillis()) {
-            logDebug(s"Value is expired for state $stateName")
-            store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
-            null.asInstanceOf[S]
-          } else {
-            resState
-          }
+//        case ProcessingTimeTTL =>
+//          val ttlForVal = retRow.getLong(1)
+//          if (ttlForVal <= System.currentTimeMillis()) {
+//            logDebug(s"Value is expired for state $stateName")
+//            store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+//            null.asInstanceOf[S]
+//          } else {
+//            resState
+//          }
       }
     } else {
       null.asInstanceOf[S]

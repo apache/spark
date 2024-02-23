@@ -160,40 +160,10 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
-
-    def ttlFunc(rocksDB: RocksDB): Unit = {
-      val ttlEncoder = keyValueEncoderMap.get("ttl")
-      val expiredKeyStateNames =
-        rocksDB.iterator("ttl").flatMap { kv =>
-          val key = ttlEncoder._1.decodeKey(kv.key)
-          val ttl = key.getLong(0)
-          if (ttl <= System.currentTimeMillis()) {
-            Some(key)
-          } else {
-            None
-          }
-        }
-      expiredKeyStateNames.foreach { keyStateName =>
-        remove(keyStateName, "ttl")
-        val stateName = SerializationUtils.deserialize(
-          keyStateName.getBinary(1)).asInstanceOf[String]
-        val groupingKey = keyStateName.getBinary(2)
-        val keyRow = StateKeyValueRowSchema.encodeGroupingKeyBytes(groupingKey)
-        val row = get(keyRow, stateName)
-        if (row != null) {
-          val ttl = row.getLong(1)
-          if (ttl <= System.currentTimeMillis()) {
-            remove(keyRow, stateName)
-          }
-        }
-      }
-    }
-
     override def commit(): Long = synchronized {
       try {
-        rocksDB.doTTL(ttlFunc)
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        val newVersion = rocksDB.commit()
+        val newVersion = rocksDB.commit(this, ttlFunc)
         state = COMMITTED
         logInfo(s"Committed $newVersion for $id")
         newVersion
@@ -332,10 +302,42 @@ private[sql] class RocksDBStateStoreProvider
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
       rocksDB.load(version)
-      new RocksDBStateStore(version)
+      val store = new RocksDBStateStore(version)
+      rocksDB.startTTLFunc(store, ttlFunc)
+      store
     }
     catch {
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+
+  def ttlFunc(store: StateStore, rocksDB: RocksDB): Unit = {
+    logError(s"inside ttlFunc from thread ${Thread.currentThread().getName}")
+    val ttlEncoder = keyValueEncoderMap.get("ttl")
+    val expiredKeyStateNames =
+      rocksDB.iterator("ttl").flatMap { kv =>
+        val key = ttlEncoder._1.decodeKey(kv.key)
+        val ttl = key.getLong(0)
+        if (ttl <= System.currentTimeMillis()) {
+          Some(key)
+        } else {
+          None
+        }
+      }
+    expiredKeyStateNames.foreach { keyStateName =>
+      store.remove(keyStateName, "ttl")
+      val stateName = SerializationUtils.deserialize(
+        keyStateName.getBinary(1)).asInstanceOf[String]
+      val groupingKey = keyStateName.getBinary(2)
+      val keyRow = StateKeyValueRowSchema.encodeGroupingKeyBytes(groupingKey)
+      val row = store.get(keyRow, stateName)
+      if (row != null) {
+        val ttl = row.getLong(1)
+        if (ttl <= System.currentTimeMillis()) {
+          logError(s"Removing state from thread ${Thread.currentThread().getName}")
+          store.remove(keyRow, stateName)
+        }
+      }
     }
   }
 
