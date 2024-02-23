@@ -127,6 +127,10 @@ final class ShuffleBlockFetcherIterator(
   /** Host local blocks to fetch, excluding zero-sized blocks. */
   private[this] val hostLocalBlocks = scala.collection.mutable.LinkedHashSet[(BlockId, Int)]()
 
+  private[this] var timeTakenInFetchMs: Long = 0
+
+  private[this] val fallbackStorage = FallbackStorage.getFallbackStorage(blockManager.conf)
+
   /**
    * A queue to hold our results. This turns the asynchronous model provided by
    * [[org.apache.spark.network.BlockTransferService]] into a synchronous model (iterator).
@@ -233,7 +237,7 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val result = iter.next()
       result match {
-        case SuccessFetchResult(blockId, mapIndex, address, _, buf, _) =>
+        case SuccessFetchResult(blockId, mapIndex, address, _, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
             if (pushBasedFetchHelper.isLocalPushMergedBlockAddress(address) ||
               hostLocalBlocks.contains(blockId -> mapIndex)) {
@@ -254,7 +258,9 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def sendRequest(req: FetchRequest): Unit = {
-    logDebug("Sending request for %d blocks (%s) from %s".format(
+    val sendRequestTime = System.nanoTime()
+    logDebug(("Sending request with sendRequestTime = $sendRequestTime " +
+      "for %d blocks (%s) from %s").format(
       req.blocks.size, Utils.bytesToString(req.size), req.address.hostPort))
     bytesInFlight += req.size
     reqsInFlight += 1
@@ -302,9 +308,11 @@ final class ShuffleBlockFetcherIterator(
             remainingBlocks -= blockId
             blockOOMRetryCounts.remove(blockId)
             updateMergedReqsDuration(BlockId(blockId).isShuffleChunk)
+            val timeTaken = (System.nanoTime() - sendRequestTime) / (1000 * 1000)
             results.put(SuccessFetchResult(BlockId(blockId), infoMap(blockId)._2,
-              address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty))
-            logDebug("remainingBlocks: " + remainingBlocks)
+              address, infoMap(blockId)._1, timeTaken, buf, remainingBlocks.isEmpty))
+            logDebug(s"Fetch done with sendRequestTime = $sendRequestTime" +
+              s" in $timeTaken ms for size ${buf.size()} remainingBlocks: " + remainingBlocks)
             enqueueDeferredFetchRequestIfNecessary()
           }
         }
@@ -363,10 +371,14 @@ final class ShuffleBlockFetcherIterator(
       }
     }
 
+    if (req.address.executorId == FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId) {
+      assert(fallbackStorage.isDefined)
+      fallbackStorage.get.fetchBlocks(blockManager, req.blocks, req.address, blockFetchingListener)
+    }
     // Fetch remote shuffle blocks to disk when the request is too large. Since the shuffle data is
     // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch
     // the data and write it to file directly.
-    if (req.size > maxReqSizeShuffleToMem) {
+    else if (req.size > maxReqSizeShuffleToMem) {
       shuffleClient.fetchBlocks(address.host, address.port, address.executorId, blockIds.toArray,
         blockFetchingListener, this)
     } else {
@@ -398,8 +410,13 @@ final class ShuffleBlockFetcherIterator(
     var pushMergedLocalBlockBytes = 0L
     val prevNumBlocksToFetch = numBlocksToFetch
 
-    val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
-    val localExecIds = Set(blockManager.blockManagerId.executorId, fallback)
+    // Fallback to original implementation, if thread pool is not enabled.
+    val localExecIds = if (FallbackStorage.getNumReadThreads(blockManager.conf) > 0) {
+      Set(blockManager.blockManagerId.executorId)
+    } else {
+      Set(blockManager.blockManagerId.executorId,
+        FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId)
+    }
     for ((address, blockInfos) <- blocksByAddress) {
       checkBlockSizes(blockInfos)
       if (pushBasedFetchHelper.isPushMergedShuffleBlockAddress(address)) {
@@ -571,12 +588,14 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val (blockId, mapIndex) = iter.next()
       try {
+        val sendStartTime = System.nanoTime()
         val buf = blockManager.getLocalBlockData(blockId)
         shuffleMetrics.incLocalBlocksFetched(1)
         shuffleMetrics.incLocalBytesRead(buf.size)
         buf.retain()
+        val timeTaken = (System.nanoTime() - sendStartTime) / (1000 * 1000)
         results.put(SuccessFetchResult(blockId, mapIndex, blockManager.blockManagerId,
-          buf.size(), buf, false))
+          buf.size(), timeTaken, buf, false))
       } catch {
         // If we see an exception, stop immediately.
         case e: Exception =>
@@ -600,9 +619,11 @@ final class ShuffleBlockFetcherIterator(
       localDirs: Array[String],
       blockManagerId: BlockManagerId): Boolean = {
     try {
+      val sendStartTime = System.nanoTime()
       val buf = blockManager.getHostLocalShuffleData(blockId, localDirs)
       buf.retain()
-      results.put(SuccessFetchResult(blockId, mapIndex, blockManagerId, buf.size(), buf,
+      val timeTaken = (System.nanoTime() - sendStartTime) / (1000 * 1000)
+      results.put(SuccessFetchResult(blockId, mapIndex, blockManagerId, buf.size(), timeTaken, buf,
         isNetworkReqDone = false))
       true
     } catch {
@@ -778,7 +799,14 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
-  override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
+  override def hasNext: Boolean = {
+    if (numBlocksProcessed < numBlocksToFetch) {
+      true
+    } else {
+      logInfo(s"Fetched $numBlocksProcessed blocks in $timeTakenInFetchMs ms")
+      false
+    }
+  }
 
   /**
    * Fetches the next (BlockId, InputStream). If a task fails, the ManagedBuffers
@@ -811,7 +839,8 @@ final class ShuffleBlockFetcherIterator(
       shuffleMetrics.incFetchWaitTime(fetchWaitTime)
 
       result match {
-        case SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
+        case SuccessFetchResult(
+        blockId, mapIndex, address, size, timeTaken, buf, isNetworkReqDone) =>
           if (address != blockManager.blockManagerId) {
             if (hostLocalBlocks.contains(blockId -> mapIndex) ||
               pushBasedFetchHelper.isLocalPushMergedBlockAddress(address)) {
@@ -960,7 +989,7 @@ final class ShuffleBlockFetcherIterator(
               }
             }
           }
-
+          timeTakenInFetchMs += timeTaken
         case FailureFetchResult(blockId, mapIndex, address, e) =>
           var errorMsg: String = null
           if (e.isInstanceOf[OutOfDirectMemoryError]) {
@@ -1021,7 +1050,7 @@ final class ShuffleBlockFetcherIterator(
                   chunkId)
                 pushBasedFetchHelper.addChunk(shuffleChunkId, bitmaps(chunkId))
                 results.put(SuccessFetchResult(shuffleChunkId, SHUFFLE_PUSH_MAP_ID,
-                  pushBasedFetchHelper.localShuffleMergerBlockMgrId, buf.size(), buf,
+                  pushBasedFetchHelper.localShuffleMergerBlockMgrId, buf.size(), 0, buf,
                   isNetworkReqDone = false))
               }
             } catch {
@@ -1558,6 +1587,7 @@ object ShuffleBlockFetcherIterator {
       mapIndex: Int,
       address: BlockManagerId,
       size: Long,
+      timeTaken: Long,
       buf: ManagedBuffer,
       isNetworkReqDone: Boolean) extends FetchResult {
     require(buf != null)

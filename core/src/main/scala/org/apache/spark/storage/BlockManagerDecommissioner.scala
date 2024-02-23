@@ -207,7 +207,7 @@ private[storage] class BlockManagerDecommissioner(
     !conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
 
   private val migrationPeers =
-    mutable.HashMap[BlockManagerId, ShuffleMigrationRunnable]()
+    mutable.HashMap[BlockManagerId, Seq[ShuffleMigrationRunnable]]()
 
   private val rddBlockMigrationExecutor =
     if (conf.get(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED)) {
@@ -301,22 +301,42 @@ private[storage] class BlockManagerDecommissioner(
     logInfo(s"${newShufflesToMigrate.size} of ${localShuffles.size} local shuffles " +
       s"are added. In total, $remainedShuffles shuffles are remained.")
 
-    // Update the threads doing migrations
-    val livePeerSet = bm.getPeers(false).toSet
-    val currentPeerSet = migrationPeers.keys.toSet
-    val deadPeers = currentPeerSet.diff(livePeerSet)
-    // Randomize the orders of the peers to avoid hotspot nodes.
-    val newPeers = Utils.randomize(livePeerSet.diff(currentPeerSet))
-    migrationPeers ++= newPeers.map { peer =>
+    def startMigrationThread(peer: BlockManagerId): ShuffleMigrationRunnable = {
       logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
       val runnable = new ShuffleMigrationRunnable(peer)
       shuffleMigrationPool.foreach(_.submit(runnable))
-      (peer, runnable)
+      runnable
     }
-    // A peer may have entered a decommissioning state, don't transfer any new blocks
-    deadPeers.foreach(migrationPeers.get(_).foreach(_.keepRunning = false))
+
+    // Update the threads doing migrations
+    if (conf.get(config.STORAGE_DECOMMISSION_MIGRATE_TO_STORAGE) &&
+      conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+      val numThread = conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS)
+      logInfo(s"Migrating to external storage location " +
+        s"${conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH)} using " +
+        s" $numThread threads.")
+      val migrationThreadList =
+        for (_ <- 1 to numThread)
+          yield startMigrationThread(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID)
+      migrationPeers ++= Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID).map { peer =>
+        (peer, migrationThreadList)
+      }
+    } else {
+      val livePeerSet = bm.getPeers(false).toSet
+      val currentPeerSet = migrationPeers.keys.toSet
+      val deadPeers = currentPeerSet.diff(livePeerSet)
+      // Randomize the orders of the peers to avoid hotspot nodes.
+      val newPeers = Utils.randomize(livePeerSet.diff(currentPeerSet))
+      migrationPeers ++= newPeers.map { peer =>
+        val runnable = startMigrationThread(peer)
+        (peer, Seq(runnable))
+      }
+      // A peer may have entered a decommissioning state, don't transfer any new blocks
+      deadPeers.foreach(migrationPeers.get(_).foreach(_.foreach(_.keepRunning = false)))
+    }
+
     // If we don't have anyone to migrate to give up
-    if (!migrationPeers.values.exists(_.keepRunning)) {
+    if (!migrationPeers.values.exists(_.exists(_.keepRunning))) {
       logWarning("No available peers to receive Shuffle blocks, stop migration.")
       stoppedShuffle = true
     }
@@ -331,7 +351,7 @@ private[storage] class BlockManagerDecommissioner(
     shuffleMigrationPool.foreach { threadPool =>
       logInfo("Stopping migrating shuffle blocks.")
       // Stop as gracefully as possible.
-      migrationPeers.values.foreach(_.keepRunning = false)
+      migrationPeers.values.foreach(_.foreach(_.keepRunning = false))
       threadPool.shutdownNow()
     }
   }

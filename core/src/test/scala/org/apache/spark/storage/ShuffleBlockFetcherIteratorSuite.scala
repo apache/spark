@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io._
 import java.nio.ByteBuffer
+import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.{CompletableFuture, Semaphore}
 import java.util.zip.CheckedInputStream
@@ -31,6 +32,7 @@ import scala.concurrent.Future
 
 import com.google.common.io.ByteStreams
 import io.netty.util.internal.OutOfDirectMemoryError
+import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{doThrow, mock, times, verify, when}
@@ -41,9 +43,13 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{MapOutputTracker, SparkFunSuite, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.config.{SHUFFLE_COMPRESS, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH, STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExternalBlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
@@ -122,6 +128,15 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // By default, the mock BlockManager returns None for hostLocalDirManager. One could
     // still use initHostLocalDirManager() to specify a custom hostLocalDirManager.
     doReturn(None).when(blockManager).hostLocalDirManager
+    val conf = new SparkConf(false)
+      .set("spark.app.id", "testId")
+      .set("spark.hadoop.fs.file.impl", classOf[ReadPartialFileSystem].getName)
+      .set(SHUFFLE_COMPRESS, false)
+      .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
+      .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
+        "file://" + Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
+      .set(STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ, 2)
+    doReturn(conf).when(blockManager).conf
     blockManager
   }
 
@@ -447,7 +462,30 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(!iterator.hasNext)
   }
 
-  test("fetch continuous blocks in batch successful 3 local + 4 host local + 2 remote reads") {
+  def createShuffleFile(shuffleId: Int, mapId: Int, reducerId: Int, conf: SparkConf): Unit = {
+    var name = ShuffleIndexBlockId(shuffleId, mapId, reducerId).name
+    var hash = JavaUtils.nonNegativeHash(name)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val appId = conf.getAppId
+    val path: String = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get
+    val indexFile = new Path(path, s"$appId/$shuffleId/$hash/$name")
+    name = ShuffleDataBlockId(shuffleId, mapId, reducerId).name
+    hash = JavaUtils.nonNegativeHash(name)
+    val dataFile = new Path(path, s"$appId/$shuffleId/$hash/$name")
+    val fallbackFileSystem = org.apache.hadoop.fs.FileSystem.get(indexFile.toUri, hadoopConf)
+    val indexOut = fallbackFileSystem.create(indexFile)
+    indexOut.writeLong(0L) // offset
+    indexOut.writeLong(10L) // next offset
+    indexOut.writeLong(10L) // next offset
+    indexOut.writeLong(10L) // next offset
+    val dataOut = fallbackFileSystem.create(dataFile)
+    dataOut.writeBytes("some data to write")
+    indexOut.close()
+    dataOut.close()
+  }
+
+  test("fetch continuous blocks in batch successful 3 local + 4 host local + 2 remote reads " +
+    "+ 2 read from external storage") {
     val blockManager = createMockBlockManager()
     val localBmId = blockManager.blockManagerId
     // Make sure blockManager.getBlockData would return the merged block
@@ -480,6 +518,17 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val mergedHostLocalBlocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockBatchId(0, 4, 0, 4) -> createMockManagedBuffer())
 
+    val externalStorageBmId = BlockManagerId(
+      FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId, "", 4)
+    val externalStorageBlock = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 5, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 5, 1) -> createMockManagedBuffer()
+    )
+    val mergedExternalBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockBatchId(0, 5, 0, 2) -> createMockManagedBuffer())
+    createShuffleFile(0, 5, 0, blockManager.conf)
+    createShuffleFile(0, 5, 1, blockManager.conf)
+
     mergedHostLocalBlocks.foreach { case (blockId, buf) =>
       doReturn(buf)
         .when(blockManager)
@@ -493,23 +542,30 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Map(
         localBmId -> toBlockList(localBlocks, 1L, 0),
         remoteBmId -> toBlockList(remoteBlocks, 1L, 1),
-        hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1)
+        hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1),
+        externalStorageBmId -> toBlockList(externalStorageBlock.keys, 1L, 1)
       ),
       blockManager = Some(blockManager),
       doBatchFetch = true
     )
 
-    // 3 local blocks batch fetched in initialization
-    verify(blockManager, times(1)).getLocalBlockData(any())
+    // 3 local blocks fetched in initialization and one external
+    // storage batch fetched by thread pool
+    verify(blockManager, times(2)).getLocalBlockData(any())
 
-    val allBlocks = mergedLocalBlocks ++ mergedRemoteBlocks ++ mergedHostLocalBlocks
-    for (i <- 0 until 3) {
+    val allBlocks = mergedLocalBlocks ++ mergedRemoteBlocks ++
+      mergedHostLocalBlocks ++ mergedExternalBlocks
+    for (i <- 0 until 4) {
       assert(iterator.hasNext, s"iterator should have 3 elements but actually has $i elements")
       val (blockId, inputStream) = iterator.next()
       verifyFetchBlocksInvocationCount(1)
       // Make sure we release buffers when a wrapped input stream is closed.
-      val mockBuf = allBlocks(blockId)
-      verifyBufferRelease(mockBuf, inputStream)
+      // for external storage shuffle, it is read directly from file and not using
+      // mock transfer.
+      if (!blockId.name.startsWith("shuffle_0_5")) {
+        val mockBuf = allBlocks(blockId)
+        verifyBufferRelease(mockBuf, inputStream)
+      }
     }
 
     // 4 host-local locks fetched

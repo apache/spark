@@ -51,7 +51,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.serializer.SerializerHelper
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleBlockPusher}
 import org.apache.spark.status.api.v1.ThreadStackTrace
-import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
+import org.apache.spark.storage.{FallbackStorage, StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -447,6 +447,7 @@ private[spark] class Executor(
           plugins.foreach(_.shutdown())
         }
       }
+      FallbackStorage.stopThreadPool(conf)
       if (!isLocal) {
         env.stop()
       }

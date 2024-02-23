@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.DataInputStream
 import java.nio.ByteBuffer
+import java.util.concurrent.ThreadPoolExecutor
 
 import scala.concurrent.Future
 import scala.reflect.ClassTag
@@ -29,13 +30,15 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH}
+import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH, STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
-import org.apache.spark.util.Utils
+import org.apache.spark.storage.ShuffleBlockFetcherIterator.FetchBlockInfo
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A fallback storage used by storage decommissioners.
@@ -92,6 +95,57 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
     val hash = JavaUtils.nonNegativeHash(filename)
     fallbackFileSystem.exists(new Path(fallbackPath, s"$appId/$shuffleId/$hash/$filename"))
   }
+
+  private val fetchThreadPool: Option[ThreadPoolExecutor] = {
+    val numShuffleThreads = FallbackStorage.getNumReadThreads(conf)
+    if (numShuffleThreads > 0) {
+      logInfo(s"FallbackStorage created thread pool using  ${numShuffleThreads} thread(s)")
+      Some(ThreadUtils.newDaemonCachedThreadPool(
+        "FetchFromFallbackStorage-threadPool", numShuffleThreads))
+    } else {
+      logInfo("FallbackStorage thread pool not created")
+      None
+    }
+  }
+
+  def fetchBlocks(
+      blockManager: BlockManager,
+      blocks: collection.Seq[FetchBlockInfo],
+      address: BlockManagerId,
+      listener: BlockFetchingListener): Unit = {
+    fetchThreadPool match {
+      case Some(p) if !p.isShutdown =>
+        blocks.foreach(block =>
+          p.submit(new Runnable {
+            override def run(): Unit = {
+              fetchShuffleBlocks(block, blockManager, listener)
+            }
+          })
+        )
+      case _ =>
+        logInfo(s" fetchThreadPool does not exists for $address or shutdown")
+        blocks.foreach(block => fetchShuffleBlocks(block, blockManager, listener))
+    }
+  }
+
+  private def fetchShuffleBlocks(
+              block: FetchBlockInfo,
+              blockManager: BlockManager,
+              listener: BlockFetchingListener): Unit = {
+    try {
+      // First try in local to check if its already cached in local disk,
+      // if not then fallback to external storage done internally by getLocalBlockData.
+      var buffer = blockManager.getLocalBlockData(block.blockId)
+      if (buffer == null) {
+        // For test
+        buffer = FallbackStorage.read(blockManager.conf, block.blockId)
+      }
+      listener.onBlockFetchSuccess(block.blockId.name, buffer)
+    } catch {
+      case e: Exception =>
+        listener.onBlockFetchFailure(block.blockId.name, e)
+    }
+  }
 }
 
 private[storage] class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
@@ -110,12 +164,26 @@ private[spark] object FallbackStorage extends Logging {
   /** We use one block manager id as a place holder. */
   val FALLBACK_BLOCK_MANAGER_ID: BlockManagerId = BlockManagerId("fallback", "remote", 7337)
 
-  def getFallbackStorage(conf: SparkConf): Option[FallbackStorage] = {
-    if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
-      Some(new FallbackStorage(conf))
+  // There should be only one fallback storage thread pool per executor.
+  var fallbackStorage: Option[FallbackStorage] = None
+  def getFallbackStorage(conf: SparkConf): Option[FallbackStorage] = this.synchronized {
+    if (fallbackStorage.isDefined) {
+      logDebug(s"FallbackStorage defined $fallbackStorage")
+      fallbackStorage
+    } else if (conf != null && conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+      fallbackStorage = Some(new FallbackStorage(conf))
+      logInfo(s"Created FallbackStorage $fallbackStorage")
+      fallbackStorage
     } else {
+      logInfo("STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH not defined")
       None
     }
+  }
+
+  def getNumReadThreads(conf: SparkConf): Int = {
+    val numShuffleThreads =
+      if (conf == null) None else conf.get(STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ)
+    if (numShuffleThreads.isDefined) numShuffleThreads.get else -1
   }
 
   /** Register the fallback block manager and its RPC endpoint. */
@@ -144,6 +212,14 @@ private[spark] object FallbackStorage extends Logging {
           logWarning(s"Failed to clean up: $fallbackUri")
         }
       }
+    }
+  }
+
+  def stopThreadPool(conf: SparkConf): Unit = {
+    logInfo(s" Stopping thread pool")
+    if (getFallbackStorage(conf).isDefined &&
+      getFallbackStorage(conf).get.fetchThreadPool.isDefined) {
+      getFallbackStorage(conf).get.fetchThreadPool.foreach(ThreadUtils.shutdown(_))
     }
   }
 
