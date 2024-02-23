@@ -561,18 +561,6 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <dependency>
-        <groupId>jakarta.servlet</groupId>
-        <artifactId>jakarta.servlet-api</artifactId>
-        <version>${jakartaservlet.version}</version>
-        <scope>provided</scope>
-      </dependency>
-      <dependency>
-        <groupId>javax.servlet</groupId>
-        <artifactId>javax.servlet-api</artifactId>
-        <version>${javaxservlet.version}</version>
-        <scope>provided</scope>
-      </dependency>
 
       <!-- End of shaded deps -->
 
@@ -2852,6 +2840,16 @@
         <groupId>org.apache.datasketches</groupId>
         <artifactId>datasketches-java</artifactId>
         <version>${datasketches.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.servlet</groupId>
+        <artifactId>jakarta.servlet-api</artifactId>
+        <version>${jakartaservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>javax.servlet-api</artifactId>
+        <version>${javaxservlet.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
