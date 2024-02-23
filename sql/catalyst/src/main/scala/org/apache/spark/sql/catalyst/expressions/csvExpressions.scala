@@ -271,7 +271,7 @@ case class StructsToCsv(
       case _ => DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(StructType),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType)
@@ -282,16 +282,9 @@ case class StructsToCsv(
 
   @tailrec
   private def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: VariantType => false
-
-    case _: BinaryType => false
-
-    case _: AtomicType => true
-
+    case _: VariantType | BinaryType => false
+    case _: AtomicType | CalendarIntervalType => true
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
-
-    case _: CalendarIntervalType => true
-
     case _ => false
   }
 
