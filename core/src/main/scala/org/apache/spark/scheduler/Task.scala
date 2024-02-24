@@ -28,6 +28,7 @@ import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.storage.BlockManager
 import org.apache.spark.util._
 
 /**
@@ -126,7 +127,7 @@ private[spark] abstract class Task[T](
 
     new CallerContext(
       "TASK",
-      env.conf.get(APP_CALLER_CONTEXT),
+      SparkEnv.get.conf.get(APP_CALLER_CONTEXT),
       appId,
       appAttemptId,
       jobId,
@@ -143,14 +144,15 @@ private[spark] abstract class Task[T](
       try {
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
-          env.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
-          env.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
+          blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+          blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
           // Notify any tasks waiting for execution memory to be freed to wake up and try to
           // acquire memory again. This makes impossible the scenario where a task sleeps forever
           // because there are no other tasks left to notify it. Since this is safe to do but may
           // not be strictly necessary, we should revisit whether we can remove this in the
           // future.
-          val memoryManager = env.memoryManager
+
+          val memoryManager = blockManager.memoryManager
           memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
@@ -163,14 +165,14 @@ private[spark] abstract class Task[T](
   }
 
   private var taskMemoryManager: TaskMemoryManager = _
-  private var env: SparkEnv = _
+  private var blockManager: BlockManager = _
 
   def setTaskMemoryManager(taskMemoryManager: TaskMemoryManager): Unit = {
     this.taskMemoryManager = taskMemoryManager
   }
 
-  def setEnv(env: SparkEnv): Unit = {
-    this.env = env
+  def setBlockManager(blockManager: BlockManager): Unit = {
+    this.blockManager = blockManager
   }
 
   def runTask(context: TaskContext): T
