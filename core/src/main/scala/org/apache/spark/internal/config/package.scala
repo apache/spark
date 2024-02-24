@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal
 
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -64,8 +65,16 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DRIVER_DEFAULT_EXTRA_CLASS_PATH =
+    ConfigBuilder(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH)
+      .internal()
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH_VALUE)
+
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH)
+      .withPrepended(DRIVER_DEFAULT_EXTRA_CLASS_PATH.key, File.pathSeparator)
       .version("1.0.0")
       .stringConf
       .createOptional
@@ -254,8 +263,16 @@ package object config {
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").version("1.2.0").stringConf.createOptional
 
+  private[spark] val EXECUTOR_DEFAULT_EXTRA_CLASS_PATH =
+    ConfigBuilder(SparkLauncher.EXECUTOR_DEFAULT_EXTRA_CLASS_PATH)
+      .internal()
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault(SparkLauncher.EXECUTOR_DEFAULT_EXTRA_CLASS_PATH_VALUE)
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
+      .withPrepended(EXECUTOR_DEFAULT_EXTRA_CLASS_PATH.key, File.pathSeparator)
       .version("1.0.0")
       .stringConf
       .createOptional
