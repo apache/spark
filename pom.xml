@@ -3362,6 +3362,7 @@
             <includes>
               <include>org.spark-project.spark:unused</include>
               <include>com.google.guava:guava</include>
+              <include>com.google.guava:failureaccess</include>
               <include>org.jpmml:*</include>
             </includes>
           </artifactSet>
@@ -3588,6 +3589,12 @@
       </dependencies>
     </profile>
 
+    <profile>
+      <id>iceberg</id>
+      <modules>
+        <module>sql/iceberg</module>
+      </modules>
+    </profile>
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
     <profile>
       <id>spark-ganglia-lgpl</id>
@@ -3652,7 +3659,7 @@
         <module>sql/hive-thriftserver</module>
       </modules>
     </profile>
-
+    
     <profile>
       <id>hadoop-cloud</id>
       <modules>

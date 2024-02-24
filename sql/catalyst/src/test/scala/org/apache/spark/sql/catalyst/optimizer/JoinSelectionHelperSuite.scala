@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, JoinHint, NO_BROADCAST_HASH, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, Join, JoinHint, LogicalPlan, NO_BROADCAST_HASH, SHUFFLE_HASH, SubqueryAlias}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.internal.SQLConf
 
@@ -177,7 +179,7 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
   }
 
   test("getSmallerSide should return BuildRight") {
-    assert(getSmallerSide(left, right) === BuildRight)
+    assert(getSmallerSide(left, right, mutable.Set.empty) === BuildRight)
   }
 
   test("canBroadcastBySize should return true if the plan size is less than 10MB") {
@@ -187,4 +189,39 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
     }
   }
 
+  test("getBroadcastBuildSide (hintOnly = false) preference to existing broadcast buildside") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100000000") {
+      val smallerLeg = right
+      val biggerLeg = left
+      val biggerLegOuter = SubqueryAlias("outerLeg", biggerLeg)
+      val join1 = SubqueryAlias("j1", Join(smallerLeg, biggerLeg, Inner,
+        Some("a".attr === "d".attr), JoinHint.NONE))
+      val broadCastExchangePlans = mutable.Set[LogicalPlan]()
+      val broadcastSideOuterJoin = getBroadcastBuildSide(
+        biggerLegOuter,
+        join1,
+        Inner,
+        JoinHint.NONE,
+        hintOnly = false,
+        SQLConf.get,
+        broadCastExchangePlans
+      )
+      broadcastSideOuterJoin.foreach {
+        case BuildRight => broadCastExchangePlans += join1.canonicalized
+        case BuildLeft => broadCastExchangePlans += biggerLegOuter.canonicalized
+      }
+      assert(broadCastExchangePlans.size == 1)
+      assert(biggerLeg.canonicalized == broadCastExchangePlans.head)
+      val broadcastSideInnerJoin = getBroadcastBuildSide(
+        smallerLeg,
+        biggerLeg,
+        Inner,
+        JoinHint.NONE,
+        hintOnly = false,
+        SQLConf.get,
+        broadCastExchangePlans
+      )
+      assert(broadcastSideInnerJoin.get == BuildRight)
+    }
+  }
 }

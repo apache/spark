@@ -77,7 +77,7 @@ trait CodegenSupport extends SparkPlan {
   /**
    * Which SparkPlan is calling produce() of this one. It's itself for the first SparkPlan.
    */
-  protected var parent: CodegenSupport = null
+   var parent: CodegenSupport = null
 
   /**
    * Returns all the RDDs of InternalRow which generates the input rows.
