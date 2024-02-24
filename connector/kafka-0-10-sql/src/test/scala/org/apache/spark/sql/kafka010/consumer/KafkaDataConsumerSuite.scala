@@ -35,10 +35,12 @@ import org.apache.spark.kafka010.KafkaDelegationTokenTest
 import org.apache.spark.sql.kafka010.{KafkaTestUtils, RecordBuilder}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ResetSystemProperties
 
 class KafkaDataConsumerSuite
   extends SharedSparkSession
   with PrivateMethodTester
+  with ResetSystemProperties
   with KafkaDelegationTokenTest {
 
   protected var testUtils: KafkaTestUtils = _
