@@ -372,6 +372,34 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       path.startsWith(FILE_UPLOAD_PATH) && path.endsWith("some-local-jar.jar")))
   }
 
+  test("SPARK-XXXXXX: User can override the minimum memory overhead of the driver") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(DRIVER_CORES, 2)
+      .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
+      .set(DRIVER_MEMORY.key, "256M")
+      .set(DRIVER_MIN_MEMORY_OVERHEAD, 500L)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
+    val kubernetesConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = CUSTOM_DRIVER_LABELS,
+      environment = DRIVER_ENVS,
+      annotations = DRIVER_ANNOTATIONS)
+
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
+    val basePod = SparkPod.initialPod()
+    val configuredPod = featureStep.configurePod(basePod)
+
+    val resourceRequirements = configuredPod.container.getResources
+    val requests = resourceRequirements.getRequests.asScala
+    assert(amountAndFormat(requests("cpu")) === "2")
+    assert(amountAndFormat(requests("memory")) === "756Mi")
+    val limits = resourceRequirements.getLimits.asScala
+    assert(amountAndFormat(limits("memory")) === "756Mi")
+    assert(amountAndFormat(limits("cpu")) === "4")
+  }
+
   def containerPort(name: String, portNumber: Int): ContainerPort =
     new ContainerPortBuilder()
       .withName(name)

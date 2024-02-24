@@ -524,6 +524,34 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podConfigured1.container.getPorts.contains(ports))
   }
 
+ //todo(JCORREIA): come back when this is actually fixed lmao
+  test("SPARK-XXXXXX: User can override the minimum memory overhead of the executor") {
+    baseConf.set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+    val conf = newExecutorConf()
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    // memory = 1024M  + 500M (overriden from the default 384).
+    assert(amountAndFormat(executor.container.getResources
+      .getLimits.get("memory")) === "1524Mi")
+  }
+
+  test("SPARK-XXXXXX: Explicit overhead takes precedence over minimum overhead") {
+    // baseConf.set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+    baseConf.set(EXECUTOR_MEMORY_OVERHEAD, 1L)
+    val conf = newExecutorConf()
+    val step = new   BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    // memory = 1024M  + 500M (overriden from the default 384).
+    assert(amountAndFormat(executor.container.getResources
+      .getLimits.get("memory")) === "1408Mi")
+  }
+
+
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
