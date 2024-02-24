@@ -524,33 +524,44 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podConfigured1.container.getPorts.contains(ports))
   }
 
- //todo(JCORREIA): come back when this is actually fixed lmao
   test("SPARK-XXXXXX: User can override the minimum memory overhead of the executor") {
-    baseConf.set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
-    val conf = newExecutorConf()
+    // main app resource, overriding the minimum oberhead to 500Mb
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+
+    val conf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf)
+    ResourceProfile.clearDefaultProfile()
+    val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
-      defaultProfile)
+      resourceProfile)
     val executor = step.configurePod(SparkPod.initialPod())
 
-    // memory = 1024M  + 500M (overriden from the default 384).
+    // memory = 1024M (default) + 500B (minimum overhead got overridden from the 384Mib)
     assert(amountAndFormat(executor.container.getResources
       .getLimits.get("memory")) === "1524Mi")
   }
 
   test("SPARK-XXXXXX: Explicit overhead takes precedence over minimum overhead") {
-    // baseConf.set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
-    baseConf.set(EXECUTOR_MEMORY_OVERHEAD, 1L)
-    val conf = newExecutorConf()
-    val step = new   BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
-      defaultProfile)
+    // main app resource, explicit overhead of 150MiB
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(EXECUTOR_MEMORY_OVERHEAD, 150L)
+      .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+
+    val conf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf)
+    ResourceProfile.clearDefaultProfile()
+    val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
+      resourceProfile)
     val executor = step.configurePod(SparkPod.initialPod())
 
-    // memory = 1024M  + 500M (overriden from the default 384).
+    // memory = 1024M  + 150MB (overrides any other overhead calculation)
     assert(amountAndFormat(executor.container.getResources
-      .getLimits.get("memory")) === "1408Mi")
+      .getLimits.get("memory")) === "1174Mi")
   }
-
-
 
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {

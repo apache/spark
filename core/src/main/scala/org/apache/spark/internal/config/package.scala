@@ -375,7 +375,6 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
-
   private[spark] val EXECUTOR_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.executor.memoryOverheadFactor")
       .doc("Fraction of executor memory to be allocated as additional non-heap memory per " +

@@ -775,6 +775,39 @@ class YarnAllocatorSuite extends SparkFunSuite
     }
   }
 
+  test("SPARK-XXXXXX: User can override the minimum memory overhead of the executor") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
+    try {
+      sparkConf
+        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
+      assert(memory == (executorMemory + 500))
+    } finally {
+      sparkConf
+        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 384L)
+    }
+  }
+
+  test("SPARK-XXXXXX: Explicit overhead takes precedence over minimum overhead") {
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
+    try {
+      sparkConf
+        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 500L)
+        .set(EXECUTOR_MEMORY_OVERHEAD, 100L)
+      val (handler, _) = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemorySize
+      assert(memory == (executorMemory + 100))
+    } finally {
+      sparkConf
+        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 384L)
+    }
+  }
+
   test("Test YARN container decommissioning") {
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
     val rmClientSpy = spy[AMRMClient[ContainerRequest]](rmClient)
@@ -870,4 +903,6 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumExecutorsRunning should be(0)
     handler.getNumExecutorsStarting should be(0)
   }
+
+
 }

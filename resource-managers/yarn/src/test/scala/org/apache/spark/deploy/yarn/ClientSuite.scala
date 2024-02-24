@@ -729,7 +729,7 @@ class ClientSuite extends SparkFunSuite
         appContext.getApplicationName should be("foo-test-app")
         // flag should only work for cluster mode
         if (deployMode=="cluster") {
-          // 1Gb driver default + 500 overriden minimum default
+          // 1Gb driver default + 500 overridden minimum default overhead
           appContext.getResource should be(Resource.newInstance(1524L, 1))
         } else {
           // 512 driver default (non-cluster) + 384 overhead default
