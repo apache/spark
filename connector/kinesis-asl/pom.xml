@@ -117,7 +117,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${aws.kinesis.client.guava.version}</version>
+      <version>${connect.guava.version}</version>
     </dependency>
 
     <!--
