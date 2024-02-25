@@ -57,7 +57,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>${aws.kinesis.client.guava.version}</version>
+      <version>${connect.guava.version}</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
@@ -168,6 +168,9 @@
           <relocation>
             <pattern>com.google.common</pattern>
             <shadedPattern>${spark.shade.packageName}.kinesis.guava</shadedPattern>
+            <includes>
+              <include>com.google.common.**</include>
+            </includes>
           </relocation>
           <relocation>
             <pattern>software.amazon.awssdk</pattern>

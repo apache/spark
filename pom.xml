@@ -158,8 +158,6 @@
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.3</avro.version>
     <aws.kinesis.client.version>2.5.2</aws.kinesis.client.version>
-    <!-- Should be consistent with Kinesis client dependency -->
-    <aws.kinesis.client.guava.version>32.1.1-jre</aws.kinesis.client.guava.version>
     <mbknor.jsonschema.version>1.0.39</mbknor.jsonschema.version>
     <aws.java.sdk.v2.version>2.24.6</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
