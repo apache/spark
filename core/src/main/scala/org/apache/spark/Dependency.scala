@@ -214,9 +214,10 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   if (numberOfShuffleBlocks > SHUFFLE_BLOCK_NUMBER_WARNING_THRESHOLD) {
     logWarning(
-      s"The number of shuffle blocks (${numberOfShuffleBlocks}) for ${_rdd} with ${numPartitions} " + 
-      "partitions is possibly too large, this could cause the driver to crash with an out-of-memory " + 
-      "error. Consider decreasing the number of partitions in this shuffle stage."
+      s"The number of shuffle blocks (${numberOfShuffleBlocks}) for ${_rdd} " +
+        "with ${numPartitions} partitions is possibly too large, " +
+        "this could cause the driver to crash with an out-of-memory error. " +
+        "Consider decreasing the number of partitions in this shuffle stage."
     )
   }
 
