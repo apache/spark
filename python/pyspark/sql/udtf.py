@@ -123,16 +123,17 @@ class SelectedColumn:
     alias : str, default ''
         If non-empty, this is the alias for the column or expression as visible from the UDTF's
         'eval' method. This is required if the expression is not a simple column reference.
-    forwardHidden : bool, default False
-        If true, the UDTF is specifying for Catalyst to pass the column or expression through to the
-        output table without making it visible to the UDTF's 'eval' method. The output column will
-        have the name specified in the 'alias' field, if non-empty, or the name of the simple column
-        reference otherwise.
+    forwardToOutputTable : bool, default False
+        If true, the UDTF is specifying to Catalyst a metadata property wherein the function call
+        will copy the result of evaluating this column or expression from the most recent input row
+        through to the output table, to a column with the same name specified in the 'alias' field
+        (or the name of the simple column reference otherwise). This is useful because it lets the
+        optimizer push filters or other operations down through the UDTF call to the input table.
     """
 
     name: str
     alias: str = ""
-    forwardHidden: bool = False
+    forwardToOutputTable: bool = False
 
 
 # Note: this class is a "dataclass" for purposes of convenience, but it is not marked "frozen"

@@ -661,7 +661,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
       select = "SelectedColumn(\"partition_col\")")
 
 
-  object UDTFForwardHiddenColumnsSimple extends TestUDTF {
+  object UDTFForwardColumnsToOutputTableSimple extends TestUDTF {
     val pythonScript: String =
       s"""
          |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, SelectedColumn
@@ -677,7 +677,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |            select=[
          |              SelectedColumn(
          |                name="input",
-         |                forwardHidden=True)
+         |                forwardToOutputTable=True)
          |            ])
          |
          |    def eval(self, *args):
@@ -1241,7 +1241,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFPartitionByOrderBySelectExpr,
     UDTFPartitionByOrderBySelectComplexExpr,
     UDTFPartitionByOrderBySelectExprOnlyPartitionColumn,
-    UDTFForwardHiddenColumnsSimple,
+    UDTFForwardColumnsToOutputTableSimple,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,
     InvalidAnalyzeMethodWithPartitionByNoInputTable,

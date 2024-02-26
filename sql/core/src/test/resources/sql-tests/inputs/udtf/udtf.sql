@@ -144,7 +144,7 @@ SELECT * FROM UDTFWithSinglePartition(1, initial_count => 2);
 SELECT * FROM UDTFWithSinglePartition(initial_count => 1, initial_count => 2);
 SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2));
 -- The following UDTF calls exercise forwarding hidden input columns to the output table.
-SELECT * FROM UDTFForwardHiddenColumnsSimple(TABLE(t2));
+SELECT * FROM UDTFForwardColumnsToOutputTableSimple(TABLE(t2));
 
 -- cleanup
 DROP VIEW t1;

@@ -2404,7 +2404,7 @@ class BaseUDTFTestsMixin:
                     + [Row(partition_col=42, count=3, total=3, last=None)],
                 )
 
-    def test_udtf_with_forward_hidden_columns(self):
+    def test_udtf_with_forward_columns(self):
         @udtf
         class TestUDTF:
             @staticmethod
@@ -2419,7 +2419,7 @@ class BaseUDTFTestsMixin:
                             name="a"),
                         SelectedColumn(
                             name="b",
-                            forwardHidden=True)
+                            forwardToOutputTable=True)
                     ])
 
             def eval(self, row: Row):
