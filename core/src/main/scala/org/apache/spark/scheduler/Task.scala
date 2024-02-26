@@ -93,6 +93,10 @@ private[spark] abstract class Task[T](
 
     require(cpus > 0, "CPUs per task should be > 0")
 
+    // Use the blockManager at start of the task through out the task - particularly in
+    // case of local mode, a SparkEnv can be initialized when spark context is restarted
+    // and we want to ensure the right env and block manager is used (given lazy initialization of
+    // block manager)
     val blockManager = SparkEnv.get.blockManager
     blockManager.registerTask(taskAttemptId)
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
