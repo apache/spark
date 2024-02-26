@@ -68,17 +68,17 @@ class ValueStateImpl[S](
     if (retRow != null) {
       val resState = stateTypesEncoder.decodeValue[S](retRow)
       ttlMode match {
-        case _ =>
+        case NoTTL =>
           resState
-//        case ProcessingTimeTTL =>
-//          val ttlForVal = retRow.getLong(1)
-//          if (ttlForVal <= System.currentTimeMillis()) {
-//            logDebug(s"Value is expired for state $stateName")
-//            store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
-//            null.asInstanceOf[S]
-//          } else {
-//            resState
-//          }
+        case ProcessingTimeTTL =>
+          val ttlForVal = retRow.getLong(1)
+          if (ttlForVal <= System.currentTimeMillis()) {
+            logDebug(s"Value is expired for state $stateName")
+            store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+            null.asInstanceOf[S]
+          } else {
+            resState
+          }
       }
     } else {
       null.asInstanceOf[S]

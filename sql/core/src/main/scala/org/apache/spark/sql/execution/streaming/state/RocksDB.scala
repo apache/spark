@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 import java.util.Locale
-import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
@@ -27,7 +26,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.ref.WeakReference
 import scala.util.Try
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.json4s.{Formats, NoTypeHints}
@@ -40,8 +38,7 @@ import org.apache.spark.{SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
-
+import org.apache.spark.util.{NextIterator, Utils}
 
 /**
  * Class representing a RocksDB instance that checkpoints version of data to DFS.
@@ -159,40 +156,6 @@ class RocksDB(
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
-
-  // Background thread class that runs every X seconds to perform TTL cleanup
-  // using a DaemonSingleThreadScheduledExecutor
-  private var ttlCleanupThread: RocksDBTTLThread = _
-
-  class RocksDBTTLThread(store: StateStore,
-    rocksDB: RocksDB, ttlFunc: (StateStore, RocksDB) => Unit, periodMs: Long) {
-    private val executor =
-      ThreadUtils.newDaemonSingleThreadScheduledExecutor("rocksdb-ttl-cleanup-thread")
-
-    private val runnable = new Runnable {
-      override def run(): Unit = {
-        try {
-          logError(s"In ttl thread ${Thread.currentThread().getName}")
-          ttlFunc(store, rocksDB)
-        } catch {
-          case NonFatal(e) =>
-            logWarning("Error running maintenance thread", e)
-            throw e
-        }
-      }
-    }
-
-    private val future: ScheduledFuture[_] = executor.scheduleAtFixedRate(
-      runnable, periodMs, periodMs, TimeUnit.MILLISECONDS)
-
-    def stop(): Unit = {
-      future.cancel(false)
-      executor.shutdown()
-    }
-
-    def isRunning: Boolean = !future.isDone
-  }
-
   /**
    * Load the given version of data in a native RocksDB instance.
    * Note that this will copy all the necessary file from DFS to local disk as needed,
@@ -245,13 +208,6 @@ class RocksDB(
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
     }
     this
-  }
-
-  // method to startTTLFunc that takes a function as a parameter,
-  // which takes this, and StateStore, as a parameter
-  def startTTLFunc(store: StateStore, ttlFunc: (StateStore, RocksDB) => Unit): Unit = {
-    logError("starting ttlFunc")
-    ttlCleanupThread = new RocksDBTTLThread(store, this, ttlFunc, 100)
   }
 
   /**
@@ -507,15 +463,10 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(store: StateStore = null,
-   ttlFunc: (StateStore, RocksDB) => Unit = (_, _) => ()): Long = {
-    while (ttlCleanupThread.isRunning) {
-      ttlCleanupThread.stop()
-    }
-    logError("In Commit")
+  def commit(): Long = {
     val newVersion = loadedVersion + 1
     try {
-      // ttlFunc(store, this)
+
       logInfo(s"Flushing updates for $newVersion")
 
       var compactTimeMs = 0L
@@ -786,19 +737,6 @@ class RocksDB(
   private def release(): Unit = acquireLock.synchronized {
     acquiredThreadInfo = null
     acquireLock.notifyAll()
-  }
-
-  // function doTTL that takes a function as a parameter (which takes this as a param),
-  // acquires a lock, executes the function, and releases the lock.
-  def doTTL(f: RocksDB => Unit): Unit = {
-    try {
-      acquire()
-      if (db != null) {
-        f(this)
-      }
-    } finally {
-      release()
-    }
   }
 
   private def getDBProperty(property: String): Long = {

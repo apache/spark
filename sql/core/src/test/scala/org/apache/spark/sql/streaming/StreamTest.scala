@@ -101,7 +101,6 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
    */
   object AddData {
     def apply[A](source: MemoryStreamBase[A], data: A*): AddDataMemory[A] = {
-      Thread.sleep(2000)
       AddDataMemory(source, data)
     }
   }

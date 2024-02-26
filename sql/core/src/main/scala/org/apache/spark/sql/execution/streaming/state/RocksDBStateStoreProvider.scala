@@ -21,14 +21,12 @@ import java.io._
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -163,7 +161,7 @@ private[sql] class RocksDBStateStoreProvider
     override def commit(): Long = synchronized {
       try {
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
-        val newVersion = rocksDB.commit(this, ttlFunc)
+        val newVersion = rocksDB.commit()
         state = COMMITTED
         logInfo(s"Committed $newVersion for $id")
         newVersion
@@ -302,42 +300,10 @@ private[sql] class RocksDBStateStoreProvider
         throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
       }
       rocksDB.load(version)
-      val store = new RocksDBStateStore(version)
-      rocksDB.startTTLFunc(store, ttlFunc)
-      store
+      new RocksDBStateStore(version)
     }
     catch {
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
-    }
-  }
-
-  def ttlFunc(store: StateStore, rocksDB: RocksDB): Unit = {
-    logError(s"inside ttlFunc from thread ${Thread.currentThread().getName}")
-    val ttlEncoder = keyValueEncoderMap.get("ttl")
-    val expiredKeyStateNames =
-      rocksDB.iterator("ttl").flatMap { kv =>
-        val key = ttlEncoder._1.decodeKey(kv.key)
-        val ttl = key.getLong(0)
-        if (ttl <= System.currentTimeMillis()) {
-          Some(key)
-        } else {
-          None
-        }
-      }
-    expiredKeyStateNames.foreach { keyStateName =>
-      store.remove(keyStateName, "ttl")
-      val stateName = SerializationUtils.deserialize(
-        keyStateName.getBinary(1)).asInstanceOf[String]
-      val groupingKey = keyStateName.getBinary(2)
-      val keyRow = StateKeyValueRowSchema.encodeGroupingKeyBytes(groupingKey)
-      val row = store.get(keyRow, stateName)
-      if (row != null) {
-        val ttl = row.getLong(1)
-        if (ttl <= System.currentTimeMillis()) {
-          logError(s"Removing state from thread ${Thread.currentThread().getName}")
-          store.remove(keyRow, stateName)
-        }
-      }
     }
   }
 
