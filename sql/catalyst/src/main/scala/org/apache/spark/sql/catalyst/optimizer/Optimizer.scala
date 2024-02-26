@@ -1814,6 +1814,31 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         filter
       }
 
+    case filter @ Filter(condition, evalUDTF: BaseEvalPythonUDTF) =>
+      // Figure out which deterministic conjuncts refer only to output attributes that the UDTF
+      // marked as forwarded directly from the input table. We can safely push these down.
+      val attributeMap = evalUDTF.getForwardColumnAttributeMap
+      val (pushDown, stayUp) =
+        splitConjunctivePredicates(condition)
+          .partition { predicate: Expression =>
+            predicate.deterministic &&
+              predicate.references.subsetOf(AttributeSet(attributeMap.keys))
+          }
+      if (pushDown.nonEmpty) {
+        val newCondition = pushDown.reduceLeft(And).transform {
+          case a: Attribute => attributeMap.getOrElse(a, a)
+        }
+        Filter(
+          condition = stayUp.reduceLeft(And),
+          child = evalUDTF.withNewChildren(
+            Seq(Filter(
+              condition = newCondition,
+              child = evalUDTF.child)))
+        )
+      } else {
+        filter
+      }
+
     case filter @ Filter(_, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>

@@ -1074,21 +1074,8 @@ SELECT * FROM UDTFForwardColumnsToOutputTableSimple(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
-  "sqlState" : "38000",
-  "messageParameters" : {
-    "msg" : "Traceback (most recent call last):\n  File \"/Users/Daniel.Tenedorio/spark-2/python/lib/pyspark.zip/pyspark/sql/worker/analyze_udtf.py\", line 145, in main\n    result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]\n  File \"<string>\", line 13, in analyze\nTypeError: __init__() got an unexpected keyword argument 'forwardToOutputTable'"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 62,
-    "fragment" : "UDTFForwardColumnsToOutputTableSimple(TABLE(t2))"
-  } ]
-}
+org.apache.spark.api.python.PythonException
+pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_RETURN_SCHEMA_MISMATCH] The number of columns in the result does not match the specified schema. Expected column count: 2, Actual column count: 1. Please make sure the values returned by the 'eval' method have the same number of columns as specified in the output schema.
 
 
 -- !query

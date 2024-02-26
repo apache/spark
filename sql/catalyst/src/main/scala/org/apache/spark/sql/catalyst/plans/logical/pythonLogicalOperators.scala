@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
+import scala.collection.mutable
+
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSeq, AttributeSet, Expression, NamedExpression, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
 
@@ -209,6 +212,25 @@ trait BaseEvalPythonUDTF extends UnaryNode {
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EVAL_PYTHON_UDTF)
+
+  /**
+   * Here we figure out which output attributes that the UDTF marked as forwarded directly from the
+   * input table, and return a map from the original attribute to the corresponding output.
+   */
+  lazy val getForwardColumnAttributeMap: AttributeMap[Attribute] = {
+    val map = mutable.Map.empty[Attribute, Attribute]
+    udtf.forwardedColumnIndexes.foreach { indexes: Seq[PythonUDTF.ColumnIndex] =>
+      val outputAttributes: AttributeSeq = AttributeSeq.fromNormalOutput(resultAttrs)
+      indexes.foreach { index: PythonUDTF.ColumnIndex =>
+        val childAttribute: Attribute = requiredChildOutput(index.index)
+        outputAttributes.resolve(Seq(childAttribute.name), SQLConf.get.resolver)
+          .map { n: NamedExpression =>
+            map.update(childAttribute, n.toAttribute)
+        }
+      }
+    }
+    AttributeMap(map.toMap)
+  }
 }
 
 /**
