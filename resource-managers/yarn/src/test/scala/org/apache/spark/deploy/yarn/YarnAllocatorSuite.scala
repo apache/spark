@@ -128,6 +128,9 @@ class YarnAllocatorSuite extends SparkFunSuite
       .set(EXECUTOR_CORES, 5)
       .set(EXECUTOR_MEMORY, 2048L)
 
+    // scalastyle:off println
+    sparkConfClone.getAll.foreach(println)
+
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
     }
@@ -772,6 +775,7 @@ class YarnAllocatorSuite extends SparkFunSuite
       assert(memory == (executorMemory * 1.4).toLong)
     } finally {
       sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.1)
+      sparkConf.remove(EXECUTOR_MEMORY_OVERHEAD)
     }
   }
 
@@ -787,7 +791,7 @@ class YarnAllocatorSuite extends SparkFunSuite
       assert(memory == (executorMemory + 500))
     } finally {
       sparkConf
-        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 384L)
+        .remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
     }
   }
 
@@ -804,7 +808,7 @@ class YarnAllocatorSuite extends SparkFunSuite
       assert(memory == (executorMemory + 100))
     } finally {
       sparkConf
-        .set(EXECUTOR_MIN_MEMORY_OVERHEAD, 384L)
+        .remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
     }
   }
 
