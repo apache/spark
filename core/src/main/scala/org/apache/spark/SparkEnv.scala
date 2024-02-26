@@ -77,7 +77,7 @@ class SparkEnv (
   def shuffleManager: ShuffleManager = _shuffleManager
 
   // We initialize the MemoryManager later in SparkContext after DriverPlugin is loaded
-  // to allow the plugin to overwrite memory configurations
+  // to allow the plugin to overwrite executor memory configurations
   private var _memoryManager: MemoryManager = _
 
   def memoryManager: MemoryManager = _memoryManager
