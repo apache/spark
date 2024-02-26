@@ -101,9 +101,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
-  public static final int DEFAULT_COLLATION_ID = 0;
-  public static final int LOWERCASE_COLLATION_ID = 1;
-
   /**
    * Creates an UTF8String from byte array, which should be encoded in UTF-8.
    *
@@ -343,23 +340,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
-  public boolean contains(final UTF8String substring, int collationID) {
-    if (collationID == DEFAULT_COLLATION_ID) {
-      return this.contains(substring);
-    }
-    if (collationID == LOWERCASE_COLLATION_ID) {
+  public boolean contains(final UTF8String substring, int collationId) {
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().contains(substring.toLowerCase());
     }
-    // ICU collation support
-    if (substring.numChars() == 0) {
-      return true;
-    }
-    for (int i = 0; i <= numBytes - substring.numBytes; i++) {
-      if (matchAt(substring, i, collationID)) {
-        return true;
-      }
-    }
-    return false;
+    // TODO: ICU collation support
+    throw new UnsupportedOperationException(
+            "contains function is not yet supported for this collation type.");
   }
 
   /**
@@ -376,41 +363,35 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
-  private boolean matchAt(final UTF8String s, int pos, int collationID) {
+  private boolean matchAt(final UTF8String s, int pos, int collationId) {
     if (s.numBytes + pos > numBytes || pos < 0) {
       return false;
     }
-    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationID) == 0;
+    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
   }
 
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
 
-  public boolean startsWith(final UTF8String prefix, int collationID) {
-    if (collationID == DEFAULT_COLLATION_ID) {
-      return this.startsWith(prefix);
-    }
-    if (collationID == LOWERCASE_COLLATION_ID) {
+  public boolean startsWith(final UTF8String prefix, int collationId) {
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
     // ICU collation support
-    return matchAt(prefix, 0, collationID);
+    return matchAt(prefix, 0, collationId);
   }
 
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
   }
 
-  public boolean endsWith(final UTF8String suffix, int collationID) {
-    if (collationID == DEFAULT_COLLATION_ID) {
-      return this.endsWith(suffix);
-    }
-    if (collationID == LOWERCASE_COLLATION_ID) {
+  public boolean endsWith(final UTF8String suffix, int collationId) {
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
     // ICU collation support
-    return matchAt(suffix, numBytes - suffix.numBytes, collationID);
+    return matchAt(suffix, numBytes - suffix.numBytes, collationId);
   }
 
   /**

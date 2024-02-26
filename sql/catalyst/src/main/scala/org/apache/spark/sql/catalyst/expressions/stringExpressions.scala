@@ -21,9 +21,7 @@ import java.io.UnsupportedEncodingException
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
-
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
@@ -34,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -559,6 +557,19 @@ case class BinaryPredicate(override val prettyName: String, left: Expression, ri
   }
 }
 
+trait CollationCheck {
+  self: BinaryExpression =>
+  def checkCollationIds(): Int = {
+    val leftCollationId: Int = left.dataType.asInstanceOf[StringType].collationId
+    val rightCollationId: Int = right.dataType.asInstanceOf[StringType].collationId
+    if (leftCollationId != rightCollationId) {
+      throw new IllegalArgumentException(
+        "Function requires the same collation type for left and right strings.")
+    }
+    leftCollationId
+  }
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
@@ -585,14 +596,23 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class Contains(left: Expression, right: Expression) extends StringPredicate {
+case class Contains(left: Expression, right: Expression) extends StringPredicate
+  with CollationCheck {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    val collationID = right.dataType.asInstanceOf[StringType].collationId
-    l.contains(r, collationID)
+    val collationId = checkCollationIds()
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      l.contains(r)
+    } else {
+      l.contains(r, collationId)
+    }
   }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collationID = right.dataType.asInstanceOf[StringType].collationId
-    defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2, $collationID)")
+    val collationId = checkCollationIds()
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2, $collationId)")
+    }
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
@@ -626,15 +646,24 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
   }
 }
 
-case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
+case class StartsWith(left: Expression, right: Expression) extends StringPredicate
+  with CollationCheck {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    val collationID = right.dataType.asInstanceOf[StringType].collationId
-    l.startsWith(r, collationID)
+    val collationId = checkCollationIds()
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      l.startsWith(r)
+    } else {
+      l.startsWith(r, collationId)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collationID = right.dataType.asInstanceOf[StringType].collationId
-    defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2, $collationID)")
+    val collationId = checkCollationIds()
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2, $collationId)")
+    }
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -668,15 +697,24 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
+case class EndsWith(left: Expression, right: Expression) extends StringPredicate
+  with CollationCheck {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
-    val collationID = right.dataType.asInstanceOf[StringType].collationId
-    l.endsWith(r, collationID)
+    val collationId = checkCollationIds()
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      l.endsWith(r)
+    } else {
+      l.endsWith(r, collationId)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collationID = right.dataType.asInstanceOf[StringType].collationId
-    defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2, $collationID)")
+    val collationId = checkCollationIds()
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2, $collationId)")
+    }
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)

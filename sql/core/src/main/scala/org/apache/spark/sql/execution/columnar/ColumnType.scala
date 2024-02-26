@@ -19,12 +19,11 @@ package org.apache.spark.sql.execution.columnar
 
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
-
 import scala.annotation.tailrec
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalBinaryType, PhysicalBooleanType, PhysicalByteType, PhysicalCalendarIntervalType, PhysicalDataType, PhysicalDecimalType, PhysicalDoubleType, PhysicalFloatType, PhysicalIntegerType, PhysicalLongType, PhysicalMapType, PhysicalNullType, PhysicalShortType, PhysicalStringType, PhysicalStructType}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -492,7 +491,7 @@ private[columnar] trait DirectCopyColumnType[JvmType] extends ColumnType[JvmType
 }
 
 private[columnar] object STRING
-  extends NativeColumnType(PhysicalStringType(StringType.DEFAULT_COLLATION_ID), 8)
+  extends NativeColumnType(PhysicalStringType(CollationFactory.DEFAULT_COLLATION_ID), 8)
     with DirectCopyColumnType[UTF8String] {
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {

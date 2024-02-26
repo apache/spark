@@ -219,38 +219,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(StartsWith(Literal("\"quote"), Literal("\"quote")) :: Nil)
   }
 
-  test("StringComparison with Collation") {
-    val row = create_row("abc", null)
-    val c1 = $"a".string.at(0)
-
-    checkEvaluation(c1 contains "b", true, row)
-    checkEvaluation(c1 contains "B", false, row)
-    checkEvaluation(c1 contains Collate("b", "UCS_BASIC"), true, row)
-    checkEvaluation(c1 contains Collate("B", "UCS_BASIC"), false, row)
-    checkEvaluation(c1 contains Collate("b", "UCS_BASIC_LCASE"), true, row)
-    checkEvaluation(c1 contains Collate("B", "UCS_BASIC_LCASE"), true, row)
-    checkEvaluation(c1 contains Collate("b", "UNICODE_CI"), true, row)
-    checkEvaluation(c1 contains Collate("B", "UNICODE_CI"), true, row)
-
-    checkEvaluation(c1 startsWith "a", true, row)
-    checkEvaluation(c1 startsWith "A", false, row)
-    checkEvaluation(c1 startsWith Collate("a", "UCS_BASIC"), true, row)
-    checkEvaluation(c1 startsWith Collate("A", "UCS_BASIC"), false, row)
-    checkEvaluation(c1 startsWith Collate("a", "UCS_BASIC_LCASE"), true, row)
-    checkEvaluation(c1 startsWith Collate("A", "UCS_BASIC_LCASE"), true, row)
-    checkEvaluation(c1 startsWith Collate("a", "UNICODE_CI"), true, row)
-    checkEvaluation(c1 startsWith Collate("A", "UNICODE_CI"), true, row)
-
-    checkEvaluation(c1 endsWith "c", true, row)
-    checkEvaluation(c1 endsWith "C", false, row)
-    checkEvaluation(c1 endsWith Collate("c", "UCS_BASIC"), true, row)
-    checkEvaluation(c1 endsWith Collate("C", "UCS_BASIC"), false, row)
-    checkEvaluation(c1 endsWith Collate("c", "UCS_BASIC_LCASE"), true, row)
-    checkEvaluation(c1 endsWith Collate("C", "UCS_BASIC_LCASE"), true, row)
-    checkEvaluation(c1 endsWith Collate("c", "UNICODE_CI"), true, row)
-    checkEvaluation(c1 endsWith Collate("C", "UNICODE_CI"), true, row)
-  }
-
   test("Substring") {
     val row = create_row("example", "example".toArray.map(_.toByte))
 

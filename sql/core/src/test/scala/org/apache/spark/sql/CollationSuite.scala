@@ -289,6 +289,34 @@ class CollationSuite extends DatasourceV2SQLBase {
       assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
     }
   }
+
+  test("checkCollation throws exception for incompatible collationIds") {
+    val left = "abc" // collate with 'UNICODE_CI'
+    val right = "a" // collate with 'UNICODE'
+    var exception: IllegalArgumentException = null
+    // contains
+    exception = intercept[IllegalArgumentException] {
+      spark.sql(s"SELECT contains(collate('$left', 'UNICODE_CI')," +
+        s"collate('$right', 'UNICODE'))").collect()
+    }
+    assert(exception.getMessage.contains(
+      "Function requires the same collation type for left and right strings."))
+    // startsWith
+    exception = intercept[IllegalArgumentException] {
+      spark.sql(s"SELECT startsWith(collate('$left', 'UNICODE_CI')," +
+        s"collate('$right', 'UNICODE'))").collect()
+    }
+    assert(exception.getMessage.contains(
+      "Function requires the same collation type for left and right strings."))
+    // endsWith
+    exception = intercept[IllegalArgumentException] {
+      spark.sql(s"SELECT endsWith(collate('$left', 'UNICODE_CI')," +
+        s"collate('$right', 'UNICODE'))").collect()
+    }
+    assert(exception.getMessage.contains(
+      "Function requires the same collation type for left and right strings."))
+  }
+
   test("Support contains string expression with Collation") {
     // Test 'contains' with different collations
     var listLeft: List[String] = List()
@@ -324,8 +352,6 @@ class CollationSuite extends DatasourceV2SQLBase {
       checkAnswer(sql("SELECT contains(collate('" + left + "', 'UCS_BASIC'), collate('" +
         right + "', 'UCS_BASIC'))"), Row(expectedAnswer))
       // UNICODE
-      checkAnswer(sql("SELECT contains('" + left + "', collate('" +
-        right + "', 'UNICODE'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT contains(collate('" + left + "', 'UNICODE'), collate('" +
         right + "', 'UNICODE'))"), Row(expectedAnswer))
     }
@@ -350,19 +376,19 @@ class CollationSuite extends DatasourceV2SQLBase {
     } {
       val expectedAnswer = listResult(index_left * listRight.length + index_right)
       // UCS_BASIC_LCASE
-      checkAnswer(sql("SELECT contains('" + left + "', collate('" +
-        right + "', 'UCS_BASIC_LCASE'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT contains(collate('" + left + "', 'UCS_BASIC_LCASE'), collate('" +
         right + "', 'UCS_BASIC_LCASE'))"), Row(expectedAnswer))
       // UNICODE_CI
-      checkAnswer(sql("SELECT contains('" + left + "', collate('" +
-        right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
-      checkAnswer(sql("SELECT contains(collate('" + left + "', 'UNICODE_CI'), collate('" +
-        right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
+      val exception = intercept[UnsupportedOperationException] {
+        spark.sql(s"SELECT contains(collate('$left', 'UNICODE_CI')," +
+          s"collate('$right', 'UNICODE_CI'))").collect()
+      }
+      assert(exception.getMessage.contains(
+        "contains function is not yet supported for this collation type."))
     }
   }
 
-    test("Support startsWith string expression with Collation") {
+  test("Support startsWith string expression with Collation") {
     // Test 'startsWith' with different collations
     var listLeft: List[String] = List()
     var listRight: List[String] = List()
@@ -397,8 +423,6 @@ class CollationSuite extends DatasourceV2SQLBase {
       checkAnswer(sql("SELECT startswith(collate('" + left + "', 'UCS_BASIC'), collate('" +
         right + "', 'UCS_BASIC'))"), Row(expectedAnswer))
       // UNICODE
-      checkAnswer(sql("SELECT startswith('" + left + "', collate('" +
-        right + "', 'UNICODE'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT startswith(collate('" + left + "', 'UNICODE'), collate('" +
         right + "', 'UNICODE'))"), Row(expectedAnswer))
     }
@@ -423,13 +447,9 @@ class CollationSuite extends DatasourceV2SQLBase {
     } {
       val expectedAnswer = listResult(index_left * listRight.length + index_right)
       // UCS_BASIC_LCASE
-      checkAnswer(sql("SELECT startswith('" + left + "', collate('" +
-        right + "', 'UCS_BASIC_LCASE'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT startswith(collate('" + left + "', 'UCS_BASIC_LCASE'), collate('" +
         right + "', 'UCS_BASIC_LCASE'))"), Row(expectedAnswer))
       // UNICODE_CI
-      checkAnswer(sql("SELECT startswith('" + left + "', collate('" +
-        right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT startswith(collate('" + left + "', 'UNICODE_CI'), collate('" +
         right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
     }
@@ -470,8 +490,6 @@ class CollationSuite extends DatasourceV2SQLBase {
       checkAnswer(sql("SELECT endswith(collate('" + left + "', 'UCS_BASIC'), collate('" +
         right + "', 'UCS_BASIC'))"), Row(expectedAnswer))
       // UNICODE
-      checkAnswer(sql("SELECT endswith('" + left + "', collate('" +
-        right + "', 'UNICODE'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT endswith(collate('" + left + "', 'UNICODE'), collate('" +
         right + "', 'UNICODE'))"), Row(expectedAnswer))
     }
@@ -496,13 +514,9 @@ class CollationSuite extends DatasourceV2SQLBase {
     } {
       val expectedAnswer = listResult(index_left * listRight.length + index_right)
       // UCS_BASIC_LCASE
-      checkAnswer(sql("SELECT endswith('" + left + "', collate('" +
-        right + "', 'UCS_BASIC_LCASE'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT endswith(collate('" + left + "', 'UCS_BASIC_LCASE'), collate('" +
         right + "', 'UCS_BASIC_LCASE'))"), Row(expectedAnswer))
       // UNICODE_CI
-      checkAnswer(sql("SELECT endswith('" + left + "', collate('" +
-        right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
       checkAnswer(sql("SELECT endswith(collate('" + left + "', 'UNICODE_CI'), collate('" +
         right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
     }
