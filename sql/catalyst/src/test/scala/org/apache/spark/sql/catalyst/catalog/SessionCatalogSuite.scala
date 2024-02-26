@@ -244,8 +244,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("list databases with pattern") {
     withBasicCatalog { catalog =>
       assert(catalog.listDatabases("db").toSet == Set.empty)
-      assert(catalog.listDatabases("db*").toSet == Set("db1", "db2", "db3"))
-      assert(catalog.listDatabases("*1").toSet == Set("db1"))
+      assert(catalog.listDatabases("db%").toSet == Set("db1", "db2", "db3"))
+      assert(catalog.listDatabases("%1").toSet == Set("db1"))
       assert(catalog.listDatabases("db2").toSet == Set("db2"))
     }
   }
@@ -867,17 +867,17 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val tempTable = Range(1, 10, 2, 10)
       createTempView(catalog, "tbl1", tempTable, overrideIfExists = false)
       createTempView(catalog, "tbl4", tempTable, overrideIfExists = false)
-      assert(catalog.listTables("db1", "*").toSet == catalog.listTables("db1").toSet)
-      assert(catalog.listTables("db2", "*").toSet == catalog.listTables("db2").toSet)
-      assert(catalog.listTables("db2", "tbl*").toSet ==
+      assert(catalog.listTables("db1", "%").toSet == catalog.listTables("db1").toSet)
+      assert(catalog.listTables("db2", "%").toSet == catalog.listTables("db2").toSet)
+      assert(catalog.listTables("db2", "tbl%").toSet ==
         Set(TableIdentifier("tbl1"),
           TableIdentifier("tbl4"),
           TableIdentifier("tbl1", Some("db2")),
           TableIdentifier("tbl2", Some("db2"))))
-      assert(catalog.listTables("db2", "*1").toSet ==
+      assert(catalog.listTables("db2", "%1").toSet ==
         Set(TableIdentifier("tbl1"), TableIdentifier("tbl1", Some("db2"))))
       intercept[NoSuchDatabaseException] {
-        catalog.listTables("unknown_db", "*")
+        catalog.listTables("unknown_db", "%")
       }
     }
   }
@@ -891,24 +891,24 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       createTempView(catalog, "temp_view1", tempTable, overrideIfExists = false)
       createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
 
-      assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "*").toSet)
-      assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "*", true).toSet)
+      assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "%").toSet)
+      assert(catalog.listTables("mydb").toSet == catalog.listTables("mydb", "%", true).toSet)
       assert(catalog.listTables("mydb").toSet ==
-        catalog.listTables("mydb", "*", false).toSet ++ catalog.listLocalTempViews("*"))
-      assert(catalog.listTables("mydb", "*", true).toSet ==
+        catalog.listTables("mydb", "%", false).toSet ++ catalog.listLocalTempViews("%"))
+      assert(catalog.listTables("mydb", "%", true).toSet ==
         Set(TableIdentifier("tbl1", Some("mydb")),
           TableIdentifier("tbl2", Some("mydb")),
           TableIdentifier("temp_view1"),
           TableIdentifier("temp_view4")))
-      assert(catalog.listTables("mydb", "*", false).toSet ==
+      assert(catalog.listTables("mydb", "%", false).toSet ==
         Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
-      assert(catalog.listTables("mydb", "tbl*", true).toSet ==
+      assert(catalog.listTables("mydb", "tbl%", true).toSet ==
         Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
-      assert(catalog.listTables("mydb", "tbl*", false).toSet ==
+      assert(catalog.listTables("mydb", "tbl%", false).toSet ==
         Set(TableIdentifier("tbl1", Some("mydb")), TableIdentifier("tbl2", Some("mydb"))))
-      assert(catalog.listTables("mydb", "temp_view*", true).toSet ==
+      assert(catalog.listTables("mydb", "temp_view%", true).toSet ==
         Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
-      assert(catalog.listTables("mydb", "temp_view*", false).toSet == Set.empty)
+      assert(catalog.listTables("mydb", "temp_view%", false).toSet == Set.empty)
     }
   }
 
@@ -917,11 +917,11 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val tempTable = Range(1, 10, 2, 10)
       createTempView(catalog, "temp_view1", tempTable, overrideIfExists = false)
       createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
-      assert(catalog.listLocalTempViews("*").toSet ==
+      assert(catalog.listLocalTempViews("%").toSet ==
         Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
-      assert(catalog.listLocalTempViews("temp_view*").toSet ==
+      assert(catalog.listLocalTempViews("temp_view%").toSet ==
         Set(TableIdentifier("temp_view1"), TableIdentifier("temp_view4")))
-      assert(catalog.listLocalTempViews("*1").toSet == Set(TableIdentifier("temp_view1")))
+      assert(catalog.listLocalTempViews("%1").toSet == Set(TableIdentifier("temp_view1")))
       assert(catalog.listLocalTempViews("does_not_exist").toSet == Set.empty)
     }
   }
@@ -933,15 +933,15 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       createTempView(catalog, "temp_view4", tempTable, overrideIfExists = false)
       createGlobalTempView(catalog, "global_temp_view1", tempTable, overrideIfExists = false)
       createGlobalTempView(catalog, "global_temp_view2", tempTable, overrideIfExists = false)
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "*").toSet ==
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "%").toSet ==
         Set(TableIdentifier("temp_view1"),
           TableIdentifier("temp_view4"),
           TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
           TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "*temp_view1").toSet ==
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "%temp_view1").toSet ==
         Set(TableIdentifier("temp_view1"),
           TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database))))
-      assert(catalog.listTables(catalog.globalTempViewManager.database, "global*").toSet ==
+      assert(catalog.listTables(catalog.globalTempViewManager.database, "global%").toSet ==
         Set(TableIdentifier("global_temp_view1", Some(catalog.globalTempViewManager.database)),
           TableIdentifier("global_temp_view2", Some(catalog.globalTempViewManager.database))))
     }
@@ -1534,11 +1534,11 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     withEmptyCatalog { catalog =>
       catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
       catalog.createFunction(newFunc("myfunc", Some("mydb")), ignoreIfExists = false)
-      assert(catalog.externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
+      assert(catalog.externalCatalog.listFunctions("mydb", "%").toSet == Set("myfunc"))
       // Create function without explicitly specifying database
       catalog.setCurrentDatabase("mydb")
       catalog.createFunction(newFunc("myfunc2"), ignoreIfExists = false)
-      assert(catalog.externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc", "myfunc2"))
+      assert(catalog.externalCatalog.listFunctions("mydb", "%").toSet == Set("myfunc", "myfunc2"))
     }
   }
 
@@ -1621,7 +1621,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.isTemporaryFunction(FunctionIdentifier("temp1")))
 
       // Returns false when the function is permanent
-      assert(catalog.externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
+      assert(catalog.externalCatalog.listFunctions("db2", "%").toSet == Set("func1"))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("func1", Some("db2"))))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("db2.func1")))
       catalog.setCurrentDatabase("db2")
@@ -1672,16 +1672,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop function") {
     withBasicCatalog { catalog =>
-      assert(catalog.externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
+      assert(catalog.externalCatalog.listFunctions("db2", "%").toSet == Set("func1"))
       catalog.dropFunction(
         FunctionIdentifier("func1", Some("db2")), ignoreIfNotExists = false)
-      assert(catalog.externalCatalog.listFunctions("db2", "*").isEmpty)
+      assert(catalog.externalCatalog.listFunctions("db2", "%").isEmpty)
       // Drop function without explicitly specifying database
       catalog.setCurrentDatabase("db2")
       catalog.createFunction(newFunc("func2", Some("db2")), ignoreIfExists = false)
-      assert(catalog.externalCatalog.listFunctions("db2", "*").toSet == Set("func2"))
+      assert(catalog.externalCatalog.listFunctions("db2", "%").toSet == Set("func2"))
       catalog.dropFunction(FunctionIdentifier("func2"), ignoreIfNotExists = false)
-      assert(catalog.externalCatalog.listFunctions("db2", "*").isEmpty)
+      assert(catalog.externalCatalog.listFunctions("db2", "%").isEmpty)
     }
   }
 
@@ -1781,16 +1781,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         funcMeta1, overrideIfExists = false, functionBuilder = Some(tempFunc1))
       catalog.registerFunction(
         funcMeta2, overrideIfExists = false, functionBuilder = Some(tempFunc2))
-      assert(catalog.listFunctions("db1", "*").map(_._1).toSet ==
+      assert(catalog.listFunctions("db1", "%").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
           FunctionIdentifier("yes_me")))
-      assert(catalog.listFunctions("db2", "*").map(_._1).toSet ==
+      assert(catalog.listFunctions("db2", "%").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
           FunctionIdentifier("yes_me"),
           FunctionIdentifier("func1", Some("db2"), Some(SESSION_CATALOG_NAME)),
           FunctionIdentifier("func2", Some("db2"), Some(SESSION_CATALOG_NAME)),
           FunctionIdentifier("not_me", Some("db2"), Some(SESSION_CATALOG_NAME))))
-      assert(catalog.listFunctions("db2", "func*").map(_._1).toSet ==
+      assert(catalog.listFunctions("db2", "func%").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
           FunctionIdentifier("func1", Some("db2"), Some(SESSION_CATALOG_NAME)),
           FunctionIdentifier("func2", Some("db2"), Some(SESSION_CATALOG_NAME))))
@@ -1818,7 +1818,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       // Load func2 into the function registry.
       catalog.registerFunction(func2, overrideIfExists = false, functionBuilder = Some(builder))
       // Should not include func2.
-      assert(catalog.listFunctions("default", "*").map(_._1).toSet ==
+      assert(catalog.listFunctions("default", "%").map(_._1).toSet ==
         Set(FunctionIdentifier("func1"),
           FunctionIdentifier("func1", Some("default"), Some(SESSION_CATALOG_NAME)))
       )

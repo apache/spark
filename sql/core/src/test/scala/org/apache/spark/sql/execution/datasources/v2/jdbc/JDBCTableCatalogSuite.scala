@@ -569,7 +569,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("SPARK-42904: CREATE TABLE with char/varchar") {
     withTable("h2.test.new_table") {
       sql("CREATE TABLE h2.test.new_table(c CHAR(10), v VARCHAR(100))")
-      checkAnswer(sql("SHOW TABLES IN h2.test LIKE 'new*'"), Row("test", "new_table", false))
+      checkAnswer(sql("SHOW TABLES IN h2.test LIKE 'new%'"), Row("test", "new_table", false))
     }
   }
 

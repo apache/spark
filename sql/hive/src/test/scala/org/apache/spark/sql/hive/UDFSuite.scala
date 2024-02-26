@@ -95,7 +95,7 @@ class UDFSuite
     withUserDefinedFunction(functionName -> false) {
       sql(s"CREATE FUNCTION $functionName AS '$functionClass'")
       checkAnswer(
-        sql("SHOW functions like '.*upper'"),
+        sql("SHOW functions like '%myupper'"),
         Row(s"$SESSION_CATALOG_NAME.default.$functionNameLower")
       )
       checkAnswer(
