@@ -1301,7 +1301,11 @@ class StructType(DataType):
 
 
 class VariantType(AtomicType):
-    """Variant data type, representing semi-structured values."""
+    """
+    Variant data type, representing semi-structured values.
+
+    .. versionadded:: 4.0.0
+    """
 
     pass
 
