@@ -62,6 +62,7 @@ message DataType {
     Array array = 20;
     Struct struct = 21;
     Map map = 22;
+    Variant variant = 25;
 
     // UserDefinedType
     UDT udt = 23;
@@ -178,6 +179,10 @@ message DataType {
     DataType value_type = 2;
     bool value_contains_null = 3;
     uint32 type_variation_reference = 4;
+  }
+
+  message Variant {
+    uint32 type_variation_reference = 1;
   }
 
   message UDT {
