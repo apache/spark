@@ -22,7 +22,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
-import org.apache.spark.sql.sources.{BaseRelation, TableScan}
+import org.apache.spark.sql.sources.{BaseRelation, DescriptiveRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
@@ -40,7 +40,7 @@ case class JDBCScan(
   override def readSchema(): StructType = prunedSchema
 
   override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
-    new BaseRelation with TableScan {
+    new BaseRelation with TableScan with DescriptiveRelation {
       override def sqlContext: SQLContext = context
       override def schema: StructType = prunedSchema
       override def needConversion: Boolean = relation.needConversion
@@ -53,6 +53,7 @@ case class JDBCScan(
         relation.buildScan(columnList, prunedSchema, pushedPredicates, groupByColumns, tableSample,
           pushedLimit, sortOrders, pushedOffset)
       }
+      override def name: String = "JDBC Relation"
     }.asInstanceOf[T]
   }
 
