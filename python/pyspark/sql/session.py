@@ -47,7 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
-from pyspark.sql.profiler import AccumulatorProfilerCollector, ProfilerCollector
+from pyspark.sql.profiler import AccumulatorProfilerCollector, Profile
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
@@ -905,6 +905,10 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.datasource import DataSourceRegistration
 
         return DataSourceRegistration(self)
+
+    @property
+    def profile(self) -> Profile:
+        return Profile(self._profiler_collector)
 
     def range(
         self,
@@ -2127,33 +2131,6 @@ class SparkSession(SparkConversionMixin):
             error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
             message_parameters={"feature": "SparkSession.clearTags"},
         )
-
-    def showPerfProfiles(self, id: Optional[int] = None) -> None:
-        self._profiler_collector.show_perf_profiles(id)
-
-    showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
-
-    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
-        if has_memory_profiler:
-            self._profiler_collector.show_memory_profiles(id)
-        else:
-            warnings.warn(
-                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
-                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
-                UserWarning,
-            )
-
-    showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
-
-    def dumpPerfProfiles(self, path: str, id: Optional[int] = None) -> None:
-        self._profiler_collector.dump_perf_profiles(path, id)
-
-    dumpPerfProfiles.__doc__ = ProfilerCollector.dump_perf_profiles.__doc__
-
-    def dumpMemoryProfiles(self, path: str, id: Optional[int] = None) -> None:
-        self._profiler_collector.dump_memory_profiles(path, id)
-
-    dumpMemoryProfiles.__doc__ = ProfilerCollector.dump_memory_profiles.__doc__
 
 
 def _test() -> None:

@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.history
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.{Node, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.Utils.{getLog, DEFAULT_BYTES}

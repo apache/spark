@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 
+import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
@@ -62,23 +63,14 @@ object JDBCRDD extends Logging {
 
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
-    val conn: Connection = dialect.createConnectionFactory(options)(-1)
-    try {
-      val statement = conn.prepareStatement(query)
-      try {
+    Using.resource(dialect.createConnectionFactory(options)(-1)) { conn =>
+      Using.resource(conn.prepareStatement(query)) { statement =>
         statement.setQueryTimeout(options.queryTimeout)
-        val rs = statement.executeQuery()
-        try {
+        Using.resource(statement.executeQuery()) { rs =>
           JdbcUtils.getSchema(rs, dialect, alwaysNullable = true,
             isTimestampNTZ = options.preferTimestampNTZ)
-        } finally {
-          rs.close()
         }
-      } finally {
-        statement.close()
       }
-    } finally {
-      conn.close()
     }
   }
 

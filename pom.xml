@@ -143,14 +143,12 @@
     <parquet.version>1.13.1</parquet.version>
     <orc.version>1.9.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>10.0.19</jetty.version>
-    <jakartaservlet.version>4.0.3</jakartaservlet.version>
+    <jetty.version>11.0.19</jetty.version>
+    <jakartaservlet.version>5.0.0</jakartaservlet.version>
+    <!-- SPARK-46938: Required by Hive / LibThrift libs -->
+    <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
-    <!--
-      SPARK-44968: don't upgrade Ivy to version 2.5.2 until the test aborted of
-      `HiveExternalCatalogVersionsSuite` in Java 11/17 daily tests is resolved.
-    -->
-    <ivy.version>2.5.1</ivy.version>
+    <ivy.version>2.5.2</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you change codahale.metrics.version, you also need to change
@@ -203,14 +201,11 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
-    <!--
-      Please don't upgrade the version to 3.0.0+,
-      Because it transitions Jakarta REST API from javax to jakarta package.
-    -->
-    <jersey.version>2.41</jersey.version>
+    <jersey.version>3.0.12</jersey.version>
     <joda.version>2.12.7</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
+    <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
@@ -562,6 +557,7 @@
           </exclusion>
         </exclusions>
       </dependency>
+
       <!-- End of shaded deps -->
 
       <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
@@ -1083,7 +1079,7 @@
       <dependency>
         <groupId>javax.xml.bind</groupId>
         <artifactId>jaxb-api</artifactId>
-        <version>2.2.11</version>
+        <version>${jaxb.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalanlp</groupId>
@@ -2840,6 +2836,16 @@
         <groupId>org.apache.datasketches</groupId>
         <artifactId>datasketches-java</artifactId>
         <version>${datasketches.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.servlet</groupId>
+        <artifactId>jakarta.servlet-api</artifactId>
+        <version>${jakartaservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>javax.servlet-api</artifactId>
+        <version>${javaxservlet.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
