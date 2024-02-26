@@ -140,6 +140,6 @@ object BatchEvalPythonExec {
         }
         fields
       }
-    }.grouped(100).map { x => pickle.dumps(x.toArray) }
+    }.grouped(100).map(x => pickle.dumps(x.toArray))
   }
 }

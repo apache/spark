@@ -125,7 +125,7 @@ case class UserDefinedPythonTableFunction(
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
           partitionColumnIndexes = None,
-          forwardHiddenColumnIndexes = None)
+          forwardedColumnIndexes = None)
       case _ =>
         // Check which argument is a table argument here since it will be replaced with
         // `UnresolvedAttribute` to construct lateral join.

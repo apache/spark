@@ -186,10 +186,10 @@ case class FunctionTableSubqueryArgumentExpression(
 
   /**
    * These are the indexes of the selected input expressions that the 'analyze' method of the UDTF
-   * marked as 'forwardHidden', which means that the UDTF is specifying for Catalyst to pass the
-   * expression through to the output table without making it visible to the 'eval' method.
+   * marked as 'forwardToOutputTable', which means that the UDTF is specifying to Catalyst this it
+   * will pass the expression through to the output table.
    */
-  lazy val forwardHiddenExpressionIndexes: Seq[PythonUDTF.ColumnIndex] = {
+  lazy val forwardedExpressionIndexes: Seq[PythonUDTF.ColumnIndex] = {
     val results = ArrayBuffer.empty[PythonUDTF.ColumnIndex]
     selectedInputExpressions.zipWithIndex.foreach {
       case (p: PythonUDTFSelectedExpression, index: Int) if p.forwardHidden =>

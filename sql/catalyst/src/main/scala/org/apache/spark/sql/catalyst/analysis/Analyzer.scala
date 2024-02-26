@@ -2199,8 +2199,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               g.copy(generator = pyudtf.copy(
                 partitionColumnIndexes =
                   optionalIndexes(tableArgs.head._1.partitioningExpressionIndexes),
-                forwardHiddenColumnIndexes =
-                  optionalIndexes(tableArgs.head._1.forwardHiddenExpressionIndexes)))
+                forwardedColumnIndexes =
+                  optionalIndexes(tableArgs.head._1.forwardedExpressionIndexes)))
             case _ => tvf
           }
 
