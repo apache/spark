@@ -1058,7 +1058,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(key, WithField(2))\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"key\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1106,7 +1106,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(a.b, WithField(2))\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"a.b\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1857,7 +1857,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(key, dropfield())\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"key\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),
@@ -1897,7 +1897,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"update_fields(a.b, dropfield())\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"a.b\"",
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRUCT\""),

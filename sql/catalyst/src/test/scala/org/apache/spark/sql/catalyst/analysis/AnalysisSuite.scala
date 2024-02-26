@@ -1351,7 +1351,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"mean(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
@@ -1370,7 +1370,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"mean(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
@@ -1388,7 +1388,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" ->
@@ -1408,7 +1408,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" ->

@@ -20,13 +20,13 @@ import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
-import javax.servlet._
-import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Files}
+import jakarta.servlet._
+import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.JsonAST._
@@ -544,7 +544,6 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     eventually(stdTimeout, stdInterval) {
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
-    val jobcount = getNumJobs("/jobs")
     assert(!isApplicationCompleted(provider.getListing().next()))
 
     listApplications(false) should contain(appId)
@@ -565,7 +564,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     listApplications(false) should not contain(appId)
 
     eventually(stdTimeout, stdInterval) {
-      assert(jobcount === getNumJobs("/jobs"))
+      assert(4 === getNumJobsRestful())
     }
 
     // no need to retain the test dir now the tests complete

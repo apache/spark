@@ -299,7 +299,7 @@ case class Elt(
         return DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(IntegerType),
             "inputSql" -> toSQLExpr(indexExpr),
             "inputType" -> toSQLType(indexType)))
@@ -308,10 +308,10 @@ case class Elt(
         return DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "2...",
+            "paramIndex" -> (ordinalNumber(1) + "..."),
             "requiredType" -> (toSQLType(StringType) + " or " + toSQLType(BinaryType)),
-            "inputSql" -> inputExprs.map(toSQLExpr(_)).mkString(","),
-            "inputType" -> inputTypes.map(toSQLType(_)).mkString(",")
+            "inputSql" -> inputExprs.map(toSQLExpr).mkString(","),
+            "inputType" -> inputTypes.map(toSQLType).mkString(",")
           )
         )
       }

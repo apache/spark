@@ -143,14 +143,12 @@
     <parquet.version>1.13.1</parquet.version>
     <orc.version>1.9.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>10.0.19</jetty.version>
-    <jakartaservlet.version>4.0.3</jakartaservlet.version>
+    <jetty.version>11.0.19</jetty.version>
+    <jakartaservlet.version>5.0.0</jakartaservlet.version>
+    <!-- SPARK-46938: Required by Hive / LibThrift libs -->
+    <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
-    <!--
-      SPARK-44968: don't upgrade Ivy to version 2.5.2 until the test aborted of
-      `HiveExternalCatalogVersionsSuite` in Java 11/17 daily tests is resolved.
-    -->
-    <ivy.version>2.5.1</ivy.version>
+    <ivy.version>2.5.2</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you change codahale.metrics.version, you also need to change
@@ -192,7 +190,7 @@
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.16.1</commons-codec.version>
-    <commons-compress.version>1.25.0</commons-compress.version>
+    <commons-compress.version>1.26.0</commons-compress.version>
     <commons-io.version>2.15.1</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
@@ -203,18 +201,15 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
-    <!--
-      Please don't upgrade the version to 3.0.0+,
-      Because it transitions Jakarta REST API from javax to jakarta package.
-    -->
-    <jersey.version>2.41</jersey.version>
+    <jersey.version>3.0.12</jersey.version>
     <joda.version>2.12.7</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
+    <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.13.1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    <selenium.version>4.12.1</selenium.version>
+    <selenium.version>4.17.0</selenium.version>
     <htmlunit3-driver.version>4.17.0</htmlunit3-driver.version>
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
@@ -222,8 +217,8 @@
     <bouncycastle.version>1.77</bouncycastle.version>
     <tink.version>1.9.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
-    <netty.version>4.1.106.Final</netty.version>
-    <netty-tcnative.version>2.0.61.Final</netty-tcnative.version>
+    <netty.version>4.1.107.Final</netty.version>
+    <netty-tcnative.version>2.0.62.Final</netty-tcnative.version>
     <icu4j.version>72.1</icu4j.version>
     <!--
     If you are changing Arrow version specification, please check
@@ -271,6 +266,7 @@
     <hive.deps.scope>compile</hive.deps.scope>
     <hive.storage.version>2.8.1</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
+    <hive.jackson.scope>compile</hive.jackson.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>compile</hive.llap.scope>
     <hive.serde.scope>compile</hive.serde.scope>
@@ -403,7 +399,6 @@
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <version>3.2.18</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -418,7 +413,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>selenium-4-12_${scala.binary.version}</artifactId>
+      <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -562,6 +557,7 @@
           </exclusion>
         </exclusions>
       </dependency>
+
       <!-- End of shaded deps -->
 
       <!-- Provide a JAXB impl; no longer auto available in Java 9+ in the JDK -->
@@ -1083,7 +1079,7 @@
       <dependency>
         <groupId>javax.xml.bind</groupId>
         <artifactId>jaxb-api</artifactId>
-        <version>2.2.11</version>
+        <version>${jaxb.version}</version>
       </dependency>
       <dependency>
         <groupId>org.scalanlp</groupId>
@@ -1146,13 +1142,13 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>3.2.17</version>
+        <version>3.2.18</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
         <artifactId>scalacheck-1-17_${scala.binary.version}</artifactId>
-        <version>3.2.17.0</version>
+        <version>3.2.18.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1163,8 +1159,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>selenium-4-12_${scala.binary.version}</artifactId>
-        <version>3.2.17.0</version>
+        <artifactId>selenium-4-17_${scala.binary.version}</artifactId>
+        <version>3.2.18.0</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1182,13 +1178,13 @@
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy</artifactId>
-        <version>1.14.10</version>
+        <version>1.14.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.bytebuddy</groupId>
         <artifactId>byte-buddy-agent</artifactId>
-        <version>1.14.10</version>
+        <version>1.14.11</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1256,7 +1252,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.7.0</version>
+        <version>42.7.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1879,13 +1875,13 @@
         <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-core-asl</artifactId>
         <version>${codehaus.jackson.version}</version>
-        <scope>${hive.deps.scope}</scope>
+        <scope>${hive.jackson.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-mapper-asl</artifactId>
         <version>${codehaus.jackson.version}</version>
-        <scope>${hive.deps.scope}</scope>
+        <scope>${hive.jackson.scope}</scope>
       </dependency>
       <dependency>
         <groupId>${hive.group}</groupId>
@@ -2841,6 +2837,16 @@
         <artifactId>datasketches-java</artifactId>
         <version>${datasketches.version}</version>
       </dependency>
+      <dependency>
+        <groupId>jakarta.servlet</groupId>
+        <artifactId>jakarta.servlet-api</artifactId>
+        <version>${jakartaservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>javax.servlet-api</artifactId>
+        <version>${javaxservlet.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -2990,14 +2996,6 @@
               <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e</arg>
               <!-- SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3. -->
               <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated:e</arg>
-              <!--
-                TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
-                  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
-              -->
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.rdd.RDDSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.scheduler.TaskSetManagerSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s</arg>
-              <arg>-Wconf:cat=deprecation&amp;msg=Auto-application to \`\(\)\` is deprecated&amp;site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s</arg>
               <!--
                 SPARK-35574 Prevent the recurrence of compilation warnings related to
                 `procedure syntax is deprecated`

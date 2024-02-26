@@ -177,7 +177,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"sort_array(array(b, d), 1)\""
   },
@@ -201,7 +201,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
     "inputType" : "\"BOOLEAN\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"sort_array(array(b, d), CAST(NULL AS BOOLEAN))\""
   },
@@ -360,7 +360,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"map(a, 1, b, 2)\"",
     "inputType" : "\"MAP<STRING, INT>\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY\"",
     "sqlExpr" : "\"array_size(map(a, 1, b, 2))\""
   },
@@ -574,7 +574,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"id\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY\"",
     "sqlExpr" : "\"array_compact(id)\""
   },
@@ -746,4 +746,18 @@ Project [array_prepend(cast(array() as array<string>), cast(null as string)) AS 
 select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String))
 -- !query analysis
 Project [array_prepend(array(cast(null as string)), cast(null as string)) AS array_prepend(array(CAST(NULL AS STRING)), CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
+select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")))
+-- !query analysis
+Project [array_union(array(cast(0.0 as double), cast(0.0 as double), cast(NaN as double)), array(cast(0.0 as double), cast(0.0 as double), cast(NaN as double))) AS array_union(array(0.0, 0.0, NaN), array(0.0, 0.0, NaN))#x]
++- OneRowRelation
+
+
+-- !query
+select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")))
+-- !query analysis
+Project [array_distinct(array(cast(0.0 as double), cast(0.0 as double), cast(0.0 as double), cast(NaN as double), cast(NaN as double))) AS array_distinct(array(0.0, 0.0, 0.0, NaN, NaN))#x]
 +- OneRowRelation

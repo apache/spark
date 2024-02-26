@@ -10609,8 +10609,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     name_like_string(name) if name is not None else "variable_{}".format(i)
                     for i, name in enumerate(self._internal.column_label_names)
                 ]
-        elif isinstance(var_name, str):
-            var_name = [var_name]
+        elif is_list_like(var_name):
+            raise ValueError(f"{var_name=} must be a scalar.")
+        else:
+            var_name = [var_name]  # type: ignore[list-item]
 
         pairs = F.explode(
             F.array(
@@ -13565,15 +13567,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return psdf
 
-    def _fall_back_frame(self, method: str) -> Callable:
-        def _internal_fall_back_function(*inputs: Any, **kwargs: Any) -> "DataFrame":
+    def _build_fallback_method(self, method: str) -> Callable:
+        def _internal_fallback_function(*args: Any, **kwargs: Any) -> "DataFrame":
             log_advice(
                 f"`{method}` is executed in fallback mode. It loads partial data into the "
                 f"driver's memory to infer the schema, and loads all data into one executor's "
                 f"memory to compute. It should only be used if the pandas DataFrame is expected "
                 f"to be small."
             )
-
             input_df = self.copy()
             index_names = input_df.index.names
 
@@ -13593,7 +13594,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 pdf = pdf.drop(columns=[tmp_agg_column_name])
                 pdf = pdf.set_index(tmp_idx_column_name, drop=True)
                 pdf = pdf.sort_index()
-                pdf = getattr(pdf, method)(*inputs, **kwargs)
+                pdf = getattr(pdf, method)(*args, **kwargs)
                 pdf[tmp_idx_column_name] = pdf.index
                 return pdf.reset_index(drop=True)
 
@@ -13603,20 +13604,44 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             return output_df
 
-        return _internal_fall_back_function
+        return _internal_fallback_function
+
+    def _asfreq_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("asfreq")
+        return _f(*args, **kwargs)
+
+    def _asof_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("asof")
+        return _f(*args, **kwargs)
+
+    def _convert_dtypes_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("convert_dtypes")
+        return _f(*args, **kwargs)
+
+    def _infer_objects_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("infer_objects")
+        return _f(*args, **kwargs)
+
+    def _set_axis_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("set_axis")
+        return _f(*args, **kwargs)
+
+    def _to_feather_fallback(self, *args: Any, **kwargs: Any) -> None:
+        _f = self._build_fallback_driver_method("to_feather")
+        return _f(*args, **kwargs)
+
+    def _to_stata_fallback(self, *args: Any, **kwargs: Any) -> None:
+        _f = self._build_fallback_driver_method("to_stata")
+        return _f(*args, **kwargs)
 
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)
         if hasattr(MissingPandasLikeDataFrame, key):
-            if key in [
-                "asfreq",
-                "asof",
-                "convert_dtypes",
-                "infer_objects",
-                "set_axis",
-            ] and get_option("compute.pandas_fallback"):
-                return self._fall_back_frame(key)
+            if get_option("compute.pandas_fallback"):
+                new_key = f"_{key}_fallback"
+                if hasattr(self, new_key):
+                    return getattr(self, new_key)
 
             property_or_func = getattr(MissingPandasLikeDataFrame, key)
             if isinstance(property_or_func, property):

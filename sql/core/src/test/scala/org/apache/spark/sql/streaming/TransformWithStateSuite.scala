@@ -46,7 +46,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
-      _countState.remove()
+      _countState.clear()
       Iterator.empty
     } else {
       _countState.update(count)

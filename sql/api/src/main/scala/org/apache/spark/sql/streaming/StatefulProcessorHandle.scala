@@ -38,6 +38,16 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    */
   def getValueState[T](stateName: String): ValueState[T]
 
+  /**
+   * Creates new or returns existing list state associated with stateName.
+   * The ListState persists values of type T.
+   *
+   * @param stateName  - name of the state variable
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  def getListState[T](stateName: String): ListState[T]
+
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo
 

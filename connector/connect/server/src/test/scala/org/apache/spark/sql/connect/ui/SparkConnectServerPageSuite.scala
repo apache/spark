@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connect.ui
 
 import java.util.{Calendar, Locale}
-import javax.servlet.http.HttpServletRequest
 
+import jakarta.servlet.http.HttpServletRequest
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 

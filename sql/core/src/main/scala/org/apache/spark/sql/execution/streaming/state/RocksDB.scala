@@ -109,6 +109,7 @@ class RocksDB(
   }
 
   columnFamilyOptions.setCompressionType(getCompressionType(conf.compression))
+  columnFamilyOptions.setMergeOperator(new StringAppendOperator())
 
   private val dbOptions =
     new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
@@ -117,6 +118,7 @@ class RocksDB(
   dbOptions.setTableFormatConfig(tableFormatConfig)
   dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
   dbOptions.setAllowFAllocate(conf.allowFAllocate)
+  dbOptions.setMergeOperator(new StringAppendOperator())
 
   if (conf.boundedMemoryUsage) {
     dbOptions.setWriteBufferManager(writeBufferManager)
@@ -228,6 +230,9 @@ class RocksDB(
 
             case RecordType.DELETE_RECORD =>
               remove(key, colFamilyName)
+
+            case RecordType.MERGE_RECORD =>
+              merge(key, value, colFamilyName)
           }
         }
       } finally {
@@ -314,6 +319,38 @@ class RocksDB(
     } else {
       changelogWriter.foreach(_.put(key, value))
     }
+  }
+
+  /**
+   * Merge the given value for the given key. This is equivalent to the Atomic
+   * Read-Modify-Write operation in RocksDB, known as the "Merge" operation. The
+   * modification is appending the provided value to current list of values for
+   * the given key.
+   *
+   * @note This operation requires that the encoder used can decode multiple values for
+   * a key from the values byte array.
+   *
+   * @note This update is not committed to disk until commit() is called.
+   */
+  def merge(
+      key: Array[Byte],
+      value: Array[Byte],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    if (!useColumnFamilies) {
+      throw new RuntimeException("Merge operation uses changelog checkpointing v2 which" +
+        " requires column families to be enabled.")
+    }
+    verifyColFamilyExists(colFamilyName)
+
+    if (conf.trackTotalNumberOfRows) {
+      val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
+      if (oldValue == null) {
+        numKeysOnWritingVersion += 1
+      }
+    }
+    db.merge(colFamilyNameToHandleMap(colFamilyName), writeOptions, key, value)
+
+    changelogWriter.foreach(_.merge(key, value, colFamilyName))
   }
 
   /**

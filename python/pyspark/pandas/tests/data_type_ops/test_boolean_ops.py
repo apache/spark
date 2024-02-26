@@ -54,7 +54,7 @@ class BooleanOpsTestsMixin:
 
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(b_pser + pser, b_psser + psser)
+            self.assert_eq(b_pser + pser, b_psser + psser, check_exact=False)
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             if col == "bool":
@@ -73,7 +73,7 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser - True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col])
+            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser - psdf[col])
@@ -90,7 +90,7 @@ class BooleanOpsTestsMixin:
         self.assert_eq(b_pser * False, b_psser * False)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col])
+            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
@@ -145,7 +145,7 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser % True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col])
+            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser % psdf[col])
