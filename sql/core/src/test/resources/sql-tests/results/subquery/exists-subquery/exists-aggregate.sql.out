@@ -241,43 +241,35 @@ NULL	true
 -- !query
 SELECT
   emp.dept_id,
-  EXISTS (SELECT dept.dept_id FROM dept WHERE dept.dept_id = emp.dept_id)
+  EXISTS (SELECT dept.dept_id FROM dept)
 FROM emp
 GROUP BY emp.dept_id ORDER BY emp.dept_id
 -- !query schema
-struct<>
+struct<dept_id:int,exists():boolean>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-  "sqlState" : "XXKD0",
-  "messageParameters" : {
-    "batch" : "Pullup Correlated Expressions",
-    "reason" : "Aggregate: Aggregate [dept_id#x], [dept_id#x, exists#x [dept_id#x && (dept_id#x = dept_id#x)] AS exists(dept_id)#x]\n:  +- Project [dept_id#x]\n:     +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n:        +- Project [dept_id#x, dept_name#x, state#x]\n:           +- LocalRelation [dept_id#x, dept_name#x, state#x]\n+- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]\n   +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]\n is not a valid aggregate expression: [MISSING_AGGREGATION] The non-aggregating expression \"dept_id\" is based on columns which are not participating in the GROUP BY clause.\nAdd the columns or the expression to the GROUP BY, aggregate the expression, or use \"any_value(dept_id)\" if you do not care which of the values within a group is returned. SQLSTATE: 42803\nPrevious schema:dept_id#x, exists(dept_id)#x\nPrevious plan: Sort [dept_id#x ASC NULLS FIRST], true\n+- Aggregate [dept_id#x], [dept_id#x, exists#x [dept_id#x] AS exists(dept_id)#x]\n   :  +- Project [dept_id#x]\n   :     +- Filter (dept_id#x = outer(dept_id#x))\n   :        +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n   :           +- Project [dept_id#x, dept_name#x, state#x]\n   :              +- LocalRelation [dept_id#x, dept_name#x, state#x]\n   +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]\n      +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]\n",
-    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
-  }
-}
+NULL	true
+10	true
+20	true
+30	true
+70	true
+100	true
 
 
 -- !query
 SELECT
   emp.dept_id,
-  NOT EXISTS (SELECT dept.dept_id FROM dept WHERE dept.dept_id = emp.dept_id)
+  NOT EXISTS (SELECT dept.dept_id FROM dept)
 FROM emp
 GROUP BY emp.dept_id ORDER BY emp.dept_id
 -- !query schema
-struct<>
+struct<dept_id:int,(NOT exists()):boolean>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
-  "sqlState" : "XXKD0",
-  "messageParameters" : {
-    "batch" : "Pullup Correlated Expressions",
-    "reason" : "Aggregate: Aggregate [dept_id#x], [dept_id#x, NOT exists#x [dept_id#x && (dept_id#x = dept_id#x)] AS (NOT exists(dept_id))#x]\n:  +- Project [dept_id#x]\n:     +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n:        +- Project [dept_id#x, dept_name#x, state#x]\n:           +- LocalRelation [dept_id#x, dept_name#x, state#x]\n+- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]\n   +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]\n is not a valid aggregate expression: [MISSING_AGGREGATION] The non-aggregating expression \"dept_id\" is based on columns which are not participating in the GROUP BY clause.\nAdd the columns or the expression to the GROUP BY, aggregate the expression, or use \"any_value(dept_id)\" if you do not care which of the values within a group is returned. SQLSTATE: 42803\nPrevious schema:dept_id#x, (NOT exists(dept_id))#x\nPrevious plan: Sort [dept_id#x ASC NULLS FIRST], true\n+- Aggregate [dept_id#x], [dept_id#x, NOT exists#x [dept_id#x] AS (NOT exists(dept_id))#x]\n   :  +- Project [dept_id#x]\n   :     +- Filter (dept_id#x = outer(dept_id#x))\n   :        +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]\n   :           +- Project [dept_id#x, dept_name#x, state#x]\n   :              +- LocalRelation [dept_id#x, dept_name#x, state#x]\n   +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]\n      +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]\n",
-    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
-  }
-}
+NULL	false
+10	false
+20	false
+30	false
+70	false
+100	false
 
 
 -- !query

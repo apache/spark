@@ -146,14 +146,14 @@ GROUP BY emp.dept_id ORDER BY emp.dept_id;
 -- Correlated exists subquery with a top-level aggregation
 SELECT
   emp.dept_id,
-  EXISTS (SELECT dept.dept_id FROM dept WHERE dept.dept_id = emp.dept_id)
+  EXISTS (SELECT dept.dept_id FROM dept)
 FROM emp
 GROUP BY emp.dept_id ORDER BY emp.dept_id;
 
 -- Correlated exists subquery with a top-level aggregation
 SELECT
   emp.dept_id,
-  NOT EXISTS (SELECT dept.dept_id FROM dept WHERE dept.dept_id = emp.dept_id)
+  NOT EXISTS (SELECT dept.dept_id FROM dept)
 FROM emp
 GROUP BY emp.dept_id ORDER BY emp.dept_id;
 

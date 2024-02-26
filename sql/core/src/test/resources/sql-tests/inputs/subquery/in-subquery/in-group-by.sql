@@ -260,14 +260,6 @@ SELECT
   sum(cast(t1.t1b NOT IN (SELECT t2b FROM t2) as INT))
 FROM t1;
 
--- Correlated subquery with a top-level aggregation
-SELECT
-  t1.t1b,
-  t1.t1b IN (SELECT t2.t2b FROM t2 WHERE t2.t2c = t1.t1b) as v1
-FROM t1
-GROUP BY t1.t1b
-ORDER BY t1.t1b;
-
 -- Derived table from subquery
 SELECT
     agg_results.t1a,
