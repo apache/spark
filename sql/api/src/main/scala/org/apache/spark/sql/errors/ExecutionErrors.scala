@@ -202,8 +202,9 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def primaryConstructorNotFoundError(cls: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "PRIMARY_CONSTRUCTOR_NOT_FOUND",
-      messageParameters = Map("cls" -> cls.toString))
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map(
+        "message" -> s"Couldn't find a primary constructor on ${cls.toString}."))
   }
 
   def cannotGetOuterPointerForInnerClassError(innerCls: Class[_]): SparkRuntimeException = {

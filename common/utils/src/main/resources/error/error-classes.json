@@ -3062,12 +3062,6 @@
     ],
     "sqlState" : "XXKD0"
   },
-  "PRIMARY_CONSTRUCTOR_NOT_FOUND" : {
-    "message" : [
-      "Couldn't find a primary constructor on <cls>."
-    ],
-    "sqlState" : "40000"
-  },
   "PROTOBUF_DEPENDENCY_NOT_FOUND" : {
     "message" : [
       "Could not find dependency: <dependencyName>."
