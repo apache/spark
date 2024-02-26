@@ -144,7 +144,17 @@ SELECT * FROM UDTFWithSinglePartition(1, initial_count => 2);
 SELECT * FROM UDTFWithSinglePartition(initial_count => 1, initial_count => 2);
 SELECT * FROM UDTFInvalidPartitionByOrderByParseError(TABLE(t2));
 -- The following UDTF calls exercise forwarding hidden input columns to the output table.
-SELECT * FROM UDTFForwardColumnsToOutputTableSimple(TABLE(t2));
+-- As a reminder, "t1" is: CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (0, 1), (1, 2) t(c1, c2);
+-- The UDTFForwardColumnsToOutputTableIdentity function returns the input table unchanged.
+-- The UDTFForwardColumnsToOutputTableAlwaysReturnC2of99 function returns the original "c1" input
+-- column unchanged, and a new "c2" column with a value of 99; this technically violates the rules
+-- of the "forwardToOutputTable" property, but it is useful for testing.
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentity(TABLE(t1));
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentity(TABLE(t1)) WHERE c2 = 2;
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(TABLE(t1));
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(TABLE(t1)) WHERE c2 = 2;
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT * FROM t1 UNION ALL SELECT * FROM t1)) WHERE c2 = 2;
 
 -- cleanup
 DROP VIEW t1;

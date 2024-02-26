@@ -2424,7 +2424,12 @@ class BaseUDTFTestsMixin:
 
             def eval(self, row: Row):
                 assert len(row) == 2
-                yield row
+                # We indicated that the second column should be forwarded to the output table,
+                # but here we always return a value of 42 for the second column.
+                # This is just to test that the forwarding mechanism works, since a WHERE clause
+                # that originally applies to the output table should get pushed down by Catalyst to
+                # the input table and filter out one of the two input rows.
+                yield row["a"], 42
 
         self.spark.udtf.register("test_udtf", TestUDTF)
 
@@ -2432,19 +2437,16 @@ class BaseUDTFTestsMixin:
             self.spark.sql(
                 """
                 WITH t AS (
-                  SELECT NULL AS a, NULL AS b
+                  SELECT 0 AS a, 1 AS b
                   UNION ALL
-                  SELECT id AS a, 1 AS b FROM range(1, 6)
-                  UNION ALL
-                  SELECT id AS a, 2 AS b FROM range(1, 6)
+                  SELECT 2 AS a, 3 AS b
                 )
                 SELECT *
                 FROM test_udtf(TABLE(t))
+                WHERE b = 3
                 """
             ),
-            [Row(a=None, b=None)] +
-            [Row(a=id, b=1) for id in range(1, 6)] +
-            [Row(a=id, b=2) for id in range(1, 6)])
+            [Row(a=2, b=42)])
 
     def test_udtf_with_prepare_string_from_analyze(self):
         @dataclass

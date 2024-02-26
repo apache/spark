@@ -905,7 +905,32 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT * FROM UDTFForwardColumnsToOutputTableSimple(TABLE(t2))
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentity(TABLE(t1))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentity(TABLE(t1)) WHERE c2 = 2
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(TABLE(t1))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(TABLE(t1)) WHERE c2 = 2
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT * FROM t1 UNION ALL SELECT * FROM t1)) WHERE c2 = 2
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 

@@ -220,12 +220,15 @@ trait BaseEvalPythonUDTF extends UnaryNode {
   lazy val getForwardColumnAttributeMap: AttributeMap[Attribute] = {
     val map = mutable.Map.empty[Attribute, Attribute]
     udtf.forwardedColumnIndexes.foreach { indexes: Seq[PythonUDTF.ColumnIndex] =>
-      val outputAttributes: AttributeSeq = AttributeSeq.fromNormalOutput(resultAttrs)
+      val outputAttributes: AttributeSeq = AttributeSeq.fromNormalOutput(output)
       indexes.foreach { index: PythonUDTF.ColumnIndex =>
-        val childAttribute: Attribute = requiredChildOutput(index.index)
+        // The UDTF child should produce one attribute containing a struct of the input arguments.
+        assert(child.output.length == 1)
+        assert(child.isInstanceOf[Project])
+        val childAttribute = child.asInstanceOf[Project].child.output(index.index)
         outputAttributes.resolve(Seq(childAttribute.name), SQLConf.get.resolver)
           .map { n: NamedExpression =>
-            map.update(childAttribute, n.toAttribute)
+            map.update(n.toAttribute, childAttribute)
         }
       }
     }

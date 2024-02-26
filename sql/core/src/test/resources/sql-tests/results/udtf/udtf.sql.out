@@ -1070,12 +1070,47 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT * FROM UDTFForwardColumnsToOutputTableSimple(TABLE(t2))
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentity(TABLE(t1))
 -- !query schema
-struct<>
+struct<c1:int,c2:int>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_RETURN_SCHEMA_MISMATCH] The number of columns in the result does not match the specified schema. Expected column count: 2, Actual column count: 1. Please make sure the values returned by the 'eval' method have the same number of columns as specified in the output schema.
+0	1
+1	2
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentity(TABLE(t1)) WHERE c2 = 2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(TABLE(t1))
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+0	99
+1	99
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(TABLE(t1)) WHERE c2 = 2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	99
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT * FROM t1 UNION ALL SELECT * FROM t1)) WHERE c2 = 2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	99
+1	99
 
 
 -- !query
