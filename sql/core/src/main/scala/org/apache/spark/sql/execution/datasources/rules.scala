@@ -333,7 +333,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       .filter(f => normalizedPartitionCols.contains(f.name))
       .foreach { field =>
         if (!PartitioningUtils.canPartitionOn(field.dataType)) {
-          failAnalysis(s"Cannot use ${field.dataType.catalogString} for partition column")
+          throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)
         }
       }
 

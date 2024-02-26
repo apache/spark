@@ -564,7 +564,7 @@ object PartitioningUtils extends SQLConfHelper {
 
     partitionColumnsSchema(schema, partitionColumns).foreach { field =>
       if (!canPartitionOn(field.dataType)) {
-        throw QueryCompilationErrors.cannotUseDataTypeForPartitionColumnError(field)
+        throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)
       }
     }
 
@@ -578,7 +578,7 @@ object PartitioningUtils extends SQLConfHelper {
    */
   def canPartitionOn(dateType: DataType): Boolean = dateType match {
     // non default collated strings should not be used as partition columns
-    // as it could lead to incorrect results
+    // as we cannot implement string collation semantic with directory names
     case st: StringType => st.isDefaultCollation
     case other => other.isInstanceOf[AtomicType]
   }

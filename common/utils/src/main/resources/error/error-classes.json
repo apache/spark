@@ -388,11 +388,6 @@
     ],
     "sqlState" : "42846"
   },
-  "CANNOT_USE_DATA_TYPE_FOR_PARTITION_COLUMN" : {
-    "message" : [
-      "Cannot use <type> for partition column."
-    ]
-  },
   "CANNOT_WRITE_STATE_STORE" : {
     "message" : [
       "Error writing state store files for provider <providerClass>."
@@ -2308,6 +2303,11 @@
       }
     },
     "sqlState" : "22023"
+  },
+  "INVALID_PARTITION_COLUMN_DATA_TYPE" : {
+    "message" : [
+      "Cannot use <type> for partition column."
+    ]
   },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [

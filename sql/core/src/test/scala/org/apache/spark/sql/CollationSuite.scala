@@ -314,9 +314,8 @@ class CollationSuite extends DatasourceV2SQLBase {
         exception = intercept[AnalysisException] {
           createTable(partitionColumns: _*)
         },
-        errorClass = "CANNOT_USE_DATA_TYPE_FOR_PARTITION_COLUMN",
-        sqlState = "42000",
-        parameters = Map("type" -> "STRING(UNICODE)")
+        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
       );
     }
   }

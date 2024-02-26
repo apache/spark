@@ -1740,10 +1740,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("outputPath" -> outputPath.toString))
   }
 
-  def cannotUseDataTypeForPartitionColumnError(field: StructField): Throwable = {
+  def invalidPartitionColumnDataTypeError(field: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "CANNOT_USE_DATA_TYPE_FOR_PARTITION_COLUMN",
-      messageParameters = Map("type" -> field.dataType.toString))
+      errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+      messageParameters = Map("type" -> toSQLType(field.dataType)))
   }
 
   def cannotUseAllColumnsForPartitionColumnsError(): Throwable = {
