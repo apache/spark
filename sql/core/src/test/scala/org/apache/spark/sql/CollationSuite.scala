@@ -253,7 +253,7 @@ class CollationSuite extends DatasourceV2SQLBase {
       sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
 
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName WHERE c2 IS NOT NULL"),
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName"),
         Seq(Row(collationName)))
       assert(sql(s"select c2 FROM $tableName").schema.head.dataType == StringType(collationId))
     }
