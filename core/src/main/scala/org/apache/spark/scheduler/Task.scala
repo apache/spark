@@ -28,7 +28,6 @@ import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceInformation
-import org.apache.spark.storage.BlockManager
 import org.apache.spark.util._
 
 /**
@@ -94,7 +93,8 @@ private[spark] abstract class Task[T](
 
     require(cpus > 0, "CPUs per task should be > 0")
 
-    SparkEnv.get.blockManager.registerTask(taskAttemptId)
+    val blockManager = SparkEnv.get.blockManager
+    blockManager.registerTask(taskAttemptId)
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
     // the stage is barrier.
     val taskContext = new TaskContextImpl(
@@ -165,14 +165,9 @@ private[spark] abstract class Task[T](
   }
 
   private var taskMemoryManager: TaskMemoryManager = _
-  private var blockManager: BlockManager = _
 
   def setTaskMemoryManager(taskMemoryManager: TaskMemoryManager): Unit = {
     this.taskMemoryManager = taskMemoryManager
-  }
-
-  def setBlockManager(blockManager: BlockManager): Unit = {
-    this.blockManager = blockManager
   }
 
   def runTask(context: TaskContext): T

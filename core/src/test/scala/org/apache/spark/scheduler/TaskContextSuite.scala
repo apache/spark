@@ -18,7 +18,8 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -27,9 +28,11 @@ import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, SparkPlugin}
 import org.apache.spark.executor.{Executor, TaskMetrics, TaskMetricsSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.METRICS_CONF
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{MemoryManager, TaskMemoryManager}
 import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
@@ -680,14 +683,99 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     context.markTaskCompleted(None)
     assert(isFailed)
   }
+
+  test("Ensure the right block manager is used to unroll memory for task") {
+    import BlockManagerValidationPlugin._
+    BlockManagerValidationPlugin.resetState()
+
+    // run a task which ignores thread interruption when spark context is shutdown
+    sc = new SparkContext("local", "test")
+
+    val rdd = new RDD[String](sc, List()) {
+      override def getPartitions = Array[Partition](StubPartition(0))
+
+      override def compute(split: Partition, context: TaskContext): Iterator[String] = {
+        context.addTaskCompletionListener(new TaskCompletionListener {
+          override def onTaskCompletion(context: TaskContext): Unit = {
+            var done = false
+            while (!done) {
+              try {
+                releaseTaskSem.acquire(1)
+                done = true
+              } catch {
+                case iEx: InterruptedException =>
+                  // ignore thread interruption
+                  logInfo("Ignoring thread interruption", iEx)
+              }
+            }
+          }
+        })
+        taskMemoryManager.set(SparkEnv.get.blockManager.memoryManager)
+        taskStartedSem.release()
+        Iterator("hi")
+      }
+    }
+    // submit the job, but dont block this thread
+    rdd.collectAsync()
+    // wait for task to start
+    taskStartedSem.acquire(1)
+
+    sc.stop()
+    assert(sc.isStopped)
+
+    // create a new SparkContext
+    val conf = new SparkConf()
+    conf.set("spark.plugins", classOf[BlockManagerValidationPlugin].getName)
+    BlockManagerValidationPlugin.threadLocalState.set(
+      () => {
+        val tmm = taskMemoryManager.get()
+        tmm.synchronized {
+          releaseTaskSem.release(1)
+          tmm.wait()
+        }
+        Thread.sleep(2500)
+      }
+    )
+    sc = new SparkContext("local", "test", conf)
+  }
 }
 
-private object TaskContextSuite {
+private object TaskContextSuite extends Logging {
   @volatile var completed = false
 
   @volatile var lastError: Throwable = _
 
   class FakeTaskFailureException extends Exception("Fake task failure")
+}
+
+class BlockManagerValidationPlugin extends SparkPlugin {
+
+  override def driverPlugin(): DriverPlugin = {
+    new DriverPlugin() {
+      // We dont really do anything - other than notifying that plugin creation has completed
+      // and then wait for a while
+      Option(BlockManagerValidationPlugin.threadLocalState.get()).foreach(_.apply())
+    }
+  }
+  override def executorPlugin(): ExecutorPlugin = {
+    new ExecutorPlugin() {
+      // nothing to see here
+    }
+  }
+}
+
+object BlockManagerValidationPlugin {
+  val threadLocalState = new ThreadLocal[() => Unit]()
+
+  val releaseTaskSem = new Semaphore(0)
+  val taskMemoryManager = new AtomicReference[MemoryManager](null)
+  val taskStartedSem = new Semaphore(0)
+
+  def resetState(): Unit = {
+    releaseTaskSem.drainPermits()
+    taskStartedSem.drainPermits()
+    taskMemoryManager.set(null)
+  }
 }
 
 private case class StubPartition(index: Int) extends Partition
