@@ -37,6 +37,9 @@ class ResourceProfile:
 
     .. versionadded:: 3.1.0
 
+    .. versionchanged:: 4.0.0
+        Supports Spark Connect.
+
     Notes
     -----
     This API is evolving.
