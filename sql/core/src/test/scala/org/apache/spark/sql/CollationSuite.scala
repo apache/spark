@@ -135,6 +135,36 @@ class CollationSuite extends DatasourceV2SQLBase {
       parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
   }
 
+  test("disable bucketing on collated string column") {
+    def createTable(bucketColumns: String*): Unit = {
+      val tableName = "test_partition_tbl"
+      withTable(tableName) {
+        sql(
+          s"""
+             |CREATE TABLE $tableName
+             |(id INT, c1 STRING COLLATE 'UNICODE', c2 string)
+             |USING parquet
+             |PARTITIONED BY (${bucketColumns.mkString(",")})
+             |""".stripMargin
+        )
+      }
+    }
+      // should work fine on default collated columns
+    createTable("id")
+    createTable("c2")
+    createTable("id", "c2")
+
+    Seq(Seq("c1"), Seq("c1", "id"), Seq("c1", "c2")).foreach { bucketColumns =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          createTable(bucketColumns: _*)
+        },
+        errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "String(UNICODE)")
+      );
+    }
+  }
+
   test("equality check respects collation") {
     Seq(
       ("ucs_basic", "aaa", "AAA", false),

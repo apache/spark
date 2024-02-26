@@ -1064,6 +1064,12 @@ The boundary `<boundary>` is invalid: `<invalidValue>`.
 
 For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary-error-class.html)
 
+### INVALID_BUCKET_COLUMN_DATA_TYPE
+
+SQLSTATE: HV004
+
+Cannot use `<type>` for bucket column.
+
 ### INVALID_BUCKET_FILE
 
 SQLSTATE: 58030

@@ -1752,6 +1752,12 @@
     },
     "sqlState" : "22003"
   },
+  "INVALID_BUCKET_COLUMN_DATA_TYPE" : {
+    "message" : [
+      "Cannot use <type> for bucket column."
+    ],
+    "sqlState" : "HV004"
+  },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
