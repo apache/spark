@@ -1044,6 +1044,13 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
+  test("SPARK-47144: Collated string") {
+    Seq("UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI").map(collationName => {
+      val query = s"select 'abc' collate '$collationName'"
+      comparePlans(connect.sql(query), spark.sql(query))
+    })
+  }
+
   private def createLocalRelationProtoByAttributeReferences(
       attrs: Seq[AttributeReference]): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
