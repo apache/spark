@@ -61,6 +61,11 @@
       <scope>compile</scope>
     </dependency>
     <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
       <groupId>org.glassfish.jersey.core</groupId>
       <artifactId>jersey-client</artifactId>
       <scope>provided</scope>
@@ -170,6 +175,13 @@
             <shadedPattern>${spark.shade.packageName}.kinesis.guava</shadedPattern>
             <includes>
               <include>com.google.common.**</include>
+            </includes>
+          </relocation>
+          <relocation>
+            <pattern>com.google.protobuf</pattern>
+            <shadedPattern>${spark.shade.packageName}.kinesis.protobuf</shadedPattern>
+            <includes>
+              <include>com.google.protobuf.**</include>
             </includes>
           </relocation>
           <relocation>
