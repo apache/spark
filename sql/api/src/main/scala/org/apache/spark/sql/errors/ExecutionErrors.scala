@@ -129,7 +129,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
   : SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2134",
+      errorClass = "CANNOT_PARSE_STRING_AS_DATATYPE",
       messageParameters = Map(
         "value" -> toSQLValue(value),
         "pattern" -> toSQLValue(pattern),

@@ -298,6 +298,12 @@
     ],
     "sqlState" : "22018"
   },
+  "CANNOT_PARSE_STRING_AS_DATATYPE" : {
+    "message" : [
+      "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
+    ],
+    "sqlState" : "22018"
+  },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -1271,6 +1277,12 @@
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
     ],
     "sqlState" : "42710"
+  },
+  "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA" : {
+    "message" : [
+      "fieldIndex on a Row without schema is undefined."
+    ],
+    "sqlState": "42000"
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
@@ -6169,11 +6181,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2134" : {
-    "message" : [
-      "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2138" : {
     "message" : [
       "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
@@ -6512,11 +6519,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2231" : {
-    "message" : [
-      "fieldIndex on a Row without schema is undefined."
     ]
   },
   "_LEGACY_ERROR_TEMP_2232" : {

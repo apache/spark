@@ -262,7 +262,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def fieldIndexOnRowWithoutSchemaError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2231")
+    new SparkUnsupportedOperationException("FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA")
   }
 
   def valueIsNullError(index: Int): Throwable = {

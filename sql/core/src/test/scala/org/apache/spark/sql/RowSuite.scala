@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -110,5 +110,17 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
     assert(Row(Seq("value")).getSeq(0) === List("value"))
     assert(Row(Seq()).getSeq(0) === List())
     assert(Row(null).getSeq(0) === null)
+  }
+
+  test("access fieldIndex on Row without schema") {
+    val rowWithoutSchema = Row(1, "foo", 3.14)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        rowWithoutSchema.fieldIndex("foo")
+      },
+      errorClass = "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA",
+      parameters = Map.empty
+    )
   }
 }
