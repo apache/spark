@@ -386,17 +386,17 @@ For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-availa
 
 Cannot find a short name for the codec `<codecName>`.
 
-### COLLATION_SUPPORT_NOT_ENABLED
-
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
-
-Collation support is under development and not all features are supported. To enable existing features set `spark.sql.collation.enabled` to `true`.
-
 ### COLLATION_INVALID_NAME
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
+
+### COLLATION_SUPPORT_NOT_ENABLED
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Collation support is under development and not all features are supported. To enable existing features set `spark.sql.collation.enabled` to `true`.
 
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 

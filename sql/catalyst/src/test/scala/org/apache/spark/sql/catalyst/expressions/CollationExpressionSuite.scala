@@ -59,9 +59,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("collate on non existing collation") {
     checkError(
-      exception = intercept[SparkException] {
-        Collate(Literal("abc"), "UCS_BASIS")
-      },
+      exception = intercept[SparkException] {Collate(Literal("abc"), "UCS_BASIS")},
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
       parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
@@ -72,8 +70,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("collation on explicitly collated string") {
-    checkEvaluation(
-      Collation(Literal.create("abc", StringType(1))).replacement, "UCS_BASIC_LCASE")
+    checkEvaluation(Collation(Literal.create("abc", StringType(1))).replacement, "UCS_BASIC_LCASE")
     checkEvaluation(
       Collation(Collate(Literal("abc"), "UCS_BASIC_LCASE")).replacement, "UCS_BASIC_LCASE")
   }

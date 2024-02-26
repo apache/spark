@@ -964,7 +964,7 @@ class QueryCompilationErrorsSuite
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
   }
 
-  test("SPARK-47102: Collation query when COLLATION_ENABLED is false") {
+  test("SPARK-47102: Collation in CollateContext when COLLATION_ENABLED is false") {
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
@@ -972,6 +972,21 @@ class QueryCompilationErrorsSuite
         },
         errorClass = "COLLATION_SUPPORT_NOT_ENABLED",
         parameters = Map.empty
+      )
+    }
+  }
+
+  test("SPARK-47102: Collation in NamedExpressionContext when COLLATION_ENABLED is false") {
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select collation('aaa')")
+        },
+        errorClass = "COLLATION_SUPPORT_NOT_ENABLED",
+        sqlState = Some("0A000"),
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "collation('aaa')", start = 7, stop = 22)
       )
     }
   }
