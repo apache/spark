@@ -31,8 +31,8 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
-import org.apache.spark.sql.catalyst.util.StringConcat
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -117,6 +117,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
+  private val COLLATED_STRING_TYPE = """string\s+COLLATE\s+([\w_]+)""".r
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -158,8 +159,8 @@ object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private val otherTypes = {
-    (Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
-      DoubleType, FloatType, ShortType, ByteType, CalendarIntervalType,
+    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
+      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
       DayTimeIntervalType(DAY),
       DayTimeIntervalType(DAY, HOUR),
       DayTimeIntervalType(DAY, MINUTE),
@@ -174,13 +175,16 @@ object DataType {
       YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
       TimestampNTZType,
-      VariantType) ++ (0 until 4).map(StringType(_)))
+      VariantType)
       .map(t => t.typeName -> t).toMap
   }
 
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
+      case COLLATED_STRING_TYPE(collation) =>
+        val collationId = CollationFactory.collationNameToId(collation)
+        StringType(collationId)
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
