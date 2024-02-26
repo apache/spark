@@ -73,7 +73,7 @@ case class FunctionTableSubqueryArgumentExpression(
     partitionByExpressions: Seq[Expression] = Seq.empty,
     withSinglePartition: Boolean = false,
     orderByExpressions: Seq[SortOrder] = Seq.empty,
-    selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
+    selectedInputExpressions: Seq[PythonUDTF.SelectedExpression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
 
   assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
@@ -145,11 +145,11 @@ case class FunctionTableSubqueryArgumentExpression(
     // If instructed, add a projection to compute the specified input expressions.
     if (selectedInputExpressions.nonEmpty) {
       val projectList = selectedInputExpressions.map {
-        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String), _) =>
+        case PythonUDTF.SelectedExpression(expression: Expression, Some(alias: String), _) =>
           Alias(expression, alias)()
-        case PythonUDTFSelectedExpression(a: Attribute, None, _) =>
+        case PythonUDTF.SelectedExpression(a: Attribute, None, _) =>
           a
-        case PythonUDTFSelectedExpression(other: Expression, None, _) =>
+        case PythonUDTF.SelectedExpression(other: Expression, None, _) =>
           throw QueryCompilationErrors
             .invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(other.sql)
       } ++ extraProjectedPartitioningExpressions
@@ -192,7 +192,7 @@ case class FunctionTableSubqueryArgumentExpression(
   lazy val forwardedExpressionIndexes: Seq[PythonUDTF.ColumnIndex] = {
     val results = ArrayBuffer.empty[PythonUDTF.ColumnIndex]
     selectedInputExpressions.zipWithIndex.foreach {
-      case (p: PythonUDTFSelectedExpression, index: Int) if p.forwardHidden =>
+      case (p: PythonUDTF.SelectedExpression, index: Int) if p.forwardToOutputTable =>
         results.append(PythonUDTF.ColumnIndex(index))
       case _ =>
     }

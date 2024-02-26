@@ -25,7 +25,7 @@ import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, SortOrder, UnresolvedPolymorphicPythonUDTF}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -280,7 +280,7 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
     }
     // Receive the list of requested input columns to select, if specified.
     val numSelectedInputExpressions = dataIn.readInt()
-    val selectedInputExpressions = ArrayBuffer.empty[PythonUDTFSelectedExpression]
+    val selectedInputExpressions = ArrayBuffer.empty[PythonUDTF.SelectedExpression]
     for (_ <- 0 until numSelectedInputExpressions) {
       val expressionSql: String = PythonWorkerUtils.readUTF(dataIn)
       val expression: Expression = parser.parseExpression(expressionSql)
@@ -290,7 +290,7 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       }
       val forwardHidden: Boolean = dataIn.readInt() == 1
       selectedInputExpressions.append(
-        PythonUDTFSelectedExpression(expression, alias, forwardHidden))
+        PythonUDTF.SelectedExpression(expression, alias, forwardHidden))
     }
     PythonUDTFAnalyzeResult(
       schema = schema,

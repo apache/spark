@@ -206,6 +206,25 @@ object PythonUDTF {
    * Each of these can refer to a partitioning column or a hidden pass-through column.
    */
   case class ColumnIndex(index: Int)
+
+  /**
+   * Represents an expression that the UDTF is specifying for Catalyst to evaluate against the
+   * columns in the input TABLE argument. The UDTF then receives one input column for each
+   * expression in the list, in the order they are listed.
+   *
+   * @param expression           the expression that the UDTF is specifying for Catalyst to evaluate
+   *                             against the columns in the input TABLE argument
+   * @param alias                If present, this is the alias for the column or expression as
+   *                             visible from the UDTF's 'eval' method. This is required if the
+   *                             expression is not a simple column reference.
+   * @param forwardToOutputTable If true, the UDTF is specifying for Catalyst to pass the column or
+   *                             expression through to the output table without making it visible to
+   *                             the UDTF's 'eval' method.
+   */
+  case class SelectedExpression(
+      expression: Expression,
+      alias: Option[String],
+      forwardToOutputTable: Boolean)
 }
 
 /**
@@ -267,7 +286,7 @@ case class PythonUDTFAnalyzeResult(
     withSinglePartition: Boolean,
     partitionByExpressions: Seq[Expression],
     orderByExpressions: Seq[SortOrder],
-    selectedInputExpressions: Seq[PythonUDTFSelectedExpression],
+    selectedInputExpressions: Seq[PythonUDTF.SelectedExpression],
     pickledAnalyzeResult: Array[Byte]) {
   /**
    * Applies the requested properties from this analysis result to the target TABLE argument
@@ -323,25 +342,6 @@ case class PythonUDTFAnalyzeResult(
       selectedInputExpressions = newSelectedInputExpressions)
   }
 }
-
-/**
- * Represents an expression that the UDTF is specifying for Catalyst to evaluate against the
- * columns in the input TABLE argument. The UDTF then receives one input column for each expression
- * in the list, in the order they are listed.
- *
- * @param expression the expression that the UDTF is specifying for Catalyst to evaluate against the
- *                   columns in the input TABLE argument
- * @param alias If present, this is the alias for the column or expression as visible from the
- *              UDTF's 'eval' method. This is required if the expression is not a simple column
- *              reference.
- * @param forwardHidden If true, the UDTF is specifying for Catalyst to pass the column or
- *                      expression through to the output table without making it visible to the
- *                      UDTF's 'eval' method.
- */
-case class PythonUDTFSelectedExpression(
-    expression: Expression,
-    alias: Option[String],
-    forwardHidden: Boolean)
 
 /**
  * A place holder used when printing expressions without debugging information such as the
