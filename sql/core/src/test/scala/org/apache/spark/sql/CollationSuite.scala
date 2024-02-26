@@ -117,9 +117,7 @@ class CollationSuite extends DatasourceV2SQLBase {
 
   test("collate function invalid input data type") {
     checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql(s"select collate(1, 'UCS_BASIC')")
-      },
+      exception = intercept[ExtendedAnalysisException] { sql(s"select collate(1, 'UCS_BASIC')") },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = "42K09",
       parameters = Map(
