@@ -62,6 +62,7 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.ARRAY => toCatalystArrayType(t.getArray)
       case proto.DataType.KindCase.STRUCT => toCatalystStructType(t.getStruct)
       case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
+      case proto.DataType.KindCase.VARIANT => VariantType
 
       case proto.DataType.KindCase.UDT => toCatalystUDT(t.getUdt)
 
@@ -269,6 +270,8 @@ object DataTypeProtoConverter {
               .setValueContainsNull(valueContainsNull)
               .build())
           .build()
+
+      case VariantType => ProtoDataTypes.VariantType
 
       case pyudt: PythonUserDefinedType =>
         // Python UDT
