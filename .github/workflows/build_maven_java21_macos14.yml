@@ -32,4 +32,4 @@ jobs:
     if: github.repository == 'apache/spark'
     with:
       java: 21
-      os: macos-14-large
+      os: macos-14

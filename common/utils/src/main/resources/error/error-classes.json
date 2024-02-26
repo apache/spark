@@ -1877,6 +1877,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_EXPRESSION_ENCODER" : {
+    "message" : [
+      "Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
+    ],
+    "sqlState" : "42001"
+  },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
       "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
@@ -2007,12 +2013,6 @@
       }
     },
     "sqlState" : "HY000"
-  },
-  "INVALID_HIVE_COLUMN_NAME" : {
-    "message" : [
-      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
-    ],
-    "sqlState" : "42K05"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
@@ -5124,11 +5124,6 @@
       "Unrecognized Parquet type: <field>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1175" : {
-    "message" : [
-      "Unsupported data type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
       "Stream-stream join without equality predicate is not supported."
@@ -5723,11 +5718,6 @@
   "_LEGACY_ERROR_TEMP_2023" : {
     "message" : [
       "Unresolved encoder expected, but <attr> was found."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2024" : {
-    "message" : [
-      "Only expression encoders are supported for now."
     ]
   },
   "_LEGACY_ERROR_TEMP_2025" : {

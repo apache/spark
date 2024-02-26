@@ -1275,16 +1275,29 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             val key =
               ((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq,
               finalTimeTravelSpec)
-            AnalysisContext.get.relationCache.get(key).map(_.transform {
-              case multi: MultiInstanceRelation =>
-                val newRelation = multi.newInstance()
-                newRelation.copyTagsFrom(multi)
-                newRelation
-            }).orElse {
+            AnalysisContext.get.relationCache.get(key).map { cache =>
+              val cachedRelation = cache.transform {
+                case multi: MultiInstanceRelation =>
+                  val newRelation = multi.newInstance()
+                  newRelation.copyTagsFrom(multi)
+                  newRelation
+              }
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                val cachedConnectRelation = cachedRelation.clone()
+                cachedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                cachedConnectRelation
+              }.getOrElse(cachedRelation)
+            }.orElse {
               val table = CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec)
               val loaded = createRelation(catalog, ident, table, u.options, u.isStreaming)
               loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
-              loaded
+              u.getTagValue(LogicalPlan.PLAN_ID_TAG).map { planId =>
+                loaded.map { loadedRelation =>
+                  val loadedConnectRelation = loadedRelation.clone()
+                  loadedConnectRelation.setTagValue(LogicalPlan.PLAN_ID_TAG, planId)
+                  loadedConnectRelation
+                }
+              }.getOrElse(loaded)
             }
           case _ => None
         }

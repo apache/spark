@@ -2210,6 +2210,24 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
+
+  test("SPARK-47120: subquery literal filter pushdown") {
+    withTable("t1", "t2") {
+      sql("create table t1(d date) using parquet")
+      sql("create table t2(d date) using parquet")
+      sql("insert into t1 values date'2021-01-01'")
+      sql("insert into t2 values (null)")
+      Seq("=", ">", ">=", "<", "<=", "!=").foreach { op =>
+        checkAnswer(sql(s"select * from t1 where 1=1 and d $op (select d from t2)"), Seq.empty)
+      }
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        "org.apache.spark.sql.catalyst.optimizer.NullPropagation") {
+        Seq("=", ">", ">=", "<", "<=", "!=").foreach { op =>
+          checkAnswer(sql(s"select * from t1 where d ${op} null"), Seq.empty)
+        }
+      }
+    }
+  }
 }
 
 @ExtendedSQLTest

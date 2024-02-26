@@ -1144,6 +1144,12 @@ SQLSTATE: F0000
 Executor memory `<executorMemory>` must be at least `<minSystemMemory>`.
 Please increase executor memory using the --executor-memory option or "`<config>`" in Spark configuration.
 
+### INVALID_EXPRESSION_ENCODER
+
+[SQLSTATE: 42001](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
+
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1189,12 +1195,6 @@ The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ans
 The handle `<handle>` is invalid.
 
 For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
-
-### INVALID_HIVE_COLUMN_NAME
-
-[SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
 
 ### INVALID_IDENTIFIER
 
