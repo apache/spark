@@ -348,4 +348,6 @@ trait SupportsStreamSourceMetadataColumns extends StreamSourceProvider {
  */
 trait DescriptiveRelation {
   def name: String
+
+  override def toString: String = name
 }
