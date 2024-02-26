@@ -206,6 +206,20 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     finalizeTask = Option(task)
   }
 
+  // Set the threshold to 1 billion which represents approximately 1GB of memory
+  // allocated to map output statuses.
+  // A large number of shuffle blocks may crash the driver with an OOM error.
+  private val SHUFFLE_BLOCK_NUMBER_WARNING_THRESHOLD: Long = 1000000000L
+  private val numberOfShuffleBlocks = numPartitions.toLong * partitioner.numPartitions.toLong
+
+  if (numberOfShuffleBlocks > SHUFFLE_BLOCK_NUMBER_WARNING_THRESHOLD) {
+    logWarning(
+      s"The number of shuffle blocks (${numberOfShuffleBlocks}) for ${_rdd} with ${numPartitions} " + 
+      "partitions is possibly too large, this could cause the driver to crash with an out-of-memory " + 
+      "error. Consider decreasing the number of partitions in this shuffle stage."
+    )
+  }
+
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
   _rdd.sparkContext.shuffleDriverComponents.registerShuffle(shuffleId)
 }
