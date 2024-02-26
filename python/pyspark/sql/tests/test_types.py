@@ -849,6 +849,7 @@ class TypesTestsMixin:
             if k != "varchar" and k != "char":
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(StringType(0), _parse_datatype_string("string"))
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
         self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
         self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))
@@ -1192,6 +1193,10 @@ class TypesTestsMixin:
         instances = [
             NullType(),
             StringType(),
+            StringType(0),
+            StringType(1),
+            StringType(2),
+            StringType(3),
             CharType(10),
             VarcharType(10),
             BinaryType(),
@@ -1513,6 +1518,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
+            ("", StringType(1)),
             # Char
             ("", CharType(10)),
             (1, CharType(10)),
@@ -1581,6 +1587,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
+            (None, StringType(1), ValueError),
             # CharType (match anything but None)
             (None, CharType(10), ValueError),
             # VarcharType (match anything but None)

@@ -158,8 +158,8 @@ object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private val otherTypes = {
-    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
-      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
+    (Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
+      DoubleType, FloatType, ShortType, ByteType, CalendarIntervalType,
       DayTimeIntervalType(DAY),
       DayTimeIntervalType(DAY, HOUR),
       DayTimeIntervalType(DAY, MINUTE),
@@ -174,7 +174,7 @@ object DataType {
       YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
       TimestampNTZType,
-      VariantType)
+      VariantType) ++ (0 until 4).map(StringType(_)))
       .map(t => t.typeName -> t).toMap
   }
 

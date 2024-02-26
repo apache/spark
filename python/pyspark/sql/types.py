@@ -263,14 +263,20 @@ class StringType(AtomicType):
     def __init__(self, collationId: int = 0):
         self.collationId = collationId
 
+    def collationIdToName(self, collationId: int) -> str:
+        return "(" + StringType.collationNames[collationId] + ")" if collationId != 0 else ""
+
+    def collationNameToId(collationName: str) -> int:
+        return StringType.collationNames.index(collationName) if collationName != "" else 0
+
     def simpleString(self) -> str:
-        return "string(%s)" % (StringType.collationNames[self.collationId])
+        return "string%s" % (self.collationIdToName(self.collationId))
 
     def jsonValue(self) -> str:
-        return "string(%s)" % (StringType.collationNames[self.collationId])
+        return "string%s" % (self.collationIdToName(self.collationId))
 
     def __repr__(self) -> str:
-        return "StringType(%s)" % (StringType.collationNames[self.collationId])
+        return "StringType(%d)" % (self.collationId) if self.collationId != 0 else "StringType()"
 
 
 class CharType(AtomicType):
@@ -1468,7 +1474,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-_COLLATION_STRING = re.compile(f"string\\(({'|'.join(StringType.collationNames)})\\)")
+_COLLATION_STRING = re.compile(f"string\\((^$|{'|'.join(StringType.collationNames)})\\)")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
@@ -1636,7 +1642,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return CalendarIntervalType()
         elif _COLLATION_STRING.match(json_value):
             m = _COLLATION_STRING.match(json_value)
-            return StringType(StringType.collationNames.index(m.group(1)))
+            return StringType(StringType.collationNameToId(m.group(1)))
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
