@@ -2489,7 +2489,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val taskCpus = 1
     val taskGpus = 0.3
     val executorGpus = 4
-    val executorCpus = 1000
+    val executorCpus = 100
 
     // each tasks require 0.3 gpu
     val taskScheduler = setupScheduler(numCores = executorCpus,
