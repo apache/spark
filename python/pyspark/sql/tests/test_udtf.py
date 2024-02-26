@@ -2427,7 +2427,6 @@ class BaseUDTFTestsMixin:
             def eval(self, row: Row):
                 # The second input column "b" should be pruned out to NULL this point, since we
                 # marked it as "forwardHidden" in the "analyze" method above.
-                print(f"@@@ row: {row}")
                 assert len(row) == 2
                 assert row["b"] is None
                 yield row
