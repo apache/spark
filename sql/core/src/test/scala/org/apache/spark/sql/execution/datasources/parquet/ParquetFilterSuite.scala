@@ -2233,10 +2233,10 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     withTempPath { path =>
       val collation = "'UCS_BASIC_LCASE'"
       val df = sql(
-        s""" SELECT
-           |COLLATE(c, $collation) as c1,
-           |struct(COLLATE(c, $collation)) as str,
-           |named_struct('f1', named_struct('f2', COLLATE(c, $collation), 'f3', 1)) as namedstr
+        s"""SELECT
+           |  COLLATE(c, $collation) as c1,
+           |  struct(COLLATE(c, $collation)) as str,
+           |  named_struct('f1', named_struct('f2', COLLATE(c, $collation), 'f3', 1)) as namedstr
            |FROM VALUES ('aaa'), ('AAA'), ('bbb')
            |as data(c)
            |""".stripMargin)
@@ -2250,11 +2250,11 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         ("<", Seq()),
         ("<=", Seq(Row("aaa"), Row("AAA"))),
         (">", Seq(Row("bbb"))),
-        (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))),
-      )
+        (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))))
 
       filters.foreach { filter =>
-        val readback = spark.read.parquet(path.getAbsolutePath)
+        val readback = spark.read
+          .parquet(path.getAbsolutePath)
           .where(s"c1 ${filter._1} collate('aaa', $collation)")
           .where(s"str ${filter._1} struct(collate('aaa', $collation))")
           .where(s"namedstr.f1.f2 ${filter._1} collate('aaa', $collation)")
