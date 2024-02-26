@@ -264,3 +264,18 @@ FROM (
          GROUP BY b
      ) t3
 GROUP BY c;
+
+-- SPARK-45599: Check that "weird" doubles group and sort as desired.
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+;

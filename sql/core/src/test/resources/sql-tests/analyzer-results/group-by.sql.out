@@ -1196,3 +1196,22 @@ Aggregate [c#x], [(c#x * 2) AS d#x]
          +- Project [if ((a#x < 0)) 0 else a#x AS b#x]
             +- SubqueryAlias t1
                +- LocalRelation [a#x]
+
+
+-- !query
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Aggregate [col1#x], [col1#x, count(1) AS cnt#xL]
+   +- LocalRelation [col1#x]
