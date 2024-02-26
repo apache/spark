@@ -173,10 +173,10 @@ object DataTypeProtoConverter {
             proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
           .build()
 
-      case StringType(collationId) =>
+      case s: StringType =>
         proto.DataType
           .newBuilder()
-          .setString(proto.DataType.String.newBuilder().setCollationId(collationId).build())
+          .setString(proto.DataType.String.newBuilder().setCollationId(s.collationId).build())
           .build()
 
       case CharType(length) =>
