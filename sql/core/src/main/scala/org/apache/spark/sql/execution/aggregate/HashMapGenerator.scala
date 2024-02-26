@@ -174,6 +174,9 @@ abstract class HashMapGenerator(
           """
         }
       case StringType => hashBytes(s"$input.getBytes()")
+      case st: StringType =>
+        hashLong(s"CollationFactory.fetchCollation(${st.collationId})" +
+          s".hashFunction.applyAsLong($input)")
       case CalendarIntervalType => hashInt(s"$input.hashCode()")
     }
   }

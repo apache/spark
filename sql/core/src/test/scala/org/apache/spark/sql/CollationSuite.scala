@@ -175,15 +175,31 @@ class CollationSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("aggregates respect collation") {
-    checkAnswer(sql(
-      """
-      WITH t AS (
-        SELECT collate(col1, 'UCS_BASIC_LCASE') as c
-        FROM
-        VALUES ('aaa'), ('bbb'), ('AAA'), ('BBB')
-      )
-      SELECT COUNT(*), c FROM t GROUP BY c
-      """), Seq(Row(2, "aaa"), Row(2, "bbb")))
+  test("aggregates count respects collation") {
+    Seq(
+      ("ucs_basic", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("ucs_basic", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("ucs_basic", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("ucs_basic_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("ucs_basic_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("ucs_basic_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+    ).foreach {
+      case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
+        checkAnswer(sql(
+          s"""
+        WITH t AS (
+          SELECT collate(col1, '$collationName') as c
+          FROM
+          VALUES ${input.map(s => s"('$s')").mkString(", ")}
+        )
+        SELECT COUNT(*), c FROM t GROUP BY c
+        """), expected)
+    }
   }
 }

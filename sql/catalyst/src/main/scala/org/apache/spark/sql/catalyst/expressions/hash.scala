@@ -405,15 +405,20 @@ abstract class HashExpression[E] extends Expression {
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
 
-  protected def genHashString(input: String, result: String, stringType: StringType): String = {
+  protected def genHashString(
+     ctx: CodegenContext, input: String, result: String, stringType: StringType): String = {
     if (stringType.isDefaultCollation) {
       val baseObject = s"$input.getBaseObject()"
       val baseOffset = s"$input.getBaseOffset()"
       val numBytes = s"$input.numBytes()"
       s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
     } else {
-      // TODO:
-      // s"$result = $hasherClassName.hashLong($, $result);"
+      val stringHash = ctx.freshName("stringHash")
+      s"""
+        long $stringHash = CollationFactory.fetchCollation(${stringType.collationId})
+            .hashFunction.applyAsLong($input);
+        $result = $hasherClassName.hashLong($stringHash, $result);
+      """
     }
   }
 
@@ -496,7 +501,7 @@ abstract class HashExpression[E] extends Expression {
     case _: DayTimeIntervalType => genHashLong(input, result)
     case _: YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
-    case _: StringType => genHashString(input, result)
+    case st: StringType => genHashString(ctx, input, result, st)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
     case MapType(kt, vt, valueContainsNull) =>
       genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
@@ -792,13 +797,6 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     s"""
       $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
      """
-
-  override protected def genHashString(input: String, result: String): String = {
-    val baseObject = s"$input.getBaseObject()"
-    val baseOffset = s"$input.getBaseOffset()"
-    val numBytes = s"$input.numBytes()"
-    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes);"
-  }
 
   override protected def genHashForArray(
       ctx: CodegenContext,
