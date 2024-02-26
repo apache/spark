@@ -93,18 +93,18 @@ class KafkaContinuousStream(
 
     val deletedPartitions = oldStartPartitionOffsets.keySet.diff(currentPartitionSet)
     if (deletedPartitions.nonEmpty) {
-      if (offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        reportDataLoss(
-          s"$deletedPartitions are gone.${CUSTOM_GROUP_ID_ERROR_MESSAGE}",
-          () =>
-            QueryExecutionErrors.partitionsDeletedAndGroupIdConfigPresentKafkaError(
-              deletedPartitions.toString,
-              ConsumerConfig.GROUP_ID_CONFIG))
-      } else {
-        reportDataLoss(
-          s"$deletedPartitions are gone. Some data may have been missed.",
-          () => QueryExecutionErrors.partitionsDeletedKafkaError(deletedPartitions.toString))
-      }
+      val (message, config) =
+        if (offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+          (s"$deletedPartitions are gone.${CUSTOM_GROUP_ID_ERROR_MESSAGE}",
+            Some(ConsumerConfig.GROUP_ID_CONFIG))
+        } else {
+          (s"$deletedPartitions are gone. Some data may have been missed.", None)
+        }
+
+      reportDataLoss(
+        message,
+        () =>
+          QueryExecutionErrors.partitionsDeletedKafkaError(deletedPartitions.toString, config))
     }
 
     val startOffsets = newPartitionOffsets ++

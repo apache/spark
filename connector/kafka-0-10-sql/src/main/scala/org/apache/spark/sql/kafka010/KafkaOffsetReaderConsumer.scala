@@ -518,19 +518,18 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
     if (deletedPartitions.nonEmpty) {
-      if (driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-        reportDataLoss(
-          s"$deletedPartitions are gone." +
-            s" ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}",
-          () =>
-            QueryExecutionErrors.partitionsDeletedAndGroupIdConfigPresentKafkaError(
-              deletedPartitions.toString,
-              ConsumerConfig.GROUP_ID_CONFIG))
-      } else {
-        reportDataLoss(
-          s"$deletedPartitions are gone. Some data may have been missed.",
-          () => QueryExecutionErrors.partitionsDeletedKafkaError(deletedPartitions.toString))
-      }
+      val (message, config) =
+        if (driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+          (s"$deletedPartitions are gone.${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}",
+            Some(ConsumerConfig.GROUP_ID_CONFIG))
+        } else {
+          (s"$deletedPartitions are gone. Some data may have been missed.", None)
+        }
+
+      reportDataLoss(
+        message,
+        () =>
+          QueryExecutionErrors.partitionsDeletedKafkaError(deletedPartitions.toString, config))
     }
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have

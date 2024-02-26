@@ -2762,20 +2762,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def partitionsDeletedKafkaError(partitions: String): SparkException = {
-    new SparkException(
-      errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
-      messageParameters = Map("partitions" -> partitions),
-      cause = null)
-  }
-
-  def partitionsDeletedAndGroupIdConfigPresentKafkaError(
+  def partitionsDeletedKafkaError(
       partitions: String,
-      groupIdConfig: String): SparkException = {
-    new SparkException(
-      errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED_AND_GROUP_ID_CONFIG_PRESENT",
-      messageParameters = Map("partitions" -> partitions, "groupIdConfig" -> groupIdConfig),
-      cause = null)
+      groupIdConfigName: Option[String]): SparkException = {
+    groupIdConfigName match {
+      case Some(config) =>
+        new SparkException(
+          errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED_AND_GROUP_ID_CONFIG_PRESENT",
+          messageParameters = Map("partitions" -> partitions, "groupIdConfig" -> config),
+          cause = null)
+      case None =>
+        new SparkException(
+          errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
+          messageParameters = Map("partitions" -> partitions),
+          cause = null)
+    }
   }
 
   def partitionOffsetChangedKafkaError(
