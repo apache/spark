@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkException
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
@@ -896,6 +897,30 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             parameters = Map("message" -> expectedErrMsg),
             matchPVals = true)
         }
+      }
+    }
+  }
+
+  test("SPARK-47238: Test broadcast threshold for generated code") {
+    // case 1: threshold is -1, shouldn't broadcast since smaller than 0 means disabled.
+    // case 2: threshold is a larger number, shouldn't broadcast since not yet exceeded.
+    // case 3: threshold is 0, should broadcast since it's always smaller than generated code size.
+    Seq((-1, false), (1000000000, false), (0, true)).foreach { case (threshold, shouldBroadcast) =>
+      withSQLConf(SQLConf.WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD.key -> threshold.toString) {
+        val df = Seq(0, 1, 2).toDF().groupBy("value").sum()
+        // Invoke tryBroadcastCleanedSource and make sure it returns the desired variables.
+        assert(df.queryExecution.executedPlan.exists {
+          case exec: WholeStageCodegenExec =>
+            val code = exec.doCodeGen()._2
+            exec.tryBroadcastCleanedSource(code) match {
+              case Left(_: Broadcast[CodeAndComment]) => shouldBroadcast
+              case Right(_: CodeAndComment) => !shouldBroadcast
+              case _ => false
+            }
+          case _ => false
+        })
+        // Execute and validate that the executor side still yields the correct result.
+        checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
       }
     }
   }
