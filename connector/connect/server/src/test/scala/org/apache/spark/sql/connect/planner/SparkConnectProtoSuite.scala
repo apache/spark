@@ -1048,7 +1048,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     Seq("UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI").map(collationName =>
       Seq(
         s"select 'abc' collate '$collationName'",
-        s"select collated('abc' collate '$collationName')"
+        s"select collation('abc' collate '$collationName')"
       ).map(query => comparePlans(connect.sql(query), spark.sql(query)))
     )
   }
