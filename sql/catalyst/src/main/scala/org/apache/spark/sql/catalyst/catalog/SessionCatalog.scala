@@ -1033,7 +1033,8 @@ class SessionCatalog(
    * Note that, if the specified database is global temporary view database, we will list global
    * temporary views.
    */
-  def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
+  def listTables(db: String): Seq[TableIdentifier] =
+    listTables(db, StringUtils.getAllMatchWildcard)
 
   /**
    * List all matching tables in the specified database, including local temporary views.
@@ -1830,7 +1831,8 @@ class SessionCatalog(
    * returns the function identifier and the scope in which it was defined (system or user
    * defined).
    */
-  def listFunctions(db: String): Seq[(FunctionIdentifier, String)] = listFunctions(db, "*")
+  def listFunctions(db: String): Seq[(FunctionIdentifier, String)] =
+    listFunctions(db, StringUtils.getAllMatchWildcard)
 
   /**
    * List all matching functions in the specified database, including temporary functions. This
@@ -1882,7 +1884,7 @@ class SessionCatalog(
       dropTable(table, ignoreIfNotExists = false, purge = false)
     }
     // Temp functions are dropped below, we only need to drop permanent functions here.
-    externalCatalog.listFunctions(DEFAULT_DATABASE, "*").map { f =>
+    externalCatalog.listFunctions(DEFAULT_DATABASE, StringUtils.getAllMatchWildcard).map { f =>
       FunctionIdentifier(f, Some(DEFAULT_DATABASE))
     }.foreach(dropFunction(_, ignoreIfNotExists = false))
     clearTempTables()

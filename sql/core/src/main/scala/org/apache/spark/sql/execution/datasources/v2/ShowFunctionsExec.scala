@@ -40,7 +40,7 @@ case class ShowFunctionsExec(
     pattern: Option[String]) extends V2CommandExec with LeafExecNode {
 
   private def applyPattern(names: Seq[String]): Seq[String] = {
-    StringUtils.filterPattern(names, pattern.getOrElse("*"))
+    StringUtils.filterPattern(names, pattern.getOrElse(StringUtils.getAllMatchWildcard))
   }
 
   override protected def run(): Seq[InternalRow] = {

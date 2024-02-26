@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, 
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -336,7 +336,7 @@ case class ShowViewsCommand(
 
     // Show the information of views.
     val views = tableIdentifierPattern.map(catalog.listViews(databaseName, _))
-      .getOrElse(catalog.listViews(databaseName, "*"))
+      .getOrElse(catalog.listViews(databaseName, StringUtils.getAllMatchWildcard))
     views.map { tableIdent =>
       val namespace = tableIdent.database.toArray.quoted
       val tableName = tableIdent.table

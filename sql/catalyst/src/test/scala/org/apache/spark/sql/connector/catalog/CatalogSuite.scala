@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -33,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class CatalogSuite extends SparkFunSuite {
+class CatalogSuite extends SparkFunSuite with SQLConfHelper {
   import CatalogV2Implicits._
 
   private val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
@@ -96,33 +97,41 @@ class CatalogSuite extends SparkFunSuite {
     assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
   }
 
-  test("listTables by pattern") {
+  test("listTables with pattern") {
     val catalog = newCatalog()
     val ident1 = Identifier.of(Array("ns"), "test_table_1")
     val ident2 = Identifier.of(Array("ns"), "test_table_2")
     val ident3 = Identifier.of(Array("ns2"), "test_table_1")
 
-    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns", "*test*")))
+    Seq(("true", "*test*"), ("false", "%test%")).foreach { v =>
+      withSQLConf(
+        SQLConf.LEGACY_USE_STAR_AND_VERTICAL_BAR_AS_WILDCARDS_IN_LIKE_PATTERN.key -> v._1) {
+        intercept[NoSuchNamespaceException](catalog.listTables(Array("ns", v._2)))
 
-    catalog.createTable(ident1, schema, emptyTrans, emptyProps)
+        catalog.createTable(ident1, schema, emptyTrans, emptyProps)
 
-    assert(catalog.listTables(Array("ns"), "*test*").toSet == Set(ident1))
-    intercept[NoSuchNamespaceException](catalog.listTables(Array("ns2"), "*test*"))
+        assert(catalog.listTables(Array("ns"), v._2).toSet == Set(ident1))
+        intercept[NoSuchNamespaceException](catalog.listTables(Array("ns2"), v._2))
 
-    catalog.createTable(ident3, schema, emptyTrans, emptyProps)
-    catalog.createTable(ident2, schema, emptyTrans, emptyProps)
+        catalog.createTable(ident3, schema, emptyTrans, emptyProps)
+        catalog.createTable(ident2, schema, emptyTrans, emptyProps)
 
-    assert(catalog.listTables(Array("ns"), "*test*").toSet == Set(ident1, ident2))
-    assert(catalog.listTables(Array("ns2"), "*test*").toSet == Set(ident3))
+        assert(catalog.listTables(Array("ns"), v._2).toSet == Set(ident1, ident2))
+        assert(catalog.listTables(Array("ns2"), v._2).toSet == Set(ident3))
 
-    catalog.dropTable(ident1)
+        catalog.dropTable(ident1)
 
-    assert(catalog.listTables(Array("ns"), "*test*").toSet == Set(ident2))
+        assert(catalog.listTables(Array("ns"), v._2).toSet == Set(ident2))
 
-    catalog.dropTable(ident2)
+        catalog.dropTable(ident2)
 
-    assert(catalog.listTables(Array("ns"), "*test*").isEmpty)
-    assert(catalog.listTables(Array("ns2"), "*test*").toSet == Set(ident3))
+        assert(catalog.listTables(Array("ns"), v._2).isEmpty)
+        assert(catalog.listTables(Array("ns2"), v._2).toSet == Set(ident3))
+
+        catalog.dropNamespace(Array("ns"), cascade = true)
+        catalog.dropNamespace(Array("ns2"), cascade = true)
+      }
+    }
   }
 
   test("createTable") {

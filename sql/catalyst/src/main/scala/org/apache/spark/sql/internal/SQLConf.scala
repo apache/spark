@@ -4604,6 +4604,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_USE_STAR_AND_VERTICAL_BAR_AS_WILDCARDS_IN_LIKE_PATTERN =
+    buildConf("spark.sql.legacy.useVerticalBarAndStarAsWildcardsInLikePattern")
+      .internal()
+      .doc("When set to true, use '*' for any character(s) and '|' for a choice as wildcards " +
+        "in the like pattern. If it is false, use '%' for any character(s) and '_' for " +
+        "a single character as wildcards in the like pattern.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
   // currently optional because we don't want to break existing users who are using the old config.
   // If this config is set, then we override the deprecated config.
@@ -5577,6 +5587,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyIgnoreParenthesesAroundStar: Boolean =
     getConf(SQLConf.LEGACY_IGNORE_PARENTHESES_AROUND_STAR)
+
+  def legacyUseStarAndVerticalBarAsWildcardsInLikePattern: Boolean =
+    getConf(SQLConf.LEGACY_USE_STAR_AND_VERTICAL_BAR_AS_WILDCARDS_IN_LIKE_PATTERN)
 
   /** ********************** SQLConf functionality methods ************ */
 

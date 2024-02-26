@@ -57,14 +57,14 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
 
   test("filter pattern") {
     val names = Seq("a1", "a2", "b2", "c3")
-    assert(filterPattern(names, " * ") === Seq("a1", "a2", "b2", "c3"))
-    assert(filterPattern(names, "*a*") === Seq("a1", "a2"))
-    assert(filterPattern(names, " *a* ") === Seq("a1", "a2"))
-    assert(filterPattern(names, " a* ") === Seq("a1", "a2"))
-    assert(filterPattern(names, " a.* ") === Seq("a1", "a2"))
-    assert(filterPattern(names, " B.*|a* ") === Seq("a1", "a2", "b2"))
-    assert(filterPattern(names, " a. ") === Seq("a1", "a2"))
-    assert(filterPattern(names, " d* ") === Nil)
+    assert(filterPatternLegacy(names, " * ") === Seq("a1", "a2", "b2", "c3"))
+    assert(filterPatternLegacy(names, "*a*") === Seq("a1", "a2"))
+    assert(filterPatternLegacy(names, " *a* ") === Seq("a1", "a2"))
+    assert(filterPatternLegacy(names, " a* ") === Seq("a1", "a2"))
+    assert(filterPatternLegacy(names, " a.* ") === Seq("a1", "a2"))
+    assert(filterPatternLegacy(names, " B.*|a* ") === Seq("a1", "a2", "b2"))
+    assert(filterPatternLegacy(names, " a. ") === Seq("a1", "a2"))
+    assert(filterPatternLegacy(names, " d* ") === Nil)
   }
 
   test("string concatenation") {
@@ -145,5 +145,39 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     val testStrings = Seq(Seq("c1"), Seq("v1", "c2"), Seq("v2.c2"))
     val expectedOutput = Seq("`c1`", "`v2.c2`", "`v1`.`c2`")
     assert(orderSuggestedIdentifiersBySimilarity(baseString, testStrings) === expectedOutput)
+  }
+
+  test("like pattern to regular expression") {
+    assert(likePatternToRegExp("\\_") === "_")
+    assert(likePatternToRegExp("\\%") === "%")
+
+    assert(likePatternToRegExp("_") === ".")
+    assert(likePatternToRegExp("%") === ".*?")
+
+    assert(likePatternToRegExp(" * ") === "\\Q \\E\\Q*\\E\\Q \\E")
+    assert(likePatternToRegExp("*a*") === "\\Q*\\E\\Qa\\E\\Q*\\E")
+    assert(likePatternToRegExp(" *a* ") === "\\Q \\E\\Q*\\E\\Qa\\E\\Q*\\E\\Q \\E")
+    assert(likePatternToRegExp(" a* ") === "\\Q \\E\\Qa\\E\\Q*\\E\\Q \\E")
+    assert(likePatternToRegExp(" a.* ") === "\\Q \\E\\Qa\\E\\Q.\\E\\Q*\\E\\Q \\E")
+    assert(likePatternToRegExp(" B.*|a* ") ===
+      "\\Q \\E\\QB\\E\\Q.\\E\\Q*\\E\\Q|\\E\\Qa\\E\\Q*\\E\\Q \\E")
+    assert(likePatternToRegExp(" a. ") === "\\Q \\E\\Qa\\E\\Q.\\E\\Q \\E")
+    assert(likePatternToRegExp(" d* ") === "\\Q \\E\\Qd\\E\\Q*\\E\\Q \\E")
+  }
+
+  test("filter like pattern") {
+    val names = Seq("a1", "a2", "b2", "c3")
+    assert(filterBySQLLikePattern(names, "%") === Seq("a1", "a2", "b2", "c3"))
+    assert(filterBySQLLikePattern(names, "%a%") === Seq("a1", "a2"))
+    assert(filterBySQLLikePattern(names, "a%") === Seq("a1", "a2"))
+    assert(filterBySQLLikePattern(names, "%a") === Nil)
+    assert(filterBySQLLikePattern(names, "a_") === Seq("a1", "a2"))
+    assert(filterBySQLLikePattern(names, "a.*") === Nil)
+    assert(filterBySQLLikePattern(names, "B%|a%") === Nil)
+    assert(filterBySQLLikePattern(names, "A%") === Seq("a1", "a2"))
+    assert(filterBySQLLikePattern(names, "B%") === Seq("b2"))
+    assert(filterBySQLLikePattern(names, "_2") === Seq("a2", "b2"))
+    assert(filterBySQLLikePattern(names, "d%") === Nil)
+    assert(filterBySQLLikePattern(names, "\\s") === Nil)
   }
 }

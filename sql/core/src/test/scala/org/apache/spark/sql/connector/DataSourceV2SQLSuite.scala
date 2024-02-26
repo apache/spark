@@ -2824,10 +2824,10 @@ class DataSourceV2SQLSuiteV1Filter
     assert(sql("SHOW CATALOGS").collect() === Array(
       Row("spark_catalog"), Row("testcat"), Row("testcat2"), Row("testpart")))
 
-    assert(sql("SHOW CATALOGS LIKE 'test*'").collect() === Array(
+    assert(sql("SHOW CATALOGS LIKE 'test%'").collect() === Array(
       Row("testcat"), Row("testcat2"), Row("testpart")))
 
-    assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect() === Array(
+    assert(sql("SHOW CATALOGS LIKE 'testcat%'").collect() === Array(
       Row("testcat"), Row("testcat2")))
   }
 

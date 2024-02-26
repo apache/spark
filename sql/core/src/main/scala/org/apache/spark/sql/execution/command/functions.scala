@@ -175,7 +175,7 @@ case class ShowFunctionsCommand(
     // match any sequence of characters (including no characters).
     val functionNames =
       sparkSession.sessionState.catalog
-        .listFunctions(db, pattern.getOrElse("*"))
+        .listFunctions(db, pattern.getOrElse(StringUtils.getAllMatchWildcard))
         .collect {
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
@@ -186,8 +186,8 @@ case class ShowFunctionsCommand(
     // only show when showSystemFunctions=true
     if (showSystemFunctions) {
       (functionNames ++
-        StringUtils.filterPattern(
-          FunctionRegistry.builtinOperators.keys.toSeq, pattern.getOrElse("*")))
+        StringUtils.filterPattern(FunctionRegistry.builtinOperators.keys.toSeq,
+          pattern.getOrElse(StringUtils.getAllMatchWildcard)))
         .sorted.map(Row(_))
     } else {
       functionNames.sorted.map(Row(_))

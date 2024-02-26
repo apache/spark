@@ -105,19 +105,19 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
             Row("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
-          s"SHOW TABLES FROM $catalog.ns1 LIKE '*name*'",
+          s"SHOW TABLES FROM $catalog.ns1 LIKE '%name%'",
           Seq(
             Row("ns1", "table_name_1a", false),
             Row("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
-          s"SHOW TABLES FROM $catalog.ns1 LIKE 'table_name_1*|table_name_2*'",
+          s"SHOW TABLES FROM $catalog.ns1 LIKE 'table\\_name\\_%'",
           Seq(
             Row("ns1", "table_name_1a", false),
             Row("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
-          s"SHOW TABLES FROM $catalog.ns1 LIKE '*2b'",
+          s"SHOW TABLES FROM $catalog.ns1 LIKE '%2b'",
           Seq(Row("ns1", "table_name_2b", false)))
       }
     }
@@ -175,7 +175,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   test("show table extended in a not existing namespace") {
     checkError(
       exception = intercept[AnalysisException] {
-        sql(s"SHOW TABLE EXTENDED IN $catalog.nonexist LIKE '*tbl*'")
+        sql(s"SHOW TABLE EXTENDED IN $catalog.nonexist LIKE '%tbl%'")
       },
       errorClass = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> "`nonexist`"))
@@ -185,7 +185,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     val namespace = "ns1"
     val table = "nonexist"
     withNamespaceAndTable(namespace, table, catalog) { _ =>
-      val result = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '*$table*'")
+      val result = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '%$table%'")
       assert(result.schema.fieldNames ===
         Seq("namespace", "tableName", "isTemporary", "information"))
       assert(result.collect().isEmpty)
@@ -284,8 +284,8 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"CREATE TABLE $catalog.$namespace.$table2 (data2 string, id2 bigint) " +
           s"$defaultUsing PARTITIONED BY (id2)")
 
-        val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace LIKE '$table*'")
-          .sort("tableName")
+        val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace LIKE '$table%'").
+          sort("tableName")
         assert(result.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
         val resultCollect = result.collect()
@@ -335,7 +335,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"CREATE GLOBAL TEMPORARY VIEW $globalTmpViewName AS SELECT id FROM $t")
 
         // temp local view
-        val localResult = sql(s"SHOW TABLE EXTENDED LIKE '$viewName*'").sort("tableName")
+        val localResult = sql(s"SHOW TABLE EXTENDED LIKE '$viewName%'").sort("tableName")
         assert(localResult.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
         val localResultCollect = localResult.collect()
@@ -358,7 +358,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         assert(actualLocalResult === expectedLocalResult)
 
         // temp global view
-        val globalResult = sql(s"SHOW TABLE EXTENDED IN global_temp LIKE '$viewName*'").
+        val globalResult = sql(s"SHOW TABLE EXTENDED IN global_temp LIKE '$viewName%'").
           sort("tableName")
         assert(globalResult.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
@@ -443,7 +443,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val result1 = sql(s"SELECT * FROM $catalog.$namespace.$table1")
         assert(result1.schema.fieldNames === selectCommandSchema)
 
-        val extendedResult = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table*'").
+        val extendedResult = sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table%'").
           sort("tableName")
         val extendedResultCollect = extendedResult.collect()
 

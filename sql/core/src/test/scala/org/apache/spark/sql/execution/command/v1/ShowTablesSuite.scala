@@ -65,11 +65,12 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
     withSourceViews {
       val expected = Seq(Row("", "source", true), Row("", "source2", true))
 
-      val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
+      val df = sql("SHOW TABLE EXTENDED FROM default LIKE '%source%'")
+
       val result = df.collect()
       val resultWithoutInfo = result.map { case Row(db, table, temp, _) => Row(db, table, temp) }
 
-      assert(resultWithoutInfo === expected)
+      assert(resultWithoutInfo.sortBy(r => r.getString(1)) === expected)
       result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
     }
   }
@@ -186,7 +187,7 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
       val viewName = table + "_view"
       withView(viewName) {
         sql(s"CREATE VIEW $catalog.$namespace.$viewName AS SELECT id FROM $t")
-        val result = sql(s"SHOW TABLE EXTENDED in $namespace LIKE '$viewName*'").sort("tableName")
+        val result = sql(s"SHOW TABLE EXTENDED in $namespace LIKE '$viewName%'").sort("tableName")
         assert(result.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
         val resultCollect = result.collect()

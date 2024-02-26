@@ -2175,11 +2175,11 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SHOW VIEWS"),
       ShowViews(CurrentNamespace, None))
     comparePlans(
-      parsePlan("SHOW VIEWS '*test*'"),
-      ShowViews(CurrentNamespace, Some("*test*")))
+      parsePlan("SHOW VIEWS '%test%'"),
+      ShowViews(CurrentNamespace, Some("%test%")))
     comparePlans(
-      parsePlan("SHOW VIEWS LIKE '*test*'"),
-      ShowViews(CurrentNamespace, Some("*test*")))
+      parsePlan("SHOW VIEWS LIKE '%test%'"),
+      ShowViews(CurrentNamespace, Some("%test%")))
     comparePlans(
       parsePlan("SHOW VIEWS FROM testcat.ns1.ns2.tbl"),
       ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
@@ -2187,11 +2187,11 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("SHOW VIEWS IN testcat.ns1.ns2.tbl"),
       ShowViews(UnresolvedNamespace(Seq("testcat", "ns1", "ns2", "tbl")), None))
     comparePlans(
-      parsePlan("SHOW VIEWS IN ns1 '*test*'"),
-      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+      parsePlan("SHOW VIEWS IN ns1 '%test%'"),
+      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("%test%")))
     comparePlans(
-      parsePlan("SHOW VIEWS IN ns1 LIKE '*test*'"),
-      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("*test*")))
+      parsePlan("SHOW VIEWS IN ns1 LIKE '%test%'"),
+      ShowViews(UnresolvedNamespace(Seq("ns1")), Some("%test%")))
   }
 
   test("analyze table statistics") {
