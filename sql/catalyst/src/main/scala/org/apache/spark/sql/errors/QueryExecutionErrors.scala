@@ -2721,8 +2721,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       endOffset: Long,
       topicPartition: String,
       groupId: String,
-      cause: Throwable): SparkException = {
-    new SparkException(
+      cause: Throwable): SparkIllegalStateException = {
+    new SparkIllegalStateException(
       errorClass = "KAFKA_DATA_LOSS.COULD_NOT_READ_OFFSET_RANGE",
       messageParameters = Map(
         "startOffset" -> startOffset.toString,
@@ -2735,60 +2735,55 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def startOffsetResetKafkaError(
       topicPartition: String,
       offset: Long,
-      fetchedOffset: Long): SparkException = {
-    new SparkException(
+      fetchedOffset: Long): SparkIllegalStateException = {
+    new SparkIllegalStateException(
       errorClass = "KAFKA_DATA_LOSS.START_OFFSET_RESET",
       messageParameters = Map(
         "topicPartition" -> topicPartition,
         "offset" -> offset.toString,
-        "fetchedOffset" -> fetchedOffset.toString),
-      cause = null)
+        "fetchedOffset" -> fetchedOffset.toString))
   }
 
-  def initialOffsetNotFoundForPartitionsKafkaError(partitions: String): SparkException = {
-    new SparkException(
+  def initialOffsetNotFoundForPartitionsKafkaError(
+      partitions: String): SparkIllegalStateException = {
+    new SparkIllegalStateException(
       errorClass = "KAFKA_DATA_LOSS.INITIAL_OFFSET_NOT_FOUND_FOR_PARTITIONS",
-      messageParameters = Map("partitions" -> partitions),
-      cause = null)
+      messageParameters = Map("partitions" -> partitions))
   }
 
   def addedPartitionDoesNotStartFromZeroKafkaError(
       topicPartition: String,
-      startOffset: Long): SparkException = {
-    new SparkException(
+      startOffset: Long): SparkIllegalStateException = {
+    new SparkIllegalStateException(
       errorClass = "KAFKA_DATA_LOSS.ADDED_PARTITION_DOES_NOT_START_FROM_OFFSET_ZERO",
       messageParameters =
-        Map("topicPartition" -> topicPartition, "startOffset" -> startOffset.toString),
-      cause = null)
+        Map("topicPartition" -> topicPartition, "startOffset" -> startOffset.toString))
   }
 
   def partitionsDeletedKafkaError(
       partitions: String,
-      groupIdConfigName: Option[String]): SparkException = {
+      groupIdConfigName: Option[String]): SparkIllegalStateException = {
     groupIdConfigName match {
       case Some(config) =>
-        new SparkException(
+        new SparkIllegalStateException(
           errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED_AND_GROUP_ID_CONFIG_PRESENT",
-          messageParameters = Map("partitions" -> partitions, "groupIdConfig" -> config),
-          cause = null)
+          messageParameters = Map("partitions" -> partitions, "groupIdConfig" -> config))
       case None =>
-        new SparkException(
+        new SparkIllegalStateException(
           errorClass = "KAFKA_DATA_LOSS.PARTITIONS_DELETED",
-          messageParameters = Map("partitions" -> partitions),
-          cause = null)
+          messageParameters = Map("partitions" -> partitions))
     }
   }
 
   def partitionOffsetChangedKafkaError(
       topicPartition: String,
       prevOffset: Long,
-      newOffset: Long): SparkException = {
-    new SparkException(
+      newOffset: Long): SparkIllegalStateException = {
+    new SparkIllegalStateException(
       errorClass = "KAFKA_DATA_LOSS.PARTITION_OFFSET_CHANGED",
       messageParameters = Map(
         "topicPartition" -> topicPartition,
         "prevOffset" -> prevOffset.toString,
-        "newOffset" -> newOffset.toString),
-      cause = null)
+        "newOffset" -> newOffset.toString))
   }
 }

@@ -23,7 +23,7 @@ import java.util.concurrent.TimeoutException
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkIllegalStateException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -227,7 +227,7 @@ class KafkaContinuousPartitionReader(
 
         // This is a failOnDataLoss exception. Retry if nextKafkaOffset is within the data range,
         // or if it's the endpoint of the data range (i.e. the "true" next offset).
-        case e: SparkException if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
+        case e: SparkIllegalStateException if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
           val range = consumer.getAvailableOffsetRange()
           if (range.latest >= nextKafkaOffset && range.earliest <= nextKafkaOffset) {
             // retry
