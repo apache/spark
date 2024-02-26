@@ -23,7 +23,7 @@ import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.python.EvalPythonExec.{ArgumentMetadata, InputRowIteratorWithForwardedHiddenValues, OutputRowIteratorWithForwardedHiddenValues}
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
@@ -54,25 +54,9 @@ case class ArrowEvalPythonUDTFExec(
 
   override protected def evaluate(
       argMetas: Array[ArgumentMetadata],
-      internalRowIter: Iterator[InternalRow],
+      iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[Iterator[InternalRow]] = {
-
-    // Wrap the [[internalRowIter]] with an iterator that can handle the hidden columns.
-    val iter: InputRowIteratorWithForwardedHiddenValues =
-      InputRowIteratorWithForwardedHiddenValues(
-        internalRowIter.map { internalRow =>
-          assert(internalRow.numFields == requiredChildOutput.length,
-            "The input row doesn't match the required output of the child plan.")
-          val rowValues: Array[Any] = internalRow.toSeq(requiredChildOutput.map(_.dataType)).toArray
-          val lookupResult: EvalPythonExec.LookupFromRowResult =
-            EvalPythonExec.lookupIndexedColumnValuesFromRow(
-              udtf.forwardHiddenColumnIndexes, rowValues)
-          EvalPythonExec.InternalInputRow(
-            row = new GenericInternalRow(lookupResult.updatedRow),
-            forwardedHiddenValues = lookupResult.indexedValues)
-        }
-      )
 
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
@@ -101,8 +85,7 @@ case class ArrowEvalPythonUDTFExec(
         s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
 
       flattenedBatch.setNumRows(batch.numRows())
-      val iteratorResult = flattenedBatch.rowIterator().asScala
-      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, iter, schema)
+      flattenedBatch.rowIterator().asScala
     }
   }
 

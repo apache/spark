@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import java.io.DataOutputStream
 
 import org.apache.spark.api.python._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
@@ -36,7 +37,7 @@ abstract class BaseArrowPythonRunner(
     protected override val workerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-  extends BasePythonRunner[Iterator[EvalPythonExec.InputRow], ColumnarBatch](
+  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {

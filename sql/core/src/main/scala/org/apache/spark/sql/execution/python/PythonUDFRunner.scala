@@ -35,7 +35,7 @@ abstract class BasePythonUDFRunner(
     argOffsets: Array[Array[Int]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-  extends BasePythonRunner[EvalPythonExec.InputRow, Array[Byte]](
+  extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID) {
 
   override val pythonExec: String =
@@ -51,7 +51,7 @@ abstract class BasePythonUDFRunner(
   protected override def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
-      inputIterator: Iterator[EvalPythonExec.InputRow],
+      inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
       context: TaskContext): Writer = {
     new Writer(env, worker, inputIterator, partitionIndex, context) {
@@ -62,9 +62,7 @@ abstract class BasePythonUDFRunner(
 
       override def writeNextInputToStream(dataOut: DataOutputStream): Boolean = {
         val startData = dataOut.size()
-        val wroteData = PythonRDD
-          .writeNextElementToStream(
-            inputIterator.map(_.asInstanceOf[EvalPythonExec.SerializedInputRow].bytes), dataOut)
+        val wroteData = PythonRDD.writeNextElementToStream(inputIterator, dataOut)
         if (!wroteData) {
           // Reached the end of input.
           dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)

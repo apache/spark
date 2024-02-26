@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.EvalPythonExec.{ArgumentMetadata, OutputRowIteratorWithForwardedHiddenValues}
+import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -63,8 +63,7 @@ case class BatchEvalPythonUDTFExec(
     EvaluatePython.registerPicklers()  // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator =
-      BatchEvalPythonExec.getInputIterator(iter, schema, udtf.forwardHiddenColumnIndexes)
+    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -84,9 +83,8 @@ case class BatchEvalPythonUDTFExec(
       assert(results.getClass.isArray)
       val res = results.asInstanceOf[Array[_]]
       pythonMetrics("pythonNumRowsReceived") += res.length
-      val iteratorResult = fromJava(results).asInstanceOf[GenericArrayData]
+      fromJava(results).asInstanceOf[GenericArrayData]
         .array.map(_.asInstanceOf[InternalRow]).iterator
-      OutputRowIteratorWithForwardedHiddenValues(udtf, iteratorResult, inputIterator, schema)
     }
   }
 

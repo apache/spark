@@ -121,8 +121,7 @@ class ArrowEvalPythonEvaluatorFactory(
       pythonRunnerConf,
       pythonMetrics,
       jobArtifactUUID,
-      profiler).compute(
-        EvalPythonExec.toInternalInputRows(batchIter), context.partitionId(), context)
+      profiler).compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.flatMap { batch =>
       val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
