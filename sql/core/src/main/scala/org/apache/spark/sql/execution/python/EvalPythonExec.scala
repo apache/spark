@@ -129,6 +129,7 @@ object EvalPythonExec {
       rowValues: Array[Any]): LookupFromRowResult = {
     optionalIndexes.map { columnIndexes: Seq[PythonUDTF.ColumnIndex] =>
       val indexedValues = mutable.ArrayBuffer.empty[PythonUDTF.ColumnValueWithIndex]
+      print(s"@@@ row values: ${rowValues.mkString(", ")}\n")
       val newRowValues: Array[Any] = rowValues.map {
         case g: GenericRowWithSchema =>
           val newFields = mutable.ArrayBuffer.empty[Any]
