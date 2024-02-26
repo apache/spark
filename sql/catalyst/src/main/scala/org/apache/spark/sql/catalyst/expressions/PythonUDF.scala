@@ -206,12 +206,6 @@ object PythonUDTF {
    * Each of these can refer to a partitioning column or a hidden pass-through column.
    */
   case class ColumnIndex(index: Int)
-
-  /**
-   * Holds the value and zero-based index of a specific column within a TABLE argument to a Python
-   * UDTF call. Each of these can refer to a partitioning column or a hidden pass-through column.
-   */
-  case class ColumnValueWithIndex(value: Any, index: Int)
 }
 
 /**

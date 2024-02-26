@@ -145,18 +145,10 @@ case class FunctionTableSubqueryArgumentExpression(
     // If instructed, add a projection to compute the specified input expressions.
     if (selectedInputExpressions.nonEmpty) {
       val projectList = selectedInputExpressions.map {
-        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String), false) =>
+        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String), _) =>
           Alias(expression, alias)()
-        case PythonUDTFSelectedExpression(a: Attribute, None, false) =>
+        case PythonUDTFSelectedExpression(a: Attribute, None, _) =>
           a
-        // If the UDTF is marking an expression as 'forwardHidden', we project it as a literal null
-        // and give it an alias so that the UDTF evaluator can find it in the output row.
-        // In this way, we save the cost of computing the expression and sending its value to the
-        // Python interpreter.
-        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String), true) =>
-          Alias(Literal(null), alias)()
-        case PythonUDTFSelectedExpression(a: Attribute, None, true) =>
-          Alias(Literal(null), a.name)()
         case PythonUDTFSelectedExpression(other: Expression, None, _) =>
           throw QueryCompilationErrors
             .invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(other.sql)

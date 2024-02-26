@@ -71,7 +71,6 @@ from pyspark.testing.sqlutils import (
 
 
 class BaseUDTFTestsMixin:
-    '''
     def test_simple_udtf(self):
         class TestUDTF:
             def eval(self):
@@ -2404,7 +2403,6 @@ class BaseUDTFTestsMixin:
                     [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)]
                     + [Row(partition_col=42, count=3, total=3, last=None)],
                 )
-    '''
 
     def test_udtf_with_forward_hidden_columns(self):
         @udtf
