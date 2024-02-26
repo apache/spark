@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -116,7 +116,7 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
     val rowWithoutSchema = Row(1, "foo", 3.14)
 
     checkError(
-      exception = intercept[AnalysisException] {
+      exception = intercept[SparkUnsupportedOperationException] {
         rowWithoutSchema.fieldIndex("foo")
       },
       errorClass = "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA",

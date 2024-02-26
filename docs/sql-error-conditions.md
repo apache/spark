@@ -261,6 +261,12 @@ Cannot parse the field name `<fieldName>` and the value `<fieldValue>` of the JS
 
 Error parsing descriptor bytes into Protobuf FileDescriptorSet.
 
+### CANNOT_PARSE_STRING_AS_DATATYPE
+
+[SQLSTATE: 22018](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot parse field value `<value>` for pattern `<pattern>` as target spark data type [`<dataType>`].
+
 ### CANNOT_PARSE_TIMESTAMP
 
 [SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -755,6 +761,12 @@ Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename retur
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot `<op>` column, because `<fieldNames>` already exists in `<struct>`.
+
+### FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA
+
+[SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+fieldIndex on a Row without schema is undefined.
 
 ### FIELD_NOT_FOUND
 

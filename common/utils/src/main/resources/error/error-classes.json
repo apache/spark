@@ -1282,7 +1282,7 @@
     "message" : [
       "fieldIndex on a Row without schema is undefined."
     ],
-    "sqlState": "42000"
+    "sqlState" : "42000"
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
