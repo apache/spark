@@ -103,4 +103,10 @@ private[sql] object ProtoDataTypes {
       .newBuilder()
       .setCalendarInterval(proto.DataType.CalendarInterval.getDefaultInstance)
       .build()
+
+  val VariantType: proto.DataType =
+    proto.DataType
+      .newBuilder()
+      .setVariant(proto.DataType.Variant.getDefaultInstance)
+      .build()
 }

@@ -352,7 +352,7 @@ class DataFrameSuite extends QueryTest
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"explode(csv)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql"-> "\"csv\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "(\"ARRAY\" or \"MAP\")"),

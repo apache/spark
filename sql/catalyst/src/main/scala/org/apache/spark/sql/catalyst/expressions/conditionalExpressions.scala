@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF, TreePattern}
-import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId, toSQLType}
+import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -70,7 +70,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BooleanType),
           "inputSql" -> toSQLExpr(predicate),
           "inputType" -> toSQLType(predicate.dataType)
@@ -201,7 +201,7 @@ case class CaseWhen(
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> (index + 1).toString,
+            "paramIndex" -> ordinalNumber(index),
             "requiredType" -> toSQLType(BooleanType),
             "inputSql" -> toSQLExpr(branches(index)._1),
             "inputType" -> toSQLType(branches(index)._1.dataType)

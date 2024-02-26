@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
@@ -961,6 +962,24 @@ class QueryCompilationErrorsSuite
       parameters = Map(
         "methodName" -> "update",
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
+  }
+
+  test("INTERNAL_ERROR: Convert unsupported data type from Spark to Parquet") {
+    val converter = new SparkToParquetSchemaConverter
+    val dummyDataType = new DataType {
+      override def defaultSize: Int = 0
+
+      override def simpleString: String = "Dummy"
+
+      override private[spark] def asNullable = NullType
+    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        converter.convertField(StructField("test", dummyDataType))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")
+    )
   }
 }
 

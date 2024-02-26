@@ -22,7 +22,6 @@ import java.net.URI
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
-import javax.ws.rs.core.UriBuilder
 
 import scala.collection.Map
 import scala.collection.concurrent.{Map => ScalaConcurrentMap}
@@ -578,6 +577,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Initialize any plugins before the task scheduler is initialized.
     _plugins = PluginContainer(this, _resources.asJava)
     _env.initializeShuffleManager()
+    _env.initializeMemoryManager(SparkContext.numDriverCores(master, conf))
 
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
@@ -1829,12 +1829,12 @@ class SparkContext(config: SparkConf) extends Logging {
         addedArchives
           .getOrElseUpdate(jobArtifactUUID, new ConcurrentHashMap[String, Long]().asScala)
           .putIfAbsent(
-          UriBuilder.fromUri(new URI(key)).fragment(uri.getFragment).build().toString,
+          Utils.getUriBuilder(new URI(key)).fragment(uri.getFragment).build().toString,
           timestamp).isEmpty) {
       logInfo(s"Added archive $path at $key with timestamp $timestamp")
       // If the scheme is file, use URI to simply copy instead of downloading.
       val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
-      val uriToDownload = UriBuilder.fromUri(uriToUse).fragment(null).build()
+      val uriToDownload = Utils.getUriBuilder(uriToUse).fragment(null).build()
       val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
         hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
       val dest = new File(

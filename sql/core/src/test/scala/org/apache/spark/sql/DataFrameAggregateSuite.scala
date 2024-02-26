@@ -1089,6 +1089,39 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("SPARK-45599: Neither 0.0 nor -0.0 should be dropped when computing percentile") {
+    // To reproduce the bug described in SPARK-45599, we need exactly these rows in roughly
+    // this order in a DataFrame with exactly 1 partition.
+    // scalastyle:off line.size.limit
+    // See: https://issues.apache.org/jira/browse/SPARK-45599?focusedCommentId=17806954&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-17806954
+    // scalastyle:on line.size.limit
+    val spark45599Repro: DataFrame = Seq(
+        0.0,
+        2.0,
+        153.0,
+        168.0,
+        3252411229536261.0,
+        7.205759403792794e+16,
+        1.7976931348623157e+308,
+        0.25,
+        Double.NaN,
+        Double.NaN,
+        -0.0,
+        -128.0,
+        Double.NaN,
+        Double.NaN
+      ).toDF("val").coalesce(1)
+
+    checkAnswer(
+      spark45599Repro.agg(
+        percentile(col("val"), lit(0.1))
+      ),
+      // With the buggy implementation of OpenHashSet, this returns `0.050000000000000044`
+      // instead of `-0.0`.
+      List(Row(-0.0))
+    )
+  }
+
   test("any_value") {
     checkAnswer(
       courseSales.groupBy("course").agg(
@@ -1156,7 +1189,7 @@ class DataFrameAggregateSuite extends QueryTest
           sqlState = None,
           parameters = Map(
             "sqlExpr" -> "\"count_if(x)\"",
-            "paramIndex" -> "1",
+            "paramIndex" -> "first",
             "inputSql" -> "\"x\"",
             "inputType" -> "\"STRING\"",
             "requiredType" -> "\"BOOLEAN\""),
@@ -1319,7 +1352,7 @@ class DataFrameAggregateSuite extends QueryTest
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"col[a]\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"INTEGRAL\""),
@@ -1970,7 +2003,7 @@ class DataFrameAggregateSuite extends QueryTest
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"hll_sketch_agg(value, text)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> "second",
         "inputSql" -> "\"text\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"INT\""
@@ -1999,7 +2032,7 @@ class DataFrameAggregateSuite extends QueryTest
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"hll_union_agg(sketch, Hll_4)\"",
-        "paramIndex" -> "2",
+        "paramIndex" -> "second",
         "inputSql" -> "\"Hll_4\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"BOOLEAN\""

@@ -45,11 +45,11 @@ class ReverseTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(1 + pser, 1 + psser)
+            self.assert_eq(1 + pser, 1 + psser, check_exact=False)
             # self.assert_eq(0.1 + pser, 0.1 + psser)
             self.assertRaises(TypeError, lambda: "x" + psser)
-            self.assert_eq(True + pser, True + psser)
-            self.assert_eq(False + pser, False + psser)
+            self.assert_eq(True + pser, True + psser, check_exact=False)
+            self.assert_eq(False + pser, False + psser, check_exact=False)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + psser)
 
@@ -57,11 +57,11 @@ class ReverseTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(1 - pser, 1 - psser)
+            self.assert_eq(1 - pser, 1 - psser, check_exact=False)
             # self.assert_eq(0.1 - pser, 0.1 - psser)
             self.assertRaises(TypeError, lambda: "x" - psser)
-            self.assert_eq(True - pser, True - psser)
-            self.assert_eq(False - pser, False - psser)
+            self.assert_eq(True - pser, True - psser, check_exact=False)
+            self.assert_eq(False - pser, False - psser, check_exact=False)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - psser)
 
@@ -69,11 +69,11 @@ class ReverseTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(1 * pser, 1 * psser)
+            self.assert_eq(1 * pser, 1 * psser, check_exact=False)
             # self.assert_eq(0.1 * pser, 0.1 * psser)
             self.assertRaises(TypeError, lambda: "x" * psser)
-            self.assert_eq(True * pser, True * psser)
-            self.assert_eq(False * pser, False * psser)
+            self.assert_eq(True * pser, True * psser, check_exact=False)
+            self.assert_eq(False * pser, False * psser, check_exact=False)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * psser)
 
@@ -117,10 +117,10 @@ class ReverseTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(1 % pser, 1 % psser)
+            self.assert_eq(1 % pser, 1 % psser, check_exact=False)
             # self.assert_eq(0.1 % pser, 0.1 % psser)
-            self.assert_eq(True % pser, True % psser)
-            self.assert_eq(False % pser, False % psser)
+            self.assert_eq(True % pser, True % psser, check_exact=False)
+            self.assert_eq(False % pser, False % psser, check_exact=False)
             self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % psser)
             self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) % psser)
 

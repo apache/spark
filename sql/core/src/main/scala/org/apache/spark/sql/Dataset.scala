@@ -37,6 +37,7 @@ import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -3515,14 +3516,18 @@ class Dataset[T] private[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def mapInPandas(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
+  private[sql] def mapInPandas(
+      func: PythonUDF,
+      isBarrier: Boolean = false,
+      profile: ResourceProfile = null): DataFrame = {
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
         func,
         toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
-        isBarrier))
+        isBarrier,
+        Option(profile)))
   }
 
   /**
@@ -3530,14 +3535,18 @@ class Dataset[T] private[sql](
    * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
    * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
    */
-  private[sql] def mapInArrow(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
+  private[sql] def mapInArrow(
+      func: PythonUDF,
+      isBarrier: Boolean = false,
+      profile: ResourceProfile = null): DataFrame = {
     Dataset.ofRows(
       sparkSession,
       MapInArrow(
         func,
         toAttributes(func.dataType.asInstanceOf[StructType]),
         logicalPlan,
-        isBarrier))
+        isBarrier,
+        Option(profile)))
   }
 
   /**

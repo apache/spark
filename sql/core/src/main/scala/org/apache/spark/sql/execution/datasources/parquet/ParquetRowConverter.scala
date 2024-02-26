@@ -395,7 +395,7 @@ private[parquet] class ParquetRowConverter(
         throw QueryExecutionErrors.cannotCreateParquetConverterForDecimalTypeError(
           t, parquetType.toString)
 
-      case StringType =>
+      case _: StringType =>
         new ParquetStringConverter(updater)
 
       // As long as the parquet type is INT64 timestamp, whether logical annotation

@@ -864,6 +864,14 @@ Sketches have different `lgConfigK` values: `<left>` and `<right>`. Set the `all
 
 `<identifier>` is not a valid identifier as it has more than 2 name parts.
 
+### [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Illegal value provided to the State Store
+
+For more details see [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
+
 ### INCOMPARABLE_PIVOT_COLUMN
 
 [SQLSTATE: 42818](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1080,6 +1088,14 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
 
+### [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-value-error-class.html)
+
+[SQLSTATE: 22022](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The value '`<confValue>`' in the config "`<confName>`" is invalid.
+
+For more details see [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-value-error-class.html)
+
 ### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
 [SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
@@ -1128,6 +1144,12 @@ SQLSTATE: F0000
 Executor memory `<executorMemory>` must be at least `<minSystemMemory>`.
 Please increase executor memory using the --executor-memory option or "`<config>`" in Spark configuration.
 
+### INVALID_EXPRESSION_ENCODER
+
+[SQLSTATE: 42001](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
+
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1173,12 +1195,6 @@ The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ans
 The handle `<handle>` is invalid.
 
 For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
-
-### INVALID_HIVE_COLUMN_NAME
-
-[SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
 
 ### INVALID_IDENTIFIER
 
@@ -2122,6 +2138,13 @@ The checkpoint seems to be only run with older Spark version(s). Run the streami
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 '`<optionName>`' must be specified.
+
+### STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.
+Stateful operators in the metadata: [`<OpsInMetadataSeq>`]; Stateful operators in current batch: [`<OpsInCurBatchSeq>`].
 
 ### STREAM_FAILED
 

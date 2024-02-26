@@ -43,7 +43,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INT\" or \"BIGINT\")",
     "sqlExpr" : "\"rand(1.0)\""
   },
@@ -101,7 +101,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INT\" or \"BIGINT\")",
     "sqlExpr" : "\"rand(1)\""
   },

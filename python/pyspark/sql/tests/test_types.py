@@ -56,6 +56,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    VariantType,
 )
 from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
@@ -874,6 +875,7 @@ class TypesTestsMixin:
             StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
             _parse_datatype_string("a INT, c DOUBLE"),
         )
+        self.assertEqual(VariantType(), _parse_datatype_string("variant"))
 
     def test_metadata_null(self):
         schema = StructType(
@@ -1210,6 +1212,7 @@ class TypesTestsMixin:
             MapType(StringType(), IntegerType()),
             StructField("f1", StringType(), True),
             StructType([StructField("f1", StringType(), True)]),
+            VariantType(),
         ]
         for instance in instances:
             self.assertEqual(eval(repr(instance)), instance)
@@ -1375,6 +1378,10 @@ class TypesTestsMixin:
             DataType.fromDDL("a int, b string"),
             StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
         )
+        self.assertEqual(
+            DataType.fromDDL("a int, v variant"),
+            StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
+        )
 
 
 class DataTypeTests(unittest.TestCase):
@@ -1458,9 +1465,9 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_BE_NONE",
+            error_class="FIELD_NOT_NULLABLE_WITH_NAME",
             message_parameters={
-                "arg_name": "obj",
+                "field_name": "test_name",
             },
         )
 
@@ -1470,11 +1477,12 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
+            error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
             message_parameters={
                 "data_type": "IntegerType()",
-                "obj_name": "data",
-                "obj_type": "str",
+                "field_name": "field b in field a",
+                "obj": "'data'",
+                "obj_type": "<class 'str'>",
             },
         )
 

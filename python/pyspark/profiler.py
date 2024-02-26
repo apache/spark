@@ -38,7 +38,7 @@ import sys
 import warnings
 
 try:
-    from memory_profiler import CodeMap, LineProfiler  # type: ignore[import]
+    from memory_profiler import CodeMap, LineProfiler
 
     has_memory_profiler = True
 except Exception:

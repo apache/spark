@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable
 
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSeq, AttributeSet, Expression, NamedExpression, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -80,7 +81,8 @@ case class MapInPandas(
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan,
-    isBarrier: Boolean) extends UnaryNode {
+    isBarrier: Boolean,
+    profile: Option[ResourceProfile]) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
 
@@ -96,7 +98,8 @@ case class MapInArrow(
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan,
-    isBarrier: Boolean) extends UnaryNode {
+    isBarrier: Boolean,
+    profile: Option[ResourceProfile]) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
 

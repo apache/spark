@@ -82,7 +82,7 @@ jobs:
           sparkr=`./dev/is-changed.py -m sparkr`
           tpcds=`./dev/is-changed.py -m sql`
           docker=`./dev/is-changed.py -m docker-integration-tests`
-          # 'build' and 'java-other-versions' are always true for now.
+          # 'build' and 'maven-build' are always true for now.
           # It does not save significant time and most of PRs trigger the build.
           precondition="
             {
@@ -91,7 +91,7 @@ jobs:
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
-              \"java-other-versions\": \"true\",
+              \"maven-build\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
               \"buf\" : \"true\",
@@ -133,8 +133,6 @@ jobs:
           - ${{ inputs.hadoop }}
         hive:
           - hive2.3
-        # TODO(SPARK-32246): We don't test 'streaming-kinesis-asl' for now.
-        # Kinesis tests depends on external Amazon kinesis service.
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
@@ -147,8 +145,9 @@ jobs:
             mllib-local, mllib, graphx
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            yarn, kubernetes, hadoop-cloud, spark-ganglia-lgpl,
-            connect, protobuf
+            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf
+          - >-
+            yarn, connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
         excluded-tags: [""]
@@ -212,7 +211,7 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
       with:
@@ -286,7 +285,6 @@ jobs:
   infra-image:
     name: "Base image build"
     needs: precondition
-    # Currently, enable docker build from cache for `master` and branch (since 3.4) jobs
     if: >-
       fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
       fromJson(needs.precondition.outputs.required).lint == 'true' ||
@@ -395,7 +393,7 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
       with:
@@ -458,7 +456,7 @@ jobs:
         fi
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v4
       with:
         files: ./python/coverage.xml
         flags: unittests
@@ -513,7 +511,7 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
       with:
@@ -576,8 +574,9 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Install Buf
-      uses: bufbuild/buf-setup-action@v1
+      uses: bufbuild/buf-setup-action@v1.29.0
       with:
+        version: 1.29.0
         github_token: ${{ secrets.GITHUB_TOKEN }}
     - name: Protocol Buffers Linter
       uses: bufbuild/buf-lint-action@v1
@@ -595,7 +594,7 @@ jobs:
         python-version: '3.9'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.9 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==0.982' 'mypy-protobuf==3.3.0'
+        python3.9 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.9 -m pip list
     - name: Python CodeGen check
       run: ./dev/connect-check-protos.py
@@ -633,7 +632,7 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
+    # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
       with:
@@ -703,7 +702,7 @@ jobs:
         # See 'docutils<0.18.0' in SPARK-39421
         python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
           ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 'docutils<0.18.0' \
-          'flake8==3.9.0' 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.9.1' \
+          'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.9.1' \
           'pandas-stubs==1.2.0.53' 'grpcio==1.59.3' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
           'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
         python3.9 -m pip list
@@ -790,17 +789,21 @@ jobs:
         path: site.tar.bz2
         retention-days: 1
 
-  java-other-versions:
+  maven-build:
     needs: precondition
-    if: fromJson(needs.precondition.outputs.required).java-other-versions == 'true'
-    name: Java ${{ matrix.java }} build with Maven
+    if: fromJson(needs.precondition.outputs.required).maven-build == 'true'
+    name: Java ${{ matrix.java }} build with Maven (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        java:
-          - 17
-          - 21
-    runs-on: ubuntu-22.04
+        include:
+          - java: 17
+            os: ubuntu-22.04 
+          - java: 21
+            os: ubuntu-22.04 
+          - java: 21
+            os: macos-14 
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 300
     steps:
     - name: Checkout Spark repository
