@@ -220,7 +220,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.LOGICAL != null) {
-      operationNotAllowed("EXPLAIN LOGICAL", ctx)
+      invalidStatement("EXPLAIN LOGICAL", ctx)
     }
 
     val statement = plan(ctx.statement)
@@ -316,12 +316,12 @@ class SparkSqlAstBuilder extends AstBuilder {
       super.visitCreateTable(ctx)
     } else {
       if (external) {
-        operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
+        invalidStatement("CREATE EXTERNAL TABLE ... USING", ctx)
       }
       if (ifNotExists) {
         // Unlike CREATE TEMPORARY VIEW USING, CREATE TEMPORARY TABLE USING does not support
         // IF NOT EXISTS. Users are not allowed to replace the existing temp table.
-        operationNotAllowed("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
+        invalidStatement("CREATE TEMPORARY TABLE IF NOT EXISTS", ctx)
       }
 
       val (_, _, _, _, options, location, _, _, _) =
@@ -396,7 +396,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       // SET ROLE is the exception to the rule, because we handle this before other SET commands.
       "SET ROLE"
     }
-    operationNotAllowed(keywords, ctx)
+    invalidStatement(keywords, ctx)
   }
 
   /**
@@ -489,7 +489,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
     if (!ctx.identifierList.isEmpty) {
-      operationNotAllowed("CREATE VIEW ... PARTITIONED ON", ctx)
+      invalidStatement("CREATE VIEW ... PARTITIONED ON", ctx)
     }
 
     checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
@@ -718,7 +718,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val serdeInfo = getSerdeInfo(
       ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
     if (provider.isDefined && serdeInfo.isDefined) {
-      operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
+      invalidStatement(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
     // For "CREATE TABLE dst LIKE src ROW FORMAT SERDE xxx" which doesn't specify the file format,
