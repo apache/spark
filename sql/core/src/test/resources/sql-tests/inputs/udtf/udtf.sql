@@ -2,6 +2,7 @@ DROP VIEW IF EXISTS t1;
 DROP VIEW IF EXISTS t2;
 CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (0, 1), (1, 2) t(c1, c2);
 CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input);
+CREATE OR REPLACE TEMPORARY VIEW t3 AS VALUES ("abc", "def"), ("ghi", "jkl") t(c1, c2);
 
 -- test basic udtf
 SELECT * FROM udtf(1, 2);
@@ -154,8 +155,23 @@ SELECT * FROM UDTFForwardColumnsToOutputTableIdentity(TABLE(t1)) WHERE c2 = 2;
 SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(TABLE(t1));
 SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(TABLE(t1)) WHERE c2 = 2;
 SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT DISTINCT * FROM t1)) WHERE c2 = 2;
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT * FROM t1 WHERE c1 IS NOT NULL OR c1 IS NOT NULL)) WHERE c2 = 2;
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT * FROM t1 INNER JOIN t1 USING (c1, c2))) WHERE c2 = 2;
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
   TABLE(SELECT * FROM t1 UNION ALL SELECT * FROM t1)) WHERE c2 = 2;
+-- In this query, the UDTF output schema has two columns: (c1 INT, c2 INT), and the UDTF marks both
+-- of these columns as "forwardToOutputTable". But the input table has columns of different names
+-- instead, which results in an "unresolved attribute" error from the analyzer.
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentityReturnIntegerTypes(TABLE(t2)) WHERE c2 = 2;
+-- In this query, the UDTF output schema has two columns: (c1 INT, c2 INT), and the UDTF marks both
+-- of these columns as "forwardToOutputTable". But the input table has columns of the same names
+-- but different types instead, which results in an error indicating this.
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentityReturnIntegerTypes(TABLE(t3)) WHERE c2 = 2;
 
 -- cleanup
 DROP VIEW t1;
 DROP VIEW t2;
+DROP VIEW t3;

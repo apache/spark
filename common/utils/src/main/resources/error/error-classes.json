@@ -3500,6 +3500,12 @@
     ],
     "sqlState" : "42802"
   },
+  "UDTF_INVALID_REQUESTED_FORWARDED_COLUMN_FROM_ANALYZE_METHOD_TYPE_MISMATCH_OUTPUT_SCHEMA" : {
+    "message" : [
+      "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' expression with name <name> and type <inputColumnType> whose 'forwardToOutputTable' property was set to true, but the output table schema included a column with a different type <outputColumnType>; please update the UDTF's 'analyze' method to specify the output column with this name to have the same type and then try the query again."
+    ],
+    "sqlState" : "42802"
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."

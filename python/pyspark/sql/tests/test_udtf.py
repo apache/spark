@@ -44,7 +44,6 @@ from pyspark.sql.functions import (
     AnalyzeResult,
     OrderingColumn,
     PartitioningColumn,
-    SelectedColumn,
     SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
@@ -2403,50 +2402,6 @@ class BaseUDTFTestsMixin:
                     [Row(partition_col=x, count=2, total=3, last=2) for x in range(1, 21)]
                     + [Row(partition_col=42, count=3, total=3, last=None)],
                 )
-
-    def test_udtf_with_forward_columns(self):
-        @udtf
-        class TestUDTF:
-            @staticmethod
-            def analyze(*args):
-                assert len(args) == 1
-                assert args[0].isTable
-                return AnalyzeResult(
-                    schema=args[0].dataType,
-                    withSinglePartition=True,
-                    select=[
-                        SelectedColumn(
-                            name="a"),
-                        SelectedColumn(
-                            name="b",
-                            forwardToOutputTable=True)
-                    ])
-
-            def eval(self, row: Row):
-                assert len(row) == 2
-                # We indicated that the second column should be forwarded to the output table,
-                # but here we always return a value of 42 for the second column.
-                # This is just to test that the forwarding mechanism works, since a WHERE clause
-                # that originally applies to the output table should get pushed down by Catalyst to
-                # the input table and filter out one of the two input rows.
-                yield row["a"], 42
-
-        self.spark.udtf.register("test_udtf", TestUDTF)
-
-        assertDataFrameEqual(
-            self.spark.sql(
-                """
-                WITH t AS (
-                  SELECT 0 AS a, 1 AS b
-                  UNION ALL
-                  SELECT 2 AS a, 3 AS b
-                )
-                SELECT *
-                FROM test_udtf(TABLE(t))
-                WHERE b = 3
-                """
-            ),
-            [Row(a=2, b=42)])
 
     def test_udtf_with_prepare_string_from_analyze(self):
         @dataclass

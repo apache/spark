@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSeq, AttributeSet, Expression, NamedExpression, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
@@ -219,19 +221,43 @@ trait BaseEvalPythonUDTF extends UnaryNode {
   /**
    * Here we figure out which output attributes that the UDTF marked as forwarded directly from the
    * input table, and return a map from the original attribute to the corresponding output.
+   * This is a "lazy val" because we only want to compute it once, and we first call it from the
+   * optimizer. As a result, it is safe to refer to the data types of input and output attributes.
    */
-  lazy val getForwardColumnAttributeMap: AttributeMap[Attribute] = {
+  lazy val forwardedColumnMap: AttributeMap[Attribute] = {
     val map = mutable.Map.empty[Attribute, Attribute]
     udtf.forwardedColumnIndexes.foreach { indexes: Seq[PythonUDTF.ColumnIndex] =>
+      // Prepare an AttributeSeq from the output attributes of the UDTF output table.
+      // We will use this to invoke the resolver on each of the requested forwarded input column
+      // names to determine the corresponding output column.
       val outputAttributes: AttributeSeq = AttributeSeq.fromNormalOutput(output)
       indexes.foreach { index: PythonUDTF.ColumnIndex =>
-        // The UDTF child should produce one attribute containing a struct of the input arguments.
-        assert(child.output.length == 1)
-        assert(child.isInstanceOf[Project])
-        val childAttribute = child.asInstanceOf[Project].child.output(index.index)
-        outputAttributes.resolve(Seq(childAttribute.name), SQLConf.get.resolver)
-          .map { n: NamedExpression =>
-            map.update(n.toAttribute, childAttribute)
+        // The UDTF child should comprise a projection of exactly one attribute containing a
+        // struct of the input arguments.
+        child match {
+          case Project(Seq(expr: NamedExpression), grandchild)
+            if expr.dataType.isInstanceOf[StructType] =>
+            // Retrieve the attribute of the UDTF input table corresponding to the requested
+            // forwarded column name using the column index.
+            // Then resolve the requested forwarded column name to the corresponding output column.
+            // The result should be a single attribute of the same type as the input column;
+            // throw a meaningful exception if it's not.
+            val childAttribute = grandchild.output(index.index)
+            outputAttributes.resolve(Seq(childAttribute.name), SQLConf.get.resolver)
+              .map { n: NamedExpression =>
+                if (!n.dataType.sameType(childAttribute.dataType)) {
+                  throw QueryCompilationErrors
+                    .invalidUDTFForwardedColumnFromAnalyzeMethodTypeMismatchInOutputSchema(
+                      name = childAttribute.name,
+                      inputColumnType = childAttribute.dataType.simpleString,
+                      outputColumnType = n.dataType.simpleString)
+                }
+                map.update(n.toAttribute, childAttribute)
+              }
+          case _ =>
+            throw SparkException.internalError(
+              s"Invalid plan: $child. The UDTF child should produce one attribute " +
+                "containing a struct of the input arguments.")
         }
       }
     }

@@ -1818,17 +1818,16 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       if evalUDTF.child.isInstanceOf[Project] =>
       // Figure out which deterministic conjuncts refer only to output attributes that the UDTF
       // marked as forwarded directly from the input table. We can safely push these down.
-      val attributeMap = evalUDTF.getForwardColumnAttributeMap
       val (pushDown, stayUp) =
         splitConjunctivePredicates(condition)
           .partition { predicate: Expression =>
             predicate.deterministic &&
-              predicate.references.subsetOf(AttributeSet(attributeMap.keys))
+              predicate.references.subsetOf(AttributeSet(evalUDTF.forwardedColumnMap.keys))
           }
       if (pushDown.nonEmpty) {
         val project = evalUDTF.child.asInstanceOf[Project]
         val newCondition = pushDown.reduceLeft(And).transform {
-          case a: Attribute => attributeMap.getOrElse(a, a)
+          case a: Attribute => evalUDTF.forwardedColumnMap.getOrElse(a, a)
         }
         if (stayUp.nonEmpty) {
           Filter(

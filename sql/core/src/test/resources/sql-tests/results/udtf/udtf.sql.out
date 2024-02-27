@@ -32,6 +32,14 @@ struct<>
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW t3 AS VALUES ("abc", "def"), ("ghi", "jkl") t(c1, c2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT * FROM udtf(1, 2)
 -- !query schema
 struct<x:int,y:int>
@@ -1105,12 +1113,79 @@ struct<c1:int,c2:int>
 
 -- !query
 SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT DISTINCT * FROM t1)) WHERE c2 = 2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	99
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT * FROM t1 WHERE c1 IS NOT NULL OR c1 IS NOT NULL)) WHERE c2 = 2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	99
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
+  TABLE(SELECT * FROM t1 INNER JOIN t1 USING (c1, c2))) WHERE c2 = 2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	99
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableAlwaysReturnC2of99(
   TABLE(SELECT * FROM t1 UNION ALL SELECT * FROM t1)) WHERE c2 = 2
 -- !query schema
 struct<c1:int,c2:int>
 -- !query output
 1	99
 1	99
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentityReturnIntegerTypes(TABLE(t2)) WHERE c2 = 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`c1`",
+    "proposal" : "`input`, `partition_col`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 2,
+    "fragment" : "c1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFForwardColumnsToOutputTableIdentityReturnIntegerTypes(TABLE(t3)) WHERE c2 = 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UDTF_INVALID_REQUESTED_FORWARDED_COLUMN_FROM_ANALYZE_METHOD_TYPE_MISMATCH_OUTPUT_SCHEMA",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "inputColumnType" : "string",
+    "name" : "c1",
+    "outputColumnType" : "int"
+  }
+}
 
 
 -- !query
@@ -1123,6 +1198,14 @@ struct<>
 
 -- !query
 DROP VIEW t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW t3
 -- !query schema
 struct<>
 -- !query output

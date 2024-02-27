@@ -688,6 +688,36 @@ object IntegratedUDFTestUtils extends SQLHelper {
          |""".stripMargin
   }
 
+  object UDTFForwardColumnsToOutputTableIdentityReturnIntegerTypes extends TestUDTF {
+    val pythonScript: String =
+      s"""
+         |from pyspark.sql.functions import AnalyzeResult, OrderingColumn, SelectedColumn
+         |from pyspark.sql.types import IntegerType, Row, StructType
+         |
+         |class $name:
+         |    @staticmethod
+         |    def analyze(*args):
+         |        assert len(args) == 1
+         |        assert args[0].isTable
+         |        return AnalyzeResult(
+         |            schema=StructType()
+         |                .add("c1", IntegerType())
+         |                .add("c2", IntegerType()),
+         |            withSinglePartition=True,
+         |            select=[
+         |              SelectedColumn(
+         |                name="c1",
+         |                forwardToOutputTable=True),
+         |              SelectedColumn(
+         |                name="c2",
+         |                forwardToOutputTable=True)
+         |            ])
+         |
+         |    def eval(self, row: Row):
+         |      yield row
+         |""".stripMargin
+  }
+
   object UDTFForwardColumnsToOutputTableAlwaysReturnC2of99 extends TestUDTF {
     val pythonScript: String =
       s"""
@@ -1273,6 +1303,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
     UDTFPartitionByOrderBySelectComplexExpr,
     UDTFPartitionByOrderBySelectExprOnlyPartitionColumn,
     UDTFForwardColumnsToOutputTableIdentity,
+    UDTFForwardColumnsToOutputTableIdentityReturnIntegerTypes,
     UDTFForwardColumnsToOutputTableAlwaysReturnC2of99,
     InvalidAnalyzeMethodReturnsNonStructTypeSchema,
     InvalidAnalyzeMethodWithSinglePartitionNoInputTable,

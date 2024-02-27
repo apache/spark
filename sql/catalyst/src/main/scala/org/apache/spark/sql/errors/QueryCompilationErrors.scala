@@ -695,6 +695,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expression" -> expression))
   }
 
+  def invalidUDTFForwardedColumnFromAnalyzeMethodTypeMismatchInOutputSchema(
+      name: String,
+      inputColumnType: String,
+      outputColumnType: String): Throwable = {
+    new AnalysisException(
+      errorClass =
+        "UDTF_INVALID_REQUESTED_FORWARDED_COLUMN_FROM_ANALYZE_METHOD_TYPE_MISMATCH_OUTPUT_SCHEMA",
+      messageParameters = Map(
+        "name" -> name,
+        "inputColumnType" -> inputColumnType,
+        "outputColumnType" -> outputColumnType))
+  }
+
   def windowAggregateFunctionWithFilterNotSupportedError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1030",
