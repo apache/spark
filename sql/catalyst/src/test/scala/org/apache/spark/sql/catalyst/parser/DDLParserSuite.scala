@@ -1794,11 +1794,11 @@ class DDLParserSuite extends AnalysisTest {
         EqualTo(UnresolvedAttribute("t.a"), Literal(2))))
   }
 
-  test("delete from table: columns aliases is not allowed") {
+  test("delete from table: column aliases are not allowed") {
     val sql = "DELETE FROM testcat.ns1.ns2.tbl AS t(a,b,c,d) WHERE d = 2"
     checkError(
       exception = parseException(sql),
-      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
+      errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
       parameters = Map("op" -> "DELETE"),
       context = ExpectedContext(
         fragment = sql,
@@ -1833,14 +1833,14 @@ class DDLParserSuite extends AnalysisTest {
         Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
   }
 
-  test("update table: columns aliases is not allowed") {
+  test("update table: column aliases are not allowed") {
     val sql =
       """UPDATE testcat.ns1.ns2.tbl AS t(a,b,c,d)
         |SET b='Robert', c=32
         |WHERE d=2""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
+      errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
       parameters = Map("op" -> "UPDATE"),
       context = ExpectedContext(
         fragment = sql,
@@ -2027,7 +2027,7 @@ class DDLParserSuite extends AnalysisTest {
         Seq.empty))
   }
 
-  test("merge into table: columns aliases are not allowed") {
+  test("merge into table: column aliases are not allowed") {
     Seq("target(c1, c2)" -> "source", "target" -> "source(c1, c2)").foreach {
       case (targetAlias, sourceAlias) =>
         val sql = s"""MERGE INTO testcat1.ns1.ns2.tbl AS $targetAlias
@@ -2040,7 +2040,7 @@ class DDLParserSuite extends AnalysisTest {
           .stripMargin
         checkError(
           exception = parseException(sql),
-          errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
+          errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
           parameters = Map("op" -> "MERGE"),
           context = ExpectedContext(
             fragment = sql,

@@ -400,17 +400,17 @@ Can't create array with `<numberOfElements>` elements which exceeding the array 
 
 For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
-### COLUMN_ALIASES_IS_NOT_ALLOWED
+### COLUMN_ALIASES_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Columns aliases are not allowed in `<op>`.
+Column aliases are not allowed in `<op>`.
 
 ### COLUMN_ALREADY_EXISTS
 
 [SQLSTATE: 42711](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The column `<columnName>` already exists. Consider to choose another name or rename the existing column.
+The column `<columnName>` already exists. Choose another name or rename the existing column.
 
 ### COLUMN_NOT_DEFINED_IN_TABLE
 
