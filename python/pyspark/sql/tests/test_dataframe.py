@@ -1849,7 +1849,7 @@ class DataFrameTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="NOT_STR",
+                error_class="NOT_DATAFRAME",
                 message_parameters={"arg_name": "other", "arg_type": "int"},
             )
 
