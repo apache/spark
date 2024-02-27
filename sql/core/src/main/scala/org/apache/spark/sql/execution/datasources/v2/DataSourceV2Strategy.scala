@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
-import org.apache.spark.sql.connector.catalog.{Identifier, IdentifierParts, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -117,8 +117,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
 
-      val tableIdentifier = v2Relation.identifier match {
-        case Some(IdentifierParts(Seq(schema, tableName))) =>
+      val tableIdentifier = v2Relation.identifier.map(_.asMultipartIdentifier) match {
+        case Some(Seq(schema, tableName)) =>
           Some(new TableIdentifier(tableName, Some(schema), v2Relation.catalog.map(_.name())))
         case _ =>
           None
