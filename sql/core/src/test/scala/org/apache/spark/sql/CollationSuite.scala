@@ -30,14 +30,13 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.types.StringType
 
-class CollationSuite extends QueryTest with SharedSparkSession {
+class CollationSuite extends DatasourceV2SQLBase {
+  protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+
   protected override def beforeAll(): Unit = {
     System.setProperty(IS_TESTING.key, "true")
     super.beforeAll()
   }
-
-class CollationSuite extends DatasourceV2SQLBase {
-  protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   test("collate returns proper type") {
     Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
