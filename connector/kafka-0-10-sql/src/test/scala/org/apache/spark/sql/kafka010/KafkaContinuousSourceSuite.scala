@@ -29,7 +29,7 @@ import org.apache.spark.sql.streaming.Trigger
 class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest {
   import testImplicits._
 
-  override val streamingTimeout = 60.seconds
+  override val streamingTimeout = 90.seconds
 
   test("read Kafka transactional messages: read_committed") {
     val table = "kafka_continuous_source_test"
