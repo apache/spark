@@ -202,17 +202,4 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       }
     }
   }
-
-  test("SPARK-47144: Verify collations work with Connect client") {
-    withClient { client =>
-      Seq("UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
-        val query1 = client.execute(buildPlan(s"select 'abc' collate '$collationName'"))
-        query1.hasNext // guarantees the request was received by server.
-
-        val query2 = client.execute(buildPlan(s"select collation('abc' collate '$collationName')"))
-        query2.hasNext // guarantees the request was received by server.
-      })
-      client.releaseSession()
-    }
-  }
 }
