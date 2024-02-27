@@ -580,7 +580,8 @@ object PartitioningUtils extends SQLConfHelper {
     // non default collated strings should not be used as partition columns
     // as we cannot implement string collation semantic with directory names
     case st: StringType => st.isDefaultCollation
-    case other => other.isInstanceOf[AtomicType]
+    case a: AtomicType => !a.isInstanceOf[VariantType]
+    case _ => false
   }
 
   def partitionColumnsSchema(
