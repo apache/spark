@@ -492,15 +492,15 @@
     },
     "sqlState" : "54000"
   },
-  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+  "COLUMN_ALIASES_NOT_ALLOWED" : {
     "message" : [
-      "Columns aliases are not allowed in <op>."
+      "Column aliases are not allowed in <op>."
     ],
     "sqlState" : "42601"
   },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
-      "The column <columnName> already exists. Consider to choose another name or rename the existing column."
+      "The column <columnName> already exists. Choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
   },

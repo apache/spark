@@ -42,7 +42,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
-      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
+      errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
       messageParameters = Map("op" -> toSQLStmt(op)),
       ctx.identifierList())
   }
