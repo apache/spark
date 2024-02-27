@@ -36,10 +36,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_pandas_api(self):
         super().test_pandas_api()
 
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_repartitionByRange_dataframe(self):
-        super().test_repartitionByRange_dataframe()
-
     @unittest.skip("Spark Connect does not SparkContext but the tests depend on them.")
     def test_same_semantics_error(self):
         super().test_same_semantics_error()

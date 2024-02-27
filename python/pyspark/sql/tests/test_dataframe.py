@@ -27,7 +27,7 @@ import io
 from contextlib import redirect_stdout
 
 from pyspark.sql import SparkSession, Row, functions
-from pyspark.sql.functions import col, lit, count, sum, mean, struct
+from pyspark.sql.functions import col, lit, count, sum, mean, struct, spark_partition_id
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -483,20 +483,21 @@ class DataFrameTestsMixin:
 
         # test repartitionByRange(numPartitions, *cols)
         df3 = df1.repartitionByRange(2, "name", "age")
-        self.assertEqual(df3.rdd.getNumPartitions(), 2)
-        self.assertEqual(df3.rdd.first(), df2.rdd.first())
-        self.assertEqual(df3.rdd.take(3), df2.rdd.take(3))
+
+        self.assertEqual(df3.select(spark_partition_id()).distinct().count(), 2)
+        self.assertEqual(df3.first(), df2.first())
+        self.assertEqual(df3.take(3), df2.take(3))
 
         # test repartitionByRange(numPartitions, *cols)
         df4 = df1.repartitionByRange(3, "name", "age")
-        self.assertEqual(df4.rdd.getNumPartitions(), 3)
-        self.assertEqual(df4.rdd.first(), df2.rdd.first())
-        self.assertEqual(df4.rdd.take(3), df2.rdd.take(3))
+        self.assertEqual(df4.select(spark_partition_id()).distinct().count(), 3)
+        self.assertEqual(df4.first(), df2.first())
+        self.assertEqual(df4.take(3), df2.take(3))
 
         # test repartitionByRange(*cols)
         df5 = df1.repartitionByRange(5, "name", "age")
-        self.assertEqual(df5.rdd.first(), df2.rdd.first())
-        self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
+        self.assertEqual(df5.first(), df2.first())
+        self.assertEqual(df5.take(3), df2.take(3))
 
         with self.assertRaises(PySparkTypeError) as pe:
             df1.repartitionByRange([10], "name", "age")
