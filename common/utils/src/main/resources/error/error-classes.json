@@ -469,12 +469,6 @@
     ],
     "sqlState" : "42704"
   },
-  "COLLATION_SUPPORT_NOT_ENABLED" : {
-    "message" : [
-      "Collation support is under development and not all features are supported. To enable existing features set `spark.sql.collation.enabled` to `true`."
-    ],
-    "sqlState" : "0A000"
-  },
   "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
       "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"
@@ -3858,6 +3852,11 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "COLLATION_SUPPORT_NOT_ENABLED" : {
+        "message" : [
+          "Collation support is under development and not all features are supported. To enable existing features set <collationEnabled> to `true`."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {

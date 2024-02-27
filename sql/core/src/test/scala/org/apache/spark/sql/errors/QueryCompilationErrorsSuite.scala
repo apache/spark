@@ -970,8 +970,9 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           sql(s"select 'aaa' collate 'UNICODE_ci'")
         },
-        errorClass = "COLLATION_SUPPORT_NOT_ENABLED",
-        parameters = Map.empty
+        errorClass = "UNSUPPORTED_FEATURE.COLLATION_SUPPORT_NOT_ENABLED",
+        parameters = Map(
+          "collationEnabled" -> SQLConf.COLLATION_ENABLED.key)
       )
     }
   }
@@ -982,9 +983,10 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           sql(s"select collation('aaa')")
         },
-        errorClass = "COLLATION_SUPPORT_NOT_ENABLED",
+        errorClass = "UNSUPPORTED_FEATURE.COLLATION_SUPPORT_NOT_ENABLED",
         sqlState = Some("0A000"),
-        parameters = Map.empty,
+        parameters = Map(
+          "collationEnabled" -> SQLConf.COLLATION_ENABLED.key),
         context = ExpectedContext(
           fragment = "collation('aaa')", start = 7, stop = 22)
       )
