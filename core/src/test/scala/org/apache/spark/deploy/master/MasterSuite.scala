@@ -705,7 +705,7 @@ class MasterSuite extends SparkFunSuite
 
       // Use different core and memory values to simplify the tests
       MockWorker.counter.set(10000)
-      (1 to 5).map { idx =>
+      (1 to 5).foreach { idx =>
         val worker = new MockWorker(master.self, conf)
         worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
         val workerReg = RegisterWorker(
@@ -718,7 +718,9 @@ class MasterSuite extends SparkFunSuite
           "http://localhost:8080",
           RpcAddress("localhost", 10000))
         master.self.send(workerReg)
-        worker
+        eventually(timeout(10.seconds)) {
+          assert(master.self.askSync[MasterStateResponse](RequestMasterState).workers.size === idx)
+        }
       }
 
       // An application with two executors
