@@ -313,6 +313,7 @@ class SqlCommand(google.protobuf.message.Message):
     POS_ARGS_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENTS_FIELD_NUMBER: builtins.int
     POS_ARGUMENTS_FIELD_NUMBER: builtins.int
+    INPUT_FIELD_NUMBER: builtins.int
     sql: builtins.str
     """(Required) SQL Query."""
     @property
@@ -347,6 +348,11 @@ class SqlCommand(google.protobuf.message.Message):
         """(Optional) A sequence of expressions for positional parameters in the SQL query text.
         It cannot coexist with `named_arguments`.
         """
+    @property
+    def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+        """(Optional) this relation should be either a 'SQL' Relation,
+        or a 'WithRelations' with a 'SQL' as the root.
+        """
     def __init__(
         self,
         *,
@@ -367,12 +373,20 @@ class SqlCommand(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
+        input: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_input", b"_input", "input", b"input"]
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_input",
+            b"_input",
             "args",
             b"args",
+            "input",
+            b"input",
             "named_arguments",
             b"named_arguments",
             "pos_args",
@@ -383,6 +397,9 @@ class SqlCommand(google.protobuf.message.Message):
             b"sql",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_input", b"_input"]
+    ) -> typing_extensions.Literal["input"] | None: ...
 
 global___SqlCommand = SqlCommand
 

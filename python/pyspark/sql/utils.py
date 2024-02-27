@@ -357,3 +357,11 @@ def get_window_class() -> Type["Window"]:
         return ConnectWindow  # type: ignore[return-value]
     else:
         return PySparkWindow
+
+
+def get_lit_sql_str(val: str) -> str:
+    # Equivalent to `lit(val)._jc.expr().sql()` for string typed val
+    # This is matched to behavior from JVM implementation.
+    # See `sql` definition from `sql/catalyst/src/main/scala/org/apache/spark/
+    # sql/catalyst/expressions/literals.scala`
+    return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"

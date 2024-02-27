@@ -69,14 +69,17 @@ class LogicalPlan:
 
     def __init__(self, child: Optional["LogicalPlan"]) -> None:
         self._child = child
+        self._plan_id = LogicalPlan._fresh_plan_id()
 
+    @staticmethod
+    def _fresh_plan_id() -> int:
         plan_id: Optional[int] = None
         with LogicalPlan._lock:
             plan_id = LogicalPlan._nextPlanId
             LogicalPlan._nextPlanId += 1
 
         assert plan_id is not None
-        self._plan_id = plan_id
+        return plan_id
 
     def _create_proto_relation(self) -> proto.Relation:
         plan = proto.Relation()
@@ -1115,12 +1118,33 @@ class SubqueryAlias(LogicalPlan):
         return plan
 
 
+class WithRelations(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        references: Sequence["LogicalPlan"],
+    ) -> None:
+        super().__init__(child)
+        assert references is not None and len(references) > 0
+        assert all(isinstance(ref, LogicalPlan) for ref in references)
+        self._references = references
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        if self._child is not None:
+            plan.with_relations.root.CopyFrom(self._child.plan(session))
+        for ref in self._references:
+            plan.with_relations.references.append(ref.plan(session))
+        return plan
+
+
 class SQL(LogicalPlan):
     def __init__(
         self,
         query: str,
         args: Optional[List[Column]] = None,
         named_args: Optional[Dict[str, Column]] = None,
+        views: Optional[Sequence[SubqueryAlias]] = None,
     ) -> None:
         super().__init__(None)
 
@@ -1134,9 +1158,14 @@ class SQL(LogicalPlan):
                 assert isinstance(k, str)
                 assert isinstance(arg, Column)
 
+        if views is not None:
+            assert isinstance(views, List)
+            assert all(isinstance(v, SubqueryAlias) for v in views)
+
         self._query = query
         self._args = args
         self._named_args = named_args
+        self._views = views
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -1147,17 +1176,19 @@ class SQL(LogicalPlan):
         if self._named_args is not None and len(self._named_args) > 0:
             for k, arg in self._named_args.items():
                 plan.sql.named_arguments[k].CopyFrom(arg.to_plan(session))
+
+        if self._views is not None and len(self._views) > 0:
+            old_plan = plan
+            plan = proto.Relation()
+            plan.common.plan_id = LogicalPlan._fresh_plan_id()
+            plan.with_relations.root.CopyFrom(old_plan)
+            plan.with_relations.references.extend([v.plan(session) for v in self._views])
+
         return plan
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
-        cmd.sql_command.sql = self._query
-
-        if self._args is not None and len(self._args) > 0:
-            cmd.sql_command.pos_arguments.extend([arg.to_plan(session) for arg in self._args])
-        if self._named_args is not None and len(self._named_args) > 0:
-            for k, arg in self._named_args.items():
-                cmd.sql_command.named_arguments[k].CopyFrom(arg.to_plan(session))
+        cmd.sql_command.input.CopyFrom(self.plan(session))
         return cmd
 
 
