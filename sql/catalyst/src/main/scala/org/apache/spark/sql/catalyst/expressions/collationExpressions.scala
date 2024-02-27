@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -40,6 +41,12 @@ import org.apache.spark.sql.types._
   group = "string_funcs")
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // Needed in order to make sure no parse errors appear when Collation Support is not enabled
+    // because this might suggest to the customer that feature is enabled until they reproduce
+    // the right syntax
+    if (!SQLConf.get.collationEnabled) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
@@ -67,6 +74,9 @@ object CollateExpressionBuilder extends ExpressionBuilder {
  */
 case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
+  if (!SQLConf.get.collationEnabled) {
+    throw QueryCompilationErrors.collationNotEnabledError()
+  }
   private val collationId = CollationFactory.collationNameToId(collationName)
   override def dataType: DataType = StringType(collationId)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
@@ -90,6 +100,9 @@ case class Collate(child: Expression, collationName: String)
   since = "4.0.0",
   group = "string_funcs")
 case class Collation(child: Expression) extends UnaryExpression with RuntimeReplaceable {
+  if (!SQLConf.get.collationEnabled) {
+    throw QueryCompilationErrors.collationNotEnabledError()
+  }
   override def dataType: DataType = StringType
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
   override def replacement: Expression = {

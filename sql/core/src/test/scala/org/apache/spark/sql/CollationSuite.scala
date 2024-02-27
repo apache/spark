@@ -21,6 +21,7 @@ import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
@@ -31,6 +32,11 @@ import org.apache.spark.sql.types.StringType
 
 class CollationSuite extends DatasourceV2SQLBase {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+
+  protected override def beforeAll(): Unit = {
+    System.setProperty(IS_TESTING.key, "true")
+    super.beforeAll()
+  }
 
   test("collate returns proper type") {
     Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
