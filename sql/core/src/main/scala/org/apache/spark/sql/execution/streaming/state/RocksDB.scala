@@ -34,7 +34,7 @@ import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
-import org.apache.spark.{SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -266,19 +266,18 @@ class RocksDB(
     // Remove leading and trailing whitespaces
     val cfName = colFamilyName.trim
 
-    if (cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3197",
-        messageParameters = Map("colFamilyName" -> colFamilyName).toMap)
+    // if the col family name is empty or "default", throw an exception
+    if (cfName.isEmpty || cfName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+      throw StateStoreErrors.cannotCreateColumnFamilyWithInvalidName(cfName)
     }
 
     if (!isInternal && cfName.charAt(0) == '_') {
       throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(cfName)
     }
 
-    if (!checkColFamilyExists(colFamilyName)) {
+    if (!checkColFamilyExists(cfName)) {
       assert(db != null)
-      val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)
+      val descriptor = new ColumnFamilyDescriptor(cfName.getBytes, columnFamilyOptions)
       val handle = db.createColumnFamily(descriptor)
       colFamilyNameToHandleMap(handle.getName.map(_.toChar).mkString) = handle
     }

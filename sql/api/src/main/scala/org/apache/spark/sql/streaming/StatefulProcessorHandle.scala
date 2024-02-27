@@ -52,14 +52,15 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   def getQueryInfo(): QueryInfo
 
   /**
-   * Function to register a processing/event time based timer for given implicit key
+   * Function to register a processing/event time based timer for given implicit grouping key
+   * and provided timestamp
    * @param expiryTimestampMs - timer expiry timestamp in milliseconds
    */
   def registerTimer(expiryTimestampMs: Long): Unit
 
   /**
-   * Function to delete a processing/event time timer for implicit key and given
-   * timestamp
+   * Function to delete a processing/event time based timer for given implicit grouping key
+   * and provided timestamp
    * @param expiryTimestampMs - timer expiry timestamp in milliseconds
    */
   def deleteTimer(expiryTimestampMs: Long): Unit

@@ -37,9 +37,4 @@ private[sql] trait ExpiredTimerInfo extends Serializable {
    * Get the expired timer's expiry time as milliseconds in epoch time.
    */
   def getExpiryTimeInMs(): Long
-
-  /**
-   * Get the expired timer's timeout mode.
-   */
-  def getTimeoutMode(): TimeoutMode
 }

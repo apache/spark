@@ -3296,6 +3296,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
+    "message" : [
+      "Failed to create column family with invalid name=<colFamilyName>. ",
+      "Empty names or one with reserved value `default` are not supported."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."

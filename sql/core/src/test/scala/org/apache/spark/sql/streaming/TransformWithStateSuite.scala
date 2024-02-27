@@ -36,7 +36,8 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
 
   override def init(
       handle: StatefulProcessorHandle,
-      outputMode: OutputMode) : Unit = {
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     _countState = _processorHandle.getValueState[Long]("countState")
@@ -56,8 +57,6 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       Iterator((key, count.toString))
     }
   }
-
-  override def close(): Unit = {}
 }
 
 // Class to verify stateful processor usage with adding processing time timers
@@ -103,8 +102,9 @@ class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
 
   override def init(
       handle: StatefulProcessorHandle,
-      outputMode: OutputMode) : Unit = {
-    super.init(handle, outputMode)
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode) : Unit = {
+    super.init(handle, outputMode, timeoutMode)
     _timerState = _processorHandle.getValueState[Long]("timerState")
   }
 
@@ -153,7 +153,8 @@ class MaxEventTimeStatefulProcessor
 
   override def init(
       handle: StatefulProcessorHandle,
-      outputMode: OutputMode): Unit = {
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit = {
     _processorHandle = handle
     _maxEventTimeState = _processorHandle.getValueState[Long]("maxEventTimeState")
     _timerState = _processorHandle.getValueState[Long]("timerState")
@@ -195,7 +196,8 @@ class RunningCountMostRecentStatefulProcessor
 
   override def init(
       handle: StatefulProcessorHandle,
-      outputMode: OutputMode) : Unit = {
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     _countState = _processorHandle.getValueState[Long]("countState")
@@ -218,8 +220,6 @@ class RunningCountMostRecentStatefulProcessor
     }
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
 class MostRecentStatefulProcessorWithDeletion
@@ -230,7 +230,8 @@ class MostRecentStatefulProcessorWithDeletion
 
   override def init(
        handle: StatefulProcessorHandle,
-       outputMode: OutputMode) : Unit = {
+       outputMode: OutputMode,
+       timeoutMode: TimeoutMode) : Unit = {
     _processorHandle = handle
     assert(handle.getQueryInfo().getBatchId >= 0)
     _processorHandle.deleteIfExists("countState")
@@ -251,8 +252,6 @@ class MostRecentStatefulProcessorWithDeletion
     }
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
 // Class to verify incorrect usage of stateful processor

@@ -24,7 +24,6 @@ import org.apache.spark.sql.streaming.{ExpiredTimerInfo, TimeoutMode}
  * is valid.
  * @param isValid - boolean to check if the provided ExpiredTimerInfo is valid
  * @param expiryTimeInMsOpt - option to expired timer's expiry time as milliseconds in epoch time
- * @param timeoutMode - timeout mode of the expired timer
  */
 class ExpiredTimerInfoImpl(
     isValid: Boolean,
@@ -34,6 +33,4 @@ class ExpiredTimerInfoImpl(
   override def isValid(): Boolean = isValid
 
   override def getExpiryTimeInMs(): Long = expiryTimeInMsOpt.getOrElse(-1L)
-
-  override def getTimeoutMode(): TimeoutMode = timeoutMode
 }

@@ -146,7 +146,7 @@ case class TransformWithStateExec(
       keyObj,
       Iterator.empty,
       new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents),
-      new ExpiredTimerInfoImpl(true, Some(expiryTimestampMs), timeoutMode)
+      new ExpiredTimerInfoImpl(true, Some(expiryTimestampMs))
     ).map { obj =>
       getOutputRow(obj)
     }
@@ -324,7 +324,7 @@ case class TransformWithStateExec(
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeoutMode, isStreaming)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
-    statefulProcessor.init(processorHandle, outputMode)
+    statefulProcessor.init(processorHandle, outputMode, timeoutMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
     processDataWithPartition(singleIterator, store, processorHandle)
   }

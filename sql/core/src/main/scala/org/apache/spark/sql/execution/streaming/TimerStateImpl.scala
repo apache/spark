@@ -109,6 +109,12 @@ class TimerStateImpl[S](
     keyRow
   }
 
+  //  We maintain a secondary index that inverts the ordering of the timestamp
+  //  and grouping key and maintains the list of (expiry) timestamps in sorted order
+  //  (using BIG_ENDIAN encoding) within RocksDB.
+  //  This is because RocksDB uses byte-wise comparison using the default comparator to
+  //  determine sorted order of keys. This is used to read expired timers at any given
+  //  processing time/event time timestamp threshold by performing a range scan.
   private def encodeSecIndexKey(expiryTimestampMs: Long): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {

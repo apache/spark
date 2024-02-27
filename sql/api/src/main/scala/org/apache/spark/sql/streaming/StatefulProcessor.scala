@@ -36,10 +36,12 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
    *               actions like creating state variables, accessing queryInfo etc. Please refer to
    *               [[StatefulProcessorHandle]] for more details.
    * @param outputMode - output mode for the stateful processor
+   * @param timeoutMode - timeout mode for the stateful processor
    */
   def init(
       handle: StatefulProcessorHandle,
-      outputMode: OutputMode): Unit
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit
 
   /**
    * Function that will allow users to interact with input data rows along with the grouping key

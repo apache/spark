@@ -30,7 +30,10 @@ class TestListStateProcessor
   @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _listState: ListState[String] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
+  override def init(
+      handle: StatefulProcessorHandle,
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit = {
     _processorHandle = handle
     _listState = handle.getListState("testListState")
   }
@@ -78,8 +81,6 @@ class TestListStateProcessor
 
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
 class ToggleSaveAndEmitProcessor
@@ -89,7 +90,10 @@ class ToggleSaveAndEmitProcessor
   @transient var _listState: ListState[String] = _
   @transient var _valueState: ValueState[Boolean] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
+  override def init(
+      handle: StatefulProcessorHandle,
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit = {
     _processorHandle = handle
     _listState = handle.getListState("testListState")
     _valueState = handle.getValueState("testValueState")
@@ -126,8 +130,6 @@ class ToggleSaveAndEmitProcessor
       }
     }
   }
-
-  override def close(): Unit = {}
 }
 
 class TransformWithListStateSuite extends StreamTest
