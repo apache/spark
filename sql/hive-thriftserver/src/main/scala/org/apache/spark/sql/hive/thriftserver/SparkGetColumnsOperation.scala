@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -74,12 +75,20 @@ private[hive] class SparkGetColumnsOperation(
       statementId,
       parentSession.getUsername)
 
-    val schemaPattern = convertSchemaPattern(schemaName)
-    val tablePattern = convertIdentifierPattern(tableName, true)
+    val (schemaPattern, tablePattern) =
+      if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+        (convertSchemaPattern(schemaName), convertIdentifierPattern(tableName, true))
+      } else {
+        (newConvertSchemaPattern(schemaName, true), newConvertIdentifierPattern(tableName, true))
+      }
 
     var columnPattern: Pattern = null
     if (columnName != null) {
-      columnPattern = Pattern.compile(convertIdentifierPattern(columnName, false))
+      if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+        columnPattern = Pattern.compile(convertIdentifierPattern(columnName, false))
+      } else {
+        columnPattern = Pattern.compile(newConvertIdentifierPattern(columnName, false))
+      }
     }
 
     val db2Tabs = catalog.listDatabases(schemaPattern).map { dbName =>

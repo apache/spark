@@ -77,31 +77,31 @@ ShowViewsCommand global_temp, [namespace#x, viewName#x, isTemporary#x]
 
 
 -- !query
-SHOW VIEWS 'view_*'
+SHOW VIEWS 'view_%'
 -- !query analysis
-ShowViewsCommand showdb, view_*, [namespace#x, viewName#x, isTemporary#x]
+ShowViewsCommand showdb, view_%, [namespace#x, viewName#x, isTemporary#x]
 
 
 -- !query
-SHOW VIEWS LIKE 'view_1*|view_2*'
+SHOW VIEWS LIKE 'view_%'
 -- !query analysis
-ShowViewsCommand showdb, view_1*|view_2*, [namespace#x, viewName#x, isTemporary#x]
+ShowViewsCommand showdb, view_%, [namespace#x, viewName#x, isTemporary#x]
 
 
 -- !query
-SHOW VIEWS IN showdb 'view_*'
+SHOW VIEWS IN showdb 'view_%'
 -- !query analysis
-ShowViewsCommand showdb, view_*, [namespace#x, viewName#x, isTemporary#x]
+ShowViewsCommand showdb, view_%, [namespace#x, viewName#x, isTemporary#x]
 
 
 -- !query
-SHOW VIEWS IN showdb LIKE 'view_*'
+SHOW VIEWS IN showdb LIKE 'view_%'
 -- !query analysis
-ShowViewsCommand showdb, view_*, [namespace#x, viewName#x, isTemporary#x]
+ShowViewsCommand showdb, view_%, [namespace#x, viewName#x, isTemporary#x]
 
 
 -- !query
-SHOW VIEWS IN wrongdb LIKE 'view_*'
+SHOW VIEWS IN wrongdb LIKE 'view_%'
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 {

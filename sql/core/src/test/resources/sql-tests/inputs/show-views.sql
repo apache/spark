@@ -14,12 +14,12 @@ SHOW VIEWS IN showdb;
 SHOW VIEWS IN global_temp;
 
 -- SHOW VIEWS WITH wildcard match
-SHOW VIEWS 'view_*';
-SHOW VIEWS LIKE 'view_1*|view_2*';
-SHOW VIEWS IN showdb 'view_*';
-SHOW VIEWS IN showdb LIKE 'view_*';
+SHOW VIEWS 'view_%';
+SHOW VIEWS LIKE 'view_%';
+SHOW VIEWS IN showdb 'view_%';
+SHOW VIEWS IN showdb LIKE 'view_%';
 -- Error when database not exists
-SHOW VIEWS IN wrongdb LIKE 'view_*';
+SHOW VIEWS IN wrongdb LIKE 'view_%';
 
 -- Clean Up
 DROP VIEW global_temp.view_3;

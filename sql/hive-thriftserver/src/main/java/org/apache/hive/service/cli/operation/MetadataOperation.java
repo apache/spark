@@ -105,6 +105,43 @@ public abstract class MetadataOperation extends Operation {
         .replaceAll("([^\\\\])_", "$1.").replaceAll("\\\\_", "_").replaceAll("^_", ".");
   }
 
+  protected String newConvertIdentifierPattern(final String pattern, boolean datanucleusFormat) {
+    if (pattern == null) {
+      return newConvertPattern("%", true);
+    } else {
+      return newConvertPattern(pattern, datanucleusFormat);
+    }
+  }
+
+  public String newConvertSchemaPattern(final String pattern, boolean datanucleusFormat) {
+    if ((pattern == null) || pattern.isEmpty()) {
+      String all = datanucleusFormat? "*" : ".*";
+      return newConvertPattern(all, datanucleusFormat);
+    } else {
+      return newConvertPattern(pattern, datanucleusFormat);
+    }
+  }
+
+  public String newConvertPattern(final String pattern, boolean datanucleusFormat) {
+    if (datanucleusFormat) {
+      return pattern
+          .replaceAll("([^\\\\])\\*", "$1%")
+          .replaceAll("\\\\\\*", "*")
+          .replaceAll("^\\*", "%")
+          .replaceAll("([^\\\\])\\.", "$1_")
+          .replaceAll("\\\\\\.", ".")
+          .replaceAll("^\\.", "_");
+    } else {
+      return pattern
+          .replaceAll("([^\\\\])\\.\\*", "$1%")
+          .replaceAll("\\\\\\.\\*", "*")
+          .replaceAll("^\\.\\*", "%")
+          .replaceAll("([^\\\\])\\.", "$1_")
+          .replaceAll("\\\\\\.", ".")
+          .replaceAll("^\\.", "_");
+    }
+  }
+
   protected boolean isAuthV2Enabled(){
     SessionState ss = SessionState.get();
     return (ss.isAuthorizationModeV2() &&

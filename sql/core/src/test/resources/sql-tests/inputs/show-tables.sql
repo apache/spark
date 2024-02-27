@@ -12,13 +12,13 @@ SHOW TABLES;
 SHOW TABLES IN showdb;
 
 -- SHOW TABLES WITH wildcard match
-SHOW TABLES 'show_t*';
-SHOW TABLES LIKE 'show_t1*|show_t2*';
-SHOW TABLES IN showdb 'show_t*';
-SHOW TABLES IN showdb LIKE 'show_t*';
+SHOW TABLES 'show_t%';
+SHOW TABLES LIKE 'show_t%';
+SHOW TABLES IN showdb 'show_t%';
+SHOW TABLES IN showdb LIKE 'show_t%';
 
 -- SHOW TABLE EXTENDED
-SHOW TABLE EXTENDED LIKE 'show_t*';
+SHOW TABLE EXTENDED LIKE 'show_t%';
 SHOW TABLE EXTENDED;
 
 -- SHOW TABLE EXTENDED ... PARTITION
@@ -26,7 +26,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1);
 -- Throw a ParseException if table name is not specified.
 SHOW TABLE EXTENDED PARTITION(c='Us', d=1);
 -- Don't support regular expression for table name if a partition specification is present.
-SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1);
+SHOW TABLE EXTENDED LIKE 'show_t%' PARTITION(c='Us', d=1);
 -- Partition specification is not complete.
 SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us');
 -- Partition specification is invalid.

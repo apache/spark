@@ -60,37 +60,37 @@ ShowTables [namespace#x, tableName#x, isTemporary#x]
 
 
 -- !query
-SHOW TABLES 'show_t*'
+SHOW TABLES 'show_t%'
 -- !query analysis
-ShowTables show_t*, [namespace#x, tableName#x, isTemporary#x]
+ShowTables show_t%, [namespace#x, tableName#x, isTemporary#x]
 +- ResolvedNamespace V2SessionCatalog(spark_catalog), [showdb]
 
 
 -- !query
-SHOW TABLES LIKE 'show_t1*|show_t2*'
+SHOW TABLES LIKE 'show_t%'
 -- !query analysis
-ShowTables show_t1*|show_t2*, [namespace#x, tableName#x, isTemporary#x]
+ShowTables show_t%, [namespace#x, tableName#x, isTemporary#x]
 +- ResolvedNamespace V2SessionCatalog(spark_catalog), [showdb]
 
 
 -- !query
-SHOW TABLES IN showdb 'show_t*'
+SHOW TABLES IN showdb 'show_t%'
 -- !query analysis
-ShowTables show_t*, [namespace#x, tableName#x, isTemporary#x]
+ShowTables show_t%, [namespace#x, tableName#x, isTemporary#x]
 +- ResolvedNamespace V2SessionCatalog(spark_catalog), [showdb]
 
 
 -- !query
-SHOW TABLES IN showdb LIKE 'show_t*'
+SHOW TABLES IN showdb LIKE 'show_t%'
 -- !query analysis
-ShowTables show_t*, [namespace#x, tableName#x, isTemporary#x]
+ShowTables show_t%, [namespace#x, tableName#x, isTemporary#x]
 +- ResolvedNamespace V2SessionCatalog(spark_catalog), [showdb]
 
 
 -- !query
-SHOW TABLE EXTENDED LIKE 'show_t*'
+SHOW TABLE EXTENDED LIKE 'show_t%'
 -- !query analysis
-ShowTablesCommand showdb, show_t*, [namespace#x, tableName#x, isTemporary#x, information#x], true
+ShowTablesCommand showdb, show_t%, [namespace#x, tableName#x, isTemporary#x, information#x], true
 
 
 -- !query
@@ -128,21 +128,21 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1)
+SHOW TABLE EXTENDED LIKE 'show_t%' PARTITION(c='Us', d=1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`show_t*`"
+    "relationName" : "`show_t%`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 26,
     "stopIndex" : 34,
-    "fragment" : "'show_t*'"
+    "fragment" : "'show_t%'"
   } ]
 }
 

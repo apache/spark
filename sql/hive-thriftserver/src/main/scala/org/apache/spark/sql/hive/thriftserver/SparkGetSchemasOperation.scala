@@ -27,6 +27,7 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Spark's own GetSchemasOperation
@@ -67,7 +68,12 @@ private[hive] class SparkGetSchemasOperation(
       parentSession.getUsername)
 
     try {
-      val schemaPattern = convertSchemaPattern(schemaName)
+      val schemaPattern =
+        if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+          convertSchemaPattern(schemaName)
+        } else {
+          newConvertSchemaPattern(schemaName, true)
+        }
       sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
         rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
       }

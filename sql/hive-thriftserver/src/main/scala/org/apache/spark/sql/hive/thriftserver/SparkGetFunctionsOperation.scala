@@ -29,6 +29,7 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Spark's own GetFunctionsOperation
@@ -61,9 +62,13 @@ private[hive] class SparkGetFunctionsOperation(
 
     val catalog = sqlContext.sessionState.catalog
     // get databases for schema pattern
-    val schemaPattern = convertSchemaPattern(schemaName)
+    val (schemaPattern, functionPattern) =
+      if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+        (convertSchemaPattern(schemaName), convertSchemaPattern(functionName))
+      } else {
+        (newConvertSchemaPattern(schemaName, true), newConvertSchemaPattern(functionName, true))
+      }
     val matchingDbs = catalog.listDatabases(schemaPattern)
-    val functionPattern = CLIServiceUtils.patternToRegex(functionName)
 
     if (isAuthV2Enabled) {
       // authorize this call on the schema objects
@@ -81,7 +86,7 @@ private[hive] class SparkGetFunctionsOperation(
 
     try {
       matchingDbs.foreach { db =>
-        catalog.listFunctions(db, functionPattern).foreach {
+        catalog.listFunctions(db, functionPattern).sortBy { item => item._1.funcName }.foreach {
           case (funcIdentifier, _) =>
             val info = catalog.lookupFunctionInfo(funcIdentifier)
             val rowData = Array[AnyRef](

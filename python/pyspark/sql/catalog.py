@@ -142,10 +142,10 @@ class Catalog:
         >>> spark.catalog.listCatalogs()
         [CatalogMetadata(name='spark_catalog', description=None)]
 
-        >>> spark.catalog.listCatalogs("spark*")
+        >>> spark.catalog.listCatalogs("spark%")
         [CatalogMetadata(name='spark_catalog', description=None)]
 
-        >>> spark.catalog.listCatalogs("hive*")
+        >>> spark.catalog.listCatalogs("hive%")
         []
         """
         if pattern is None:
@@ -213,10 +213,10 @@ class Catalog:
         >>> spark.catalog.listDatabases()
         [Database(name='default', catalog='spark_catalog', description='default database', ...
 
-        >>> spark.catalog.listDatabases("def*")
+        >>> spark.catalog.listDatabases("def%")
         [Database(name='default', catalog='spark_catalog', description='default database', ...
 
-        >>> spark.catalog.listDatabases("def2*")
+        >>> spark.catalog.listDatabases("def2%")
         []
         """
         if pattern is None:
@@ -342,10 +342,10 @@ class Catalog:
         >>> spark.catalog.listTables()
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
 
-        >>> spark.catalog.listTables(pattern="test*")
+        >>> spark.catalog.listTables(pattern="test%")
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
 
-        >>> spark.catalog.listTables(pattern="table*")
+        >>> spark.catalog.listTables(pattern="table%")
         []
 
         >>> _ = spark.catalog.dropTempView("test_view")
@@ -470,10 +470,10 @@ class Catalog:
         >>> spark.catalog.listFunctions()
         [Function(name=...
 
-        >>> spark.catalog.listFunctions(pattern="to_*")
+        >>> spark.catalog.listFunctions(pattern="to_%")
         [Function(name=...
 
-        >>> spark.catalog.listFunctions(pattern="*not_existing_func*")
+        >>> spark.catalog.listFunctions(pattern="%not_existing_func%")
         []
         """
         if dbName is None:
