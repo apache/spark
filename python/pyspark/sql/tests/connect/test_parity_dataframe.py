@@ -31,10 +31,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_observe_str(self):
         super().test_observe_str()
 
-    @unittest.skip("Spark Connect does not SparkContext but the tests depend on them.")
-    def test_same_semantics_error(self):
-        super().test_same_semantics_error()
-
     # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
     def test_sample(self):
         super().test_sample()
