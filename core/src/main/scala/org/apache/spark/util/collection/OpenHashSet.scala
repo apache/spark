@@ -133,7 +133,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
    *
    * See: https://issues.apache.org/jira/browse/SPARK-45599
    */
-  @annotation.nowarn("cat=other-non-cooperative-equals")
+  @annotation.nowarn
   private def keyExistsAtPos(k: T, pos: Int) =
     _data(pos) equals k
 
