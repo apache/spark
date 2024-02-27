@@ -23,6 +23,7 @@ import os
 import pickle
 import sys
 import unittest
+from dataclasses import dataclass, asdict
 
 from pyspark.sql import Row
 from pyspark.sql import functions as F
@@ -56,6 +57,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    VariantType,
 )
 from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
@@ -410,6 +412,17 @@ class TypesTestsMixin:
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
+
+    def test_create_dataframe_from_dataclasses(self):
+        @dataclass
+        class User:
+            name: str
+            age: int
+            is_active: bool
+
+        user = User(name="John", age=30, is_active=True)
+        r = self.spark.createDataFrame([user]).first()
+        self.assertEqual(asdict(user), r.asDict())
 
     def test_negative_decimal(self):
         try:
@@ -874,6 +887,7 @@ class TypesTestsMixin:
             StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
             _parse_datatype_string("a INT, c DOUBLE"),
         )
+        self.assertEqual(VariantType(), _parse_datatype_string("variant"))
 
     def test_metadata_null(self):
         schema = StructType(
@@ -1210,6 +1224,7 @@ class TypesTestsMixin:
             MapType(StringType(), IntegerType()),
             StructField("f1", StringType(), True),
             StructType([StructField("f1", StringType(), True)]),
+            VariantType(),
         ]
         for instance in instances:
             self.assertEqual(eval(repr(instance)), instance)
@@ -1374,6 +1389,10 @@ class TypesTestsMixin:
         self.assertEqual(
             DataType.fromDDL("a int, b string"),
             StructType([StructField("a", IntegerType()), StructField("b", StringType())]),
+        )
+        self.assertEqual(
+            DataType.fromDDL("a int, v variant"),
+            StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
         )
 
 
