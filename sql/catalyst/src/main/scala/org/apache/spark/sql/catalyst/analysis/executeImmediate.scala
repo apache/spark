@@ -123,11 +123,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           } else {
             val aliases = expressions.collect {
               case (e: Alias) => e
-            }
-            val nonAliases = expressions.filter(!_.isInstanceOf[Alias])
-
-            if (nonAliases.nonEmpty) {
-              throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
+              case (u: UnresolvedAttribute) => new Alias(u, u.name)()
             }
 
             NameParameterizedQuery(
