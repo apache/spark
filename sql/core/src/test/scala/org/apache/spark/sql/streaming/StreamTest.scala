@@ -284,7 +284,11 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
   /** Assert that a condition on the active query is true */
   class AssertOnQuery(val condition: StreamExecution => Boolean, val message: String)
     extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"AssertOnQuery(<condition>, $message)"
+    override def toString: String = if (message == "") {
+      "AssertOnQuery(<condition>)"
+    } else {
+      s"AssertOnQuery(<condition>, $message)"
+    }
   }
 
   object AssertOnQuery {
