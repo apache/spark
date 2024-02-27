@@ -291,30 +291,52 @@ class CollationSuite extends DatasourceV2SQLBase {
   }
 
   test("checkCollation throws exception for incompatible collationIds") {
-    val left = "abc" // collate with 'UNICODE_CI'
-    val right = "a" // collate with 'UNICODE'
-    var exception: IllegalArgumentException = null
+    val left: String = "abc" // collate with 'UNICODE_CI'
+    val leftCollationName: String = "UNICODE_CI";
+    var right: String = null // collate with 'UNICODE'
+    val rightCollationName: String = "UNICODE";
     // contains
-    exception = intercept[IllegalArgumentException] {
-      spark.sql(s"SELECT contains(collate('$left', 'UNICODE_CI')," +
-        s"collate('$right', 'UNICODE'))").collect()
-    }
-    assert(exception.getMessage.contains(
-      "Function requires the same collation type for left and right strings."))
+    right = left.substring(1, 2);
+    checkError(
+      exception = intercept[SparkException] {
+        spark.sql(s"SELECT contains(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))").collect()
+      },
+      errorClass = "COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName"
+      )
+    )
     // startsWith
-    exception = intercept[IllegalArgumentException] {
-      spark.sql(s"SELECT startsWith(collate('$left', 'UNICODE_CI')," +
-        s"collate('$right', 'UNICODE'))").collect()
-    }
-    assert(exception.getMessage.contains(
-      "Function requires the same collation type for left and right strings."))
+    right = left.substring(0, 1);
+    checkError(
+      exception = intercept[SparkException] {
+        spark.sql(s"SELECT startsWith(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))").collect()
+      },
+      errorClass = "COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName"
+      )
+    )
     // endsWith
-    exception = intercept[IllegalArgumentException] {
-      spark.sql(s"SELECT endsWith(collate('$left', 'UNICODE_CI')," +
-        s"collate('$right', 'UNICODE'))").collect()
-    }
-    assert(exception.getMessage.contains(
-      "Function requires the same collation type for left and right strings."))
+    right = left.substring(2, 3);
+    checkError(
+      exception = intercept[SparkException] {
+        spark.sql(s"SELECT endsWith(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))").collect()
+      },
+      errorClass = "COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName"
+      )
+    )
   }
 
   test("Support contains string expression with Collation") {
@@ -379,12 +401,18 @@ class CollationSuite extends DatasourceV2SQLBase {
       checkAnswer(sql("SELECT contains(collate('" + left + "', 'UCS_BASIC_LCASE'), collate('" +
         right + "', 'UCS_BASIC_LCASE'))"), Row(expectedAnswer))
       // UNICODE_CI
-      val exception = intercept[UnsupportedOperationException] {
-        spark.sql(s"SELECT contains(collate('$left', 'UNICODE_CI')," +
-          s"collate('$right', 'UNICODE_CI'))").collect()
-      }
-      assert(exception.getMessage.contains(
-        "contains function is not yet supported for this collation type."))
+      checkError(
+        exception = intercept[SparkException] {
+          spark.sql(s"SELECT contains(collate('$left', 'UNICODE_CI')," +
+            s"collate('$right', 'UNICODE_CI'))").collect()
+        },
+        errorClass = "COLLATION_NOT_SUPPORTED_FOR_FUNCTION",
+        sqlState = "0A000",
+        parameters = Map(
+          "functionName" -> "contains",
+          "collationName" -> "UNICODE_CI"
+        )
+      )
     }
   }
 

@@ -22,7 +22,7 @@ import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{Base64 => JBase64}
 import java.util.{HashMap, Locale, Map => JMap}
 import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -558,13 +558,19 @@ case class BinaryPredicate(override val prettyName: String, left: Expression, ri
 }
 
 trait CollationCheck {
-  self: BinaryExpression =>
+  self: StringPredicate =>
   def checkCollationIds(): Int = {
     val leftCollationId: Int = left.dataType.asInstanceOf[StringType].collationId
     val rightCollationId: Int = right.dataType.asInstanceOf[StringType].collationId
     if (leftCollationId != rightCollationId) {
-      throw new IllegalArgumentException(
-        "Function requires the same collation type for left and right strings.")
+      throw new SparkException(
+        errorClass = "COLLATION_MISMATCH",
+        messageParameters = Map(
+          "collationNameLeft" -> CollationFactory.fetchCollation(leftCollationId).collationName,
+          "collationNameRight" -> CollationFactory.fetchCollation(rightCollationId).collationName
+        ),
+        cause = null
+      )
     }
     leftCollationId
   }

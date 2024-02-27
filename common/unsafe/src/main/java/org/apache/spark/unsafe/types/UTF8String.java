@@ -22,6 +22,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -30,6 +31,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.SparkException;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -340,13 +342,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
-  public boolean contains(final UTF8String substring, int collationId) {
+  public boolean contains(final UTF8String substring, int collationId) throws SparkException {
+    if (collationId == CollationFactory.DEFAULT_COLLATION_ID) {
+      return this.contains(substring);
+    }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().contains(substring.toLowerCase());
     }
-    // TODO: ICU collation support
-    throw new UnsupportedOperationException(
-            "contains function is not yet supported for this collation type.");
+    // TODO: enable ICU collation support for "contains"
+    Map<String, String> params = new HashMap<>();
+    params.put("functionName", Thread.currentThread().getStackTrace()[1].getMethodName());
+    params.put("collationName", CollationFactory.fetchCollation(collationId).collationName);
+    throw new SparkException("COLLATION_NOT_SUPPORTED_FOR_FUNCTION",
+            SparkException.constructMessageParams(params), null);
   }
 
   /**
@@ -375,6 +383,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean startsWith(final UTF8String prefix, int collationId) {
+    if (collationId == CollationFactory.DEFAULT_COLLATION_ID) {
+      return this.startsWith(prefix);
+    }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
@@ -387,6 +398,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean endsWith(final UTF8String suffix, int collationId) {
+    if (collationId == CollationFactory.DEFAULT_COLLATION_ID) {
+      return this.endsWith(suffix);
+    }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
