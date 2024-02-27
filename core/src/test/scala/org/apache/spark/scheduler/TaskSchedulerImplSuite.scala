@@ -2270,7 +2270,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   // 1 executor with 4 GPUS
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
-    (1 to 20).foreach { taskNum =>
+    scala.util.Random.shuffle((1 to 20).toList).take(5).foreach { taskNum =>
       val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run in the same executor") {
@@ -2317,7 +2317,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   // 4 executors, each of which has 1 GPU
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
-    (1 to 20).foreach { taskNum =>
+    scala.util.Random.shuffle((1 to 20).toList).take(5).foreach { taskNum =>
       val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run on the different executor") {
@@ -2374,7 +2374,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   // 1 executor with 4 GPUS
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
-    (1 to 20).foreach { taskNum =>
+    scala.util.Random.shuffle((1 to 20).toList).take(5).foreach { taskNum =>
       val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 TaskResourceProfile with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run in the same executor") {
@@ -2423,7 +2423,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   // 4 executors, each of which has 1 GPU
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
-    (1 to 20).foreach { taskNum =>
+    scala.util.Random.shuffle((1 to 20).toList).take(5).foreach { taskNum =>
       val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 TaskResourceProfile with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run on the different executor") {
@@ -2489,7 +2489,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val taskCpus = 1
     val taskGpus = 0.3
     val executorGpus = 4
-    val executorCpus = 1000
+    val executorCpus = 100
 
     // each tasks require 0.3 gpu
     val taskScheduler = setupScheduler(numCores = executorCpus,

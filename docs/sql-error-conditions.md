@@ -1144,6 +1144,12 @@ SQLSTATE: F0000
 Executor memory `<executorMemory>` must be at least `<minSystemMemory>`.
 Please increase executor memory using the --executor-memory option or "`<config>`" in Spark configuration.
 
+### INVALID_EXPRESSION_ENCODER
+
+[SQLSTATE: 42001](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
+
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
