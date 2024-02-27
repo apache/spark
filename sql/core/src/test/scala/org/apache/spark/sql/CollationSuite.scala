@@ -21,15 +21,18 @@ import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
+
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.types.StringType
 
-class CollationSuite extends DatasourceV2SQLBase {
+class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   test("collate returns proper type") {
@@ -196,18 +199,38 @@ class CollationSuite extends DatasourceV2SQLBase {
       ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
       ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
     ).foreach {
       case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
         checkAnswer(sql(
           s"""
-        WITH t AS (
-          SELECT collate(col1, '$collationName') as c
-          FROM
-          VALUES ${input.map(s => s"('$s')").mkString(", ")}
+          with t as (
+          select collate(col1, '$collationName') as c
+          from
+          values ${input.map(s => s"('$s')").mkString(", ")}
         )
         SELECT COUNT(*), c FROM t GROUP BY c
         """), expected)
+    }
+  }
+
+  test("hash agg is not used for non binary collations") {
+    val tableName = "T1"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 STRING COLLATE 'UCS_BASIC_LCASE')
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      val df = sql(s"SELECT COUNT(*), c1 FROM $tableName GROUP BY c1")
+      val plan = df.queryExecution.executedPlan
+      assert(collectFirst(plan) {
+        case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
+      }.isEmpty)
     }
   }
 
