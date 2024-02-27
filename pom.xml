@@ -423,6 +423,12 @@
       <groupId>org.scalatestplus</groupId>
       <artifactId>selenium-4-7_${scala.binary.version}</artifactId>
       <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>net.bytebuddy</groupId>
+          <artifactId>byte-buddy</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
@@ -725,6 +731,12 @@
         <artifactId>htmlunit-driver</artifactId>
         <version>${htmlunit-driver.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <!-- Update htmlunit dependency that selenium uses for better JS support -->
       <dependency>
