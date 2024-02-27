@@ -23,6 +23,7 @@ import os
 import pickle
 import sys
 import unittest
+from dataclasses import dataclass, asdict
 
 from pyspark.sql import Row
 from pyspark.sql import functions as F
@@ -411,6 +412,17 @@ class TypesTestsMixin:
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{"a": 1}], ["b"])
         self.assertEqual(df.columns, ["b"])
+
+    def test_create_dataframe_from_dataclasses(self):
+        @dataclass
+        class User:
+            name: str
+            age: int
+            is_active: bool
+
+        user = User(name="John", age=30, is_active=True)
+        r = self.spark.createDataFrame([user]).first()
+        self.assertEqual(asdict(user), r.asDict())
 
     def test_negative_decimal(self):
         try:
