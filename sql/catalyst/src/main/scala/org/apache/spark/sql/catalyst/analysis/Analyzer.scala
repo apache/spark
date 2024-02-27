@@ -382,10 +382,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * 2. otherwise, stays the same.
    */
   object ResolveBinaryArithmetic extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(BINARY_ARITHMETIC), ruleId) {
-      case p: LogicalPlan => p.transformExpressionsUpWithPruning(
-        _.containsPattern(BINARY_ARITHMETIC), ruleId) {
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveExpressionsUpWithPruning(_.containsPattern(BINARY_ARITHMETIC), ruleId) {
         case a @ Add(l, r, mode) if a.childrenResolved => (l.dataType, r.dataType) match {
           case (DateType, DayTimeIntervalType(DAY, DAY)) => DateAdd(l, ExtractANSIIntervalDays(r))
           case (DateType, _: DayTimeIntervalType) => TimeAdd(Cast(l, TimestampType), r)
@@ -455,7 +453,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case _ => d
         }
       }
-    }
   }
 
   /**

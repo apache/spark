@@ -637,6 +637,23 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class Variant(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        type_variation_reference: builtins.int
+        def __init__(
+            self,
+            *,
+            type_variation_reference: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "type_variation_reference", b"type_variation_reference"
+            ],
+        ) -> None: ...
+
     class UDT(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -753,6 +770,7 @@ class DataType(google.protobuf.message.Message):
     ARRAY_FIELD_NUMBER: builtins.int
     STRUCT_FIELD_NUMBER: builtins.int
     MAP_FIELD_NUMBER: builtins.int
+    VARIANT_FIELD_NUMBER: builtins.int
     UDT_FIELD_NUMBER: builtins.int
     UNPARSED_FIELD_NUMBER: builtins.int
     @property
@@ -805,6 +823,8 @@ class DataType(google.protobuf.message.Message):
     @property
     def map(self) -> global___DataType.Map: ...
     @property
+    def variant(self) -> global___DataType.Variant: ...
+    @property
     def udt(self) -> global___DataType.UDT:
         """UserDefinedType"""
     @property
@@ -835,6 +855,7 @@ class DataType(google.protobuf.message.Message):
         array: global___DataType.Array | None = ...,
         struct: global___DataType.Struct | None = ...,
         map: global___DataType.Map | None = ...,
+        variant: global___DataType.Variant | None = ...,
         udt: global___DataType.UDT | None = ...,
         unparsed: global___DataType.Unparsed | None = ...,
     ) -> None: ...
@@ -889,6 +910,8 @@ class DataType(google.protobuf.message.Message):
             b"unparsed",
             "var_char",
             b"var_char",
+            "variant",
+            b"variant",
             "year_month_interval",
             b"year_month_interval",
         ],
@@ -944,6 +967,8 @@ class DataType(google.protobuf.message.Message):
             b"unparsed",
             "var_char",
             b"var_char",
+            "variant",
+            b"variant",
             "year_month_interval",
             b"year_month_interval",
         ],
@@ -974,6 +999,7 @@ class DataType(google.protobuf.message.Message):
             "array",
             "struct",
             "map",
+            "variant",
             "udt",
             "unparsed",
         ]
