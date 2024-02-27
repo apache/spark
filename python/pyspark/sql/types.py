@@ -92,6 +92,7 @@ __all__ = [
     "MapType",
     "StructField",
     "StructType",
+    "VariantType",
 ]
 
 
@@ -1299,6 +1300,16 @@ class StructType(DataType):
         return _create_row(self.names, values)
 
 
+class VariantType(AtomicType):
+    """
+    Variant data type, representing semi-structured values.
+
+    .. versionadded:: 4.0.0
+    """
+
+    pass
+
+
 class UserDefinedType(DataType):
     """User-defined type (UDT).
 
@@ -1437,6 +1448,7 @@ _atomic_types: List[Type[DataType]] = [
     TimestampType,
     TimestampNTZType,
     NullType,
+    VariantType,
 ]
 _all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
 
@@ -2110,6 +2122,22 @@ _acceptable_types = {
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),
+    VariantType: (
+        bool,
+        int,
+        float,
+        decimal.Decimal,
+        str,
+        bytearray,
+        bytes,
+        datetime.date,
+        datetime.datetime,
+        datetime.timedelta,
+        tuple,
+        list,
+        dict,
+        array,
+    ),
 }
 
 
@@ -2434,6 +2462,14 @@ def _make_type_verifier(
                 )
 
         verify_value = verify_struct
+
+    elif isinstance(dataType, VariantType):
+
+        def verify_variant(obj: Any) -> None:
+            # The variant data type can take in any type.
+            pass
+
+        verify_value = verify_variant
 
     else:
 

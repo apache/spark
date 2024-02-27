@@ -148,10 +148,6 @@ abstract class DockerJDBCIntegrationSuite
           pulled = true
       }
 
-      docker.pullImageCmd(db.imageName)
-        .start()
-        .awaitCompletion(connectionTimeout.value.toSeconds, TimeUnit.SECONDS)
-
       val hostConfig = HostConfig
         .newHostConfig()
         .withNetworkMode("bridge")
