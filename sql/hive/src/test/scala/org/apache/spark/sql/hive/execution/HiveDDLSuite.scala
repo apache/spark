@@ -3047,9 +3047,9 @@ class HiveDDLSuite
         exception = intercept[ParseException] {
           sql(sql1)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        errorClass = "INVALID_STATEMENT_OR_CLAUSE",
         parameters = Map(
-          "message" -> ("CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE " +
+          "operation" -> ("CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE " +
             "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
         context = ExpectedContext(fragment = sql1, start = 0, stop = 130)
       )
@@ -3063,9 +3063,9 @@ class HiveDDLSuite
         exception = intercept[ParseException] {
           sql(sql2)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        errorClass = "INVALID_STATEMENT_OR_CLAUSE",
         parameters = Map(
-          "message" -> ("CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE " +
+          "operation" -> ("CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE " +
             "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
         context = ExpectedContext(fragment = sql2, start = 0, stop = 168)
       )
@@ -3093,9 +3093,9 @@ class HiveDDLSuite
         exception = intercept[ParseException] {
           sql(sql4)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        errorClass = "INVALID_STATEMENT_OR_CLAUSE",
         parameters = Map(
-          "message" -> ("CREATE TABLE LIKE ... USING ... STORED AS " +
+          "operation" -> ("CREATE TABLE LIKE ... USING ... STORED AS " +
             "INPUTFORMAT inFormat OUTPUTFORMAT outFormat ROW FORMAT " +
             "SERDE org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
         context = ExpectedContext(fragment = sql4, start = 0, stop = 185)
