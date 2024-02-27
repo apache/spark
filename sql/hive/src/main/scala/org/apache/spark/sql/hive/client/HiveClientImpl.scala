@@ -497,7 +497,13 @@ private[hive] class HiveClientImpl(
       ignoredProperties += key -> value
     }
 
-    val excludedTableProperties = HiveStatisticsProperties ++ Set(
+    val hiveStatisticsProperties = if (SQLConf.get.excludeHiveStatisticsProperties) {
+      HiveStatisticsProperties
+    } else {
+      Set.empty[String]
+    }
+
+    val excludedTableProperties = hiveStatisticsProperties ++ Set(
       // The property value of "comment" is moved to the dedicated field "comment"
       "comment",
       // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added

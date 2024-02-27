@@ -1363,6 +1363,15 @@ object SQLConf {
       .intConf
       .createOptional
 
+  val EXCLUDE_HIVE_STATISTICS_PROPERTIES =
+    buildConf("spark.sql.hive.excludeHiveStatisticsProperties")
+      .internal()
+      .doc("When true, the hive statistics properties will be excluded when HiveClient calls " +
+        "the getTable-related method to return table properties.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZER_METADATA_ONLY = buildConf("spark.sql.optimizer.metadataOnly")
     .internal()
     .doc("When true, enable the metadata-only query optimization that use the table's metadata " +
@@ -5224,6 +5233,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def hiveThriftServerSingleSession: Boolean =
     getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
+
+  def excludeHiveStatisticsProperties: Boolean = getConf(EXCLUDE_HIVE_STATISTICS_PROPERTIES)
 
   def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 

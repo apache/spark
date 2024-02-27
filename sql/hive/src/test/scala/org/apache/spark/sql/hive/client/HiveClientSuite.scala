@@ -33,12 +33,14 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveVersion
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
-class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
+class HiveClientSuite(version: String) extends HiveVersionSuite(version) with SQLHelper {
 
   private var versionSpark: TestHiveVersion = null
 
@@ -252,6 +254,24 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   test("getTablesByName when empty") {
     assert(client.getTablesByName("default", Seq.empty).isEmpty)
+  }
+
+  test("exclude hive statistics properties when call getTable") {
+    val hiveStatisticsProperties = Seq(StatsSetupConst.COLUMN_STATS_ACCURATE,
+      StatsSetupConst.NUM_FILES,
+      StatsSetupConst.NUM_PARTITIONS,
+      StatsSetupConst.ROW_COUNT,
+      StatsSetupConst.RAW_DATA_SIZE,
+      StatsSetupConst.TOTAL_SIZE)
+    withSQLConf(SQLConf.EXCLUDE_HIVE_STATISTICS_PROPERTIES.key -> "true") {
+      val table = client.getTable("default", "src")
+      assert(hiveStatisticsProperties.forall(!table.properties.contains(_)))
+    }
+
+    withSQLConf(SQLConf.EXCLUDE_HIVE_STATISTICS_PROPERTIES.key -> "false") {
+      val table = client.getTable("default", "src")
+      assert(hiveStatisticsProperties.forall(table.properties.contains(_)))
+    }
   }
 
   test("alterTable(table: CatalogTable)") {
