@@ -486,7 +486,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
 
   test("SPARK-39771: warn when shuffle block number is too large") {
     sc = new SparkContext("local", "test", conf)
-    val logAppender = new LogAppender("deprecated Avro option 'ignoreExtension'")
+    val logAppender = new LogAppender("warn when shuffle block number is too large")
     withLogAppender(logAppender) {
       sc.parallelize(1 to 100000, 100000).map(x => (x, x)).reduceByKey(_ + _).toDebugString
     }
