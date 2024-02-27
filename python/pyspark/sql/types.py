@@ -1654,7 +1654,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return CalendarIntervalType()
         elif _COLLATED_STRING.match(json_value):
             m = _COLLATED_STRING.match(json_value)
-            return StringType(StringType.collationNameToId(m.group(1)))
+            return StringType(StringType.collationNameToId(m.group(1)))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
