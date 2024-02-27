@@ -3854,7 +3854,7 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
-      "COLLATION_SUPPORT_NOT_ENABLED" : {
+      "COLLATION" : {
         "message" : [
           "Collation support is under development and not all features are supported. To enable existing features set <collationEnabled> to `true`."
         ]

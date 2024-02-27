@@ -58,7 +58,7 @@ The ANALYZE TABLE command does not support views.
 
 Catalog `<catalogName>` does not support `<operation>`.
 
-## COLLATION_SUPPORT_NOT_ENABLED
+## COLLATION
 
 Collation support is under development and not all features are supported. To enable existing features set `<collationEnabled>` to `true`.
 
