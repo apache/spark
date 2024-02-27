@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{DateTimeException, LocalDateTime, ZoneId}
 import java.util.Locale
 
-import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT
@@ -514,15 +514,13 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     val invalidTimestampStr = "2021-13-01T25:61:61"
 
     checkError(
-      exception = intercept[SparkRuntimeException] {
+      exception = intercept[SparkException] {
         formatter.parseWithoutTimeZone(invalidTimestampStr, allowTimeZone = false)
       },
-      errorClass = "CANNOT_PARSE_STRING_AS_DATATYPE",
+      errorClass = "INTERNAL_ERROR",
       parameters = Map(
-        "value" -> "'2021-13-01T25:61:61'",
-        "pattern" -> "'yyyy-MM-dd HH:mm:ss'",
-        "dataType" -> "TimestampNTZType"
-      )
+        "message" -> ("Cannot parse field value '2021-13-01T25:61:61' for pattern " +
+          "'yyyy-MM-dd HH:mm:ss' as target spark data type [TimestampNTZType]."))
     )
   }
 }

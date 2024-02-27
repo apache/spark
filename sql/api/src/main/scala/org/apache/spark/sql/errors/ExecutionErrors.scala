@@ -127,13 +127,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
-  : SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "CANNOT_PARSE_STRING_AS_DATATYPE",
-      messageParameters = Map(
-        "value" -> toSQLValue(value),
-        "pattern" -> toSQLValue(pattern),
-        "dataType" -> dataType.toString))
+  : Throwable = {
+    SparkException.internalError(
+      s"Cannot parse field value ${toSQLValue(value)} for pattern ${toSQLValue(pattern)} " +
+        s"as target spark data type [${dataType.toString}].")
   }
 
   def unsupportedArrowTypeError(typeName: ArrowType): SparkUnsupportedOperationException = {

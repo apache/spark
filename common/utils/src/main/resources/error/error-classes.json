@@ -298,12 +298,6 @@
     ],
     "sqlState" : "22018"
   },
-  "CANNOT_PARSE_STRING_AS_DATATYPE" : {
-    "message" : [
-      "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ],
-    "sqlState" : "22018"
-  },
   "CANNOT_PARSE_TIMESTAMP" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -1282,7 +1276,7 @@
     "message" : [
       "fieldIndex on a Row without schema is undefined."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "42601"
   },
   "FIELD_NOT_FOUND" : {
     "message" : [
