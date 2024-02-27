@@ -97,8 +97,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   /**
-   * True if comparisons, equality and hashing can be done purely on binary representation.
-   * i.e. binary(e1) = binary(e2) <=> e1 = e2.
+   * True if comparisons, equality and hashing can be done purely on binary representation of
+   * Unsafe row. i.e. binary(e1) = binary(e2) <=> e1 = e2.
    * e.g. this is not true for non-binary collations (any case/accent insensitive collation
    * can lead to rows being semantically equal even though their binary representations differ).
    */

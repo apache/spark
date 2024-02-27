@@ -215,22 +215,25 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("hash agg is not used for non binary collations") {
-    val tableName = "T1"
-    withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TABLE $tableName (c1 STRING COLLATE 'UCS_BASIC_LCASE')
-           |USING PARQUET
-           |""".stripMargin)
+    val tableNameNonBinary = "T_NON_BINARY"
+    val tableNameBinary = "T_BINARY"
+    withTable(tableNameNonBinary) {
+      withTable(tableNameBinary) {
+        sql(s"CREATE TABLE $tableNameNonBinary (c STRING COLLATE 'UCS_BASIC_LCASE') USING PARQUET")
+        sql(s"INSERT INTO $tableNameNonBinary VALUES ('aaa')")
+        sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE 'UCS_BASIC') USING PARQUET")
+        sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
 
-      sql(s"INSERT INTO $tableName VALUES ('aaa')")
-      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+        val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
+        assert(collectFirst(dfNonBinary.queryExecution.executedPlan) {
+          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
+        }.isEmpty)
 
-      val df = sql(s"SELECT COUNT(*), c1 FROM $tableName GROUP BY c1")
-      val plan = df.queryExecution.executedPlan
-      assert(collectFirst(plan) {
-        case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
-      }.isEmpty)
+        val dfBinary = sql(s"SELECT COUNT(*), c FROM $tableNameBinary GROUP BY c")
+        assert(collectFirst(dfBinary.queryExecution.executedPlan) {
+          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
+        }.nonEmpty)
+      }
     }
   }
 

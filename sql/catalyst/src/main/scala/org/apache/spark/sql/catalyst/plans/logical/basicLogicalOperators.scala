@@ -1234,7 +1234,6 @@ object Aggregate {
 
   def supportsHashAggregate(
       aggregateBufferAttributes: Seq[Attribute], groupingExpression: Seq[Expression]): Boolean = {
-    // TODO: Test!
     val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
     isAggregateBufferMutable(aggregationBufferSchema) &&
       groupingExpression.forall(e => UnsafeRow.isBinaryStable(e.dataType))

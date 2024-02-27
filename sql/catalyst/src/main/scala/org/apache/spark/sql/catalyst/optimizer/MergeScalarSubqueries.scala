@@ -353,12 +353,20 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] {
         case a: AggregateExpression => a
       })
     }
-    // val Seq(newPlanSupportsHashAggregate, cachedPlanSupportsHashAggregate) =
-    //   aggregateExpressionsSeq.map(aggregateExpressions => Aggregate.supportsHashAggregate(
-    //     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes),))
+    val groupByExpressionSeq = Seq(newPlan, cachedPlan).map { plan =>
+      plan.groupingExpressions.flatMap(_.collect {
+        case n: NamedExpression => n
+      })
+    }
+
     val Seq(newPlanSupportsHashAggregate, cachedPlanSupportsHashAggregate) =
-      aggregateExpressionsSeq.map(aggregateExpressions => Aggregate.supportsHashAggregate(
-        aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), Seq.empty))
+      aggregateExpressionsSeq.zip(groupByExpressionSeq).map {
+        case (aggregateExpressions, groupByExpressions) =>
+          Aggregate.supportsHashAggregate(
+            aggregateExpressions.flatMap(
+              _.aggregateFunction.aggBufferAttributes), groupByExpressions)
+      }
+
     newPlanSupportsHashAggregate && cachedPlanSupportsHashAggregate ||
       newPlanSupportsHashAggregate == cachedPlanSupportsHashAggregate && {
         val Seq(newPlanSupportsObjectHashAggregate, cachedPlanSupportsObjectHashAggregate) =
