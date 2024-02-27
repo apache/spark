@@ -172,7 +172,7 @@ case class BatchScanExec(
                 KeyGroupedShuffleSpec.reducePartitionValue(row, partExpressions, reducers)
               }.map { case (wrapper, splits) => (wrapper.row, splits.flatMap(_._2)) }.toSeq
               val rowOrdering = RowOrdering.createNaturalAscendingOrdering(
-                expressions.map(_.dataType))
+                partExpressions.map(_.dataType))
               result.sorted(rowOrdering.on((t: (InternalRow, _)) => t._1))
             case _ => groupedPartitions
           }

@@ -63,6 +63,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     Collections.emptyMap[String, String]
   }
   private val table: String = "tbl"
+<<<<<<< HEAD
 
   private val columns: Array[Column] = Array(
     Column.create("id", IntegerType),
@@ -73,6 +74,16 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Column.create("store_id", IntegerType),
       Column.create("dept_id", IntegerType),
       Column.create("data", StringType))
+=======
+  private val schema = new StructType()
+      .add("id", IntegerType)
+      .add("data", StringType)
+      .add("ts", TimestampType)
+    private val schema2 = new StructType()
+      .add("store_id", LongType)
+      .add("dept_id", IntegerType)
+      .add("data", StringType)
+>>>>>>> 0016169c60a (Fix bug of using un-projected expression in sorting)
 
   test("clustered distribution: output partitioning should be KeyGroupedPartitioning") {
     val partitions: Array[Transform] = Array(Expressions.years("ts"))
@@ -1483,7 +1494,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       case (table1buckets, table2buckets) =>
         catalog.clearTables()
 
-        val partition1 = Array(bucket(3, "store_id"),
+        val partition1 = Array(identity("data"),
           bucket(table1buckets, "dept_id"))
         val partition2 = Array(bucket(3, "store_id"),
           bucket(table2buckets, "dept_id"))
