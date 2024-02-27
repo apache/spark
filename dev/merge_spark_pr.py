@@ -79,6 +79,7 @@ def print_error(msg):
 def bold_input(prompt) -> str:
     return input("\033[1m%s\033[0m" % prompt)
 
+
 def get_json(url):
     try:
         request = Request(url)
