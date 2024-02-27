@@ -2307,7 +2307,8 @@
   "INVALID_PARTITION_COLUMN_DATA_TYPE" : {
     "message" : [
       "Cannot use <type> for partition column."
-    ]
+    ],
+    "sqlState" : "0A000"
   },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [

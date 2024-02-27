@@ -380,10 +380,13 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "p1",
           "2019-01-01", "2019-01-01 11:11:11", "Spark SQL"))
 
-      val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
-      }.getMessage
-      assert(e.contains("Cannot use interval"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
+        },
+        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"INTERVAL\"")
+      )
     }
   }
 
