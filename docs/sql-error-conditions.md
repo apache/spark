@@ -2238,6 +2238,12 @@ Please ensure that the number of aliases provided matches the number of columns 
 
 Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias `<aliasName>`; please remove this alias and then try the query again.
 
+### UDTF_INVALID_REQUESTED_FORWARDED_COLUMN_FROM_ANALYZE_METHOD_TYPE_MISMATCH_OUTPUT_SCHEMA
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' expression with name `<name>` and type `<inputColumnType>` whose 'forwardToOutputTable' property was set to true, but the output table schema included a column with a different type `<outputColumnType>`; please update the UDTF's 'analyze' method to specify the output column with this name to have the same type and then try the query again.
+
 ### UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
