@@ -119,7 +119,7 @@ def run_cmd(cmd):
 
 
 def continue_maybe(prompt):
-    result = bold_input("\n\033[1m%s (y/N): \033[0m" % prompt)
+    result = bold_input("%s (y/N): " % prompt)
     if result.lower() != "y":
         fail("Okay, exiting")
 
