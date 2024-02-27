@@ -1172,7 +1172,12 @@ class SubqueryAlias(LogicalPlan):
 
 
 class SQL(LogicalPlan):
-    def __init__(self, query: str, args: Optional[Union[Dict[str, Any], List]] = None) -> None:
+    def __init__(
+        self,
+        query: str,
+        args: Optional[Union[Dict[str, Any], List]] = None,
+        views: Optional[Sequence[SubqueryAlias]] = None,
+    ) -> None:
         super().__init__(None)
 
         if args is not None:
@@ -1185,8 +1190,14 @@ class SQL(LogicalPlan):
                     message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
 
+        if views is not None:
+            assert isinstance(views, List)
+            for view in views:
+                assert isinstance(view, SubqueryAlias)
+
         self._query = query
         self._args = args
+        self._views = views
 
     def _to_expr(self, session: "SparkConnectClient", v: Any) -> proto.Expression:
         if isinstance(v, Column):
@@ -1206,19 +1217,18 @@ class SQL(LogicalPlan):
                 for v in self._args:
                     plan.sql.pos_arguments.append(self._to_expr(session, v))
 
+        if self._views is not None and len(self._views) > 0:
+            old_plan = plan
+            plan = self._create_proto_relation()
+            plan.with_relations.root.CopyFrom(old_plan)
+            for view in self._views:
+                plan.with_relations.references.append(view.plan(session))
+
         return plan
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
-        cmd.sql_command.sql = self._query
-        if self._args is not None and len(self._args) > 0:
-            if isinstance(self._args, Dict):
-                for k, v in self._args.items():
-                    cmd.sql_command.named_arguments[k].CopyFrom(self._to_expr(session, v))
-            else:
-                for v in self._args:
-                    cmd.sql_command.pos_arguments.append(self._to_expr(session, v))
-
+        cmd.sql_command.input.CopyFrom(self.plan(session))
         return cmd
 
 

@@ -101,6 +101,7 @@ class Relation(google.protobuf.message.Message):
     CACHED_REMOTE_RELATION_FIELD_NUMBER: builtins.int
     COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
     AS_OF_JOIN_FIELD_NUMBER: builtins.int
+    WITH_RELATIONS_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -196,6 +197,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def as_of_join(self) -> global___AsOfJoin: ...
     @property
+    def with_relations(self) -> global___WithRelations: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -272,6 +275,7 @@ class Relation(google.protobuf.message.Message):
         common_inline_user_defined_table_function: global___CommonInlineUserDefinedTableFunction
         | None = ...,
         as_of_join: global___AsOfJoin | None = ...,
+        with_relations: global___WithRelations | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -396,6 +400,8 @@ class Relation(google.protobuf.message.Message):
             b"with_columns",
             "with_columns_renamed",
             b"with_columns_renamed",
+            "with_relations",
+            b"with_relations",
             "with_watermark",
             b"with_watermark",
         ],
@@ -509,6 +515,8 @@ class Relation(google.protobuf.message.Message):
             b"with_columns",
             "with_columns_renamed",
             b"with_columns_renamed",
+            "with_relations",
+            b"with_relations",
             "with_watermark",
             b"with_watermark",
         ],
@@ -555,6 +563,7 @@ class Relation(google.protobuf.message.Message):
             "cached_remote_relation",
             "common_inline_user_defined_table_function",
             "as_of_join",
+            "with_relations",
             "fill_na",
             "drop_na",
             "replace",
@@ -742,6 +751,45 @@ class SQL(google.protobuf.message.Message):
     ) -> None: ...
 
 global___SQL = SQL
+
+class WithRelations(google.protobuf.message.Message):
+    """Relation of type [[WithRelations]].
+
+    This relation contains a root plan, and one or more references that are used by the root plan.
+    There are two ways of referencing a relation, by name (through a subquery alias), or by plan_id
+    (using RelationCommon.plan_id).
+
+    This relation can be used to implement CTEs, describe DAGs, or to reduce tree depth.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ROOT_FIELD_NUMBER: builtins.int
+    REFERENCES_FIELD_NUMBER: builtins.int
+    @property
+    def root(self) -> global___Relation:
+        """(Required) Plan at the root of the query tree. This plan is expected to contain one or more
+        references. Those references get expanded later on by the engine.
+        """
+    @property
+    def references(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Relation]:
+        """(Required) Plans referenced by the root plan. Relations in this list are also allowed to
+        contain references to other relations in this list, as long they do not form cycles.
+        """
+    def __init__(
+        self,
+        *,
+        root: global___Relation | None = ...,
+        references: collections.abc.Iterable[global___Relation] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["root", b"root"]) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["references", b"references", "root", b"root"]
+    ) -> None: ...
+
+global___WithRelations = WithRelations
 
 class Read(google.protobuf.message.Message):
     """Relation that reads from a file / table or other data source. Does not have additional
