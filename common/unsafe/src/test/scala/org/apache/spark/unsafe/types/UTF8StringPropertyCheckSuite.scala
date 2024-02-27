@@ -47,9 +47,9 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
   test("startsWith") {
     forAll { (s: String) =>
       val utf8 = toUTF8(s)
-      assert(utf8.startsWith(utf8))
+      assert(utf8.startsWithBinary(utf8))
       for (i <- 1 to s.length) {
-        assert(utf8.startsWith(toUTF8(s.dropRight(i))))
+        assert(utf8.startsWithBinary(toUTF8(s.dropRight(i))))
       }
     }
   }
@@ -57,9 +57,9 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
   test("endsWith") {
     forAll { (s: String) =>
       val utf8 = toUTF8(s)
-      assert(utf8.endsWith(utf8))
+      assert(utf8.endsWithBinary(utf8))
       for (i <- 1 to s.length) {
-        assert(utf8.endsWith(toUTF8(s.drop(i))))
+        assert(utf8.endsWithBinary(toUTF8(s.drop(i))))
       }
     }
   }
@@ -98,7 +98,7 @@ class UTF8StringPropertyCheckSuite extends AnyFunSuite with ScalaCheckDrivenProp
     forAll { (s: String) =>
       for (start <- 0 to s.length; end <- 0 to s.length; if start <= end) {
         val substring = s.substring(start, end)
-        assert(toUTF8(s).contains(toUTF8(substring)) === s.contains(substring))
+        assert(toUTF8(s).containsBinary(toUTF8(substring)) === s.contains(substring))
       }
     }
   }

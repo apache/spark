@@ -329,7 +329,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Returns whether this contains `substring` or not.
    */
-  public boolean contains(final UTF8String substring) {
+  public boolean containsBinary(final UTF8String substring) {
     if (substring.numBytes == 0) {
       return true;
     }
@@ -343,11 +343,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean contains(final UTF8String substring, int collationId) throws SparkException {
-    if (collationId == CollationFactory.DEFAULT_COLLATION_ID) {
-      return this.contains(substring);
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.containsBinary(substring);
     }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
-      return this.toLowerCase().contains(substring.toLowerCase());
+      return this.toLowerCase().containsBinary(substring.toLowerCase());
     }
     // TODO: enable ICU collation support for "contains"
     Map<String, String> params = new HashMap<>();
@@ -378,31 +378,31 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
   }
 
-  public boolean startsWith(final UTF8String prefix) {
+  public boolean startsWithBinary(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
 
   public boolean startsWith(final UTF8String prefix, int collationId) {
-    if (collationId == CollationFactory.DEFAULT_COLLATION_ID) {
-      return this.startsWith(prefix);
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.startsWithBinary(prefix);
     }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
-      return this.toLowerCase().startsWith(prefix.toLowerCase());
+      return this.toLowerCase().startsWithBinary(prefix.toLowerCase());
     }
     // ICU collation support
     return matchAt(prefix, 0, collationId);
   }
 
-  public boolean endsWith(final UTF8String suffix) {
+  public boolean endsWithBinary(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
   }
 
   public boolean endsWith(final UTF8String suffix, int collationId) {
-    if (collationId == CollationFactory.DEFAULT_COLLATION_ID) {
-      return this.endsWith(suffix);
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.endsWithBinary(suffix);
     }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
-      return this.toLowerCase().endsWith(suffix.toLowerCase());
+      return this.toLowerCase().endsWithBinary(suffix.toLowerCase());
     }
     // ICU collation support
     return matchAt(suffix, numBytes - suffix.numBytes, collationId);
@@ -516,7 +516,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * 0 will be returned, else the index of match (1-based index)
    */
   public int findInSet(UTF8String match) {
-    if (match.contains(COMMA_UTF8)) {
+    if (match.containsBinary(COMMA_UTF8)) {
       return 0;
     }
 
