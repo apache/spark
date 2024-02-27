@@ -91,7 +91,7 @@ object BucketFunction extends ReducibleFunction[Int, Int] {
                        otherNumBuckets: Option[_]): Option[Reducer[Int]] = {
     (thisNumBuckets, otherNumBuckets) match {
       case (Some(thisNumBucketsVal: Int), Some(otherNumBucketsVal: Int))
-        if func.isInstanceOf[ReducibleFunction[_, _]] &&
+        if func == BucketFunction &&
           ((thisNumBucketsVal > otherNumBucketsVal) &&
             (thisNumBucketsVal % otherNumBucketsVal == 0)) =>
         Some(BucketReducer(thisNumBucketsVal, otherNumBucketsVal))

@@ -237,6 +237,7 @@ case class BatchScanExec(
 
         case _ => filteredPartitions
       }
+
       new DataSourceRDD(
         sparkContext, finalPartitions, readerFactory, supportsColumnar, customMetrics)
     }
