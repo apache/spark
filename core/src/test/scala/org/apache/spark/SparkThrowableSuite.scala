@@ -42,7 +42,6 @@ import org.apache.spark.util.Utils
  * Test suite for Spark Throwables.
  */
 class SparkThrowableSuite extends SparkFunSuite {
-
   /* Used to regenerate the error class file. Run:
    {{{
       SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
@@ -51,10 +50,12 @@ class SparkThrowableSuite extends SparkFunSuite {
 
    To regenerate the error class document. Run:
    {{{
-      SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
-        "core/testOnly *SparkThrowableSuite -- -t \"Error classes match with document\""
+      $regenerateCommand
    }}}
    */
+  private val regenerateCommand = "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt " +
+    "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error classes match with document\\\"\""
+
   private val errorJsonFilePath = getWorkspaceFilePath(
     "common", "utils", "src", "main", "resources", "error", "error-classes.json")
 
@@ -328,9 +329,8 @@ class SparkThrowableSuite extends SparkFunSuite {
         }
       } else {
         assert(subErrorDoc.trim == errorsInDoc.trim,
-          "The error class document is not up to date. Please regenerate it by running " +
-            "`SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \"core/testOnly *SparkThrowableSuite -- -t " +
-            "\\\"Error classes match with document\\\"\"`")
+          "The error class document is not up to date. " +
+            s"Please regenerate it by running `$regenerateCommand`")
       }
     })
 
@@ -353,9 +353,8 @@ class SparkThrowableSuite extends SparkFunSuite {
       }
     } else {
       assert(sqlErrorParentDoc.trim == commonErrorsInDoc.trim,
-        "The error class document is not up to date. Please regenerate it by running " +
-          "`SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \"core/testOnly *SparkThrowableSuite -- -t " +
-          "\\\"Error classes match with document\\\"\"`")
+        "The error class document is not up to date. " +
+          s"Please regenerate it by running `$regenerateCommand`")
     }
 
     val orphans = orphanedGoldenFiles()
@@ -372,9 +371,8 @@ class SparkThrowableSuite extends SparkFunSuite {
       }
     } else {
       assert(orphans.isEmpty,
-        "Exist orphaned error class documents. Please regenerate it by running " +
-          "`SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \"core/testOnly *SparkThrowableSuite -- -t " +
-          "\\\"Error classes match with document\\\"\"`")
+        "Exist orphaned error class documents. " +
+          s"Please regenerate it by running `$regenerateCommand`")
     }
   }
 
