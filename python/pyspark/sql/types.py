@@ -254,18 +254,17 @@ class StringType(AtomicType):
         the collation id number.
     """
 
-    collationNames = [
-        "UCS_BASIC",
-        "UCS_BASIC_LCASE",
-        "UNICODE",
-        "UNICODE_CI"
-    ]
+    collationNames = ["UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI"]
 
     def __init__(self, collationId: int = 0):
         self.collationId = collationId
 
     def collationIdToName(self) -> str:
-        return " COLLATE " + StringType.collationNames[self.collationId] if self.collationId != 0 else ""
+        return (
+            " COLLATE " + StringType.collationNames[self.collationId]
+            if self.collationId != 0
+            else ""
+        )
 
     def collationNameToId(collationName: str) -> int:
         return StringType.collationNames.index(collationName)
