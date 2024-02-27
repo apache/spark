@@ -1172,7 +1172,12 @@ class SubqueryAlias(LogicalPlan):
 
 
 class SQL(LogicalPlan):
-    def __init__(self, query: str, args: Optional[Union[Dict[str, Any], List]] = None) -> None:
+    def __init__(
+        self,
+        query: str,
+        args: Optional[Union[Dict[str, Any], List]] = None,
+        views: Optional[Sequence[SubqueryAlias]] = None,
+    ) -> None:
         super().__init__(None)
 
         if args is not None:
@@ -1182,8 +1187,14 @@ class SQL(LogicalPlan):
             else:
                 assert isinstance(args, List)
 
+        if views is not None:
+            assert isinstance(views, List)
+            for view in views:
+                assert isinstance(view, SubqueryAlias)
+
         self._query = query
         self._args = args
+        self._views = views
 
     def _to_expr(self, session: "SparkConnectClient", v: Any) -> proto.Expression:
         if isinstance(v, Column):
@@ -1203,6 +1214,10 @@ class SQL(LogicalPlan):
                 for v in self._args:
                     plan.sql.pos_arguments.append(self._to_expr(session, v))
 
+        if self._views is not None and len(self._views) > 0:
+            for view in self._views:
+                plan.sql.views.append(view.plan(session).subquery_alias)
+
         return plan
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
@@ -1215,6 +1230,10 @@ class SQL(LogicalPlan):
             else:
                 for v in self._args:
                     cmd.sql_command.pos_arguments.append(self._to_expr(session, v))
+
+        if self._views is not None and len(self._views) > 0:
+            for view in self._views:
+                cmd.sql_command.views.append(view.plan(session).subquery_alias)
 
         return cmd
 

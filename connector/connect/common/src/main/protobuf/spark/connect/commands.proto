@@ -73,6 +73,9 @@ message SqlCommand {
   // (Optional) A sequence of expressions for positional parameters in the SQL query text.
   // It cannot coexist with `named_arguments`.
   repeated Expression pos_arguments = 5;
+
+  // (Optional) dataframes that can be referenced in the query
+  repeated SubqueryAlias views = 6;
 }
 
 // A command that can create DataFrame global temp view or local temp view.
