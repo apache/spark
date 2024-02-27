@@ -54,6 +54,10 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
 
   /** Configuration key for the driver memory. */
   public static final String DRIVER_MEMORY = "spark.driver.memory";
+  /** Configuration key for the driver default extra class path. */
+  public static final String DRIVER_DEFAULT_EXTRA_CLASS_PATH =
+    "spark.driver.defaultExtraClassPath";
+  public static final String DRIVER_DEFAULT_EXTRA_CLASS_PATH_VALUE = "hive-jackson/*";
   /** Configuration key for the driver class path. */
   public static final String DRIVER_EXTRA_CLASSPATH = "spark.driver.extraClassPath";
   /** Configuration key for the default driver VM options. */
@@ -65,6 +69,10 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
 
   /** Configuration key for the executor memory. */
   public static final String EXECUTOR_MEMORY = "spark.executor.memory";
+  /** Configuration key for the executor default extra class path. */
+  public static final String EXECUTOR_DEFAULT_EXTRA_CLASS_PATH =
+    "spark.executor.defaultExtraClassPath";
+  public static final String EXECUTOR_DEFAULT_EXTRA_CLASS_PATH_VALUE = "hive-jackson/*";
   /** Configuration key for the executor class path. */
   public static final String EXECUTOR_EXTRA_CLASSPATH = "spark.executor.extraClassPath";
   /** Configuration key for the default executor VM options. */

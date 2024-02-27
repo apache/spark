@@ -89,7 +89,7 @@ class ConfTestsMixin:
             spark.conf.set("foo", "bar")
             updated = spark.conf.getAll
 
-            self.assertEquals(len(updated), len(all_confs) + 1)
+            self.assertEqual(len(updated), len(all_confs) + 1)
             self.assertIn("foo", updated)
         finally:
             spark.conf.unset("foo")
