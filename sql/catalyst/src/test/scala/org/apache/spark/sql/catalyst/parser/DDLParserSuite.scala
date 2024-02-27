@@ -602,7 +602,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(createSql),
       errorClass = "INVALID_STATEMENT_OR_CLAUSE",
-      parameters = Map("operation" -> "CREATE TABLE ... USING ... STORED AS parquet "),
+      parameters = Map("operation" -> "CREATE TABLE ... USING ... STORED AS PARQUET "),
       context = ExpectedContext(
         fragment = createSql,
         start = 0,
@@ -612,7 +612,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(replaceSql),
       errorClass = "INVALID_STATEMENT_OR_CLAUSE",
-      parameters = Map("operation" -> "REPLACE TABLE ... USING ... STORED AS parquet "),
+      parameters = Map("operation" -> "REPLACE TABLE ... USING ... STORED AS PARQUET "),
       context = ExpectedContext(
         fragment = replaceSql,
         start = 0,
@@ -627,7 +627,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(createSql),
       errorClass = "INVALID_STATEMENT_OR_CLAUSE",
-      parameters = Map("operation" -> "CREATE TABLE ... USING ... ROW FORMAT SERDE customSerde"),
+      parameters = Map("operation" -> "CREATE TABLE ... USING ... ROW FORMAT SERDE CUSTOMSERDE"),
       context = ExpectedContext(
         fragment = createSql,
         start = 0,
@@ -637,7 +637,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(replaceSql),
       errorClass = "INVALID_STATEMENT_OR_CLAUSE",
-      parameters = Map("operation" -> "REPLACE TABLE ... USING ... ROW FORMAT SERDE customSerde"),
+      parameters = Map("operation" -> "REPLACE TABLE ... USING ... ROW FORMAT SERDE CUSTOMSERDE"),
       context = ExpectedContext(
         fragment = replaceSql,
         start = 0,
@@ -1448,7 +1448,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql5),
       errorClass = "INVALID_STATEMENT_OR_CLAUSE",
-      parameters = Map("operation" -> "ALTER TABLE table PARTITION partition_spec CHANGE COLUMN"),
+      parameters = Map("operation" -> "ALTER TABLE ... PARTITION ... CHANGE COLUMN"),
       context = ExpectedContext(
         fragment = sql5,
         start = 0,
@@ -1495,7 +1495,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql5),
       errorClass = "INVALID_STATEMENT_OR_CLAUSE",
-      parameters = Map("operation" -> "ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS"),
+      parameters = Map("operation" -> "ALTER TABLE ... PARTITION ... REPLACE COLUMNS"),
       context = ExpectedContext(
         fragment = sql5,
         start = 0,

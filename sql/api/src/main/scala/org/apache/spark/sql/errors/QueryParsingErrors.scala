@@ -390,7 +390,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def invalidStatementError(operation: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_STATEMENT_OR_CLAUSE",
-      messageParameters = Map("operation" -> operation),
+      messageParameters = Map("operation" -> toSQLStmt(operation)),
       ctx)
   }
 
