@@ -266,7 +266,8 @@ class StringType(AtomicType):
             else ""
         )
 
-    def collationNameToId(collationName: str) -> int:
+    @classmethod
+    def collationNameToId(cls, collationName: str) -> int:
         return StringType.collationNames.index(collationName)
 
     def simpleString(self) -> str:
