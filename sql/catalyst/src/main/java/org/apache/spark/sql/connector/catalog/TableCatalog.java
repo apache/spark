@@ -108,9 +108,11 @@ public interface TableCatalog extends CatalogPlugin {
    * If the catalog supports views, this must return identifiers for only tables and not views.
    *
    * @param namespace a multi-part namespace
-   * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
-   *                follow regular expression convention, case-insensitive match and white spaces
-   *                on both ends will be ignored. Please refer to regex_pattern in https://
+   * @param pattern the filter pattern,
+   *                when SQLConf.LEGACY_USE_STAR_AND_VERTICAL_BAR_AS_WILDCARDS_IN_LIKE_PATTERN
+   *                is true, use '*' for any character(s) and '|' for a choice as wildcards.
+   *                If it is false, use '%' for any character(s) and '_' for a single character
+   *                as wildcards. Please refer to regex_pattern in https://
    *                spark.apache.org/docs/latest/sql-ref-syntax-aux-show-tables.html#parameters
    *                for more details.
    * @return an array of Identifiers for tables

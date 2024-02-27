@@ -124,7 +124,8 @@ object StringUtils extends Logging {
   }
 
   /**
-   * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
+   * This legacy utility can be used for filtering pattern in the "Like" of
+   * "Show Tables / Functions" DDL.
    * @param names the names list to be filtered
    * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
    *                follow regular expression convention, case insensitive match and white spaces
@@ -144,6 +145,13 @@ object StringUtils extends Logging {
     funcNames.toSeq
   }
 
+  /**
+   * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL.
+   * @param names the names list to be filtered
+   * @param pattern the filter pattern, SQL type like expressions:
+   *                '%' for any character(s), and '_' for a single character
+   * @return the filtered names list
+   */
   def filterBySQLLikePattern(names: Seq[String], pattern: String): Seq[String] = {
     try {
       val p = Pattern.compile(likePatternToRegExp(pattern), Pattern.CASE_INSENSITIVE)
@@ -153,12 +161,6 @@ object StringUtils extends Logging {
     }
   }
 
-  /**
-   *
-   * @param pattern the filter pattern, only '%' and '_' are allowed as wildcards, others will
-   *                follow regular expression convention,
-   * @return the filtered names list
-   */
   private[util] def likePatternToRegExp(pattern: String): String = {
     val regExp = new StringBuilder()
 

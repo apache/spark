@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTablesOperation
+import org.apache.hive.service.cli.operation.MetadataOperationUtils._
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging

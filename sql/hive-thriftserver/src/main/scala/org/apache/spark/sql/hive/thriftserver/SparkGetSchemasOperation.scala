@@ -23,6 +23,7 @@ import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
+import org.apache.hive.service.cli.operation.MetadataOperationUtils._
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging

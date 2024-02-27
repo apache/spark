@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationTyp
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetColumnsOperation
+import org.apache.hive.service.cli.operation.MetadataOperationUtils._
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging

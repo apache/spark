@@ -30,6 +30,8 @@ import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 
+import org.apache.spark.sql.internal.SQLConf;
+
 /**
  * GetSchemasOperation.
  *
@@ -61,7 +63,12 @@ public class GetSchemasOperation extends MetadataOperation {
     }
     try {
       IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
-      String schemaPattern = convertSchemaPattern(schemaName);
+      String schemaPattern;
+      if (SQLConf.get().legacyUseStarAndVerticalBarAsWildcardsInLikePattern()) {
+        schemaPattern = MetadataOperationUtils.convertSchemaPattern(schemaName);
+      } else {
+        schemaPattern = MetadataOperationUtils.newConvertSchemaPattern(schemaName, true);
+      }
       for (String dbName : metastoreClient.getDatabases(schemaPattern)) {
         rowSet.addRow(new Object[] {dbName, DEFAULT_HIVE_CATALOG});
       }
