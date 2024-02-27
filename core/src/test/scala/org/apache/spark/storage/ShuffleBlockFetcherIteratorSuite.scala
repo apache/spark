@@ -562,7 +562,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       // Make sure we release buffers when a wrapped input stream is closed.
       // for external storage shuffle, it is read directly from file and not using
       // mock transfer.
-      if (!blockId.name.startsWith("shuffle_0_5")) {
+      if (mergedExternalBlocks.keys.forall(_ != blockId)) {
         val mockBuf = allBlocks(blockId)
         verifyBufferRelease(mockBuf, inputStream)
       }

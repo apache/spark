@@ -167,15 +167,22 @@ private[spark] object FallbackStorage extends Logging {
   // There should be only one fallback storage thread pool per executor.
   var fallbackStorage: Option[FallbackStorage] = None
   def getFallbackStorage(conf: SparkConf): Option[FallbackStorage] = this.synchronized {
-    if (fallbackStorage.isDefined) {
-      logDebug(s"FallbackStorage defined $fallbackStorage")
-      fallbackStorage
-    } else if (conf != null && conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
-      fallbackStorage = Some(new FallbackStorage(conf))
-      logInfo(s"Created FallbackStorage $fallbackStorage")
-      fallbackStorage
+    if (conf != null && conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+      if (fallbackStorage.isDefined) {
+        val fallbackPath = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get
+        if (fallbackPath.equals(fallbackStorage.get.fallbackPath.toString)) {
+          logDebug(s"FallbackStorage defined with path $fallbackPath")
+          fallbackStorage
+        } else {
+          // for unit test.
+          Some(new FallbackStorage(conf))
+        }
+      } else {
+        fallbackStorage = Some(new FallbackStorage(conf))
+        logInfo(s"Created FallbackStorage $fallbackStorage")
+        fallbackStorage
+      }
     } else {
-      logInfo("STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH not defined")
       None
     }
   }
