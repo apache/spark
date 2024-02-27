@@ -42,6 +42,7 @@ import org.apache.spark.util.Utils
  * Test suite for Spark Throwables.
  */
 class SparkThrowableSuite extends SparkFunSuite {
+
   /* Used to regenerate the error class file. Run:
    {{{
       SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
@@ -50,7 +51,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
    To regenerate the error class document. Run:
    {{{
-      $regenerateCommand
+      SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
+        "core/testOnly *SparkThrowableSuite -- -t \"Error classes match with document\""
    }}}
    */
   private val regenerateCommand = "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt " +
