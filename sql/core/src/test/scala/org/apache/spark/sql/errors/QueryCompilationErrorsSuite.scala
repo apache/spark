@@ -968,7 +968,7 @@ class QueryCompilationErrorsSuite
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"select 'aaa' collate 'UNICODE_ci'")
+          sql(s"select 'aaa' collate 'UNICODE_CI'")
         },
         errorClass = "UNSUPPORTED_FEATURE.COLLATION_SUPPORT_NOT_ENABLED",
         parameters = Map(
