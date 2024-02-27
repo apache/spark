@@ -328,7 +328,9 @@ class SparkThrowableSuite extends SparkFunSuite {
         }
       } else {
         assert(subErrorDoc.trim == errorsInDoc.trim,
-          "The error class document is not up to date. Please regenerate it.")
+          "The error class document is not up to date. Please regenerate it by running " +
+            "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \"core/testOnly *SparkThrowableSuite -- -t " +
+            "\\\"Error classes match with document\\\"\"")
       }
     })
 
@@ -351,7 +353,9 @@ class SparkThrowableSuite extends SparkFunSuite {
       }
     } else {
       assert(sqlErrorParentDoc.trim == commonErrorsInDoc.trim,
-        "The error class document is not up to date. Please regenerate it.")
+        "The error class document is not up to date. Please regenerate it by running " +
+          "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \"core/testOnly *SparkThrowableSuite -- -t " +
+          "\\\"Error classes match with document\\\"\"")
     }
 
     val orphans = orphanedGoldenFiles()
@@ -368,7 +372,9 @@ class SparkThrowableSuite extends SparkFunSuite {
       }
     } else {
       assert(orphans.isEmpty,
-        "Exist orphaned error class documents. Please regenerate it.")
+        "Exist orphaned error class documents. Please regenerate it by running " +
+          "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \"core/testOnly *SparkThrowableSuite -- -t " +
+          "\\\"Error classes match with document\\\"\"")
     }
   }
 
