@@ -251,9 +251,9 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
-   * Recursively transforms the expressions of a tree, first to all of its
-   * children and then itself (post-order), skipping nodes that have already
-   * been analyzed.
+   * Recursively transforms all expressions of all the logical nodes in plan tree
+   * in a bottom-up manner. It applies first to all of its children and then itself (post-order),
+   * skipping nodes that have already been analyzed.
    *
    * @param rule   the function used to transform this nodes children.
    * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
