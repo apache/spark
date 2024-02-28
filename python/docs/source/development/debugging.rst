@@ -215,7 +215,7 @@ Python/Pandas UDF
 ~~~~~~~~~~~~~~~~~
 
 PySpark provides remote `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ for
-Python/Pandas UDFs
+Python/Pandas UDFs.
 
 SparkContext-based
 ^^^^^^^^^^^^^^^^^^
