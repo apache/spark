@@ -178,16 +178,22 @@ class DataType(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         TYPE_VARIATION_REFERENCE_FIELD_NUMBER: builtins.int
+        COLLATION_ID_FIELD_NUMBER: builtins.int
         type_variation_reference: builtins.int
+        collation_id: builtins.int
         def __init__(
             self,
             *,
             type_variation_reference: builtins.int = ...,
+            collation_id: builtins.int = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "type_variation_reference", b"type_variation_reference"
+                "collation_id",
+                b"collation_id",
+                "type_variation_reference",
+                b"type_variation_reference",
             ],
         ) -> None: ...
 

@@ -1224,7 +1224,7 @@
       <dependency>
         <groupId>com.github.docker-java</groupId>
         <artifactId>docker-java</artifactId>
-        <version>3.3.4</version>
+        <version>3.3.5</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -1244,7 +1244,7 @@
       <dependency>
         <groupId>com.github.docker-java</groupId>
         <artifactId>docker-java-transport-zerodep</artifactId>
-        <version>3.3.4</version>
+        <version>3.3.5</version>
         <scope>test</scope>
       </dependency>
       <dependency>
