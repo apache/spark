@@ -209,7 +209,7 @@ of the most common options to set are:
     The minimum amount of non-heap memory to be allocated per driver process in cluster mode, in MiB unless otherwise specified, if <code>spark.driver.memoryOverhead</code> is not defined.
     This option is currently supported on YARN and Kubernetes.
   </td>
-  <td>3.5.0</td>
+  <td>3.5.2</td>
 </tr>
 <tr>
   <td><code>spark.driver.memoryOverheadFactor</code></td>
@@ -322,7 +322,7 @@ of the most common options to set are:
     The minimum amount of non-heap memory to be allocated per executor process, in MiB unless otherwise specified, if <code>spark.executor.memoryOverhead</code> is not defined.
     This option is currently supported on YARN and Kubernetes.
   </td>
-  <td>3.5.0</td>
+  <td>3.5.2</td>
 </tr>
 <tr>
   <td><code>spark.executor.memoryOverheadFactor</code></td>
