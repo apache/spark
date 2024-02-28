@@ -50,11 +50,6 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = {
-    // Because CollectLimitExec collect all the output of child to a single partition, so we need
-    // collect the first `limit` + `offset` elements and then to drop the first `offset` elements.
-    // For example: limit is 1 and offset is 2 and the child output two partition.
-    // The first partition output [1, 2] and the Second partition output [3, 4, 5].
-    // Then [1, 2, 3] will be taken and output [3].
     if (limit >= 0) {
       if (offset > 0) {
         child.executeTake(limit).drop(offset)
