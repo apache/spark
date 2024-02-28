@@ -2970,7 +2970,7 @@ class RDD(Generic[T_co]):
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsNewAPIHadoopDataset") as d:
         ...     path = os.path.join(d, "new_hadoop_file")
         ...
         ...     # Create the conf for writing
@@ -3059,7 +3059,7 @@ class RDD(Generic[T_co]):
 
         >>> output_format_class = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsNewAPIHadoopFile") as d:
         ...     path = os.path.join(d, "hadoop_file")
         ...
         ...     # Write a temporary Hadoop file
@@ -3129,7 +3129,7 @@ class RDD(Generic[T_co]):
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsHadoopDataset") as d:
         ...     path = os.path.join(d, "old_hadoop_file")
         ...
         ...     # Create the conf for writing
@@ -3224,7 +3224,7 @@ class RDD(Generic[T_co]):
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsHadoopFile") as d:
         ...     path = os.path.join(d, "old_hadoop_file")
         ...
         ...     # Write a temporary Hadoop file
@@ -3290,7 +3290,7 @@ class RDD(Generic[T_co]):
 
         Set the related classes
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsSequenceFile") as d:
         ...     path = os.path.join(d, "sequence_file")
         ...
         ...     # Write a temporary sequence file
@@ -3332,7 +3332,7 @@ class RDD(Generic[T_co]):
         --------
         >>> import os
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsPickleFile") as d:
         ...     path = os.path.join(d, "pickle_file")
         ...
         ...     # Write a temporary pickled file
@@ -3374,7 +3374,7 @@ class RDD(Generic[T_co]):
         >>> import tempfile
         >>> from fileinput import input
         >>> from glob import glob
-        >>> with tempfile.TemporaryDirectory() as d1:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsTextFile1") as d1:
         ...     path1 = os.path.join(d1, "text_file1")
         ...
         ...     # Write a temporary text file
@@ -3386,7 +3386,7 @@ class RDD(Generic[T_co]):
 
         Empty lines are tolerated when saving to text files.
 
-        >>> with tempfile.TemporaryDirectory() as d2:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsTextFile2") as d2:
         ...     path2 = os.path.join(d2, "text2_file2")
         ...
         ...     # Write another temporary text file
@@ -3399,7 +3399,7 @@ class RDD(Generic[T_co]):
         Using compressionCodecClass
 
         >>> from fileinput import input, hook_compressed
-        >>> with tempfile.TemporaryDirectory() as d3:
+        >>> with tempfile.TemporaryDirectory(prefix="saveAsTextFile3") as d3:
         ...     path3 = os.path.join(d3, "text3")
         ...     codec = "org.apache.hadoop.io.compress.GzipCodec"
         ...
