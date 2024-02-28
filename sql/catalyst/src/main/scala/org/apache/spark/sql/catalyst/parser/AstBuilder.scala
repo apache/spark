@@ -3198,7 +3198,11 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         commentSpec = Some(spec)
       }
     }
-
+    val dataType = typedVisit[DataType](ctx.dataType)
+    if (!SQLConf.get.collationEnabled &&
+      dataType.isInstanceOf[StringType] && !dataType.asInstanceOf[StringType].isDefaultCollation) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
     ColumnDefinition(
       name = name,
       dataType = typedVisit[DataType](ctx.dataType),

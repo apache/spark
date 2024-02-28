@@ -300,9 +300,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def collationNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.COLLATION",
-      messageParameters = Map(
-        "collationEnabled" -> SQLConf.COLLATION_ENABLED.key)
-    )
+      messageParameters = Map.empty)
   }
 
   def unresolvedUsingColForJoinError(

@@ -964,16 +964,36 @@ class QueryCompilationErrorsSuite
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
   }
 
-  test("SPARK-47102: Collation in CollateContext when COLLATION_ENABLED is false") {
+  test("SPARK-47102: Collate in CollateClauseContext when COLLATION_ENABLED is false") {
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"select 'aaa' collate 'UNICODE_CI'")
+          sql(s"CREATE TABLE t(col STRING COLLATE 'UNICODE_CI') USING parquet")
         },
         errorClass = "UNSUPPORTED_FEATURE.COLLATION",
-        parameters = Map(
-          "collationEnabled" -> SQLConf.COLLATION_ENABLED.key)
-      )
+        parameters = Map.empty)
+    }
+  }
+
+  test("SPARK-47102: Collate in NamedExpressionContext when COLLATION_ENABLED is false") {
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT collate('aaa', 'UNICODE_CI')")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.COLLATION",
+        parameters = Map.empty)
+    }
+  }
+
+  test("SPARK-47102: Collate in CollateContext when COLLATION_ENABLED is false") {
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT 'aaa' COLLATE 'UNICODE_CI'")
+        },
+        errorClass = "UNSUPPORTED_FEATURE.COLLATION",
+        parameters = Map.empty)
     }
   }
 
@@ -984,14 +1004,11 @@ class QueryCompilationErrorsSuite
           sql(s"select collation('aaa')")
         },
         errorClass = "UNSUPPORTED_FEATURE.COLLATION",
-        sqlState = Some("0A000"),
-        parameters = Map(
-          "collationEnabled" -> SQLConf.COLLATION_ENABLED.key),
-        context = ExpectedContext(
-          fragment = "collation('aaa')", start = 7, stop = 22)
+        parameters = Map.empty
       )
     }
   }
+
 
   test("INTERNAL_ERROR: Convert unsupported data type from Spark to Parquet") {
     val converter = new SparkToParquetSchemaConverter

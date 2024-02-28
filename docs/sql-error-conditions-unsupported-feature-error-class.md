@@ -60,7 +60,7 @@ Catalog `<catalogName>` does not support `<operation>`.
 
 ## COLLATION
 
-Collation support is under development and not all features are supported. To enable existing features set `<collationEnabled>` to `true`.
+Collation feature is not yet supported.
 
 ## COMBINATION_QUERY_RESULT_CLAUSES
 
