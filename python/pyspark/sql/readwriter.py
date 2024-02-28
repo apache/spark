@@ -596,7 +596,7 @@ class DataFrameReader(OptionUtils):
         Read multiple Parquet files and merge schema.
 
         >>> with tempfile.TemporaryDirectory(prefix="parquet3") as d1:
-        ...     with tempfile.TemporaryDirectory(prefix="parquet4") as d2):
+        ...     with tempfile.TemporaryDirectory(prefix="parquet4") as d2:
         ...         df.write.mode("overwrite").format("parquet").save(d1)
         ...         df2.write.mode("overwrite").format("parquet").save(d2)
         ...
