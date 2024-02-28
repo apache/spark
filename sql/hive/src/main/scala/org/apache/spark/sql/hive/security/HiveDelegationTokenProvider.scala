@@ -62,6 +62,12 @@ private[spark] class HiveDelegationTokenProvider
   override def delegationTokensRequired(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Boolean = {
+    // provide a way to force to get HIVE_DELEGATION_TOKEN
+    // HIVE_DELEGATION_TOKEN is needed when using iceberg with HiveCatalog on spark-sql or
+    // spark-shell
+    if (sparkConf.getBoolean("spark.security.credentials.hive.enabled", defaultValue = false)) {
+      return true
+    }
     // Delegation tokens are needed only when:
     // - trying to connect to a secure metastore
     // - either deploying in cluster mode without a keytab, or impersonating another user
