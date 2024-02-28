@@ -315,7 +315,7 @@ class CollationSuite extends DatasourceV2SQLBase {
           createTable(partitionColumns: _*)
         },
         errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
+        parameters = Map("type" -> "\"STRING COLLATE 'UNICODE'\"")
       );
     }
   }
