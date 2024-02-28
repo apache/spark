@@ -524,7 +524,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podConfigured1.container.getPorts.contains(ports))
   }
 
-  test("SPARK-XXXXXX: User can override the minimum memory overhead of the executor") {
+  test("SPARK-47208: User can override the minimum memory overhead of the executor") {
     // main app resource, overriding the minimum oberhead to 500Mb
     val sparkConf = new SparkConf(false)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
@@ -543,7 +543,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       .getLimits.get("memory")) === "1524Mi")
   }
 
-  test("SPARK-XXXXXX: Explicit overhead takes precedence over minimum overhead") {
+  test("SPARK-47208: Explicit overhead takes precedence over minimum overhead") {
     // main app resource, explicit overhead of 150MiB
     val sparkConf = new SparkConf(false)
       .set(CONTAINER_IMAGE, "spark-driver:latest")

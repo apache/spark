@@ -710,7 +710,7 @@ class ClientSuite extends SparkFunSuite
       "client",
       "cluster"
     ).foreach { case (deployMode) =>
-      test(s"SPARK-XXXXXX: minimum memory overhead is correctly set in ($deployMode mode)") {
+      test(s"SPARK-47208: minimum memory overhead is correctly set in ($deployMode mode)") {
         val sparkConf = new SparkConf()
           .set("spark.app.name", "foo-test-app")
           .set(SUBMIT_DEPLOY_MODE, deployMode)

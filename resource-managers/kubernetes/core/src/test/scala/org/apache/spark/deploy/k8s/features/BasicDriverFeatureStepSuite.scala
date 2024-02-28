@@ -372,7 +372,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       path.startsWith(FILE_UPLOAD_PATH) && path.endsWith("some-local-jar.jar")))
   }
 
-  test("SPARK-XXXXXX: User can override the minimum memory overhead of the driver") {
+  test("SPARK-47208: User can override the minimum memory overhead of the driver") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
       .set(DRIVER_MEMORY.key, "256M")
@@ -395,7 +395,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(amountAndFormat(limits("memory")) === "756Mi")
   }
 
-  test("SPARK-XXXXXX: Explicit overhead takes precedence over minimum overhead") {
+  test("SPARK-47208: Explicit overhead takes precedence over minimum overhead") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
       .set(DRIVER_MEMORY.key, "256M")
@@ -419,7 +419,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(amountAndFormat(limits("memory")) === "456Mi")
   }
 
-  test("SPARK-XXXXXX: Overhead is maximum between factor of memory and min base overhead") {
+  test("SPARK-47208: Overhead is maximum between factor of memory and min base overhead") {
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
       .set(DRIVER_MEMORY.key, "5000M")
