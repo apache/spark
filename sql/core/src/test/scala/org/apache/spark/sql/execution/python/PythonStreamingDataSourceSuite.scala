@@ -62,8 +62,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |        raise Exception("error committing offset")
       |    def read(self, partition):
       |        yield (0, partition.value)
-      |        yield (1, partition.value)
-      |        yield (2, partition.value)
       |""".stripMargin
 
   private val errorDataSourceName = "ErrorDataSource"
@@ -125,10 +123,14 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val stopSignal = new CountDownLatch(1)
 
     val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
+      // checkAnswer may materialize the dataframe more than once
+      // Cache here to make sure the numInputRows metrics is consistent.
+      df.cache()
       checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
       if (batchId > 30) stopSignal.countDown()
     }).start()
     stopSignal.await()
+    assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
     q.awaitTermination()
   }
@@ -175,10 +177,12 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val stopSignal = new CountDownLatch(1)
 
     val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
+      df.cache()
       checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
       if (batchId > 30) stopSignal.countDown()
     }).start()
     stopSignal.await()
+    assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
     q.awaitTermination()
   }
