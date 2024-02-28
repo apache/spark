@@ -127,6 +127,17 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   }
 
   /**
+   * Check if a key exists at the provided position using object equality rather than
+   * cooperative equality. Otherwise, hash sets will mishandle values for which `==`
+   * and `equals` return different results, like 0.0/-0.0 and NaN/NaN.
+   *
+   * See: https://issues.apache.org/jira/browse/SPARK-45599
+   */
+  @annotation.nowarn
+  private def keyExistsAtPos(k: T, pos: Int) =
+    _data(pos) equals k
+
+  /**
    * Add an element to the set. This one differs from add in that it doesn't trigger rehashing.
    * The caller is responsible for calling rehashIfNeeded.
    *
@@ -146,8 +157,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
         _bitset.set(pos)
         _size += 1
         return pos | NONEXISTENCE_MASK
-      } else if (_data(pos) == k) {
-        // Found an existing key.
+      } else if (keyExistsAtPos(k, pos)) {
         return pos
       } else {
         // quadratic probing with values increase by 1, 2, 3, ...
@@ -181,7 +191,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     while (true) {
       if (!_bitset.get(pos)) {
         return INVALID_POS
-      } else if (k == _data(pos)) {
+      } else if (keyExistsAtPos(k, pos)) {
         return pos
       } else {
         // quadratic probing with values increase by 1, 2, 3, ...
