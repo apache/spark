@@ -462,7 +462,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(WITH_WINDOW_DEFINITION, UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
-      case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
+      case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressionsDown {
         case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
           val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
             throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
@@ -2062,7 +2062,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
-      plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
+      plan.resolveExpressionsDownWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _) =>
           if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
             f
@@ -3424,7 +3424,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Check and add proper window frames for all window functions.
    */
   object ResolveWindowFrame extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsDownWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
       case WindowExpression(wf: FrameLessOffsetWindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)) if wf.frame != f =>
@@ -3450,7 +3450,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Check and add order to [[AggregateWindowFunction]]s.
    */
   object ResolveWindowOrder extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsDownWithPruning(
       _.containsPattern(WINDOW_EXPRESSION), ruleId) {
       case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
         throw QueryCompilationErrors.windowFunctionWithWindowFrameNotOrderedError(wf)
@@ -3992,7 +3992,7 @@ object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
  * Resolve expressions if they contains [[NamePlaceholder]]s.
  */
 object ResolveExpressionsWithNamePlaceholders extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsDownWithPruning(
     _.containsAnyPattern(ARRAYS_ZIP, CREATE_NAMED_STRUCT), ruleId) {
     case e: ArraysZip if !e.resolved =>
       val names = e.children.zip(e.names).map {
@@ -4053,7 +4053,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
   private def updateOuterReferenceInSubquery(
       plan: LogicalPlan,
       refExprs: Seq[Expression]): LogicalPlan = {
-    plan resolveExpressions { case e =>
+    plan resolveExpressionsDown { case e =>
       val outerAlias =
         refExprs.find(stripAlias(_).semanticEquals(stripOuterReference(e)))
       outerAlias match {
@@ -4098,7 +4098,7 @@ object UpdateOuterReferences extends Rule[LogicalPlan] {
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveExpressionsWithPruning(_.containsPattern(TEMP_RESOLVED_COLUMN)) {
+    plan.resolveExpressionsDownWithPruning(_.containsPattern(TEMP_RESOLVED_COLUMN)) {
       case t: TempResolvedColumn =>
         if (t.hasTried) {
           UnresolvedAttribute(t.nameParts)

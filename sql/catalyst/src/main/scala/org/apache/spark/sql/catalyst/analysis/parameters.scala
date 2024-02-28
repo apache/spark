@@ -125,7 +125,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
   }
 
   private def bind(p: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
-    p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
+    p.resolveExpressionsDownWithPruning(_.containsPattern(PARAMETER)) (f orElse {
       case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
     })
   }

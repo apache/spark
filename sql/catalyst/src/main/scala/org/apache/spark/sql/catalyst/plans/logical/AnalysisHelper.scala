@@ -222,15 +222,15 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
-   * Recursively transforms the expressions of a tree, skipping nodes that have already
+   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    */
-  def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
-    resolveExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
+  def resolveExpressionsDown(r: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
   }
 
   /**
-   * Recursively transforms the expressions of a tree, skipping nodes that have already
+   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    *
    * @param rule   the function used to transform this nodes children.
@@ -243,11 +243,20 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    *               subtree. Do not pass it if the rule is not purely functional and reads a
    *               varying initial state for different invocations.
    */
-  def resolveExpressionsWithPruning(cond: TreePatternBits => Boolean,
-    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression]): LogicalPlan = {
+  def resolveExpressionsDownWithPruning(cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[Expression, Expression]): LogicalPlan = {
     resolveOperatorsWithPruning(cond, ruleId) {
       case p => p.transformExpressionsWithPruning(cond, ruleId)(rule)
     }
+  }
+
+  /**
+   * Recursively bottom-up transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   */
+  def resolveExpressionsUp(r: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveExpressionsUpWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
   }
 
   /**
@@ -307,7 +316,8 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
-   * Use [[resolveExpressions()]] in the analyzer.
+   * Use [[resolveExpressionsDown()]] in the analyzer.
+   *
    * @see [[QueryPlan.transformAllExpressionsWithPruning()]]
    */
   override def transformAllExpressionsWithPruning(

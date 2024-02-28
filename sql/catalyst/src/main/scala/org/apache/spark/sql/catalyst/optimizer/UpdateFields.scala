@@ -72,7 +72,7 @@ object OptimizeUpdateFields extends Rule[LogicalPlan] {
       UpdateFields(struct, fieldOps1 ++ fieldOps2)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsDownWithPruning(
     _.containsPattern(UPDATE_FIELDS), ruleId)(optimizeUpdateFields)
 }
 

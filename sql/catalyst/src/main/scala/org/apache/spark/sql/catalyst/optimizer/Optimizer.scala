@@ -1266,7 +1266,7 @@ object OptimizeRepartition extends Rule[LogicalPlan] {
  * Replaces first(col) to nth_value(col, 1) for better performance.
  */
 object OptimizeWindowFunctions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsDownWithPruning(
     _.containsPattern(WINDOW_EXPRESSION), ruleId) {
     case we @ WindowExpression(AggregateExpression(first: First, _, _, _, _),
         WindowSpecDefinition(_, orderSpec, frameSpecification: SpecifiedWindowFrame))
