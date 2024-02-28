@@ -2055,6 +2055,18 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
+### STATEFUL_PROCESSOR_CANNOT_USE_TIMERS_WITH_INVALID_HANDLE_STATE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use timers with invalid handle state=`<handleState>`. Timers can only be registered in the handleInputRows method.
+
+### STATEFUL_PROCESSOR_CANNOT_USE_TIMERS_WITH_INVALID_TIMEOUT_MODE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use timers with invalid timeoutMode=`<timeoutMode>`
+
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

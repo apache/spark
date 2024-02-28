@@ -3296,6 +3296,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATEFUL_PROCESSOR_CANNOT_USE_TIMERS_WITH_INVALID_HANDLE_STATE" : {
+    "message" : [
+      "Cannot use timers with invalid handle state=<handleState>. Timers can only be registered in the handleInputRows method."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_CANNOT_USE_TIMERS_WITH_INVALID_TIMEOUT_MODE" : {
+    "message" : [
+      "Cannot use timers with invalid timeoutMode=<timeoutMode>"
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
       "Failed to create column family with invalid name=<colFamilyName>. ",

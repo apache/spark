@@ -130,11 +130,13 @@ class StatefulProcessorHandleImpl(
   private val timerState = getTimerState[Boolean]()
 
   override def registerTimer(expiryTimestampMs: Long): Unit = {
-    verify(timeoutMode == ProcessingTime || timeoutMode == EventTime,
-    s"Cannot register timers with incorrect TimeoutMode")
-    verify(currState == INITIALIZED || currState == DATA_PROCESSED,
-    s"Cannot register timers with " +
-      s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
+    if (!(timeoutMode == ProcessingTime || timeoutMode == EventTime)) {
+      throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
+    }
+
+    if (!(currState == INITIALIZED || currState == DATA_PROCESSED)) {
+      throw StateStoreErrors.cannotUseTimersWithInvalidHandleState(currState.toString)
+    }
 
     if (timerState.exists(expiryTimestampMs)) {
       logWarning(s"Timer already exists for expiryTimestampMs=$expiryTimestampMs")
@@ -145,11 +147,13 @@ class StatefulProcessorHandleImpl(
   }
 
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
-    verify(timeoutMode == ProcessingTime || timeoutMode == EventTime,
-    s"Cannot delete timers with incorrect TimeoutMode")
-    verify(currState == INITIALIZED || currState == DATA_PROCESSED,
-    s"Cannot delete timers with " +
-      s"expiryTimestampMs=$expiryTimestampMs in current state=$currState")
+    if (!(timeoutMode == ProcessingTime || timeoutMode == EventTime)) {
+      throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
+    }
+
+    if (!(currState == INITIALIZED || currState == DATA_PROCESSED)) {
+      throw StateStoreErrors.cannotUseTimersWithInvalidHandleState(currState.toString)
+    }
 
     if (!timerState.exists(expiryTimestampMs)) {
       logInfo(s"Timer does not exist for expiryTimestampMs=$expiryTimestampMs")

@@ -73,6 +73,16 @@ object StateStoreErrors {
     StateStoreCannotCreateColumnFamilyWithReservedChars = {
       new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
   }
+
+  def cannotUseTimersWithInvalidTimeoutMode(timeoutMode: String):
+    StatefulProcessorCannotUseTimersWithInvalidTimeoutMode = {
+      new StatefulProcessorCannotUseTimersWithInvalidTimeoutMode(timeoutMode)
+  }
+
+  def cannotUseTimersWithInvalidHandleState(handleState: String):
+    StatefulProcessorCannotUseTimersWithInvalidHandleState = {
+    new StatefulProcessorCannotUseTimersWithInvalidHandleState(handleState)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -109,4 +119,16 @@ class StateStoreUnsupportedOperationException(operationType: String, entity: Str
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
+  )
+
+class StatefulProcessorCannotUseTimersWithInvalidTimeoutMode(timeoutMode: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_USE_TIMERS_WITH_INVALID_TIMEOUT_MODE",
+    messageParameters = Map("timeoutMode" -> timeoutMode)
+  )
+
+class StatefulProcessorCannotUseTimersWithInvalidHandleState(handleState: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_USE_TIMERS_WITH_INVALID_HANDLE_STATE",
+    messageParameters = Map("handleState" -> handleState)
   )

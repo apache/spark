@@ -168,12 +168,12 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
       val ex = intercept[Exception] {
         handle.registerTimer(10000L)
       }
-      assert(ex.getMessage.contains("Cannot register timers"))
+      assert(ex.getMessage.contains("Cannot use timers"))
 
       val ex2 = intercept[Exception] {
         handle.deleteTimer(10000L)
       }
-      assert(ex2.getMessage.contains("Cannot delete timers"))
+      assert(ex2.getMessage.contains("Cannot use timers"))
     }
   }
 
@@ -280,17 +280,17 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
 
         verifyInvalidOperation(handle, StatefulProcessorHandleState.CREATED,
-          "Cannot register timers") { handle =>
+          "Cannot use timers") { handle =>
           registerTimer(handle)
         }
 
         verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
-          "Cannot register timers") { handle =>
+          "Cannot use timers") { handle =>
           registerTimer(handle)
         }
 
         verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
-          "Cannot register timers") { handle =>
+          "Cannot use timers") { handle =>
           registerTimer(handle)
         }
       }
