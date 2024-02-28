@@ -55,16 +55,16 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(escapeLikeRegex("a_b", '\"') === expectedEscapedStrSeven)
   }
 
-  test("filter pattern") {
+  test("legacy filter pattern") {
     val names = Seq("a1", "a2", "b2", "c3")
-    assert(filterPatternLegacy(names, " * ") === Seq("a1", "a2", "b2", "c3"))
-    assert(filterPatternLegacy(names, "*a*") === Seq("a1", "a2"))
-    assert(filterPatternLegacy(names, " *a* ") === Seq("a1", "a2"))
-    assert(filterPatternLegacy(names, " a* ") === Seq("a1", "a2"))
-    assert(filterPatternLegacy(names, " a.* ") === Seq("a1", "a2"))
-    assert(filterPatternLegacy(names, " B.*|a* ") === Seq("a1", "a2", "b2"))
-    assert(filterPatternLegacy(names, " a. ") === Seq("a1", "a2"))
-    assert(filterPatternLegacy(names, " d* ") === Nil)
+    assert(legacyFilterPattern(names, " * ") === Seq("a1", "a2", "b2", "c3"))
+    assert(legacyFilterPattern(names, "*a*") === Seq("a1", "a2"))
+    assert(legacyFilterPattern(names, " *a* ") === Seq("a1", "a2"))
+    assert(legacyFilterPattern(names, " a* ") === Seq("a1", "a2"))
+    assert(legacyFilterPattern(names, " a.* ") === Seq("a1", "a2"))
+    assert(legacyFilterPattern(names, " B.*|a* ") === Seq("a1", "a2", "b2"))
+    assert(legacyFilterPattern(names, " a. ") === Seq("a1", "a2"))
+    assert(legacyFilterPattern(names, " d* ") === Nil)
   }
 
   test("string concatenation") {
@@ -165,7 +165,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(likePatternToRegExp(" d* ") === "\\Q \\E\\Qd\\E\\Q*\\E\\Q \\E")
   }
 
-  test("filter like pattern") {
+  test("filterBySQLLikePattern") {
     val names = Seq("a1", "a2", "b2", "c3")
     assert(filterBySQLLikePattern(names, "%") === Seq("a1", "a2", "b2", "c3"))
     assert(filterBySQLLikePattern(names, "%a%") === Seq("a1", "a2"))

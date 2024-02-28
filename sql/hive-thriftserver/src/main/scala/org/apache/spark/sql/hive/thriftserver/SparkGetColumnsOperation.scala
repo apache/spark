@@ -78,17 +78,17 @@ private[hive] class SparkGetColumnsOperation(
 
     val (schemaPattern, tablePattern) =
       if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
-        (convertSchemaPattern(schemaName), convertIdentifierPattern(tableName, true))
+        (legacyConvertSchemaPattern(schemaName), legacyConvertIdentifierPattern(tableName, true))
       } else {
-        (newConvertSchemaPattern(schemaName, true), newConvertIdentifierPattern(tableName, true))
+        (convertSchemaPattern(schemaName, true), convertIdentifierPattern(tableName, true))
       }
 
     var columnPattern: Pattern = null
     if (columnName != null) {
       if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
-        columnPattern = Pattern.compile(convertIdentifierPattern(columnName, false))
+        columnPattern = Pattern.compile(legacyConvertIdentifierPattern(columnName, false))
       } else {
-        columnPattern = Pattern.compile(newConvertIdentifierPattern(columnName, false))
+        columnPattern = Pattern.compile(convertIdentifierPattern(columnName, false))
       }
     }
 

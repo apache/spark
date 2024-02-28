@@ -71,9 +71,9 @@ private[hive] class SparkGetSchemasOperation(
     try {
       val schemaPattern =
         if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
-          convertSchemaPattern(schemaName)
+          legacyConvertSchemaPattern(schemaName)
         } else {
-          newConvertSchemaPattern(schemaName, true)
+          convertSchemaPattern(schemaName, true)
         }
       sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
         rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))

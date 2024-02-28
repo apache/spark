@@ -85,9 +85,9 @@ public class GetFunctionsOperation extends MetadataOperation {
       IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
       String schemaPattern;
       if (SQLConf.get().legacyUseStarAndVerticalBarAsWildcardsInLikePattern()) {
-        schemaPattern = MetadataOperationUtils.convertSchemaPattern(schemaName);
+        schemaPattern = MetadataOperationUtils.legacyConvertSchemaPattern(schemaName);
       } else {
-        schemaPattern = MetadataOperationUtils.newConvertSchemaPattern(schemaName, true);
+        schemaPattern = MetadataOperationUtils.convertSchemaPattern(schemaName, true);
       }
       List<String> matchingDbs;
       try {

@@ -23,28 +23,28 @@ import org.apache.spark.SparkFunSuite
 
 class MetadataOperationUtilsSuite extends SparkFunSuite {
 
-  test("convertSchemaPattern") {
+  test("legacy convertSchemaPattern") {
     Seq(("", "*"), ("%", "*"), (null, "*"),
       (".*", ".*"), ("_*", ".*"), ("_%", ".*"), (".%", ".*"),
       ("db%", "db*"), ("db*", "db*"),
       ("db_", "db."), ("db.", "db."),
       ("*", "*")) foreach { v =>
-        val schemaPattern = MetadataOperationUtils.convertSchemaPattern(v._1)
+        val schemaPattern = MetadataOperationUtils.legacyConvertSchemaPattern(v._1)
         assert(schemaPattern == v._2)
     }
   }
 
-  test("newConvertSchemaPattern") {
+  test("new convertSchemaPattern") {
     Seq(("", "%", "%"), ("%", "%", "%"), (null, "%", "%"),
       (".*", "_%", "%"), ("_*", "_%", "_*"), ("_%", "_%", "_%"), (".%", "_%", "_%"),
       ("db%", "db%", "db%"), ("db*", "db%", "db*"),
       ("db_", "db_", "db_"), ("db.", "db_", "db_"),
       ("*", "%", "*")) foreach { v =>
-      val schemaPattern = MetadataOperationUtils.newConvertSchemaPattern(v._1, true)
+      val schemaPattern = MetadataOperationUtils.convertSchemaPattern(v._1, true)
       assert(schemaPattern == v._2)
 
       val schemaPatternDatanucleusFormat =
-        MetadataOperationUtils.newConvertSchemaPattern(v._1, false)
+        MetadataOperationUtils.convertSchemaPattern(v._1, false)
       assert(schemaPatternDatanucleusFormat == v._3)
     }
   }

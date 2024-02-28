@@ -22,11 +22,12 @@ public class MetadataOperationUtils {
   /**
    * Convert wildchars and escape sequence from JDBC format to datanucleous/regex
    */
-  public static String convertIdentifierPattern(final String pattern, boolean datanucleusFormat) {
+  public static String legacyConvertIdentifierPattern(
+      final String pattern, boolean datanucleusFormat) {
     if (pattern == null) {
-      return convertPattern("%", true);
+      return legacyConvertPattern("%", true);
     } else {
-      return convertPattern(pattern, datanucleusFormat);
+      return legacyConvertPattern(pattern, datanucleusFormat);
     }
   }
 
@@ -34,11 +35,11 @@ public class MetadataOperationUtils {
    * Convert wildchars and escape sequence of schema pattern from JDBC format to datanucleous/regex
    * The schema pattern treats empty string also as wildchar
    */
-  public static String convertSchemaPattern(final String pattern) {
+  public static String legacyConvertSchemaPattern(final String pattern) {
     if ((pattern == null) || pattern.isEmpty()) {
-      return convertPattern("%", true);
+      return legacyConvertPattern("%", true);
     } else {
-      return convertPattern(pattern, true);
+      return legacyConvertPattern(pattern, true);
     }
   }
 
@@ -47,15 +48,14 @@ public class MetadataOperationUtils {
    * Java regex patterns.
    *
    * @param pattern input which may contain '%' or '_' wildcard characters, or
-   * these characters escaped using {@link #getSearchStringEscape()}.
-   * @return replace %/_ with regex search characters, also handle escaped
-   * characters.
+   *                these characters escaped using "\".
+   * @return replace %/_ with regex search characters, also handle escaped characters.
    *
    * The datanucleus module expects the wildchar as '*'. The columns search on the
    * other hand is done locally inside the hive code and that requires the regex wildchar
    * format '.*'  This is driven by the datanucleusFormat flag.
    */
-  public static String convertPattern(final String pattern, boolean datanucleusFormat) {
+  public static String legacyConvertPattern(final String pattern, boolean datanucleusFormat) {
     String wStr;
     if (datanucleusFormat) {
       wStr = "*";
@@ -67,25 +67,25 @@ public class MetadataOperationUtils {
         .replaceAll("([^\\\\])_", "$1.").replaceAll("\\\\_", "_").replaceAll("^_", ".");
   }
 
-  public static String newConvertIdentifierPattern(
+  public static String convertIdentifierPattern(
       final String pattern, boolean datanucleusFormat) {
     if (pattern == null) {
-      return newConvertPattern("%", true);
+      return convertPattern("%", true);
     } else {
-      return newConvertPattern(pattern, datanucleusFormat);
+      return convertPattern(pattern, datanucleusFormat);
     }
   }
 
-  public static String newConvertSchemaPattern(final String pattern, boolean datanucleusFormat) {
+  public static String convertSchemaPattern(final String pattern, boolean datanucleusFormat) {
     if ((pattern == null) || pattern.isEmpty()) {
       String all = datanucleusFormat? "*" : ".*";
-      return newConvertPattern(all, datanucleusFormat);
+      return convertPattern(all, datanucleusFormat);
     } else {
-      return newConvertPattern(pattern, datanucleusFormat);
+      return convertPattern(pattern, datanucleusFormat);
     }
   }
 
-  public static String newConvertPattern(final String pattern, boolean datanucleusFormat) {
+  public static String convertPattern(final String pattern, boolean datanucleusFormat) {
     if (datanucleusFormat) {
       return pattern
           .replaceAll("([^\\\\])\\*", "$1%")

@@ -65,9 +65,9 @@ private[hive] class SparkGetFunctionsOperation(
     // get databases for schema pattern
     val (schemaPattern, functionPattern) =
       if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
-        (convertSchemaPattern(schemaName), convertSchemaPattern(functionName))
+        (legacyConvertSchemaPattern(schemaName), legacyConvertSchemaPattern(functionName))
       } else {
-        (newConvertSchemaPattern(schemaName, true), newConvertSchemaPattern(functionName, true))
+        (convertSchemaPattern(schemaName, true), convertSchemaPattern(functionName, true))
       }
     val matchingDbs = catalog.listDatabases(schemaPattern)
 

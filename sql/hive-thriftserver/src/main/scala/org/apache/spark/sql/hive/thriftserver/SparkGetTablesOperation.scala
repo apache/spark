@@ -68,9 +68,9 @@ private[hive] class SparkGetTablesOperation(
     val catalog = sqlContext.sessionState.catalog
     val (schemaPattern, tablePattern) =
       if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
-        (convertSchemaPattern(schemaName), convertIdentifierPattern(tableName, true))
+        (legacyConvertSchemaPattern(schemaName), legacyConvertIdentifierPattern(tableName, true))
       } else {
-        (newConvertSchemaPattern(schemaName, true), newConvertIdentifierPattern(tableName, true))
+        (convertSchemaPattern(schemaName, true), convertIdentifierPattern(tableName, true))
       }
     val matchingDbs = catalog.listDatabases(schemaPattern)
 

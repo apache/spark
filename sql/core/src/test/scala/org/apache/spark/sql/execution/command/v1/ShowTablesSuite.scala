@@ -66,7 +66,6 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
       val expected = Seq(Row("", "source", true), Row("", "source2", true))
 
       val df = sql("SHOW TABLE EXTENDED FROM default LIKE '%source%'")
-
       val result = df.collect()
       val resultWithoutInfo = result.map { case Row(db, table, temp, _) => Row(db, table, temp) }
 

@@ -139,18 +139,18 @@ public class GetColumnsOperation extends MetadataOperation {
       String schemaPattern, tablePattern;
       Pattern columnPattern = null;
       if (SQLConf.get().legacyUseStarAndVerticalBarAsWildcardsInLikePattern()) {
-        schemaPattern = MetadataOperationUtils.convertSchemaPattern(schemaName);
+        schemaPattern = MetadataOperationUtils.legacyConvertSchemaPattern(schemaName);
+        tablePattern = MetadataOperationUtils.legacyConvertIdentifierPattern(tableName, true);
+        if (columnName != null) {
+          columnPattern = Pattern.compile(
+              MetadataOperationUtils.legacyConvertIdentifierPattern(columnName, false));
+        }
+      } else {
+        schemaPattern = MetadataOperationUtils.convertSchemaPattern(schemaName, true);
         tablePattern = MetadataOperationUtils.convertIdentifierPattern(tableName, true);
         if (columnName != null) {
           columnPattern = Pattern.compile(
-              MetadataOperationUtils.convertIdentifierPattern(columnName, false));
-        }
-      } else {
-        schemaPattern = MetadataOperationUtils.newConvertSchemaPattern(schemaName, true);
-        tablePattern = MetadataOperationUtils.newConvertIdentifierPattern(tableName, true);
-        if (columnName != null) {
-          columnPattern = Pattern.compile(
-            MetadataOperationUtils.newConvertIdentifierPattern(columnName, false));
+            MetadataOperationUtils.convertIdentifierPattern(columnName, false));
         }
       }
 

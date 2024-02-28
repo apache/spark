@@ -120,7 +120,7 @@ object StringUtils extends Logging {
 
   def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
     if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
-      filterPatternLegacy(names, pattern)
+      legacyFilterPattern(names, pattern)
     } else {
       filterBySQLLikePattern(names, pattern)
     }
@@ -135,7 +135,7 @@ object StringUtils extends Logging {
    *                on both ends will be ignored
    * @return the filtered names list in order
    */
-  def filterPatternLegacy(names: Seq[String], pattern: String): Seq[String] = {
+  def legacyFilterPattern(names: Seq[String], pattern: String): Seq[String] = {
     val funcNames = scala.collection.mutable.SortedSet.empty[String]
     pattern.trim().split("\\|").foreach { subPattern =>
       try {

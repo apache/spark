@@ -284,8 +284,8 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"CREATE TABLE $catalog.$namespace.$table2 (data2 string, id2 bigint) " +
           s"$defaultUsing PARTITIONED BY (id2)")
 
-        val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace LIKE '$table%'").
-          sort("tableName")
+        val result = sql(s"SHOW TABLE EXTENDED FROM $catalog.$namespace LIKE '$table%'")
+          .sort("tableName")
         assert(result.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
         val resultCollect = result.collect()

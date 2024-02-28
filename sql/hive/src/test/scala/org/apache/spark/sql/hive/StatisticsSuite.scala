@@ -870,9 +870,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       StatsSetupConst.TOTAL_SIZE).forall(!tableMetadata.contains(_)))
 
     if (analyzedByHive) {
-      assert(StringUtils.filterPatternLegacy(describeResult1, "*numRows\\s+500*").nonEmpty)
+      assert(StringUtils.legacyFilterPattern(describeResult1, "*numRows\\s+500*").nonEmpty)
     } else {
-      assert(StringUtils.filterPatternLegacy(describeResult1, "*numRows\\s+500*").isEmpty)
+      assert(StringUtils.legacyFilterPattern(describeResult1, "*numRows\\s+500*").isEmpty)
     }
   }
 
