@@ -1843,15 +1843,14 @@ class DataFrameTestsMixin:
         self.assertEqual(df.take(8), result)
 
     def test_same_semantics_error(self):
-        with QuietTest(self.sc):
-            with self.assertRaises(PySparkTypeError) as pe:
-                self.spark.range(10).sameSemantics(1)
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(10).sameSemantics(1)
 
-            self.check_error(
-                exception=pe.exception,
-                error_class="NOT_DATAFRAME",
-                message_parameters={"arg_name": "other", "arg_type": "int"},
-            )
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_DATAFRAME",
+            message_parameters={"arg_name": "other", "arg_type": "int"},
+        )
 
     def test_input_files(self):
         tpath = tempfile.mkdtemp()

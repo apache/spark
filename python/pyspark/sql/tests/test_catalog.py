@@ -477,7 +477,7 @@ class CatalogTestsMixin:
         import tempfile
 
         spark = self.spark
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_refresh_table") as tmp_dir:
             with self.table("my_tab"):
                 spark.sql(
                     "CREATE TABLE my_tab (col STRING) USING TEXT LOCATION '{}'".format(tmp_dir)

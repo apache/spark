@@ -387,6 +387,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def invalidStatementError(operation: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      messageParameters = Map("operation" -> toSQLStmt(operation)),
+      ctx)
+  }
+
   def descColumnForPartitionUnsupportedError(ctx: DescribeRelationContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",

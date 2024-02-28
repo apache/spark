@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.format.DateTimeFormatter
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.jdk.CollectionConverters._
@@ -807,6 +808,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       assert(doCompileFilter(LessThan(col0, 5)) === """"col0" < 5""")
       assert(doCompileFilter(LessThan(col0,
         Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col0" < '1995-11-21 00:00:00.0'""")
+      assert(doCompileFilter(LessThan(col0,
+        LocalDateTime.parse("2007-12-03 10:15:30",
+          DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))))
+        === """"col0" < '2007-12-03 10:15:30'""")
       assert(doCompileFilter(LessThan(col0, Date.valueOf("1983-08-04")))
         === """"col0" < '1983-08-04'""")
       assert(doCompileFilter(LessThanOrEqual(col0, 5)) === """"col0" <= 5""")

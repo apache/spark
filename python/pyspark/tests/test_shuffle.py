@@ -16,7 +16,7 @@
 #
 import random
 import unittest
-import tempfile
+from tempfile import TemporaryDirectory
 import os
 
 from py4j.protocol import Py4JJavaError
@@ -67,16 +67,16 @@ class MergerTests(unittest.TestCase):
         # SPARK-39179: Test shuffle of data with multiple location also check
         # shuffle locations get randomized
 
-        with tempfile.TemporaryDirectory() as tempdir1, tempfile.TemporaryDirectory() as tempdir2:
+        with TemporaryDirectory(prefix="shf1") as d1, TemporaryDirectory(prefix="shf2") as d2:
             original = os.environ.get("SPARK_LOCAL_DIRS", None)
-            os.environ["SPARK_LOCAL_DIRS"] = tempdir1 + "," + tempdir2
+            os.environ["SPARK_LOCAL_DIRS"] = d1 + "," + d2
             try:
                 index_of_tempdir1 = [False, False]
                 for idx in range(10):
                     m = ExternalMerger(self.agg, 20)
-                    if m.localdirs[0].startswith(tempdir1):
+                    if m.localdirs[0].startswith(d1):
                         index_of_tempdir1[0] = True
-                    elif m.localdirs[1].startswith(tempdir1):
+                    elif m.localdirs[1].startswith(d1):
                         index_of_tempdir1[1] = True
                     m.mergeValues(self.data)
                     self.assertTrue(m.spills >= 1)
