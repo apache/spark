@@ -40,23 +40,23 @@ struct<>
 
 
 -- !query
-select count(*), ucs_basic from t1 group by ucs_basic
+select count(*) from t1 group by ucs_basic
 -- !query schema
-struct<count(1):bigint,ucs_basic:string>
+struct<count(1):bigint>
 -- !query output
-1	AAA
-1	BBB
-1	aaa
-1	bbb
+1
+1
+1
+1
 
 
 -- !query
-select count(*), ucs_basic_lcase from t1 group by ucs_basic_lcase
+select count(*) from t1 group by ucs_basic_lcase
 -- !query schema
-struct<count(1):bigint,ucs_basic_lcase:string COLLATE UCS_BASIC_LCASE>
+struct<count(1):bigint>
 -- !query output
-2	BBB
-2	aaa
+2
+2
 
 
 -- !query
@@ -92,6 +92,55 @@ struct<ucs_basic:string,ucs_basic_lcase:string COLLATE UCS_BASIC_LCASE>
 -- !query output
 AAA	AAA
 aaa	aaa
+
+
+-- !query
+drop table t1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table t1 (c1 struct<ucs_basic: string collate 'ucs_basic', ucs_basic_lcase: string collate 'ucs_basic_lcase'>) USING PARQUET
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO t1 VALUES (named_struct('ucs_basic', 'aaa', 'ucs_basic_lcase', 'aaa'))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO t1 VALUES (named_struct('ucs_basic', 'AAA', 'ucs_basic_lcase', 'AAA'))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select count(*) from t1 group by c1.ucs_basic
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+1
+
+
+-- !query
+select count(*) from t1 group by c1.ucs_basic_lcase
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+2
 
 
 -- !query
