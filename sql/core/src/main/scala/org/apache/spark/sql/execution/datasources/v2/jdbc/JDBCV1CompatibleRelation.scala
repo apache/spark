@@ -53,9 +53,5 @@ case class JDBCV1CompatibleRelation(
       pushedLimit, sortOrders, pushedOffset)
   }
 
-  /**
-   * Returns string representation of this relation
-   * Since relation string representation is visible to customer by explain command
-   */
   override def toString: String = "JDBC Relation"
 }
