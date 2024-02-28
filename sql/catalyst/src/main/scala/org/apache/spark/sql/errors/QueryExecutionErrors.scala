@@ -442,7 +442,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         s"${argClasses.mkString("(", ", ", ")")} on $cls.")
   }
 
-  def constructorNotFoundError(cls: String): SparkRuntimeException = {
+  def constructorNotFoundError(cls: String): SparkException = {
     SparkException.internalError(
       s"Couldn't find a valid constructor on <$cls>.")
   }
