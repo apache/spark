@@ -358,7 +358,7 @@ class StreamingTestsMixin:
             )
 
     def test_streaming_write_to_table(self):
-        with self.table("output_table"), tempfile.TemporaryDirectory() as tmpdir:
+        with self.table("output_table"), tempfile.TemporaryDirectory(prefix="to_table") as tmpdir:
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
             q = df.writeStream.toTable("output_table", format="parquet", checkpointLocation=tmpdir)
             self.assertTrue(q.isActive)
