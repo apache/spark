@@ -416,10 +416,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2017")
   }
 
-  def classUnsupportedByMapObjectsError(cls: Class[_]): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
-      messageParameters = Map("cls" -> cls.getName))
+  def classUnsupportedByMapObjectsError(cls: Class[_]): SparkException = {
+    SparkException.internalError(s"Couldn't find a valid constructor on <${cls.getName}>.")
   }
 
   def nullAsMapKeyNotAllowedError(): SparkRuntimeException = {
