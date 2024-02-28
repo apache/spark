@@ -42,7 +42,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository
-        key: build-sparkr-maven-${{ hashFiles('**/pom.xml') }}
+        key: build-sparkr-windows-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           build-sparkr-windows-maven-
     - name: Install Java 17

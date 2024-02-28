@@ -47,6 +47,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    VariantType,
     UserDefinedType,
 )
 from pyspark.errors import PySparkAssertionError, PySparkValueError
@@ -190,6 +191,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, ArrayType):
         ret.array.element_type.CopyFrom(pyspark_types_to_proto_types(data_type.elementType))
         ret.array.contains_null = data_type.containsNull
+    elif isinstance(data_type, VariantType):
+        ret.variant.CopyFrom(pb2.DataType.Variant())
     elif isinstance(data_type, UserDefinedType):
         json_value = data_type.jsonValue()
         ret.udt.type = "udt"
@@ -297,6 +300,8 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             proto_schema_to_pyspark_data_type(schema.map.value_type),
             schema.map.value_contains_null,
         )
+    elif schema.HasField("variant"):
+        return VariantType()
     elif schema.HasField("udt"):
         assert schema.udt.type == "udt"
         json_value = {}

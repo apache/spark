@@ -22,21 +22,23 @@ import java.sql.{Connection, DriverManager}
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.TimeoutException
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.api.async.{ResultCallback, ResultCallbackTemplate}
-import com.github.dockerjava.api.command.CreateContainerResponse
+import com.github.dockerjava.api.command.{CreateContainerResponse, PullImageResultCallback}
 import com.github.dockerjava.api.exception.NotFoundException
 import com.github.dockerjava.api.model._
 import com.github.dockerjava.core.{DefaultDockerClientConfig, DockerClientImpl}
 import com.github.dockerjava.zerodep.ZerodepDockerHttpClient
-import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.DockerUtils
+import org.apache.spark.util.Utils.{bytesToString, timeStringAsSeconds}
 
 abstract class DatabaseOnDocker {
   /**
@@ -101,11 +103,18 @@ abstract class DockerJDBCIntegrationSuite
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
-  val connectionTimeout = timeout(5.minutes)
   val keepContainer =
     sys.props.getOrElse("spark.test.docker.keepContainer", "false").toBoolean
   val removePulledImage =
     sys.props.getOrElse("spark.test.docker.removePulledImage", "true").toBoolean
+  protected val imagePullTimeout: Long =
+    timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.imagePullTimeout", "5min"))
+  protected val startContainerTimeout: Long =
+    timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
+  protected val connectionTimeout: PatienceConfiguration.Timeout = {
+    val timeoutStr = sys.props.getOrElse("spark.test.docker.conn", "5min")
+    timeout(timeStringAsSeconds(timeoutStr).seconds)
+  }
 
   private var docker: DockerClient = _
   // Configure networking (necessary for boot2docker / Docker Machine)
@@ -142,15 +151,40 @@ abstract class DockerJDBCIntegrationSuite
       } catch {
         case e: NotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
-          docker.pullImageCmd(db.imageName)
-            .start()
-            .awaitCompletion(connectionTimeout.value.toSeconds, TimeUnit.SECONDS)
-          pulled = true
-      }
+          val callback = new PullImageResultCallback {
+            override def onNext(item: PullResponseItem): Unit = {
+              super.onNext(item)
+              if (item.getStatus != null) {
+                item.getStatus match {
+                  case s if item.getProgressDetail != null &&
+                      item.getProgressDetail.getCurrent != null &&
+                      item.getProgressDetail.getCurrent == item.getProgressDetail.getTotal =>
+                    // logging for final progress procedural status
+                    logInfo(s"$s ${item.getId} ${bytesToString(item.getProgressDetail.getTotal)}")
+                  case s if s != "Downloading" && s != "Extracting" =>
+                    logInfo(s"${item.getStatus} ${item.getId}")
+                  case _ =>
+                }
+              }
+            }
 
-      docker.pullImageCmd(db.imageName)
-        .start()
-        .awaitCompletion(connectionTimeout.value.toSeconds, TimeUnit.SECONDS)
+            override def onComplete(): Unit = {
+              pulled = true
+            }
+
+            override def onError(throwable: Throwable): Unit = {
+              logError(s"Failed to pull Docker image ${db.imageName}", throwable)
+            }
+          }
+
+          docker.pullImageCmd(db.imageName)
+            .exec(callback)
+            .awaitCompletion(imagePullTimeout, TimeUnit.SECONDS)
+          if (!pulled) {
+            throw new TimeoutException(
+              s"Timeout('$imagePullTimeout secs') waiting for image ${db.imageName} to be pulled")
+          }
+      }
 
       val hostConfig = HostConfig
         .newHostConfig()
@@ -180,7 +214,7 @@ abstract class DockerJDBCIntegrationSuite
       container = createContainerCmd.exec()
       // Start the container and wait until the database can accept JDBC connections:
       docker.startContainerCmd(container.getId).exec()
-      eventually(connectionTimeout, interval(1.second)) {
+      eventually(timeout(startContainerTimeout.seconds), interval(1.second)) {
         val response = docker.inspectContainerCmd(container.getId).exec()
         assert(response.getState.getRunning)
       }

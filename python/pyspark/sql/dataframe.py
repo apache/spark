@@ -6711,7 +6711,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(other, DataFrame):
             raise PySparkTypeError(
-                error_class="NOT_STR",
+                error_class="NOT_DATAFRAME",
                 message_parameters={"arg_name": "other", "arg_type": type(other).__name__},
             )
         return self._jdf.sameSemantics(other._jdf)
