@@ -2928,6 +2928,39 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Check HasPartitionSize from InMemoryPartitionTable") {
+    val t = "testpart.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (key int)")
+      val table = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array(), "tbl"))
+        .asInstanceOf[InMemoryPartitionTable]
+
+      var partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
+      assert(partSizes.length == 0)
+
+      sql(s"INSERT INTO $t VALUES ('a', 1), ('b', 2), ('c', 3)")
+      partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
+      assert(partSizes.length == 3)
+      assert(partSizes.toSet == Set(100, 100, 100))
+
+      sql(s"ALTER TABLE $t DROP PARTITION (key=3)")
+      partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
+      assert(partSizes.length == 2)
+      assert(partSizes.toSet == Set(100, 100))
+
+      sql(s"ALTER TABLE $t ADD PARTITION (key=4)")
+      partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
+      assert(partSizes.length == 3)
+      assert(partSizes.toSet == Set(100, 100, 100))
+
+      sql(s"INSERT INTO $t VALUES ('c', 3), ('e', 5)")
+      partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
+      assert(partSizes.length == 5)
+      assert(partSizes.toSet == Set(100, 100, 100, 100, 100))
+    }
+  }
+
   test("time travel") {
     sql("use testcat")
     // The testing in-memory table simply append the version/timestamp to the table name when
