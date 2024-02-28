@@ -806,7 +806,7 @@ class ParquetFilters(
               }
 
               override def keep(value: Binary): Boolean = {
-                value != null && UTF8String.fromBytes(value.getBytes).startsWithBinary(
+                value != null && UTF8String.fromBytes(value.getBytes).startsWith(
                   UTF8String.fromBytes(strToBinary.getBytes))
               }
             }
@@ -822,7 +822,7 @@ class ParquetFilters(
               override def canDrop(statistics: Statistics[Binary]): Boolean = false
               override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
               override def keep(value: Binary): Boolean = {
-                value != null && UTF8String.fromBytes(value.getBytes).endsWithBinary(suffixStr)
+                value != null && UTF8String.fromBytes(value.getBytes).endsWith(suffixStr)
               }
             }
           )
@@ -837,7 +837,7 @@ class ParquetFilters(
               override def canDrop(statistics: Statistics[Binary]): Boolean = false
               override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
               override def keep(value: Binary): Boolean = {
-                value != null && UTF8String.fromBytes(value.getBytes).containsBinary(subStr)
+                value != null && UTF8String.fromBytes(value.getBytes).contains(subStr)
               }
             }
           )

@@ -559,7 +559,7 @@ case class BinaryPredicate(override val prettyName: String, left: Expression, ri
   }
 }
 
-trait CollationCheck {
+trait CollationCompatibilityCheck {
   self: StringPredicate =>
   def checkCollationIds(): Int = {
     val leftCollationId: Int = left.dataType.asInstanceOf[StringType].collationId
@@ -605,11 +605,11 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate
-  with CollationCheck {
+  with CollationCompatibilityCheck {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     val collationId = checkCollationIds()
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
-      l.containsBinary(r)
+      l.contains(r)
     } else {
       l.contains(r, collationId)
     }
@@ -617,7 +617,7 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationId = checkCollationIds()
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.containsBinary($c2)")
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2)")
     } else {
       defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2, $collationId)")
     }
@@ -655,11 +655,11 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 }
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate
-  with CollationCheck {
+  with CollationCompatibilityCheck {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     val collationId = checkCollationIds()
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
-      l.startsWithBinary(r)
+      l.startsWith(r)
     } else {
       l.startsWith(r, collationId)
     }
@@ -668,7 +668,7 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationId = checkCollationIds()
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWithBinary($c2)")
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2)")
     } else {
       defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2, $collationId)")
     }
@@ -706,11 +706,11 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate
-  with CollationCheck {
+  with CollationCompatibilityCheck {
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     val collationId = checkCollationIds()
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
-      l.endsWithBinary(r)
+      l.endsWith(r)
     } else {
       l.endsWith(r, collationId)
     }
@@ -719,7 +719,7 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationId = checkCollationIds()
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
-      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWithBinary($c2)")
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2)")
     } else {
       defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2, $collationId)")
     }

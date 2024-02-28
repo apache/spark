@@ -49,10 +49,10 @@ public class UTF8StringSuite {
 
     assertEquals(0, s1.binaryCompare(s2));
 
-    assertTrue(s1.containsBinary(s2));
-    assertTrue(s2.containsBinary(s1));
-    assertTrue(s1.startsWithBinary(s2));
-    assertTrue(s1.endsWithBinary(s2));
+    assertTrue(s1.contains(s2));
+    assertTrue(s2.contains(s1));
+    assertTrue(s1.startsWith(s2));
+    assertTrue(s1.endsWith(s2));
   }
 
   @Test
@@ -183,35 +183,35 @@ public class UTF8StringSuite {
 
   @Test
   public void contains() {
-    assertTrue(EMPTY_UTF8.containsBinary(EMPTY_UTF8));
-    assertTrue(fromString("hello").containsBinary(fromString("ello")));
-    assertFalse(fromString("hello").containsBinary(fromString("vello")));
-    assertFalse(fromString("hello").containsBinary(fromString("hellooo")));
-    assertTrue(fromString("大千世界").containsBinary(fromString("千世界")));
-    assertFalse(fromString("大千世界").containsBinary(fromString("世千")));
-    assertFalse(fromString("大千世界").containsBinary(fromString("大千世界好")));
+    assertTrue(EMPTY_UTF8.contains(EMPTY_UTF8));
+    assertTrue(fromString("hello").contains(fromString("ello")));
+    assertFalse(fromString("hello").contains(fromString("vello")));
+    assertFalse(fromString("hello").contains(fromString("hellooo")));
+    assertTrue(fromString("大千世界").contains(fromString("千世界")));
+    assertFalse(fromString("大千世界").contains(fromString("世千")));
+    assertFalse(fromString("大千世界").contains(fromString("大千世界好")));
   }
 
   @Test
   public void startsWith() {
-    assertTrue(EMPTY_UTF8.startsWithBinary(EMPTY_UTF8));
-    assertTrue(fromString("hello").startsWithBinary(fromString("hell")));
-    assertFalse(fromString("hello").startsWithBinary(fromString("ell")));
-    assertFalse(fromString("hello").startsWithBinary(fromString("hellooo")));
-    assertTrue(fromString("数据砖头").startsWithBinary(fromString("数据")));
-    assertFalse(fromString("大千世界").startsWithBinary(fromString("千")));
-    assertFalse(fromString("大千世界").startsWithBinary(fromString("大千世界好")));
+    assertTrue(EMPTY_UTF8.startsWith(EMPTY_UTF8));
+    assertTrue(fromString("hello").startsWith(fromString("hell")));
+    assertFalse(fromString("hello").startsWith(fromString("ell")));
+    assertFalse(fromString("hello").startsWith(fromString("hellooo")));
+    assertTrue(fromString("数据砖头").startsWith(fromString("数据")));
+    assertFalse(fromString("大千世界").startsWith(fromString("千")));
+    assertFalse(fromString("大千世界").startsWith(fromString("大千世界好")));
   }
 
   @Test
   public void endsWith() {
-    assertTrue(EMPTY_UTF8.endsWithBinary(EMPTY_UTF8));
-    assertTrue(fromString("hello").endsWithBinary(fromString("ello")));
-    assertFalse(fromString("hello").endsWithBinary(fromString("ellov")));
-    assertFalse(fromString("hello").endsWithBinary(fromString("hhhello")));
-    assertTrue(fromString("大千世界").endsWithBinary(fromString("世界")));
-    assertFalse(fromString("大千世界").endsWithBinary(fromString("世")));
-    assertFalse(fromString("数据砖头").endsWithBinary(fromString("我的数据砖头")));
+    assertTrue(EMPTY_UTF8.endsWith(EMPTY_UTF8));
+    assertTrue(fromString("hello").endsWith(fromString("ello")));
+    assertFalse(fromString("hello").endsWith(fromString("ellov")));
+    assertFalse(fromString("hello").endsWith(fromString("hhhello")));
+    assertTrue(fromString("大千世界").endsWith(fromString("世界")));
+    assertFalse(fromString("大千世界").endsWith(fromString("世")));
+    assertFalse(fromString("数据砖头").endsWith(fromString("我的数据砖头")));
   }
 
   @Test

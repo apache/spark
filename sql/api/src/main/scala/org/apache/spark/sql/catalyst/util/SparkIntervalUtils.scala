@@ -181,7 +181,7 @@ trait SparkIntervalUtils {
       val b = bytes(i)
       state match {
         case PREFIX =>
-          if (s.startsWithBinary(intervalStr)) {
+          if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
               throwIAE("interval string cannot be empty")
             } else if (!Character.isWhitespace(bytes(i + intervalStr.numBytes()))) {
