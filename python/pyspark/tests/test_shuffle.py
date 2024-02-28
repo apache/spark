@@ -67,7 +67,14 @@ class MergerTests(unittest.TestCase):
         # SPARK-39179: Test shuffle of data with multiple location also check
         # shuffle locations get randomized
 
-        with tempfile.TemporaryDirectory() as tempdir1, tempfile.TemporaryDirectory() as tempdir2:
+        with (
+            tempfile.TemporaryDirectory(
+                prefix="test_shuffle_data_with_multiple_locations1"
+            ) as tempdir1,
+            tempfile.TemporaryDirectory(
+                prefix="test_shuffle_data_with_multiple_locations2"
+            ) as tempdir2,
+        ):
             original = os.environ.get("SPARK_LOCAL_DIRS", None)
             os.environ["SPARK_LOCAL_DIRS"] = tempdir1 + "," + tempdir2
             try:

@@ -174,7 +174,7 @@ class Broadcast(Generic[T]):
 
         Write a pickled representation of `b` to the open temp file.
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="dump") as d:
         ...     path = os.path.join(d, "test.txt")
         ...     with open(path, "wb") as f:
         ...         b.dump(b.value, f)
@@ -215,7 +215,7 @@ class Broadcast(Generic[T]):
 
         Read the pickled representation of value from temp file.
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="load_from_path") as d:
         ...     path = os.path.join(d, "test.txt")
         ...     with open(path, "wb") as f:
         ...         b.dump(b.value, f)
@@ -250,7 +250,7 @@ class Broadcast(Generic[T]):
 
         Read the pickled representation of value from the open temp file.
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="load") as d:
         ...     path = os.path.join(d, "test.txt")
         ...     with open(path, "wb") as f:
         ...         b.dump(b.value, f)

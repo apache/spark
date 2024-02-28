@@ -34,7 +34,7 @@ if should_test_connect:
 
 class ArtifactTestsMixin:
     def check_add_pyfile(self, spark_session):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="check_add_pyfile") as d:
             pyfile_path = os.path.join(d, "my_pyfile.py")
             with open(pyfile_path, "w") as f:
                 f.write("my_func = lambda: 10")
@@ -60,7 +60,7 @@ class ArtifactTestsMixin:
         )
 
     def test_artifacts_cannot_be_overwritten(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_artifacts_cannot_be_overwritten") as d:
             pyfile_path = os.path.join(d, "my_pyfile.py")
             with open(pyfile_path, "w+") as f:
                 f.write("my_func = lambda: 10")
@@ -79,7 +79,7 @@ class ArtifactTestsMixin:
                 self.spark.addArtifacts(pyfile_path, pyfile=True)
 
     def check_add_zipped_package(self, spark_session):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="check_add_zipped_package") as d:
             package_path = os.path.join(d, "my_zipfile")
             os.mkdir(package_path)
             pyfile_path = os.path.join(package_path, "__init__.py")
@@ -108,7 +108,7 @@ class ArtifactTestsMixin:
         )
 
     def check_add_archive(self, spark_session):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="check_add_archive") as d:
             archive_path = os.path.join(d, "my_archive")
             os.mkdir(archive_path)
             pyfile_path = os.path.join(archive_path, "my_file.txt")
@@ -144,7 +144,7 @@ class ArtifactTestsMixin:
         )
 
     def check_add_file(self, spark_session):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="check_add_file") as d:
             file_path = os.path.join(d, "my_file.txt")
             with open(file_path, "w") as f:
                 f.write("Hello world!!")
@@ -393,8 +393,8 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
             self.assertEqual(artifact2.data.data, data)
 
     def test_copy_from_local_to_fs(self):
-        with tempfile.TemporaryDirectory() as d:
-            with tempfile.TemporaryDirectory() as d2:
+        with tempfile.TemporaryDirectory(prefix="test_copy_from_local_to_fs1") as d:
+            with tempfile.TemporaryDirectory(prefix="test_copy_from_local_to_fs2") as d2:
                 file_path = os.path.join(d, "file1")
                 dest_path = os.path.join(d2, "file1_dest")
                 file_content = "test_copy_from_local_to_FS"
@@ -417,7 +417,7 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
         self.assertEqual(self.artifact_manager.is_cached_artifact(expected_hash), True)
 
     def test_add_not_existing_artifact(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_add_not_existing_artifact") as d:
             with self.assertRaises(FileNotFoundError):
                 self.artifact_manager.add_artifacts(
                     os.path.join(d, "not_existing"), file=True, pyfile=False, archive=False
