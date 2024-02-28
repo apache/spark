@@ -768,6 +768,12 @@ No such struct field `<fieldName>` in `<fields>`.
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
 
+### FOREACH_BATCH_USER_FUNCTION_ERROR
+
+[SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
+
+An error occurred in the user provided function in foreach batch sink.
+
 ### FOUND_MULTIPLE_DATA_SOURCES
 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1148,7 +1154,7 @@ Please increase executor memory using the --executor-memory option or "`<config>
 
 [SQLSTATE: 42001](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Found an invalid expression encoder. Expects an instance of `ExpressionEncoder` but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
+Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
 
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
