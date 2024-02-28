@@ -41,6 +41,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
@@ -348,10 +349,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
-      val invalidateFunc = () => session.sharedState.cacheManager.uncacheTableOrView(
-        session,
-        (r.catalog.name() +: r.identifier.namespace() :+ r.identifier.name()).toImmutableArraySeq,
-        cascade = true)
+      val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
       DropTableExec(r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
     case _: NoopCommand =>
