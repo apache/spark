@@ -200,6 +200,7 @@
         "map": {
           "keyType": {
             "string": {
+              "collationId": 0
             }
           },
           "valueType": {
@@ -227,6 +228,7 @@
                 "name": "_1",
                 "dataType": {
                   "string": {
+                    "collationId": 0
                   }
                 },
                 "nullable": true
@@ -402,6 +404,7 @@
             "map": {
               "keyType": {
                 "string": {
+                  "collationId": 0
                 }
               },
               "valueType": {
@@ -414,6 +417,7 @@
             "map": {
               "keyType": {
                 "string": {
+                  "collationId": 0
                 }
               },
               "valueType": {
@@ -435,6 +439,7 @@
             "map": {
               "keyType": {
                 "string": {
+                  "collationId": 0
                 }
               },
               "valueType": {
@@ -456,6 +461,7 @@
             "map": {
               "keyType": {
                 "string": {
+                  "collationId": 0
                 }
               },
               "valueType": {
@@ -487,6 +493,7 @@
             "map": {
               "keyType": {
                 "string": {
+                  "collationId": 0
                 }
               },
               "valueType": {
@@ -504,6 +511,7 @@
             "map": {
               "keyType": {
                 "string": {
+                  "collationId": 0
                 }
               },
               "valueType": {
@@ -525,6 +533,7 @@
             "map": {
               "keyType": {
                 "string": {
+                  "collationId": 0
                 }
               },
               "valueType": {
@@ -567,6 +576,7 @@
                   "map": {
                     "keyType": {
                       "string": {
+                        "collationId": 0
                       }
                     },
                     "valueType": {
@@ -584,6 +594,7 @@
                       "name": "_1",
                       "dataType": {
                         "string": {
+                          "collationId": 0
                         }
                       },
                       "nullable": true
@@ -597,6 +608,7 @@
                           },
                           "valueType": {
                             "string": {
+                              "collationId": 0
                             }
                           },
                           "valueContainsNull": true
@@ -628,6 +640,7 @@
             "map": {
               "keyType": {
                 "string": {
+                  "collationId": 0
                 }
               },
               "valueType": {
@@ -653,6 +666,7 @@
                     "name": "_1",
                     "dataType": {
                       "string": {
+                        "collationId": 0
                       }
                     },
                     "nullable": true
@@ -666,6 +680,7 @@
                         },
                         "valueType": {
                           "string": {
+                            "collationId": 0
                           }
                         },
                         "valueContainsNull": true
@@ -685,6 +700,7 @@
                   },
                   "valueType": {
                     "string": {
+                      "collationId": 0
                     }
                   },
                   "keys": [{
