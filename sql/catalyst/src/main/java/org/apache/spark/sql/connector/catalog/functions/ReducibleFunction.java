@@ -37,5 +37,6 @@ public interface ReducibleFunction<T, A> extends ScalarFunction<T> {
      * @param otherArgument argument for other function instance
      * @return a reduction function if it is reducible, none if not
      */
-    Option<Reducer<A>> reducer(ReducibleFunction<?, ?> other, Option<?> thisArgument, Option<?> otherArgument);
+    Option<Reducer<A>> reducer(ReducibleFunction<?, ?> other, Option<?> thisArgument,
+                               Option<?> otherArgument);
 }

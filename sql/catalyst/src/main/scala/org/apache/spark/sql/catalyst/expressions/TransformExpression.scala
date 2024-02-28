@@ -69,8 +69,7 @@ case class TransformExpression(
       true
     } else {
       (function, other.function) match {
-        case (f: ReducibleFunction[Any, Any] @unchecked,
-          o: ReducibleFunction[Any, Any] @unchecked) =>
+        case (f: ReducibleFunction[_, _], o: ReducibleFunction[_, _]) =>
           val reducer = f.reducer(o, numBucketsOpt, other.numBucketsOpt)
           val otherReducer = o.reducer(f, other.numBucketsOpt, numBucketsOpt)
           reducer.isDefined || otherReducer.isDefined

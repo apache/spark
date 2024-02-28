@@ -550,7 +550,7 @@ case class EnsureRequirements(
       plan: SparkPlan,
       values: Seq[(InternalRow, Int)],
       joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[Reducer[Any]]]],
+      reducers: Option[Seq[Option[Reducer[_]]]],
       applyPartialClustering: Boolean,
       replicatePartitions: Boolean): SparkPlan = plan match {
     case scan: BatchScanExec =>
@@ -570,7 +570,7 @@ case class EnsureRequirements(
 
   private def reduceCommonPartValues(commonPartValues: Seq[(InternalRow, Int)],
                                      expressions: Seq[Expression],
-                                     reducers: Option[Seq[Option[Reducer[Any]]]]) = {
+                                     reducers: Option[Seq[Option[Reducer[_]]]]) = {
     reducers match {
       case Some(reducers) => commonPartValues.groupBy { case (row, _) =>
         KeyGroupedShuffleSpec.reducePartitionValue(row, expressions, reducers)

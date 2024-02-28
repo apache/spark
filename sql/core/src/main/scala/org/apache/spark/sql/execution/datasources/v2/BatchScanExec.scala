@@ -272,7 +272,7 @@ case class StoragePartitionJoinParams(
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     joinKeyPositions: Option[Seq[Int]] = None,
     commonPartitionValues: Option[Seq[(InternalRow, Int)]] = None,
-    reducers: Option[Seq[Option[Reducer[Any]]]] = None,
+    reducers: Option[Seq[Option[Reducer[_]]]] = None,
     applyPartialClustering: Boolean = false,
     replicatePartitions: Boolean = false) {
   override def equals(other: Any): Boolean = other match {
