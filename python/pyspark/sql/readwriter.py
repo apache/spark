@@ -399,9 +399,8 @@ class DataFrameReader(OptionUtils):
 
         Example 2: Read JSON from multiple files in a directory
 
-        >>> import tempfile
-        >>> with (tempfile.TemporaryDirectory(prefix="json2") as d1,
-        ...         tempfile.TemporaryDirectory(prefix="json3") as d2):
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory(prefix="json2") as d1, TemporaryDirectory(prefix="json3") as d2:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 30, "name": "Bob"}]
@@ -596,16 +595,16 @@ class DataFrameReader(OptionUtils):
 
         Read multiple Parquet files and merge schema.
 
-        >>> with (tempfile.TemporaryDirectory(prefix="parquet3") as d1,
-        ...         tempfile.TemporaryDirectory(prefix="parquet4") as d2):
-        ...     df.write.mode("overwrite").format("parquet").save(d1)
-        ...     df2.write.mode("overwrite").format("parquet").save(d2)
+        >>> with tempfile.TemporaryDirectory(prefix="parquet3") as d1:
+        ...     with tempfile.TemporaryDirectory(prefix="parquet4") as d2):
+        ...         df.write.mode("overwrite").format("parquet").save(d1)
+        ...         df2.write.mode("overwrite").format("parquet").save(d2)
         ...
-        ...     spark.read.option(
-        ...         "mergeSchema", "true"
-        ...     ).parquet(d1, d2).select(
-        ...         "name", "age", "height"
-        ...     ).orderBy("name", "age").show()
+        ...         spark.read.option(
+        ...             "mergeSchema", "true"
+        ...         ).parquet(d1, d2).select(
+        ...             "name", "age", "height"
+        ...         ).orderBy("name", "age").show()
         +-----+----+------+
         | name| age|height|
         +-----+----+------+

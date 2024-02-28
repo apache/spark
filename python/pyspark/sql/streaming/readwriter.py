@@ -984,13 +984,13 @@ class DataStreamWriter:
 
         >>> import tempfile
         >>> import time
-        >>> with (tempfile.TemporaryDirectory(prefix="format1") as d,
-        ...         tempfile.TemporaryDirectory(prefix="format2") as cp):
-        ...     df = spark.readStream.format("rate").load()
-        ...     q = df.writeStream.format("csv").option("checkpointLocation", cp).start(d)
-        ...     time.sleep(5)
-        ...     q.stop()
-        ...     spark.read.schema("timestamp TIMESTAMP, value STRING").csv(d).show()
+        >>> with tempfile.TemporaryDirectory(prefix="format1") as d:
+        ...     with tempfile.TemporaryDirectory(prefix="format2") as cp):
+        ...         df = spark.readStream.format("rate").load()
+        ...         q = df.writeStream.format("csv").option("checkpointLocation", cp).start(d)
+        ...         time.sleep(5)
+        ...         q.stop()
+        ...         spark.read.schema("timestamp TIMESTAMP, value STRING").csv(d).show()
         +...---------+-----+
         |...timestamp|value|
         +...---------+-----+
@@ -1105,14 +1105,14 @@ class DataStreamWriter:
 
         >>> import tempfile
         >>> import time
-        >>> with (tempfile.TemporaryDirectory(prefix="partitionBy1") as d,
-        ...         tempfile.TemporaryDirectory(prefix="partitionBy2") as cp):
-        ...     df = spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-        ...     q = df.writeStream.partitionBy(
-        ...         "timestamp").format("parquet").option("checkpointLocation", cp).start(d)
-        ...     time.sleep(5)
-        ...     q.stop()
-        ...     spark.read.schema(df.schema).parquet(d).show()
+        >>> with tempfile.TemporaryDirectory(prefix="partitionBy1") as d:
+        ...     with tempfile.TemporaryDirectory(prefix="partitionBy2") as cp):
+        ...         df = spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        ...         q = df.writeStream.partitionBy(
+        ...             "timestamp").format("parquet").option("checkpointLocation", cp).start(d)
+        ...         time.sleep(5)
+        ...         q.stop()
+        ...         spark.read.schema(df.schema).parquet(d).show()
         +...---------+-----+
         |...timestamp|value|
         +...---------+-----+
