@@ -375,8 +375,8 @@ class DataSourceWriter(ABC):
 
 class DataSourceStreamWriter(ABC):
     """
-    A base class for data source writers. Data source writers are responsible for saving
-    the data to the data source.
+    A base class for data stream writers. Data stream writers are responsible for writing
+    the data to the streaming sink.
 
     .. versionadded: 4.0.0
     """
@@ -384,11 +384,11 @@ class DataSourceStreamWriter(ABC):
     @abstractmethod
     def write(self, iterator: Iterator[Row]) -> "WriterCommitMessage":
         """
-        Writes data into the data source.
+        Writes data into the streaming sink.
 
-        This method is called once on each executor to write data to the data source.
-        It accepts an iterator of input data and returns a single row representing a
-        commit message, or None if there is no commit message.
+        This method is called on executors to write data to the streaming data sink in
+        each microbatch. It accepts an iterator of input data and returns a single row
+        representing a commit message, or None if there is no commit message.
 
         The driver collects commit messages, if any, from all executors and passes them
         to the ``commit`` method if all tasks run successfully. If any task fails, the
@@ -407,7 +407,7 @@ class DataSourceStreamWriter(ABC):
 
     def commit(self, messages: List["WriterCommitMessage"], batchId: int) -> None:
         """
-        Commits this writing job with a list of commit messages.
+        Commits this microbatch with a list of commit messages.
 
         This method is invoked on the driver when all tasks run successfully. The
         commit messages are collected from the ``write`` method call from each task,
@@ -423,7 +423,7 @@ class DataSourceStreamWriter(ABC):
 
     def abort(self, messages: List["WriterCommitMessage"], batchId: int) -> None:
         """
-        Aborts this writing job due to task failures.
+        Aborts this microbatch due to task failures.
 
         This method is invoked on the driver when one or more tasks failed. The commit
         messages are collected from the ``write`` method call from each task, and are
@@ -436,6 +436,7 @@ class DataSourceStreamWriter(ABC):
             A list of commit messages.
         """
         ...
+
 
 class WriterCommitMessage:
     """

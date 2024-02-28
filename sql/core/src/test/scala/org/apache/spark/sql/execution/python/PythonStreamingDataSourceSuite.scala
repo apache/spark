@@ -17,10 +17,11 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.File
+import java.lang.IllegalArgumentException
 
 import scala.concurrent.duration._
 
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 
@@ -28,83 +29,47 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
   import testImplicits._
 
-  protected def simpleDataStreamReaderScript: String =
-    """
-      |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
-      |
-      |class SimpleDataStreamReader(DataSourceStreamReader):
-      |    current = 0
-      |    def initialOffset(self):
-      |        return {"offset": "0"}
-      |    def latestOffset(self):
-      |        self.current += 2
-      |        return {"offset": str(self.current)}
-      |    def partitions(self, start: dict, end: dict):
-      |        return [InputPartition(i) for i in range(int(start["offset"]), int(end["offset"]))]
-      |    def commit(self, end: dict):
-      |        1 + 2
-      |    def read(self, partition):
-      |        yield (partition.value,)
-      |""".stripMargin
+  val waitTimeout = 5.seconds
 
-  protected def errorDataStreamReaderScript: String =
-    """
-      |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
-      |
-      |class ErrorDataStreamReader(DataSourceStreamReader):
-      |    def initialOffset(self):
-      |        raise Exception("error reading initial offset")
-      |    def latestOffset(self):
-      |        raise Exception("error reading latest offset")
-      |    def partitions(self, start: dict, end: dict):
-      |        raise Exception("error planning partitions")
-      |    def commit(self, end: dict):
-      |        raise Exception("error committing offset")
-      |    def read(self, partition):
-      |        yield (0, partition.value)
-      |        yield (1, partition.value)
-      |        yield (2, partition.value)
-      |""".stripMargin
-
-  private val errorDataSourceName = "ErrorDataSource"
+  protected def simpleDataStreamWriterScript: String =
+    s"""
+       |import json
+       |import uuid
+       |import os
+       |from pyspark import TaskContext
+       |from pyspark.sql.datasource import DataSource, DataSourceStreamWriter
+       |from pyspark.sql.datasource import WriterCommitMessage
+       |
+       |class SimpleDataSourceStreamWriter(DataSourceStreamWriter):
+       |    def __init__(self, options, overwrite):
+       |        self.options = options
+       |        self.overwrite = overwrite
+       |
+       |    def write(self, iterator):
+       |        context = TaskContext.get()
+       |        partition_id = context.partitionId()
+       |        path = self.options.get("path")
+       |        assert path is not None
+       |        output_path = os.path.join(path, f"{partition_id}.json")
+       |        cnt = 0
+       |        mode = "w" if self.overwrite else "a"
+       |        with open(output_path, mode) as file:
+       |            for row in iterator:
+       |                file.write(json.dumps(row.asDict()) + "\\n")
+       |        return WriterCommitMessage()
+       |
+       |class SimpleDataSource(DataSource):
+       |    def schema(self) -> str:
+       |        return "id INT"
+       |    def streamWriter(self, schema, overwrite):
+       |        return SimpleDataSourceStreamWriter(self.options, overwrite)
+       |""".stripMargin
 
   Seq("append", "complete").foreach { mode =>
     test(s"data source stream write - $mode mode") {
       assume(shouldTestPandasUDFs)
-      val dataSourceScript =
-        s"""
-           |import json
-           |import uuid
-           |import os
-           |from pyspark import TaskContext
-           |from pyspark.sql.datasource import DataSource, DataSourceStreamWriter
-           |from pyspark.sql.datasource import WriterCommitMessage
-           |
-           |class SimpleDataSourceStreamWriter(DataSourceStreamWriter):
-           |    def __init__(self, options, overwrite):
-           |        self.options = options
-           |        self.overwrite = overwrite
-           |
-           |    def write(self, iterator):
-           |        context = TaskContext.get()
-           |        partition_id = context.partitionId()
-           |        path = self.options.get("path")
-           |        assert path is not None
-           |        output_path = os.path.join(path, f"{partition_id}.json")
-           |        cnt = 0
-           |        mode = "w" if self.overwrite else "a"
-           |        with open(output_path, mode) as file:
-           |            for row in iterator:
-           |                file.write(json.dumps(row.asDict()) + "\\n")
-           |        return WriterCommitMessage()
-           |
-           |class SimpleDataSource(DataSource):
-           |    def schema(self) -> str:
-           |        return "id INT"
-           |    def streamWriter(self, schema, overwrite):
-           |        return SimpleDataSourceStreamWriter(self.options, overwrite)
-           |""".stripMargin
-      val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+      val dataSource =
+        createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
       spark.dataSource.registerPython(dataSourceName, dataSource)
       val inputData = MemoryStream[Int]
       withTempDir { dir =>
@@ -131,7 +96,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
           .start(outputDir.getAbsolutePath)
 
         inputData.addData(1, 2, 3)
-        eventually(timeout(3.seconds)) {
+        eventually(timeout(waitTimeout)) {
           if (mode == "append") {
             checkAnswer(
               resultDf,
@@ -144,7 +109,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         }
 
         inputData.addData(1, 4)
-        eventually(timeout(3.seconds)) {
+        eventually(timeout(waitTimeout)) {
           if (mode == "append") {
             checkAnswer(
               resultDf,
@@ -168,7 +133,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     // The data source write the number of rows and partitions into batchId.json in
     // the output directory in commit() function. If aborting a microbatch, it writes
     // batchId.txt into output directory.
-
     val dataSourceScript =
       s"""
          |import json
@@ -227,32 +191,92 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         .outputMode("append")
         .option("checkpointLocation", checkpointDir.getAbsolutePath)
         .start(outputDir.getAbsolutePath)
-      inputData.addData(1 to 30)
 
       def metadataDf: DataFrame = spark.read.format("json")
         .load(outputDir.getAbsolutePath)
 
-      eventually(timeout(3.seconds)) {
+      inputData.addData(1 to 30)
+      eventually(timeout(waitTimeout)) {
         checkAnswer(metadataDf, Seq(Row(3, 30)))
       }
 
       inputData.addData(31 to 50)
-
-      eventually(timeout(3.seconds)) {
+      eventually(timeout(waitTimeout)) {
         checkAnswer(metadataDf, Seq(Row(3, 30), Row(3, 20)))
+      }
+
+      // Write and commit an empty batch.
+      inputData.addData(Seq.empty)
+      eventually(timeout(waitTimeout)) {
+        checkAnswer(metadataDf, Seq(Row(3, 30), Row(3, 20), Row(3, 0)))
       }
 
       // The sink throws exception when encountering value > 50.
       inputData.addData(51 to 100)
-
-      eventually(timeout(3.seconds)) {
+      eventually(timeout(waitTimeout)) {
         checkAnswer(
-          spark.read.text(outputDir.getAbsolutePath + "/2.txt"),
-          Seq(Row("failed in batch 2")))
+          spark.read.text(outputDir.getAbsolutePath + "/3.txt"),
+          Seq(Row("failed in batch 3")))
       }
 
       q.stop()
       assert(q.exception.get.message.contains("invalid value"))
+    }
+  }
+
+  test("python streaming sink: invalid write mode") {
+    assume(shouldTestPandasUDFs)
+    // The data source write the number of rows and partitions into batchId.json in
+    // the output directory in commit() function. If aborting a microbatch, it writes
+    // batchId.txt into output directory.
+
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+
+    withTempDir { dir =>
+      val path = dir.getAbsolutePath
+      val checkpointDir = new File(path, "checkpoint")
+      checkpointDir.mkdir()
+      val outputDir = new File(path, "output")
+      outputDir.mkdir()
+      def runQuery(mode: String): Unit = {
+        val inputData = MemoryStream[Int]
+        withTempDir { dir =>
+          val path = dir.getAbsolutePath
+          val checkpointDir = new File(path, "checkpoint")
+          checkpointDir.mkdir()
+          val outputDir = new File(path, "output")
+          outputDir.mkdir()
+          val q = inputData.toDF()
+            .writeStream
+            .format(dataSourceName)
+            .outputMode(mode)
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start(outputDir.getAbsolutePath)
+          q.stop()
+          q.awaitTermination()
+        }
+      }
+
+      runQuery("append")
+      runQuery("update")
+
+      // Complete mode is not supported for stateless query.
+      checkError(
+        exception = intercept[AnalysisException] {
+          runQuery("complete")
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_3102",
+        parameters = Map(
+          "msg" -> ("Complete output mode not supported when there are no streaming aggregations" +
+            " on streaming DataFrames/Datasets")))
+
+
+
+      val error2 = intercept[IllegalArgumentException] {
+        runQuery("invalid")
+      }
+      assert(error2.getMessage.contains("invalid"))
     }
   }
 }
