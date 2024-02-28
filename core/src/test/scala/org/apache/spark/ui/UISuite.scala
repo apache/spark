@@ -20,11 +20,11 @@ package org.apache.spark.ui
 import java.net.{BindException, ServerSocket}
 import java.net.{URI, URL}
 import java.util.Locale
-import javax.servlet._
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 
+import jakarta.servlet._
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.mockito.Mockito.{mock, when}

@@ -250,6 +250,29 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     }
   }
 
+  /**
+   * Recursively transforms all expressions of all the logical nodes in plan tree
+   * in a bottom-up manner. It applies first to all of its children and then itself (post-order),
+   * skipping nodes that have already been analyzed.
+   *
+   * @param rule   the function used to transform this nodes children.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def resolveExpressionsUpWithPruning(cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveOperatorsUpWithPruning(cond, ruleId) {
+      case p => p.transformExpressionsUpWithPruning(cond, ruleId)(rule)
+    }
+  }
+
   protected def assertNotAnalysisRule(): Unit = {
     if (Utils.isTesting &&
         AnalysisHelper.inAnalyzer.get > 0 &&

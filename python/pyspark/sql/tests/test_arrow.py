@@ -18,10 +18,12 @@
 import datetime
 import os
 import threading
+import calendar
 import time
 import unittest
 from typing import cast
 from collections import namedtuple
+from zoneinfo import ZoneInfo
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
@@ -995,6 +997,31 @@ class ArrowTestsMixin:
         )
 
         self.assertEqual(df.first(), expected)
+
+    def test_toPandas_timestmap_tzinfo(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_timestmap_tzinfo(arrow_enabled)
+
+    def check_toPandas_timestmap_tzinfo(self, arrow_enabled):
+        # SPARK-47202: Test timestamp with tzinfo in toPandas and createDataFrame
+        ts_tzinfo = datetime.datetime(2023, 1, 1, 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+        data = pd.DataFrame({"a": [ts_tzinfo]})
+        df = self.spark.createDataFrame(data)
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            pdf = df.toPandas()
+
+        expected = pd.DataFrame(
+            # Spark unsets tzinfo and converts them to localtimes.
+            {"a": [datetime.datetime.fromtimestamp(calendar.timegm(ts_tzinfo.utctimetuple()))]}
+        )
+
+        assert_frame_equal(pdf, expected)
 
     def test_toPandas_nested_timestamp(self):
         for arrow_enabled in [True, False]:
