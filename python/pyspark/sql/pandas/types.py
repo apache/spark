@@ -898,7 +898,7 @@ def _create_converter_from_pandas(
                     return None
                 else:
                     if isinstance(value, datetime.datetime) and value.tzinfo is not None:
-                        ts = pd.Timstamp(value)
+                        ts = pd.Timestamp(value)
                     else:
                         ts = pd.Timestamp(value).tz_localize(timezone)
                     return ts.to_pydatetime()
