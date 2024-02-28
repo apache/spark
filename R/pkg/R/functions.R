@@ -4538,7 +4538,7 @@ setMethod("map_sort",
           function(x, asc = TRUE) {
             jc <- callJStatic("org.apache.spark.sql.functions", "map_sort", x@jc, asc)
             column(jc)
-          }
+          })
 
 #' @details
 #' \code{element_at}: Returns element of array at given index in \code{extraction} if
