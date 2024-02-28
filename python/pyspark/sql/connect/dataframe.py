@@ -2113,6 +2113,11 @@ class DataFrame:
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def sameSemantics(self, other: "DataFrame") -> bool:
+        if not isinstance(other, DataFrame):
+            raise PySparkTypeError(
+                error_class="NOT_DATAFRAME",
+                message_parameters={"arg_name": "other", "arg_type": type(other).__name__},
+            )
         self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),

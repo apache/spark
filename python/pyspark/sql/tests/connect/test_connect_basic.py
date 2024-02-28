@@ -291,7 +291,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(len(data.index), 10)
 
     def test_json(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_json") as d:
             # Write a DataFrame into a JSON file
             self.spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}]).write.mode(
                 "overwrite"
@@ -376,7 +376,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_parquet(self):
         # SPARK-41445: Implement DataFrameReader.parquet
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_parquet") as d:
             # Write a DataFrame into a JSON file
             self.spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}]).write.mode(
                 "overwrite"
@@ -388,7 +388,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_text(self):
         # SPARK-41849: Implement DataFrameReader.text
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_text") as d:
             # Write a DataFrame into a text file
             self.spark.createDataFrame(
                 [{"name": "Sandeep Singh"}, {"name": "Hyukjin Kwon"}]
@@ -398,7 +398,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_csv(self):
         # SPARK-42011: Implement DataFrameReader.csv
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_csv") as d:
             # Write a DataFrame into a text file
             self.spark.createDataFrame(
                 [{"name": "Sandeep Singh"}, {"name": "Hyukjin Kwon"}]
@@ -409,7 +409,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_multi_paths(self):
         # SPARK-42041: DataFrameReader should support list of paths
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_multi_paths1") as d:
             text_files = []
             for i in range(0, 3):
                 text_file = f"{d}/text-{i}.text"
@@ -421,7 +421,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 self.spark.read.text(text_files).collect(),
             )
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_multi_paths2") as d:
             json_files = []
             for i in range(0, 5):
                 json_file = f"{d}/json-{i}.json"
@@ -435,7 +435,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_orc(self):
         # SPARK-42012: Implement DataFrameReader.orc
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_orc") as d:
             # Write a DataFrame into a text file
             self.spark.createDataFrame(
                 [{"name": "Sandeep Singh"}, {"name": "Hyukjin Kwon"}]
@@ -2474,7 +2474,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
     def test_write_operations(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_write_operations") as d:
             df = self.connect.range(50)
             df.write.mode("overwrite").format("csv").save(d)
 
@@ -2483,7 +2483,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             cd = ndf.collect()
             self.assertEqual(set(df.collect()), set(cd))
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_write_operations") as d:
             df = self.connect.range(50)
             df.write.mode("overwrite").csv(d, lineSep="|")
 
@@ -3120,7 +3120,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_simple_udt_from_read(self):
         from pyspark.ml.linalg import Matrices, Vectors
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_simple_udt_from_read") as d:
             path1 = f"{d}/df1.parquet"
             self.spark.createDataFrame(
                 [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],

@@ -106,7 +106,7 @@ class MemoryProfilerTests(PySparkTestCase):
             self.sc.show_profiles()
         self.assertTrue("plus_one" in fake_out.getvalue())
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_memory_profiler") as d:
             self.sc.dump_profiles(d)
             self.assertTrue(f"udf_{id}_memory.txt" in os.listdir(d))
 
@@ -235,7 +235,7 @@ class MemoryProfiler2TestsMixin:
         with self.trap_stdout() as io_all:
             self.spark.profile.show(type="memory")
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_memory_profiler_udf") as d:
             self.spark.profile.dump(d, type="memory")
 
             for id in self.profile_results:

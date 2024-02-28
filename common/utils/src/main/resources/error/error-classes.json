@@ -492,15 +492,15 @@
     },
     "sqlState" : "54000"
   },
-  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+  "COLUMN_ALIASES_NOT_ALLOWED" : {
     "message" : [
-      "Columns aliases are not allowed in <op>."
+      "Column aliases are not allowed in <op>."
     ],
     "sqlState" : "42601"
   },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
-      "The column <columnName> already exists. Consider to choose another name or rename the existing column."
+      "The column <columnName> already exists. Choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
   },
@@ -2502,6 +2502,12 @@
       "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: <sqlString>."
     ],
     "sqlState" : "07501"
+  },
+  "INVALID_STATEMENT_OR_CLAUSE" : {
+    "message" : [
+      "The statement or clause: <operation> is not valid."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
@@ -5708,11 +5714,6 @@
   "_LEGACY_ERROR_TEMP_2020" : {
     "message" : [
       "Couldn't find a valid constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2021" : {
-    "message" : [
-      "Couldn't find a primary constructor on <cls>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2023" : {
