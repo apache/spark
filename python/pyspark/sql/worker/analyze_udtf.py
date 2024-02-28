@@ -87,7 +87,8 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
             value = None
         is_table = read_bool(infile)
         argument = AnalyzeArgument(
-            dataType=dt, value=value, isTable=is_table, isConstantExpression=is_constant_expression)
+            dataType=dt, value=value, isTable=is_table, isConstantExpression=is_constant_expression
+        )
 
         is_named_arg = read_bool(infile)
         if is_named_arg:
