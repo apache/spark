@@ -84,8 +84,10 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
                 value = dt.fromInternal(value)
         else:
             value = None
-        is_table = read_bool(infile)  # is table argument
-        argument = AnalyzeArgument(dataType=dt, value=value, isTable=is_table)
+        is_table = read_bool(infile)
+        is_constant_expression = read_bool(infile)
+        argument = AnalyzeArgument(
+            dataType=dt, value=value, isTable=is_table, isConstantExpression=is_constant_expression)
 
         is_named_arg = read_bool(infile)
         if is_named_arg:
