@@ -507,6 +507,8 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
     checkEvaluation(cast(Float.NaN, TimestampType), null)
     checkEvaluation(cast(1.0f / 0.0f, TimestampType), null)
+    checkEvaluation(cast(Literal(Long.MaxValue), TimestampType), Long.MaxValue)
+    checkEvaluation(cast(Literal(Long.MinValue), TimestampType), Long.MinValue)
   }
 
   test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
