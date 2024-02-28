@@ -788,6 +788,13 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
      """
 
+  override protected def genHashString(input: String, result: String): String = {
+    val baseObject = s"$input.getBaseObject()"
+    val baseOffset = s"$input.getBaseOffset()"
+    val numBytes = s"$input.numBytes()"
+    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
+  }
+
   override protected def genHashForArray(
       ctx: CodegenContext,
       input: String,
@@ -804,13 +811,6 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
           $result = (31 * $result) + $childResult;
         }
       """
-  }
-
-  override protected def genHashString(input: String, result: String): String = {
-    val baseObject = s"$input.getBaseObject()"
-    val baseOffset = s"$input.getBaseOffset()"
-    val numBytes = s"$input.numBytes()"
-    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
   }
 
   override protected def genHashForMap(
