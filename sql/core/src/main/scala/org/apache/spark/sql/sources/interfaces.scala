@@ -340,14 +340,3 @@ trait SupportsStreamSourceMetadataColumns extends StreamSourceProvider {
       options: Map[String, String],
       userSpecifiedSchema: Option[StructType]): Seq[AttributeReference]
 }
-
-/**
- * A BaseRelation that has properties which describe that relation.
- * BaseRelation has no any member which provides information about it.
- * Descriptive relation is useful for debugging and logging also.
- */
-trait DescriptiveRelation {
-  def name: String
-
-  override def toString: String = name
-}
