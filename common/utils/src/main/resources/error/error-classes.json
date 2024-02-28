@@ -2503,6 +2503,12 @@
     ],
     "sqlState" : "07501"
   },
+  "INVALID_STATEMENT_OR_CLAUSE" : {
+    "message" : [
+      "The statement or clause: <operation> is not valid."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
       "Invalid subquery:"
