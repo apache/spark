@@ -206,9 +206,9 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     finalizeTask = Option(task)
   }
 
-  // Set the threshold to 1 billion which represents approximately 1GB of memory
-  // allocated to map output statuses.
-  // A large number of shuffle blocks may crash the driver with an OOM error.
+  // Set the threshold to 1 billion which leads to an 125MB bitmap and
+  // the actual size of `HighlyCompressedMapStatus` can be much larger than 125MB.
+  // This may crash the driver with an OOM error.
   private val SHUFFLE_BLOCK_NUMBER_WARNING_THRESHOLD: Long = 1L << 30
   private val numberOfShuffleBlocks = numPartitions.toLong * partitioner.numPartitions.toLong
 
