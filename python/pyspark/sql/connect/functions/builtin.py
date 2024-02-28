@@ -2004,8 +2004,8 @@ def map_values(col: "ColumnOrName") -> Column:
 map_values.__doc__ = pysparkfuncs.map_values.__doc__
 
 
-def map_sort(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("map_sort", col)
+def map_sort(col: "ColumnOrName", asc: bool = True) -> Column:
+    return _invoke_function("map_sort", _to_col(col), lit(asc))
 
 
 map_sort.__doc__ = pysparkfuncs.map_sort.__doc__

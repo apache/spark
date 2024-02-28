@@ -6988,10 +6988,21 @@ object functions {
 
   /**
    * Sorts the input map in ascending order based on the natural order of map keys.
+   *
    * @group map_funcs
    * @since 4.0.0
    */
-  def map_sort(e: Column): Column = Column.fn("map_sort", e)
+  def map_sort(e: Column): Column = map_sort(e, asc = true)
+  // TODO: add test for this
+
+  /**
+   * Sorts the input map in ascending or descending order according to the natural ordering
+   * of the map keys.
+   *
+   * @group map_funcs
+   * @since 4.0.0
+   */
+  def map_sort(e: Column, asc: Boolean): Column = Column.fn("map_sort", e, lit(asc))
 
   // scalastyle:off line.size.limit
   /**
