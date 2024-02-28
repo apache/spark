@@ -792,7 +792,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     val baseObject = s"$input.getBaseObject()"
     val baseOffset = s"$input.getBaseOffset()"
     val numBytes = s"$input.numBytes()"
-    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
+    s"$result = $hasherClassName.hashUnsafeBytes($baseObject, $baseOffset, $numBytes);"
   }
 
   override protected def genHashForArray(
