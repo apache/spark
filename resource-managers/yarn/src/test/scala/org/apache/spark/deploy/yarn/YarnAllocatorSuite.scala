@@ -907,6 +907,4 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumExecutorsRunning should be(0)
     handler.getNumExecutorsStarting should be(0)
   }
-
-
 }
