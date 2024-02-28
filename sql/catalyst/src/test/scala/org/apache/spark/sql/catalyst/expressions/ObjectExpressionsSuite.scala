@@ -414,7 +414,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
       // Unsupported custom collection class
       checkError(
-        exception = intercept[SparkException] {
+        exception = intercept[SparkRuntimeException] {
           testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
         },
         errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
