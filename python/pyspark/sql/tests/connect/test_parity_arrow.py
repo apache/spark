@@ -16,6 +16,7 @@
 #
 
 import unittest
+import sys
 
 from pyspark.sql.tests.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -129,6 +130,7 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_toPandas_nested_timestamp(self):
         self.check_toPandas_nested_timestamp(True)
 
+    @unittest.skipIf(sys.version_info < (3, 9), "zoneinfo is available from Python 3.9+")
     def test_toPandas_timestmap_tzinfo(self):
         self.check_toPandas_timestmap_tzinfo(True)
 
