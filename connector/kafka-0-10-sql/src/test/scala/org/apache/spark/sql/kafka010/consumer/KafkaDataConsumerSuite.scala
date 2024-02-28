@@ -31,9 +31,8 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{TaskContext, TaskContextImpl}
-import org.apache.spark.SparkIllegalStateException
 import org.apache.spark.kafka010.KafkaDelegationTokenTest
-import org.apache.spark.sql.kafka010.{KafkaTestUtils, RecordBuilder}
+import org.apache.spark.sql.kafka010.{KafkaIllegalStateException, KafkaTestUtils, RecordBuilder}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -94,7 +93,7 @@ class KafkaDataConsumerSuite
     val cause = new Exception("D'oh!")
     val throwOnDataLoss = PrivateMethod[Unit](Symbol("throwOnDataLoss"))
     val consumer = KafkaDataConsumer.acquire(topicPartition, getKafkaParams())
-    val e = intercept[SparkIllegalStateException] {
+    val e = intercept[KafkaIllegalStateException] {
       consumer.invokePrivate(throwOnDataLoss(0L, 1L, topicPartition, groupId, cause))
     }
     assert(e.getCause === cause)

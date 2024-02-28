@@ -32,7 +32,7 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenUtil}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.kafka010.KafkaExceptions
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.{AvailableOffsetRange, UNKNOWN_OFFSET}
 import org.apache.spark.util.{ShutdownHookManager, UninterruptibleThread}
@@ -644,10 +644,10 @@ private[kafka010] class KafkaDataConsumer(
       groupId: String,
       cause: Throwable = null): Unit = {
     dataLoss += 1
-    throw QueryExecutionErrors.couldNotReadOffsetRangeInKafkaError(
+    throw KafkaExceptions.couldNotReadOffsetRange(
       startOffset,
       endOffset,
-      topicPartition.toString,
+      topicPartition,
       groupId,
       cause)
   }

@@ -30,7 +30,6 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 import org.apache.spark.util.{UninterruptibleThread, UninterruptibleThreadRunner}
 import org.apache.spark.util.ArrayImplicits._
@@ -192,7 +191,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
             reportDataLoss(
               s"startingOffsets for $tp was $off but consumer reset to ${fetched(tp)}",
               () =>
-                QueryExecutionErrors.startOffsetResetKafkaError(tp.toString, off, fetched(tp)))
+                KafkaExceptions.startOffsetReset(tp, off, fetched(tp)))
           }
         case _ =>
         // no real way to check that beginning or end is reasonable
@@ -506,14 +505,13 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       reportDataLoss(
         s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed",
         () =>
-          QueryExecutionErrors.initialOffsetNotFoundForPartitionsKafkaError(
-            deletedPartitions.toString))
+          KafkaExceptions.initialOffsetNotFoundForPartitions(deletedPartitions))
     }
     logInfo(s"Partitions added: $newPartitionInitialOffsets")
     newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
       reportDataLoss(
         s"Added partition $p starts from $o instead of 0. Some data may have been missed",
-        () => QueryExecutionErrors.addedPartitionDoesNotStartFromZeroKafkaError(p.toString, o))
+        () => KafkaExceptions.addedPartitionDoesNotStartFromZero(p, o))
     }
 
     val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
@@ -529,7 +527,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       reportDataLoss(
         message,
         () =>
-          QueryExecutionErrors.partitionsDeletedKafkaError(deletedPartitions.toString, config))
+          KafkaExceptions.partitionsDeleted(deletedPartitions, config))
     }
 
     // Use the until partitions to calculate offset ranges to ignore partitions that have
@@ -550,10 +548,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
           s"Partition $tp's offset was changed from " +
             s"$fromOffset to $untilOffset, some data may have been missed",
           () =>
-            QueryExecutionErrors.partitionOffsetChangedKafkaError(
-              tp.toString,
-              fromOffset,
-              untilOffset))
+            KafkaExceptions.partitionOffsetChanged(tp, fromOffset, untilOffset))
       }
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }

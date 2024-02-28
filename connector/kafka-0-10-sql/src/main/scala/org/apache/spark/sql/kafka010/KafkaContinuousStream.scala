@@ -23,13 +23,12 @@ import java.util.concurrent.TimeoutException
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{SparkIllegalStateException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -95,7 +94,7 @@ class KafkaContinuousStream(
     if (deletedPartitions.nonEmpty) {
       val (message, config) =
         if (offsetReader.driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
-          (s"$deletedPartitions are gone.${CUSTOM_GROUP_ID_ERROR_MESSAGE}",
+          (s"$deletedPartitions are gone. ${CUSTOM_GROUP_ID_ERROR_MESSAGE}",
             Some(ConsumerConfig.GROUP_ID_CONFIG))
         } else {
           (s"$deletedPartitions are gone. Some data may have been missed.", None)
@@ -103,8 +102,7 @@ class KafkaContinuousStream(
 
       reportDataLoss(
         message,
-        () =>
-          QueryExecutionErrors.partitionsDeletedKafkaError(deletedPartitions.toString, config))
+        () => KafkaExceptions.partitionsDeleted(deletedPartitions, config))
     }
 
     val startOffsets = newPartitionOffsets ++
@@ -227,7 +225,7 @@ class KafkaContinuousPartitionReader(
 
         // This is a failOnDataLoss exception. Retry if nextKafkaOffset is within the data range,
         // or if it's the endpoint of the data range (i.e. the "true" next offset).
-        case e: SparkIllegalStateException if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
+        case e: KafkaIllegalStateException if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
           val range = consumer.getAvailableOffsetRange()
           if (range.latest >= nextKafkaOffset && range.earliest <= nextKafkaOffset) {
             // retry
