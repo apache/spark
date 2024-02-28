@@ -25,7 +25,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DRIVER_TIMEOUT
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SparkExitCode, ThreadUtils}
 
 /**
  * A built-in plugin to provide Driver timeout feature.
@@ -51,7 +51,7 @@ class DriverTimeoutDriverPlugin extends DriverPlugin with Logging {
         logWarning(s"Terminate Driver JVM because it runs after $timeout minute" +
           (if (timeout == 1) "" else "s"))
         // We cannot use 'SparkContext.stop' because SparkContext might be in abnormal situation.
-        System.exit(124)
+        System.exit(SparkExitCode.DRIVER_TIMEOUT)
       }
       timeoutService.schedule(task, timeout, TimeUnit.MINUTES)
     }
