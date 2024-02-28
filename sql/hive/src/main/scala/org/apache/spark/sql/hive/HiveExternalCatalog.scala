@@ -191,7 +191,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override def listDatabases(): Seq[String] = withClient {
-    client.listDatabases(StringUtils.getAllMatchWildcard)
+    client.listDatabases(StringUtils.getMatchAllWildcard)
   }
 
   override def listDatabases(pattern: String): Seq[String] = withClient {

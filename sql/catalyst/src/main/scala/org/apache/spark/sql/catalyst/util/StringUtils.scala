@@ -107,7 +107,10 @@ object StringUtils extends Logging {
   def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.trimAll().toLowerCase)
   // scalastyle:on caselocale
 
-  def getAllMatchWildcard: String = {
+  /**
+   * get Wildcard that represent matching "all"
+   */
+  def getMatchAllWildcard: String = {
     if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
       "*"
     } else {
@@ -148,7 +151,7 @@ object StringUtils extends Logging {
   /**
    * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL.
    * @param names the names list to be filtered
-   * @param pattern the filter pattern, SQL type like expressions:
+   * @param pattern the filter pattern, same as SQL type `like` expressions:
    *                '%' for any character(s), and '_' for a single character
    * @return the filtered names list
    */

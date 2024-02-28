@@ -1034,7 +1034,7 @@ class SessionCatalog(
    * temporary views.
    */
   def listTables(db: String): Seq[TableIdentifier] =
-    listTables(db, StringUtils.getAllMatchWildcard)
+    listTables(db, StringUtils.getMatchAllWildcard)
 
   /**
    * List all matching tables in the specified database, including local temporary views.
@@ -1832,7 +1832,7 @@ class SessionCatalog(
    * defined).
    */
   def listFunctions(db: String): Seq[(FunctionIdentifier, String)] =
-    listFunctions(db, StringUtils.getAllMatchWildcard)
+    listFunctions(db, StringUtils.getMatchAllWildcard)
 
   /**
    * List all matching functions in the specified database, including temporary functions. This
@@ -1884,7 +1884,7 @@ class SessionCatalog(
       dropTable(table, ignoreIfNotExists = false, purge = false)
     }
     // Temp functions are dropped below, we only need to drop permanent functions here.
-    externalCatalog.listFunctions(DEFAULT_DATABASE, StringUtils.getAllMatchWildcard).map { f =>
+    externalCatalog.listFunctions(DEFAULT_DATABASE, StringUtils.getMatchAllWildcard).map { f =>
       FunctionIdentifier(f, Some(DEFAULT_DATABASE))
     }.foreach(dropFunction(_, ignoreIfNotExists = false))
     clearTempTables()

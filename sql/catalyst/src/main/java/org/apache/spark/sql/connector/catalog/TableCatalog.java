@@ -109,10 +109,10 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param namespace a multi-part namespace
    * @param pattern the filter pattern,
-   *                when SQLConf.LEGACY_USE_STAR_AND_VERTICAL_BAR_AS_WILDCARDS_IN_LIKE_PATTERN
+   *                when 'spark.sql.legacy.useVerticalBarAndStarAsWildcardsInLikePattern'
    *                is true, use '*' for any character(s) and '|' for a choice as wildcards.
    *                If it is false, use '%' for any character(s) and '_' for a single character
-   *                as wildcards. Please refer to regex_pattern in https://
+   *                as wildcards. Please refer to 'regex_pattern' in https://
    *                spark.apache.org/docs/latest/sql-ref-syntax-aux-show-tables.html#parameters
    *                for more details.
    * @return an array of Identifiers for tables

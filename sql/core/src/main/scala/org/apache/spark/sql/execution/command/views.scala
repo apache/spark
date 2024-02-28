@@ -336,7 +336,7 @@ case class ShowViewsCommand(
 
     // Show the information of views.
     val views = tableIdentifierPattern.map(catalog.listViews(databaseName, _))
-      .getOrElse(catalog.listViews(databaseName, StringUtils.getAllMatchWildcard))
+      .getOrElse(catalog.listViews(databaseName, StringUtils.getMatchAllWildcard))
     views.map { tableIdent =>
       val namespace = tableIdent.database.toArray.quoted
       val tableName = tableIdent.table
