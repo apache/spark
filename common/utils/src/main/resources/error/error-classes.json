@@ -3310,8 +3310,7 @@
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
-      "Failed to create column family with invalid name=<colFamilyName>. ",
-      "Empty names or one with reserved value `default` are not supported."
+      "Failed to create column family with invalid name=<colFamilyName>. Empty names or one with reserved value default are not supported."
     ],
     "sqlState" : "42802"
   },

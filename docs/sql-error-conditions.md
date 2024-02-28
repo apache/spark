@@ -2071,8 +2071,7 @@ Cannot use timers with invalid timeoutMode=`<timeoutMode>`
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to create column family with invalid name=`<colFamilyName>`. 
-Empty names or one with reserved value `default` are not supported.
+Failed to create column family with invalid name=`<colFamilyName>`. Empty names or one with reserved value default are not supported.
 
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
