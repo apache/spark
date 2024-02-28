@@ -207,8 +207,6 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
         case NamedArgumentExpression(k, v) => (Some(k), v)
         case _ => (None, expr)
       }
-      // Write the 'value' field to provide the argument's value if it is a foldable scalar
-      // expression.
       if (value.foldable) {
         dataOut.writeBoolean(true)
         val obj = pickler.dumps(EvaluatePython.toJava(value.eval(), value.dataType))
@@ -216,7 +214,6 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       } else {
         dataOut.writeBoolean(false)
       }
-      // Write the 'isTable' field to indicate whether the argument is a table.
       dataOut.writeBoolean(isTable)
       // If the expr is NamedArgumentExpression, send its name.
       key match {
