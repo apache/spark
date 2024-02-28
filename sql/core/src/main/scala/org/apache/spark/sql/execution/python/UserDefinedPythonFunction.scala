@@ -207,7 +207,7 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
         case NamedArgumentExpression(k, v) => (Some(k), v)
         case _ => (None, expr)
       }
-      // Write the 'value' field to provide the argument's value if it is a foldable scalar\
+      // Write the 'value' field to provide the argument's value if it is a foldable scalar
       // expression.
       if (value.foldable) {
         dataOut.writeBoolean(true)
@@ -218,11 +218,6 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       }
       // Write the 'isTable' field to indicate whether the argument is a table.
       dataOut.writeBoolean(isTable)
-      // Write the 'isConstantExpression' field to indicate whether the argument is a foldable
-      // scalar expression. In this way, the UDTF can distinguish between a literal NULL argument
-      // and other types of arguments such as complex expression trees or table arguments where the
-      // 'value' field is always None.
-      dataOut.writeBoolean(value.foldable)
       // If the expr is NamedArgumentExpression, send its name.
       key match {
         case Some(key) =>
