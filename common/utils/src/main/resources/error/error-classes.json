@@ -2308,7 +2308,7 @@
     "message" : [
       "Cannot use <type> for partition column."
     ],
-    "sqlState" : "0A000"
+    "sqlState" : "42"
   },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
@@ -5143,7 +5143,7 @@
   },
   "_LEGACY_ERROR_TEMP_1183" : {
     "message" : [
-      "Cannot use interval type in the table schema."
+      "Cannot use \"INTERVAL\" type in the table schema."
     ]
   },
   "_LEGACY_ERROR_TEMP_1184" : {
