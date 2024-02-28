@@ -779,7 +779,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-XXXXXX: User can override the minimum memory overhead of the executor") {
+  test("SPARK-47208: User can override the minimum memory overhead of the executor") {
     val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
     try {
       sparkConf
@@ -795,7 +795,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     }
   }
 
-  test("SPARK-XXXXXX: Explicit overhead takes precedence over minimum overhead") {
+  test("SPARK-47208: Explicit overhead takes precedence over minimum overhead") {
     val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
     try {
       sparkConf

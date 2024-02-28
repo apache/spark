@@ -121,7 +121,7 @@ package object config {
     .doc("The minimum amount of non-heap memory to be allocated per driver in cluster mode, " +
       "in MiB unless otherwise specified. Overrides the default value of 384Mib." +
       " This value is ignored if spark.driver.memoryOverhead is set directly.")
-    .version("3.5.0")
+    .version("3.5.2")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
@@ -371,7 +371,7 @@ package object config {
     .doc("The minimum amount of non-heap memory to be allocated per executor " +
       "in MiB unless otherwise specified. Overrides the default value of 384Mib." +
       " This value is ignored if spark.executor.memoryOverhead is set directly.")
-    .version("3.5.0")
+    .version("3.5.2")
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
