@@ -122,8 +122,15 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
               resolveArguments(expressions))
           } else {
             val aliases = expressions.collect {
-              case (e: Alias) => e
-              case (u: UnresolvedAttribute) => new Alias(u, u.name)()
+              case e: Alias => e
+              case u: UnresolvedAttribute => Alias(u, u.name)()
+            }
+
+            if (aliases.size != expressions.size) {
+              val nonAliases = expressions.filter(attr =>
+                !attr.isInstanceOf[Alias] && !attr.isInstanceOf[UnresolvedAttribute])
+
+              throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(nonAliases)
             }
 
             NameParameterizedQuery(
