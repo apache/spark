@@ -7082,18 +7082,16 @@ object functions {
   def sort_array(e: Column, asc: Boolean): Column = Column.fn("sort_array", e, lit(asc))
 
   /**
-   * Sorts the input map in ascending order according to the natural ordering
-   * of the map keys.
+   * Sorts the input map in ascending order according to the natural ordering of the map keys.
    *
    * @group map_funcs
    * @since 4.0.0
    */
   def map_sort(e: Column): Column = map_sort(e, asc = true)
 
-
   /**
-   * Sorts the input map in ascending or descending order according to the natural ordering
-   * of the map keys.
+   * Sorts the input map in ascending or descending order according to the natural ordering of the
+   * map keys.
    *
    * @group map_funcs
    * @since 4.0.0
