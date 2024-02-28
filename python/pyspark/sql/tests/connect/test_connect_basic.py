@@ -3403,7 +3403,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.createDataFrame([], StructType([StructField("id", StringType(1))])),
         ]
         for df in dfs:
-            self.assertEqual(df.schema[0].dataType, StringType(1))
+            # performs both datatype -> proto & proto -> datatype conversions
+            self.assertEqual(
+                df.to(StructType([StructField("new", StringType(1))])).schema[0].dataType,
+                StringType(1),
+            )
 
 
 class SparkConnectSessionTests(ReusedConnectTestCase):
