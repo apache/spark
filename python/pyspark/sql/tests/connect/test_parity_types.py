@@ -86,6 +86,9 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_udt(self):
         super().test_udt()
 
+    def test_collated_string(self):
+        super().test_collated_string()
+
 
 if __name__ == "__main__":
     import unittest

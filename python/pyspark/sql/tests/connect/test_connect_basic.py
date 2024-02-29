@@ -3397,18 +3397,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(10, df.count())
         self.assertTrue(df.is_cached)
 
-    def test_collated_string(self):
-        dfs = [
-            self.connect.sql("SELECT 'abc' collate 'UCS_BASIC_LCASE'"),
-            self.connect.createDataFrame([], StructType([StructField("id", StringType(1))])),
-        ]
-        for df in dfs:
-            # performs both datatype -> proto & proto -> datatype conversions
-            self.assertEqual(
-                df.to(StructType([StructField("new", StringType(1))])).schema[0].dataType,
-                StringType(1),
-            )
-
 
 class SparkConnectSessionTests(ReusedConnectTestCase):
     def setUp(self) -> None:
