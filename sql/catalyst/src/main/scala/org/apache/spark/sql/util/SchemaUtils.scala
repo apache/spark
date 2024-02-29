@@ -309,10 +309,13 @@ private[spark] object SchemaUtils {
    * within the specified data type.
    */
   def typeExistsRecursively(dt: DataType)(f: DataType => Boolean): Boolean = dt match {
-      case struct: StructType => struct.existsRecursively(f)
-      case arr: ArrayType => typeExistsRecursively(arr.elementType)(f)
+      case struct: StructType =>
+        f(struct) || struct.fields.exists(field => typeExistsRecursively(field.dataType)(f))
+      case arr: ArrayType =>
+        typeExistsRecursively(arr.elementType)(f)
       case map: MapType =>
         typeExistsRecursively(map.keyType)(f) || typeExistsRecursively(map.valueType)(f)
-      case other => f(other)
+      case other =>
+        f(other)
   }
 }
