@@ -142,7 +142,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * @param size number of bytes spilled
    */
   @inline private def logSpillage(size: Long): Unit = {
-    val threadId = Thread.currentThread().getId
+    val threadId = Thread.currentThread().threadId
     logInfo("Thread %d spilling in-memory map of %s to disk (%d time%s so far)"
       .format(threadId, org.apache.spark.util.Utils.bytesToString(size),
         _spillCount, if (_spillCount > 1) "s" else ""))

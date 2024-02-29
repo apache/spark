@@ -167,7 +167,7 @@ private[spark] class SparkHadoopUtil extends Logging {
    */
   private[spark] def getFSBytesReadOnThreadCallback(): () => Long = {
     val f = () => FileSystem.getAllStatistics.asScala.map(_.getThreadStatistics.getBytesRead).sum
-    val baseline = (Thread.currentThread().getId, f())
+    val baseline = (Thread.currentThread().threadId, f())
 
     /**
      * This function may be called in both spawned child threads and parent task thread (in
@@ -180,7 +180,7 @@ private[spark] class SparkHadoopUtil extends Logging {
 
       override def apply(): Long = {
         bytesReadMap.synchronized {
-          bytesReadMap.put(Thread.currentThread().getId, f())
+          bytesReadMap.put(Thread.currentThread().threadId, f())
           bytesReadMap.map { case (k, v) =>
             v - (if (k == baseline._1) baseline._2 else 0)
           }.sum

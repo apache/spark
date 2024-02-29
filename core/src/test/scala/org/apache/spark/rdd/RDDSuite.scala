@@ -1223,7 +1223,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       })
       t.setDaemon(false)
       t.start()
-      tid.add(t.getId)
+      tid.add(t.threadId)
       Iterator(0)
     }.collect()
     val tmx = ManagementFactory.getThreadMXBean

@@ -717,7 +717,7 @@ class RocksDB(
     def timeWaitedMs = System.currentTimeMillis - waitStartTime
     def isAcquiredByDifferentThread = acquiredThreadInfo != null &&
       acquiredThreadInfo.threadRef.get.isDefined &&
-      newAcquiredThreadInfo.threadRef.get.get.getId != acquiredThreadInfo.threadRef.get.get.getId
+      newAcquiredThreadInfo.threadRef.get.get.threadId != acquiredThreadInfo.threadRef.get.get.threadId
 
     while (isAcquiredByDifferentThread && timeWaitedMs < conf.lockAcquireTimeoutMs) {
       acquireLock.wait(10)
@@ -1113,7 +1113,7 @@ case class AcquiredThreadInfo() {
       s", task: $taskDetails"
     } else ""
 
-    s"[ThreadId: ${threadRef.get.map(_.getId)}$taskStr]"
+    s"[ThreadId: ${threadRef.get.map(_.threadId)}$taskStr]"
   }
 }
 
