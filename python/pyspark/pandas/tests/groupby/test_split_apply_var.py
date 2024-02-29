@@ -21,16 +21,16 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTestingFuncMixin
 
 
-class GroupbySplitApplyBasicMixin(GroupbySplitApplyTestingFuncMixin):
+class GroupbySplitApplyVarMixin(GroupbySplitApplyTestingFuncMixin):
     def test_split_apply_combine_on_series(self):
         funcs = [
-            ((True, False), ["count", "first", "last"]),
+            ((False, False), ["var"]),
         ]
         self._test_split_apply_func(funcs)
 
 
-class GroupbySplitApplyBasicTests(
-    GroupbySplitApplyBasicMixin,
+class GroupbySplitApplyVarTests(
+    GroupbySplitApplyVarMixin,
     PandasOnSparkTestCase,
     SQLTestUtils,
 ):
@@ -38,7 +38,7 @@ class GroupbySplitApplyBasicTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.groupby.test_split_apply_basic import *  # noqa: F401
+    from pyspark.pandas.tests.groupby.test_split_apply_var import *  # noqa: F401
 
     try:
         import xmlrunner

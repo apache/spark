@@ -37,8 +37,8 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.DockerUtils
-import org.apache.spark.util.Utils.{bytesToString, timeStringAsSeconds}
+import org.apache.spark.util.{DockerUtils, Utils}
+import org.apache.spark.util.Utils.timeStringAsSeconds
 
 abstract class DatabaseOnDocker {
   /**
@@ -154,33 +154,22 @@ abstract class DockerJDBCIntegrationSuite
           val callback = new PullImageResultCallback {
             override def onNext(item: PullResponseItem): Unit = {
               super.onNext(item)
-              if (item.getStatus != null) {
-                item.getStatus match {
-                  case s if item.getProgressDetail != null &&
-                      item.getProgressDetail.getCurrent != null &&
-                      item.getProgressDetail.getCurrent == item.getProgressDetail.getTotal =>
-                    // logging for final progress procedural status
-                    logInfo(s"$s ${item.getId} ${bytesToString(item.getProgressDetail.getTotal)}")
-                  case s if s != "Downloading" && s != "Extracting" =>
-                    logInfo(s"${item.getStatus} ${item.getId}")
-                  case _ =>
-                }
+              val status = item.getStatus
+              if (status != null && status != "Downloading" && status != "Extracting") {
+                logInfo(s"$status ${item.getId}")
               }
-            }
-
-            override def onComplete(): Unit = {
-              pulled = true
-            }
-
-            override def onError(throwable: Throwable): Unit = {
-              logError(s"Failed to pull Docker image ${db.imageName}", throwable)
             }
           }
 
-          docker.pullImageCmd(db.imageName)
-            .exec(callback)
-            .awaitCompletion(imagePullTimeout, TimeUnit.SECONDS)
-          if (!pulled) {
+          val (success, time) = Utils.timeTakenMs(
+            docker.pullImageCmd(db.imageName)
+              .exec(callback)
+              .awaitCompletion(imagePullTimeout, TimeUnit.SECONDS))
+
+          if (success) {
+            pulled = success
+            logInfo(s"Successfully pulled image ${db.imageName} in $time ms")
+          } else {
             throw new TimeoutException(
               s"Timeout('$imagePullTimeout secs') waiting for image ${db.imageName} to be pulled")
           }

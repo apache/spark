@@ -1306,6 +1306,12 @@ The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
 
 For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-parameter-value-error-class.html)
 
+### INVALID_PARTITION_COLUMN_DATA_TYPE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use `<type>` for partition column.
+
 ### [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-partition-operation-error-class.html)
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1377,6 +1383,12 @@ For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-synta
 SQLSTATE: 07501
 
 The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: `<sqlString>`.
+
+### INVALID_STATEMENT_OR_CLAUSE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The statement or clause: `<operation>` is not valid.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 

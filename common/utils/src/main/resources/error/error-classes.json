@@ -2304,6 +2304,12 @@
     },
     "sqlState" : "22023"
   },
+  "INVALID_PARTITION_COLUMN_DATA_TYPE" : {
+    "message" : [
+      "Cannot use <type> for partition column."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
       "The partition command is invalid."
@@ -2502,6 +2508,12 @@
       "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: <sqlString>."
     ],
     "sqlState" : "07501"
+  },
+  "INVALID_STATEMENT_OR_CLAUSE" : {
+    "message" : [
+      "The statement or clause: <operation> is not valid."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
@@ -5028,11 +5040,6 @@
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1153" : {
-    "message" : [
-      "Cannot use <field> for partition column."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1155" : {
     "message" : [
       "Partition column `<col>` not found in schema <schemaCatalog>."
@@ -5136,7 +5143,7 @@
   },
   "_LEGACY_ERROR_TEMP_1183" : {
     "message" : [
-      "Cannot use interval type in the table schema."
+      "Cannot use \"INTERVAL\" type in the table schema."
     ]
   },
   "_LEGACY_ERROR_TEMP_1184" : {

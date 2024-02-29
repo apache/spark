@@ -73,14 +73,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   private def assertUnsupportedFeature(
       body: => Unit,
-      message: String,
+      operation: String,
       expectedContext: ExpectedContext): Unit = {
     checkError(
       exception = intercept[ParseException] {
         body
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> message),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> operation),
       context = expectedContext)
   }
 
