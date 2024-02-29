@@ -302,6 +302,34 @@ object ResolveDefaultColumns extends QueryErrorsBase
   }
 
   /**
+   * If the provided default value is a literal of a wider type than the target column,
+   * but the literal value fits within the narrower type, just coerce it for convenience.
+   * Exclude boolean/array/struct/map types from consideration for this type coercion to
+   * avoid surprising behavior like interpreting "false" as integer zero.
+   */
+  private def defaultValueFromWiderTypeLiteral(
+      expr: Expression,
+      targetType: DataType,
+      colName: String): Option[Expression] = {
+    expr match {
+      case l: Literal if !Seq(targetType, l.dataType).exists(_ match {
+        case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
+        case _ => false
+      }) =>
+        val casted = Cast(l, targetType, Some(conf.sessionLocalTimeZone), evalMode = EvalMode.TRY)
+        try {
+          Option(casted.eval(EmptyRow)).map(Literal(_, targetType))
+        } catch {
+          case e @ ( _: SparkThrowable | _: RuntimeException) =>
+            logWarning(s"Failed to cast default value '$l' for column $colName from " +
+              s"${l.dataType} to $targetType due to ${e.getMessage}")
+            None
+        }
+      case _ => None
+    }
+  }
+
+  /**
    * Returns the result of type coercion from [[analyzed]] to [[dataType]], or throws an error if
    * the expression is not coercible.
    */
@@ -318,30 +346,10 @@ object ResolveDefaultColumns extends QueryErrorsBase
         equivalent
       case canUpCast if Cast.canUpCast(canUpCast.dataType, supplanted) =>
         Cast(analyzed, supplanted, Some(conf.sessionLocalTimeZone))
-      case l: Literal
-        if !Seq(supplanted, l.dataType).exists(_ match {
-          case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
-          case _ => false
-        }) =>
-        // If the provided default value is a literal of a wider type than the target column,
-        // but the literal value fits within the narrower type, just coerce it for convenience.
-        // Exclude boolean/array/struct/map types from consideration for this type coercion to
-        // avoid surprising behavior like interpreting "false" as integer zero.
-        val casted = Cast(l, supplanted, Some(conf.sessionLocalTimeZone), evalMode = EvalMode.TRY)
-        val result = try {
-          Option(casted.eval(EmptyRow)).map(Literal(_, supplanted))
-        } catch {
-          case e @ ( _: SparkThrowable | _: RuntimeException) =>
-            logWarning(s"Failed to cast default value '$l' for column $colName from " +
-              s"${l.dataType} to $supplanted due to ${e.getMessage}")
-            None
-        }
-        result.getOrElse(
+      case other =>
+        defaultValueFromWiderTypeLiteral(other, supplanted, colName).getOrElse(
           throw QueryCompilationErrors.defaultValuesDataTypeError(
-            statementType, colName, defaultSQL, dataType, l.dataType))
-      case _ =>
-        throw QueryCompilationErrors.defaultValuesDataTypeError(
-          statementType, colName, defaultSQL, dataType, analyzed.dataType)
+            statementType, colName, defaultSQL, dataType, other.dataType))
     }
     if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(dataType)) {
       CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
@@ -463,7 +471,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
         statement, colName, default.originalSQL)
     } else if (default.resolved) {
       val dataType = CharVarcharUtils.replaceCharVarcharWithString(targetType)
-      if (!Cast.canUpCast(default.child.dataType, dataType)) {
+      if (!Cast.canUpCast(default.child.dataType, dataType) &&
+        defaultValueFromWiderTypeLiteral(default.child, dataType, colName).isEmpty) {
         throw QueryCompilationErrors.defaultValuesDataTypeError(
           statement, colName, default.originalSQL, targetType, default.child.dataType)
       }

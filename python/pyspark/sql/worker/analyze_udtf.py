@@ -78,14 +78,17 @@ def read_arguments(infile: IO) -> Tuple[List[AnalyzeArgument], Dict[str, Analyze
     kwargs: Dict[str, AnalyzeArgument] = {}
     for _ in range(num_args):
         dt = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-        if read_bool(infile):  # is foldable
+        is_constant_expression = read_bool(infile)
+        if is_constant_expression:
             value = pickleSer._read_with_length(infile)
             if dt.needConversion():
                 value = dt.fromInternal(value)
         else:
             value = None
-        is_table = read_bool(infile)  # is table argument
-        argument = AnalyzeArgument(dataType=dt, value=value, isTable=is_table)
+        is_table = read_bool(infile)
+        argument = AnalyzeArgument(
+            dataType=dt, value=value, isTable=is_table, isConstantExpression=is_constant_expression
+        )
 
         is_named_arg = read_bool(infile)
         if is_named_arg:

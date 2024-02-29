@@ -19,11 +19,11 @@ package org.apache.spark.ui
 
 import java.net.URL
 import java.util.Locale
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 import scala.xml.Node
 
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 import org.htmlunit.DefaultCssErrorHandler
 import org.htmlunit.cssparser.parser.CSSParseException
