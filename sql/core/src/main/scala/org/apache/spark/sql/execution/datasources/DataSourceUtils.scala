@@ -289,13 +289,10 @@ object DataSourceUtils extends PredicateHelper {
   def shouldPushFilter(expression: Expression): Boolean = {
     def checkRecursive(expression: Expression): Boolean = expression match {
       case _: Attribute | _: GetStructField =>
-        // don't push down filters for columns with non-default collation
+        // don't push down filters for types with non-default collation
         // as it could lead to incorrect results
-        expression.dataType match {
-          case st: StringType => st.isDefaultCollation
-          case struct: StructType => !SchemaUtils.containsNonDefaultCollatedString(struct)
-          case _ => true
-        }
+        !SchemaUtils.hasNonDefaultCollatedString(expression.dataType)
+
       case _ => expression.children.forall(checkRecursive)
     }
 

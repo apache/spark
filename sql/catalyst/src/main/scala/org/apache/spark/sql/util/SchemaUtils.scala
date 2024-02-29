@@ -295,12 +295,27 @@ private[spark] object SchemaUtils {
   def escapeMetaCharacters(str: String): String = SparkSchemaUtils.escapeMetaCharacters(str)
 
   /**
-   * Checks whether there are non default collated string types in the schema.
+   * Checks if a given data type has a non-default collation string type.
    */
-  def containsNonDefaultCollatedString(schema: StructType): Boolean = {
-    schema.existsRecursively {
+  def hasNonDefaultCollatedString(dt: DataType): Boolean = {
+    SchemaUtils.typeExistsRecursively(dt) {
       case st: StringType => !st.isDefaultCollation
       case _ => false
     }
+  }
+
+  /**
+   * Checks if a given data type satisfies a given condition.
+   *
+   * @param dt The data type to check.
+   * @param f  The condition to check for.
+   * @return True if the data type that satisfies the condition is found, false otherwise.
+   */
+  def typeExistsRecursively(dt: DataType)(f: DataType => Boolean): Boolean = dt match {
+      case struct: StructType => struct.existsRecursively(f)
+      case arr: ArrayType => typeExistsRecursively(arr.elementType)(f)
+      case map: MapType =>
+        typeExistsRecursively(map.keyType)(f) || typeExistsRecursively(map.valueType)(f)
+      case other => f(other)
   }
 }
