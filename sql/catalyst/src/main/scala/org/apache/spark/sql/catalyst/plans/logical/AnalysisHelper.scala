@@ -222,7 +222,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
-   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
+   * Recursively transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    */
   def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
@@ -238,7 +238,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
-   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
+   * Recursively transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    *
    * @param rule   the function used to transform this nodes children.
