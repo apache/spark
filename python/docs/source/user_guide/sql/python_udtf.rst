@@ -356,11 +356,7 @@ For more details, please see `Apache Arrow in PySpark <../arrow_pandas.rst>`_.
 TABLE input argument
 ~~~~~~~~~~~~~~~~~~~~
 Python UDTFs can also take a TABLE as input argument, and it can be used in conjunction 
-with scalar input arguments.
-By default, you are allowed to have only one TABLE argument as input, primarily for 
-performance reasons. If you need to have more than one TABLE input argument, 
-you can enable this by setting the ``spark.sql.tvf.allowMultipleTableArguments.enabled``
-configuration to ``true``.
+with scalar input arguments. You are allowed to have only one TABLE argument as input.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
