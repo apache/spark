@@ -22,7 +22,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.{ListState, QueryInfo, StatefulProcessorHandle, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -136,6 +136,13 @@ class StatefulProcessorHandleImpl(
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder)
+    resultState
+  }
+
+  override def getMapState[K, V](stateName: String): MapState[K, V] = {
+    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
+      "initialization is complete")
+    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder)
     resultState
   }
 }

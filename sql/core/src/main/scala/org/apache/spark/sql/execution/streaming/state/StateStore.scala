@@ -60,12 +60,24 @@ trait ReadStateStore {
   /** Version of the data in this store before committing updates. */
   def version: Long
 
+  /** Whether composite key is used for state store. */
+  var useCompositeKey: Boolean = false
+
+  def setUseCompositeKey(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException("Set state store to use composite key is not supported")
+  }
+
   /**
    * Get the current value of a non-null key.
    * @return a non-null row if the key exists in the store, otherwise null.
    */
   def get(key: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
+
+  def getWithCompositeKey(
+      groupingKey: UnsafeRow,
+      userKey: UnsafeRow,
+      colFamilyName: String): UnsafeRow
 
   /**
    * Provides an iterator containing all values of a non-null key. If key does not exist,
@@ -115,6 +127,8 @@ trait ReadStateStore {
  */
 trait StateStore extends ReadStateStore {
 
+  def setUseCompositeKey(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
   /**
    * Remove column family with given name, if present.
    */
@@ -135,6 +149,12 @@ trait StateStore extends ReadStateStore {
    * in the params can be reused, and must make copies of the data as needed for persistence.
    */
   def put(key: UnsafeRow, value: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  def putWithCompositeKey(groupingKey: UnsafeRow, userKey: UnsafeRow, value: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  def removeWithCompositeKey(groupingKey: UnsafeRow, userKey: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
@@ -204,6 +224,10 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def prefixScan(prefixKey: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair] =
     store.prefixScan(prefixKey, colFamilyName)
+
+  override def getWithCompositeKey(groupingKey: UnsafeRow, userKey: UnsafeRow,
+    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow =
+    store.getWithCompositeKey(groupingKey, userKey, colFamilyName)
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     store.valuesIterator(key, colFamilyName)

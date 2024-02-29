@@ -84,6 +84,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       map.iterator()
     }
 
+    override def getWithCompositeKey(
+        key: UnsafeRow,
+        userKey: UnsafeRow,
+        colFamilyName: String): UnsafeRow = {
+      throw new UnsupportedOperationException("Get with composite key is not supported for HDFS")
+    }
+
     override def abort(): Unit = {}
 
     override def toString(): String = {
@@ -131,6 +138,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       mapToUpdate.get(key)
     }
 
+    override def getWithCompositeKey(
+        key: UnsafeRow,
+        userKey: UnsafeRow,
+        colFamilyName: String): UnsafeRow = {
+      throw new UnsupportedOperationException("Get with composite key is not supported for HDFS")
+    }
+
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       require(value != null, "Cannot put a null value")
       verify(state == UPDATING, "Cannot put after already committed or aborted")
@@ -140,12 +154,27 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
     }
 
+    override def putWithCompositeKey(
+        key: UnsafeRow,
+        userKey: UnsafeRow,
+        value: UnsafeRow,
+        colFamilyName: String): Unit = {
+      throw new UnsupportedOperationException("Put with composite key is not supported for HDFS")
+    }
+
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
         writeRemoveToDeltaFile(compressedStream, key)
       }
+    }
+
+    override def removeWithCompositeKey(
+        key: UnsafeRow,
+        userKey: UnsafeRow,
+        colFamilyName: String): Unit = {
+      throw new UnsupportedOperationException("Remove with composite key is not supported for HDFS")
     }
 
     /** Commit all the updates that have been made to the store, and return the new version. */

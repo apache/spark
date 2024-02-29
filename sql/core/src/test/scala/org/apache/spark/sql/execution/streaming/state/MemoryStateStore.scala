@@ -39,6 +39,30 @@ class MemoryStateStore extends StateStore() {
     throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
+  override def getWithCompositeKey(
+      key: UnsafeRow,
+      userKey: UnsafeRow,
+      colFamilyName: String): UnsafeRow = {
+    throw new UnsupportedOperationException(
+      "Get with composite key is not supported for Memory State")
+  }
+
+  def putWithCompositeKey(
+      key: UnsafeRow,
+      userKey: UnsafeRow, value: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException(
+      "Put with composite key is not supported for Memory State")
+  }
+
+  def removeWithCompositeKey(
+      key: UnsafeRow,
+      userKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException(
+      "Remove with composite key is not supported for Memory State")
+  }
+
   override def removeColFamilyIfExists(colFamilyName: String): Unit = {
     throw StateStoreErrors.removingColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
