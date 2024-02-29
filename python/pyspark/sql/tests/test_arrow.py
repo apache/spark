@@ -25,7 +25,7 @@ import warnings
 from distutils.version import LooseVersion
 from typing import cast
 from collections import namedtuple
-from zoneinfo import ZoneInfo
+import sys
 
 from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
@@ -1092,6 +1092,7 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.first(), expected)
 
+    @unittest.skipIf(sys.version_info < (3, 9), "zoneinfo is available from Python 3.9+")
     def test_toPandas_timestmap_tzinfo(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -1099,6 +1100,8 @@ class ArrowTestsMixin:
 
     def check_toPandas_timestmap_tzinfo(self, arrow_enabled):
         # SPARK-47202: Test timestamp with tzinfo in toPandas and createDataFrame
+        from zoneinfo import ZoneInfo
+
         ts_tzinfo = datetime.datetime(2023, 1, 1, 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
         data = pd.DataFrame({"a": [ts_tzinfo]})
         df = self.spark.createDataFrame(data)
