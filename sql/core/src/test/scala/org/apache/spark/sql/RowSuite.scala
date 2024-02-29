@@ -119,8 +119,8 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         rowWithoutSchema.fieldIndex("foo")
       },
-      errorClass = "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA",
-      parameters = Map.empty
+      errorClass = "UNSUPPORTED_CALL.FIELD_INDEX",
+      parameters = Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "foo")
     )
   }
 }

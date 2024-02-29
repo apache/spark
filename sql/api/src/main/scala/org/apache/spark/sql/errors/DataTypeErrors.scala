@@ -261,8 +261,14 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map("raw" -> s"'$raw'"))
   }
 
-  def fieldIndexOnRowWithoutSchemaError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA")
+  def fieldIndexOnRowWithoutSchemaError(fieldName: String): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_CALL.FIELD_INDEX",
+      messageParameters = Map(
+        "methodName" -> "fieldIndex",
+        "className" -> "Row",
+        "fieldName" -> fieldName)
+    )
   }
 
   def valueIsNullError(index: Int): Throwable = {

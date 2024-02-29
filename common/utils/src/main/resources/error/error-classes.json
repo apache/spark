@@ -1272,12 +1272,6 @@
     ],
     "sqlState" : "42710"
   },
-  "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA" : {
-    "message" : [
-      "fieldIndex on a Row without schema is undefined."
-    ],
-    "sqlState" : "42601"
-  },
   "FIELD_NOT_FOUND" : {
     "message" : [
       "No such struct field <fieldName> in <fields>."
@@ -3723,6 +3717,13 @@
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
     ],
+    "subClass" : {
+      "FIELD_INDEX" : {
+        "message" : [
+          "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
