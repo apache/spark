@@ -89,8 +89,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       try {
         close();
       } catch (IOException e) {
-        logger.error("error while closing UnsafeSorterSpillReader", e);
-        throw new RuntimeException(e);
+        logger.info("error while closing UnsafeSorterSpillReader", e);
       }
     });
   }

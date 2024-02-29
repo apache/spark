@@ -1758,7 +1758,6 @@ class ThreadLeakInSortMergeJoinSuite
 
       assertSpilled(sparkContext, "inner join") {
         sql("SELECT * FROM testData JOIN testData2 ON key = a").collect()
-        System.gc()
       }
 
       val readAheadThread = Thread.getAllStackTraces.keySet().asScala
