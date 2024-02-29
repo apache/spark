@@ -39,7 +39,7 @@ object ResolveTimeZone extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveExpressionsDownWithPruning(
+    plan.resolveExpressionsWithPruning(
       _.containsPattern(TIME_ZONE_AWARE_EXPRESSION), ruleId)(transformTimeZoneExprs)
 
   def resolveTimeZones(e: Expression): Expression = e.transformWithPruning(

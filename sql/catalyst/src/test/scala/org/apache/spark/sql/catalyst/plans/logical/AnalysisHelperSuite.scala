@@ -61,7 +61,7 @@ class AnalysisHelperSuite extends SparkFunSuite {
   test("resolveExpressions runs on operators recursively") {
     invocationCount = 0
     val plan = Project(projectExprs, Project(projectExprs, LocalRelation()))
-    plan.resolveExpressionsDown(exprFunction)
+    plan.resolveExpressions(exprFunction)
     assert(invocationCount === 2)
   }
 
@@ -85,7 +85,7 @@ class AnalysisHelperSuite extends SparkFunSuite {
     invocationCount = 0
     val plan = Project(projectExprs, Project(projectExprs, LocalRelation()))
     plan.setAnalyzed()
-    plan.resolveExpressionsDown(exprFunction)
+    plan.resolveExpressions(exprFunction)
     assert(invocationCount === 0)
   }
 
@@ -112,7 +112,7 @@ class AnalysisHelperSuite extends SparkFunSuite {
     val plan1 = Project(projectExprs, LocalRelation())
     val plan2 = Project(projectExprs, plan1)
     plan1.setAnalyzed()
-    plan2.resolveExpressionsDown(exprFunction)
+    plan2.resolveExpressions(exprFunction)
     assert(invocationCount === 1)
   }
 
@@ -138,7 +138,7 @@ class AnalysisHelperSuite extends SparkFunSuite {
     AnalysisHelper.markInAnalyzer {
       plan.resolveOperators { case p: Project => p.transform { case p: Project => p } }
       plan.resolveOperatorsDown { case p: Project => p.transform { case p: Project => p } }
-      plan.resolveExpressionsDown { case lit: Literal =>
+      plan.resolveExpressions { case lit: Literal =>
         Project(Nil, LocalRelation()).transform { case p: Project => p }
         lit
       }

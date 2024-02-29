@@ -225,8 +225,36 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    */
+  def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveExpressionsWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
+  }
+
+  /**
+   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   */
   def resolveExpressionsDown(r: PartialFunction[Expression, Expression]): LogicalPlan = {
     resolveExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
+  }
+
+  /**
+   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   *
+   * @param rule   the function used to transform this nodes children.
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   */
+  def resolveExpressionsWithPruning(cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId)(
+      rule: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveExpressionsDownWithPruning(cond, ruleId)(rule)
   }
 
   /**
@@ -316,7 +344,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
-   * Use [[resolveExpressionsDown()]] in the analyzer.
+   * Use [[resolveExpressions()]] in the analyzer.
    *
    * @see [[QueryPlan.transformAllExpressionsWithPruning()]]
    */
