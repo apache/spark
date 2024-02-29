@@ -341,7 +341,7 @@ class InMemoryTableWithV1Fallback(
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.TRUNCATE)
 
-  @volatile private var dataMap: mutable.Map[Seq[Any], Seq[Row]] = mutable.Map.empty
+  @volatile private val dataMap: mutable.Map[Seq[Any], Seq[Row]] = mutable.Map.empty
   private val partFieldNames = partitioning.flatMap(_.references).toSeq.flatMap(_.fieldNames)
   private val partIndexes = partFieldNames.map(schema.fieldIndex(_))
 
