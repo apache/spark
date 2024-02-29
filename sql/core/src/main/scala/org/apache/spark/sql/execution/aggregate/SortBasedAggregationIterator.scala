@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
@@ -104,7 +105,7 @@ class SortBasedAggregationIterator(
     }
 
     groupKeyEqualityCheck =
-      if (groupingExpressions.forall(e => UnsafeRow.isBinaryStable(e.dataType))) {
+      if (groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))) {
         (key1: UnsafeRow, key2: UnsafeRow) => key1.equals(key2)
       } else {
         val types = groupingAttributes.map(_.dataType).toIndexedSeq

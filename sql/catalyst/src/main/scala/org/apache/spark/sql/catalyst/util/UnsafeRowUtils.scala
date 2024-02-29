@@ -197,4 +197,21 @@ object UnsafeRowUtils {
       s"rowSizeInBytes: ${row.getSizeInBytes}\nfieldStatus:\n" +
       fieldStatusArr.mkString("\n")
   }
+
+  /**
+   * True if comparisons, equality and hashing can be done purely on binary representation of
+   * Unsafe row. i.e. binary(e1) = binary(e2) <=> e1 = e2.
+   * e.g. this is not true for non-binary collations (any case/accent insensitive collation
+   * can lead to rows being semantically equal even though their binary representations differ).
+   */
+  def isBinaryStable(dataType: DataType): Boolean = dataType match {
+    case st: StringType => CollationFactory.fetchCollation(st.collationId).isBinaryCollation
+    case _: AtomicType => true
+    case _: ArrayType => isBinaryStable(dataType.asInstanceOf[ArrayType].elementType)
+    case _: MapType => isBinaryStable(dataType.asInstanceOf[MapType].keyType) &&
+      isBinaryStable(dataType.asInstanceOf[MapType].valueType)
+    case _: StructType =>
+      dataType.asInstanceOf[StructType].fields.forall(f => isBinaryStable(f.dataType))
+    case _ => false
+  }
 }
