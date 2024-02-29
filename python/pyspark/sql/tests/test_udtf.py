@@ -1249,6 +1249,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, DataType)
                 assert a.value is not None
                 assert a.isTable is False
+                assert a.isConstantExpression is True
                 return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
@@ -1402,6 +1403,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, StructType)
                 assert a.value is None
                 assert a.isTable is True
+                assert a.isConstantExpression is False
                 return AnalyzeResult(StructType().add("a", a.dataType[0].dataType))
 
             def eval(self, a: Row):
@@ -1421,6 +1423,7 @@ class BaseUDTFTestsMixin:
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(a.dataType, StructType)
                 assert a.isTable is True
+                assert a.isConstantExpression is False
                 return AnalyzeResult(a.dataType.add("is_even", BooleanType()))
 
             def eval(self, a: Row):
@@ -1959,7 +1962,8 @@ class BaseUDTFTestsMixin:
             def analyze(**kwargs: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(kwargs["a"].dataType, IntegerType)
                 assert kwargs["a"].value == 10
-                assert not kwargs["a"].isTable
+                assert kwargs["a"].isTable is False
+                assert kwargs["a"].isConstantExpression is True
                 assert isinstance(kwargs["b"].dataType, StringType)
                 assert kwargs["b"].value == "x"
                 assert not kwargs["b"].isTable
@@ -2021,6 +2025,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, IntegerType)
                 assert a.value == 10
                 assert not a.isTable
+                assert a.isConstantExpression is True
                 if b is not None:
                     assert isinstance(b.dataType, StringType)
                     assert b.value == "z"

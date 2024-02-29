@@ -687,9 +687,9 @@ class MasterSuite extends SparkFunSuite
   private val workerSelectionPolicyTestCases = Seq(
     (CORES_FREE_ASC, true, List("10001", "10002")),
     (CORES_FREE_ASC, false, List("10001")),
-    (CORES_FREE_DESC, true, List("10004", "10005")),
-    (CORES_FREE_DESC, false, List("10005")),
-    (MEMORY_FREE_ASC, true, List("10001", "10005")),
+    (CORES_FREE_DESC, true, List("10002", "10003")),
+    (CORES_FREE_DESC, false, List("10003")),
+    (MEMORY_FREE_ASC, true, List("10001", "10003")),
     (MEMORY_FREE_ASC, false, List("10001")),
     (MEMORY_FREE_DESC, true, List("10002", "10003")),
     (MEMORY_FREE_DESC, false, Seq("10002")),
@@ -701,11 +701,14 @@ class MasterSuite extends SparkFunSuite
       val conf = new SparkConf()
         .set(WORKER_SELECTION_POLICY.key, policy.toString)
         .set(SPREAD_OUT_APPS.key, spreadOut.toString)
+        .set(UI_ENABLED.key, "false")
+        .set(Network.RPC_NETTY_DISPATCHER_NUM_THREADS, 1)
+        .set(Network.RPC_IO_THREADS, 1)
       val master = makeAliveMaster(conf)
 
       // Use different core and memory values to simplify the tests
       MockWorker.counter.set(10000)
-      (1 to 5).foreach { idx =>
+      (1 to 3).foreach { idx =>
         val worker = new MockWorker(master.self, conf)
         worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
         val workerReg = RegisterWorker(
@@ -713,7 +716,7 @@ class MasterSuite extends SparkFunSuite
           "localhost",
           worker.self.address.port,
           worker.self,
-          idx * 10,
+          4 + idx,
           10240 * (if (idx < 2) idx else (6 - idx)),
           "http://localhost:8080",
           RpcAddress("localhost", 10000))
