@@ -139,10 +139,10 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
       val e1 =
         intercept[ParseException](sql(s"ALTER TABLE $t ADD COLUMN data interval"))
-      assert(e1.getMessage.contains("Cannot use interval type in the table schema."))
+      assert(e1.getMessage.contains("Cannot use \"INTERVAL\" type in the table schema."))
       val e2 =
         intercept[ParseException](sql(s"ALTER TABLE $t ADD COLUMN point.z interval"))
-      assert(e2.getMessage.contains("Cannot use interval type in the table schema."))
+      assert(e2.getMessage.contains("Cannot use \"INTERVAL\" type in the table schema."))
     }
   }
 
