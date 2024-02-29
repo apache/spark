@@ -327,7 +327,7 @@ class StaxXmlParser(
 
     if (valuesMap.isEmpty) {
       // Return an empty row with all nested elements by the schema set to null.
-      new GenericInternalRow(Array.fill[Any](schema.fieldNames.length)(null))
+      new GenericInternalRow(Array.fill[Any](schema.length)(null))
     } else {
       new GenericInternalRow(row)
     }
