@@ -538,6 +538,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .option("dbtable", "test_ltz")
     val df = reader.load()
     val row1 = df.collect().head.getTimestamp(0)
+    assert(df.count() === 1)
+    assert(row1 === Timestamp.valueOf("2018-11-17 13:33:33"))
 
     df.write.format("jdbc")
       .option("url", jdbcUrl)
