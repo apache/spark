@@ -267,7 +267,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map(
         "methodName" -> "fieldIndex",
         "className" -> "Row",
-        "fieldName" -> fieldName)
+        "fieldName" -> toSQLId(fieldName))
     )
   }
 
