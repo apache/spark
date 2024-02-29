@@ -2186,8 +2186,15 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create a [[Collate]] expression.
    */
   override def visitCollate(ctx: CollateContext): Expression = withOrigin(ctx) {
-    val collationName = visitCollateClause(ctx.collateClause())
+    lazy val collationName = visitCollateClause(ctx.collateClause())
     Collate(expression(ctx.primaryExpression), collationName)
+  }
+
+  override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
+    if (!SQLConf.get.collationEnabled) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
+    string(visitStringLit(ctx.stringLit))
   }
 
   /**
@@ -3197,13 +3204,6 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         }
         commentSpec = Some(spec)
       }
-    }
-    val dataType = typedVisit[DataType](ctx.dataType)
-    if (dataType.existsRecursively(
-        dt => dt.isInstanceOf[StringType]) &&
-      !SQLConf.get.collationEnabled &&
-      !dataType.asInstanceOf[StringType].isDefaultCollation) {
-      throw QueryCompilationErrors.collationNotEnabledError()
     }
     ColumnDefinition(
       name = name,

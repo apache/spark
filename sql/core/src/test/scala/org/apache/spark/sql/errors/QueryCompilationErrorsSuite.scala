@@ -968,6 +968,7 @@ class QueryCompilationErrorsSuite
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
       Seq(
         "CREATE TABLE t(col STRING COLLATE 'UNICODE_CI') USING parquet",
+        "CREATE TABLE t(col STRING COLLATE 'UNKNOWN_COLLATION_STRING') USING parquet",
         "SELECT 'aaa' COLLATE 'UNICODE_CI'",
         "select collation('aaa')"
       ).foreach { sqlText =>

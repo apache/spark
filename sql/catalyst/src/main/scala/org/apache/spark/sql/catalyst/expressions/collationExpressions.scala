@@ -73,13 +73,7 @@ object CollateExpressionBuilder extends ExpressionBuilder {
  */
 case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
-  private val collationId = if (!SQLConf.get.collationEnabled) {
-    // This is here if someone enters a query which only has invalid collation name
-    throw QueryCompilationErrors.collationNotEnabledError()
-  }
-  else {
-    CollationFactory.collationNameToId(collationName)
-  }
+  private val collationId = CollationFactory.collationNameToId(collationName)
   override def dataType: DataType = StringType(collationId)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
