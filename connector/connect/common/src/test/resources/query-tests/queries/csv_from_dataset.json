@@ -18,6 +18,7 @@
           "name": "c1",
           "dataType": {
             "string": {
+              "collationId": 0
             }
           },
           "nullable": true
