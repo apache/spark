@@ -16839,6 +16839,7 @@ def map_concat(
         cols = cols[0]  # type: ignore[assignment]
     return _invoke_function_over_seq_of_columns("map_concat", cols)  # type: ignore[arg-type]
 
+
 @_try_remote_functions
 def map_sort(col: "ColumnOrName", asc: bool = True) -> Column:
     """
@@ -16870,7 +16871,7 @@ def map_sort(col: "ColumnOrName", asc: bool = True) -> Column:
     +------------------------+
     |    map_sort(data, true)|
     +------------------------+
-    |{1 -> a, 2 -> b, 3 -> c}|
+    |    {1 -> a, 2 -> b, ...|
     +------------------------+
 
     Example 2: Sorting a map in descending order
@@ -16879,9 +16880,9 @@ def map_sort(col: "ColumnOrName", asc: bool = True) -> Column:
     >>> df = spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as data")
     >>> df.select(sf.map_sort(df.data, False)).show()
     +------------------------+
-    |    map_sort(data, true)|
+    |    map_sort(data, false)|
     +------------------------+
-    |{3 -> c, 2 -> b, 1 -> a}|
+    |    {3 -> c, 2 -> b, ...|
     +------------------------+
     """
     return _invoke_function("map_sort", _to_java_column(col), asc)
