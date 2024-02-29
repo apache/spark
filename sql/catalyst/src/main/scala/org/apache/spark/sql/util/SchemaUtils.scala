@@ -305,11 +305,8 @@ private[spark] object SchemaUtils {
   }
 
   /**
-   * Checks if a given data type satisfies a given condition.
-   *
-   * @param dt The data type to check.
-   * @param f  The condition to check for.
-   * @return True if the data type that satisfies the condition is found, false otherwise.
+   * Recursively checks whether a given predicate holds true for any data type
+   * within the specified data type.
    */
   def typeExistsRecursively(dt: DataType)(f: DataType => Boolean): Boolean = dt match {
       case struct: StructType => struct.existsRecursively(f)
