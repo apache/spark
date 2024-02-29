@@ -16,13 +16,13 @@
 #
 import unittest
 
-from pyspark.pandas.tests.groupby.test_split_apply_basic import GroupbySplitApplyBasicMixin
+from pyspark.pandas.tests.groupby.test_split_apply_last import GroupbySplitApplyLastMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class GroupbySplitApplyBasicParityTests(
-    GroupbySplitApplyBasicMixin,
+class GroupbySplitApplyLastParityTests(
+    GroupbySplitApplyLastMixin,
     PandasOnSparkTestUtils,
     ReusedConnectTestCase,
 ):
@@ -30,7 +30,7 @@ class GroupbySplitApplyBasicParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.groupby.test_parity_split_apply_basic import *  # noqa
+    from pyspark.pandas.tests.connect.groupby.test_parity_split_apply_last import *  # noqa
 
     try:
         import xmlrunner  # type: ignore[import]
