@@ -756,12 +756,6 @@ Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename retur
 
 Cannot `<op>` column, because `<fieldNames>` already exists in `<struct>`.
 
-### FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA
-
-[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-fieldIndex on a Row without schema is undefined.
-
 ### FIELD_NOT_FOUND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
