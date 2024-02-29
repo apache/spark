@@ -207,7 +207,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   // Set the threshold to 1 billion which leads to an 128MB bitmap and
-  // the actual size of `HighlyCompressedMapStatus` can be much larger than 125MB.
+  // the actual size of `HighlyCompressedMapStatus` can be much larger than 128MB.
   // This may crash the driver with an OOM error.
   private val SHUFFLE_BLOCK_NUMBER_WARNING_THRESHOLD: Long = 1L << 30
   private val numberOfShuffleBlocks = numPartitions.toLong * partitioner.numPartitions.toLong
