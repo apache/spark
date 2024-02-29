@@ -478,3 +478,28 @@ SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY va
 SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2;
 SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1;
 SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2;
+
+-- Test cases for distinct window function
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    sum(DISTINCT val_long) OVER(PARTITION BY cate) as s
+FROM
+    testData;
+
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    sum(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as s
+FROM
+    testData;
+
+SELECT
+    cate,
+    val,
+    count(DISTINCT val_long) OVER(PARTITION BY cate ORDER BY val) as ct,
+    rank() OVER(PARTITION BY cate ORDER BY val) as r
+FROM
+    testData;

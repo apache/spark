@@ -357,7 +357,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE",
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
-          case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
+          // Distinct window function only support entire partition frame and
+          // growing frame.
+          case w @ WindowExpression(AggregateExpression(f, _, true, _, _),
+            WindowSpecDefinition(_, _, frame: SpecifiedWindowFrame))
+             if f.children.forall(_.foldable) || frame.lower != UnboundedPreceding =>
             w.failAnalysis(
               errorClass = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
               messageParameters = Map("windowExpr" -> toSQLExpr(w)))
