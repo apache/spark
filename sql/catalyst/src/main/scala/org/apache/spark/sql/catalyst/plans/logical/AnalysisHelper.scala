@@ -252,8 +252,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    *               varying initial state for different invocations.
    */
   def resolveExpressionsWithPruning(cond: TreePatternBits => Boolean,
-      ruleId: RuleId = UnknownRuleId)(
-      rule: PartialFunction[Expression, Expression]): LogicalPlan = {
+    ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression]): LogicalPlan = {
     resolveExpressionsDownWithPruning(cond, ruleId)(rule)
   }
 
