@@ -650,7 +650,10 @@ case class CatalogStatistics(
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def toPlanStats(planOutput: Seq[Attribute], planStatsEnabled: Boolean): Statistics = {
+  def toPlanStats(
+      planOutput: Seq[Attribute],
+      planStatsEnabled: Boolean,
+      compressionFactor: Double): Statistics = {
     if (planStatsEnabled && rowCount.isDefined) {
       val attrStats = AttributeMap(planOutput
         .flatMap(a => colStats.get(a.name).map(a -> _.toPlanStat(a.name, a.dataType))))
@@ -660,7 +663,7 @@ case class CatalogStatistics(
     } else {
       // When plan statistics are disabled or the table doesn't have other statistics,
       // we apply the size-only estimation strategy and only propagate sizeInBytes in statistics.
-      Statistics(sizeInBytes = sizeInBytes)
+      Statistics(sizeInBytes = BigInt((sizeInBytes.longValue * compressionFactor).toLong))
     }
   }
 
@@ -927,7 +930,8 @@ case class HiveTableRelation(
   )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled,
+        conf.fileCompressionFactor))
       .orElse(tableStats)
       .getOrElse {
       throw SparkException.internalError("Table stats must be specified.")
