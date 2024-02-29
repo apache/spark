@@ -344,7 +344,6 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
 
   /**
    * Use [[resolveExpressions()]] in the analyzer.
-   *
    * @see [[QueryPlan.transformAllExpressionsWithPruning()]]
    */
   override def transformAllExpressionsWithPruning(
