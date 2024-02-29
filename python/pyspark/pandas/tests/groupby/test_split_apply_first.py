@@ -24,10 +24,7 @@ from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTesti
 class GroupbySplitApplyFirstMixin(GroupbySplitApplyTestingFuncMixin):
     def test_split_apply_combine_on_series(self):
         funcs = [
-            (
-                (True, False),
-                ["first"],
-            ),
+            ((True, False), ["first"]),
         ]
         self._test_split_apply_func(funcs)
 

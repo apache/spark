@@ -21,16 +21,16 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTestingFuncMixin
 
 
-class GroupbySplitApplyCountMixin(GroupbySplitApplyTestingFuncMixin):
+class GroupbySplitApplySkewMixin(GroupbySplitApplyTestingFuncMixin):
     def test_split_apply_combine_on_series(self):
         funcs = [
-            ((True, False), ["count"]),
+            ((False, False), ["skew"]),
         ]
         self._test_split_apply_func(funcs)
 
 
-class GroupbySplitApplyCountTests(
-    GroupbySplitApplyCountMixin,
+class GroupbySplitApplySkewTests(
+    GroupbySplitApplySkewMixin,
     PandasOnSparkTestCase,
     SQLTestUtils,
 ):
@@ -38,7 +38,7 @@ class GroupbySplitApplyCountTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.groupby.test_split_apply_count import *  # noqa: F401
+    from pyspark.pandas.tests.groupby.test_split_apply_skew import *  # noqa: F401
 
     try:
         import xmlrunner

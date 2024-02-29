@@ -16,32 +16,24 @@
 #
 import unittest
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTestingFuncMixin
+from pyspark.pandas.tests.groupby.test_split_apply_std import GroupbySplitApplyStdMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class GroupbySplitApplyCountMixin(GroupbySplitApplyTestingFuncMixin):
-    def test_split_apply_combine_on_series(self):
-        funcs = [
-            ((True, False), ["count"]),
-        ]
-        self._test_split_apply_func(funcs)
-
-
-class GroupbySplitApplyCountTests(
-    GroupbySplitApplyCountMixin,
-    PandasOnSparkTestCase,
-    SQLTestUtils,
+class GroupbySplitApplyStdParityTests(
+    GroupbySplitApplyStdMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.groupby.test_split_apply_count import *  # noqa: F401
+    from pyspark.pandas.tests.connect.groupby.test_parity_split_apply_std import *  # noqa
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
