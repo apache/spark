@@ -53,5 +53,5 @@ case class JDBCV1CompatibleRelation(
       pushedLimit, sortOrders, pushedOffset)
   }
 
-  override def toString: String = "JDBC Relation"
+  override def toString: String = "JDBC V1 Compatible Relation"
 }
