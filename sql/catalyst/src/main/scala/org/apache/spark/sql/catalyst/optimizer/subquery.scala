@@ -261,17 +261,25 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // If we have introduced new `exists`-attributes that:
           // 1) are referenced by aggregateExpressions within a non-aggregateFunction expression
           // 2) are not referenced by groupingExpressions
-          // we need to add them to the groupingExpressions.
+          // we wrap them in any_value() aggregate function.
           val aggFunctionReferences = a.aggregateExpressions.
             flatMap(extractAggregateExpressions).
             flatMap(_.aggregateFunction.references).toSet
           val nonAggFuncReferences =
             a.aggregateExpressions.flatMap(_.references).filterNot(aggFunctionReferences.contains)
           val groupingReferences = a.groupingExpressions.flatMap(_.references)
-          val newGroupingExprs = introducedAttrs
+          val toBeWrappedExistsAttrs = introducedAttrs
             .filter(nonAggFuncReferences.contains)
             .filterNot(groupingReferences.contains)
-          a.copy(groupingExpressions = a.groupingExpressions ++ newGroupingExprs)
+
+          // Replace all eligible `exists` by `any_value(exists)` among aggregateExpressions
+          val newAggregateExpressions = a.aggregateExpressions.map { aggExpr =>
+            aggExpr.transformUp {
+              case attr: Attribute if toBeWrappedExistsAttrs.contains(attr) =>
+                Max(attr).toAggregateExpression()
+            }.asInstanceOf[NamedExpression]
+          }
+          a.copy(aggregateExpressions = newAggregateExpressions)
         case _ => updatedNode
       }
   }
