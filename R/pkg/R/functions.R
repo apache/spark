@@ -4524,7 +4524,7 @@ setMethod("map_zip_with",
           })
 
 #' @details
-#' \code{sort_array}: Sorts the input map in ascending or descending order according to
+#' \code{map_sort}: Sorts the input map in ascending or descending order according to
 #' the natural ordering of the map keys.
 #'
 #' @rdname column_collection_functions
@@ -4532,7 +4532,7 @@ setMethod("map_zip_with",
 #'            TRUE, sorting is in ascending order.
 #'            FALSE, sorting is in descending order.
 #' @aliases map_sort map_sort,Column-method
-#' @note sort_array since 4.0.0
+#' @note map_sort since 4.0.0
 setMethod("map_sort",
           signature(x = "Column"),
           function(x, asc = TRUE) {
