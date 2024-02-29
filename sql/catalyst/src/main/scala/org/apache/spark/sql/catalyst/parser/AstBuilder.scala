@@ -1840,7 +1840,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Both un-targeted (global) and targeted aliases are supported.
    */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
-    var target = Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq)
+    val target = Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq)
 
     if (ctx.exceptClause != null) {
       visitStarExcept(ctx, target)
