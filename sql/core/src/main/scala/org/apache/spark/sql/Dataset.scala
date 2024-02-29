@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -73,7 +73,7 @@ private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
   val DATASET_ID_KEY = "__dataset_id"
   val COL_POS_KEY = "__col_position"
-  val DATASET_ID_TAG = TreeNodeTag[HashSet[Long]]("dataset_id")
+  val DATASET_ID_TAG = LogicalPlan.DATASET_ID_TAG
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
@@ -1308,12 +1308,20 @@ class Dataset[T] private[sql](
       case a: AttributeReference if logicalPlan.outputSet.contains(a) =>
         val index = logicalPlan.output.indexWhere(_.exprId == a.exprId)
         joined.left.output(index)
+
+      case a: AttributeReference if a.metadata.contains(Dataset.DATASET_ID_KEY) =>
+        UnresolvedAttributeWithTag(a, a.metadata.getLong(Dataset.DATASET_ID_KEY))
     }
+
     val rightAsOfExpr = rightAsOf.expr.transformUp {
       case a: AttributeReference if other.logicalPlan.outputSet.contains(a) =>
         val index = other.logicalPlan.output.indexWhere(_.exprId == a.exprId)
         joined.right.output(index)
+
+      case a: AttributeReference if a.metadata.contains(Dataset.DATASET_ID_KEY) =>
+        UnresolvedAttributeWithTag(a, a.metadata.getLong(Dataset.DATASET_ID_KEY))
     }
+
     withPlan {
       AsOfJoin(
         joined.left, joined.right,
@@ -1576,7 +1584,30 @@ class Dataset[T] private[sql](
 
       case other => other
     }
-    Project(untypedCols.map(_.named), logicalPlan)
+    val namedExprs = untypedCols.map(_.named)
+    val inputSet = logicalPlan.outputSet
+    val rectifiedNamedExprs = namedExprs.map(ne => ne match {
+
+      case al: Alias if !al.references.subsetOf(inputSet) &&
+        al.nonInheritableMetadataKeys.contains(Dataset.DATASET_ID_KEY) =>
+        val unresolvedExpr = al.child.transformUp {
+          case attr: AttributeReference if !inputSet.contains(attr) =>
+            UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
+        }
+        val newAl = al.copy(child = unresolvedExpr, name = al.name)(exprId = al.exprId,
+          qualifier = al.qualifier, explicitMetadata = al.explicitMetadata,
+          nonInheritableMetadataKeys = al.nonInheritableMetadataKeys)
+        newAl.copyTagsFrom(al)
+        newAl
+
+      case attr: Attribute if !inputSet.contains(attr) &&
+        attr.metadata.contains(Dataset.DATASET_ID_KEY) =>
+        UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
+
+      case _ => ne
+
+    })
+    Project(rectifiedNamedExprs, logicalPlan)
   }
 
   /**

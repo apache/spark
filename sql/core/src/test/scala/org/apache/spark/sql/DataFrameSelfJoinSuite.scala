@@ -488,4 +488,14 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         context = ExpectedContext(fragment = "$", getCurrentClassCallSitePattern))
     }
   }
+
+  test("SPARK_47217: Dedup of relations can impact projected columns resolution") {
+    val df = Seq((1, 2)).toDF("a", "b")
+    val df2 = df.select(df("a").as("aa"), df("b").as("bb"))
+    val df3 = df2.join(df, df2("bb") === df("b")).select(df2("aa"), df("a"))
+
+    checkAnswer(
+      df3,
+      Row(1, 1) :: Nil)
+  }
 }

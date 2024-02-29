@@ -24,6 +24,7 @@ import java.util.*;
 import java.math.BigInteger;
 import java.math.BigDecimal;
 
+import org.apache.spark.sql.catalyst.plans.logical.Join;
 import scala.collection.Seq;
 import scala.jdk.javaapi.CollectionConverters;
 
@@ -31,6 +32,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Ints;
 import org.junit.jupiter.api.*;
 
+import org.apache.spark.sql.catalyst.expressions.Alias;
+import org.apache.spark.sql.catalyst.expressions.AttributeReference;
+import org.apache.spark.sql.catalyst.expressions.AttributeSet;
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
+import org.apache.spark.sql.catalyst.plans.logical.Project;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Column;
@@ -539,5 +545,75 @@ public class JavaDataFrameSuite {
     String[] expected = spark.table("testData").collectAsList().stream()
       .map(row -> row.get(0).toString() + row.getString(1)).toArray(String[]::new);
     Assertions.assertArrayEquals(expected, result);
+  }
+
+  @Test
+  public void testDedupBehaviourOnProjection_SPARK_47217() {
+    //Create table1 DF
+    List<Row> table1Data = Arrays.asList(
+      RowFactory.create(1, 2, 3),
+      RowFactory.create(1, 2, 3));
+    StructType table1Scema = new StructType()
+      .add("col11", DataTypes.IntegerType)
+      .add("col12", DataTypes.IntegerType)
+      .add("col13", DataTypes.IntegerType);
+
+    Dataset<Row> table1 = spark.createDataFrame(table1Data, table1Scema);
+
+    //Create table2 DataFrame
+    List<Row> table2Data = Arrays.asList(RowFactory.create(1, 2, 3));
+    StructType table2Schema = new StructType()
+      .add("col21", DataTypes.IntegerType)
+      .add("col22", DataTypes.IntegerType)
+      .add("col23", DataTypes.IntegerType);
+
+    Dataset<Row> table2 = spark.createDataFrame(table2Data, table2Schema);
+
+    //Create table 3 DataFrame
+    List<Row> table3Data = Arrays.asList(RowFactory.create(1, 2, 3), RowFactory.create(1, 2, 3));
+    StructType table3Schema = new StructType().
+      add("col31", DataTypes.IntegerType).
+      add("col32", DataTypes.IntegerType).
+      add("col33", DataTypes.IntegerType);
+
+    Dataset<Row> table3 = spark.createDataFrame(table3Data, table3Schema);
+
+    //Perform left outer join for table2
+    Dataset<Row> srcDf = table1.join(
+        table2,
+        table1.col("col11").equalTo(table2.col("col21")),
+        "left_outer").select(
+        table1.col("col11"),
+        table1.col("col12"),
+        table1.col("col13"),
+        table2.col("col22"));
+
+    //Perform leftouter join for exchange table2(firstjoin)
+    srcDf = srcDf.join(
+            broadcast(table3),
+            srcDf.col("col12").equalTo(
+                table3.col("col32")), "left_outer").
+        select(srcDf.col("col11"), srcDf.col("col12"),
+            srcDf.col("col13"),
+            table3.col("col33").as("col33_1"));
+
+    //Perform left outer joinfor exchangeRateTable1 again(secondjoin)
+    Dataset<Row> temp = srcDf.join(broadcast(table3),
+        srcDf.col("col11").equalTo(
+            table3.col("col31")), "left_outer");
+
+    srcDf = temp.select(srcDf.col("col11"), srcDf.col("col12"),
+        srcDf.col("col13"), srcDf.col("col33_1"),
+        table3.col("col33").as("col33_2"));
+
+    // verify optimized plan creation ok
+    srcDf.queryExecution().optimizedPlan();
+    LogicalPlan lp = srcDf.queryExecution().analyzed();
+    // verify attribute ref resolution is correct, i.e it resolves to the right leg of join
+    AttributeReference refToCheck =
+        (AttributeReference) ((Alias)((Project)lp).projectList().last()).child();
+    AttributeSet compareSet =
+        ((Join) ((Project) lp).child()).right().outputSet();
+    Assertions.assertTrue(compareSet.contains(refToCheck));
   }
 }

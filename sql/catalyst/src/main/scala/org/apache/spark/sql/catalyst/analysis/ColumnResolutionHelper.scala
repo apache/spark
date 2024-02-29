@@ -134,6 +134,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       expr: Expression,
       resolveColumnByName: Seq[String] => Option[Expression],
       getAttrCandidates: () => Seq[Attribute],
+      resolveOnDatasetId: (Long, String) => Option[NamedExpression],
       throws: Boolean,
       includeLastResort: Boolean): Expression = {
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
@@ -155,6 +156,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
               viewName, colName, expectedNumCandidates, matched, viewDDL)
           }
           matched(ordinal)
+
+        case u @ UnresolvedAttributeWithTag(attr, id) =>
+          resolveOnDatasetId(id, attr.name).getOrElse(attr)
 
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
@@ -452,6 +456,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         plan.resolve(nameParts, conf.resolver)
       },
       getAttrCandidates = () => plan.output,
+      resolveOnDatasetId = (_, _) => None,
       throws = throws,
       includeLastResort = includeLastResort)
   }
@@ -476,6 +481,43 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       getAttrCandidates = () => {
         assert(q.children.length == 1)
         q.children.head.output
+      },
+
+      resolveOnDatasetId = (datasetid: Long, name: String) => {
+        def findUnaryNodeMatchingTagId(lp: LogicalPlan): Option[LogicalPlan] = {
+          var currentLp = lp
+          while(currentLp.children.size < 2) {
+            if (currentLp.getTagValue(LogicalPlan.DATASET_ID_TAG).exists(_.contains(datasetid))) {
+              return Option(currentLp)
+            } else {
+              if (currentLp.children.size == 1) {
+                currentLp = currentLp.children.head
+              } else {
+                // leaf node
+                return None
+              }
+            }
+          }
+          None
+        }
+
+        val binaryNodeOpt = q.collectFirst {
+          case bn: BinaryNode => bn
+        }
+
+        val resolveOnAttribs = binaryNodeOpt match {
+          case Some(bn) =>
+            val leftDefOpt = findUnaryNodeMatchingTagId(bn.left)
+            val rightDefOpt = findUnaryNodeMatchingTagId(bn.right)
+            (leftDefOpt, rightDefOpt) match {
+              case (None, Some(lp)) => lp.output
+              case (Some(lp), None) => lp.output
+              case _ => q.children.head.output
+            }
+
+          case _ => q.children.head.output
+        }
+        AttributeSeq.fromNormalOutput(resolveOnAttribs).resolve(Seq(name), conf.resolver)
       },
       throws = true,
       includeLastResort = includeLastResort)
