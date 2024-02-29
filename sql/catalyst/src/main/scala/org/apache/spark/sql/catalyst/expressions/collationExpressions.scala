@@ -41,17 +41,17 @@ import org.apache.spark.sql.types._
   group = "string_funcs")
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // We need to throw this error first, as we do not want user to see
+    // misleading hints that collation is enabled
+    if (!SQLConf.get.collationEnabled) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
           case (StringType, true) =>
             val evalCollation = collationExpr.eval()
             if (evalCollation == null) {
-              // We need to throw this error first, as we do not want user to see
-              // misleading hints that collation is enabled
-              if (!SQLConf.get.collationEnabled) {
-                throw QueryCompilationErrors.collationNotEnabledError()
-              }
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
               Collate(e, evalCollation.toString)
@@ -73,7 +73,13 @@ object CollateExpressionBuilder extends ExpressionBuilder {
  */
 case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
-  private val collationId = CollationFactory.collationNameToId(collationName)
+  private val collationId = if (!SQLConf.get.collationEnabled) {
+    // This is here if someone enters a query which only has invalid collation name
+    throw QueryCompilationErrors.collationNotEnabledError()
+  }
+  else {
+    CollationFactory.collationNameToId(collationName)
+  }
   override def dataType: DataType = StringType(collationId)
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 

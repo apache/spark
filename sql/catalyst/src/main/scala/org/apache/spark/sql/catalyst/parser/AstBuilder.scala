@@ -3199,8 +3199,10 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       }
     }
     val dataType = typedVisit[DataType](ctx.dataType)
-    if (!SQLConf.get.collationEnabled &&
-      dataType.isInstanceOf[StringType] && !dataType.asInstanceOf[StringType].isDefaultCollation) {
+    if (dataType.existsRecursively(
+        dt => dt.isInstanceOf[StringType]) &&
+      !SQLConf.get.collationEnabled &&
+      !dataType.asInstanceOf[StringType].isDefaultCollation) {
       throw QueryCompilationErrors.collationNotEnabledError()
     }
     ColumnDefinition(

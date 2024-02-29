@@ -753,7 +753,7 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
-  val COLLATION_ENABLED =
+  lazy val COLLATION_ENABLED =
     buildConf("spark.sql.collation.enabled")
       .doc("Collations feature is under development and its use should be done under this" +
         "feature flag.")
