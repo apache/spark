@@ -16,58 +16,8 @@
 #
 import unittest
 
-from pyspark import TaskContext
 from pyspark.testing.connectutils import ReusedConnectTestCase
-
-from pyspark.resource import TaskResourceRequests, ResourceProfileBuilder
-
-
-class ResourceProfileTestsMixin(object):
-    def test_map_in_arrow_without_profile(self):
-        def func(iterator):
-            tc = TaskContext.get()
-            assert tc.cpus() == 1
-            for batch in iterator:
-                yield batch
-
-        df = self.spark.range(10)
-        df.mapInArrow(func, "id long").collect()
-
-    def test_map_in_arrow_with_profile(self):
-        def func(iterator):
-            tc = TaskContext.get()
-            assert tc.cpus() == 3
-            for batch in iterator:
-                yield batch
-
-        df = self.spark.range(10)
-
-        treqs = TaskResourceRequests().cpus(3)
-        rp = ResourceProfileBuilder().require(treqs).build
-        df.mapInArrow(func, "id long", False, rp).collect()
-
-    def test_map_in_pandas_without_profile(self):
-        def func(iterator):
-            tc = TaskContext.get()
-            assert tc.cpus() == 1
-            for batch in iterator:
-                yield batch
-
-        df = self.spark.range(10)
-        df.mapInPandas(func, "id long").collect()
-
-    def test_map_in_pandas_with_profile(self):
-        def func(iterator):
-            tc = TaskContext.get()
-            assert tc.cpus() == 3
-            for batch in iterator:
-                yield batch
-
-        df = self.spark.range(10)
-
-        treqs = TaskResourceRequests().cpus(3)
-        rp = ResourceProfileBuilder().require(treqs).build
-        df.mapInPandas(func, "id long", False, rp).collect()
+from pyspark.sql.tests.test_resources import ResourceProfileTestsMixin
 
 
 class ResourceProfileTests(ResourceProfileTestsMixin, ReusedConnectTestCase):
