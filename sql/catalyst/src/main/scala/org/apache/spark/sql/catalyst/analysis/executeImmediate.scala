@@ -123,7 +123,7 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           } else {
             val aliases = expressions.collect {
               case e: Alias => e
-              case u: UnresolvedAttribute => Alias(u, u.name)()
+              case u: UnresolvedAttribute => Alias(u, u.nameParts.last)()
             }
 
             if (aliases.size != expressions.size) {

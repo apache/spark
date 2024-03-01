@@ -339,8 +339,9 @@ class QueryExecutionSuite extends SharedSparkSession {
   test("SPARK-47033: EXECUTE IMMEDIATE USING does not recognize session variable names") {
     spark.sql("DECLARE parm = 'Hello';")
 
-    val originalQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING parm AS parm;")
-    val newQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING parm;")
+    val originalQuery = spark.sql(
+      "EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm AS parm;")
+    val newQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm;")
 
     val columns = originalQuery.columns zip newQuery.columns
     assert(columns.count(x => x._1 != x._2) == 0)
