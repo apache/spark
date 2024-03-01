@@ -333,6 +333,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (substring.numBytes == 0) {
       return true;
     }
+
     byte first = substring.getByte(0);
     for (int i = 0; i <= numBytes - substring.numBytes; i++) {
       if (getByte(i) == first && matchAt(substring, i)) {
