@@ -598,23 +598,16 @@ object CollationCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case operator: LogicalPlan =>
-        operator transformExpressionsUp {
-          case e@(_: Collation | _: Collate) =>
-            if (!SQLConf.get.collationEnabled) {
+        operator.expressions.foreach(_.foreach(
+          e =>
+            if (isCollationExpression(e) && !SQLConf.get.collationEnabled) {
               throw QueryCompilationErrors.collationNotEnabledError()
             }
-            e
-          case other =>
-            if (other.children.exists(hasCollationExpression)) {
-              if (!SQLConf.get.collationEnabled) {
-                throw QueryCompilationErrors.collationNotEnabledError()
-              }
-            }
-            other
-        }
+          )
+        )
     }
   }
 
-  private def hasCollationExpression(expression: Expression): Boolean =
+  private def isCollationExpression(expression: Expression): Boolean =
     expression.isInstanceOf[Collation] || expression.isInstanceOf[Collate]
 }
