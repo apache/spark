@@ -108,7 +108,7 @@ class SparkConnectPlanner(
 
   private[connect] def sessionId: String = sessionHolder.sessionId
 
-  lazy val executeHolder = executeHolderOpt.getOrElse {
+  private lazy val executeHolder = executeHolderOpt.getOrElse {
     throw new IllegalArgumentException("executeHolder is not set")
   }
 
