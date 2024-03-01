@@ -76,7 +76,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    *   1. Generates the explain output for the input plan excluding the subquery plans.
    *   2. Generates the explain output for each subquery referenced in the plan.
    */
-  def processPlan[T <: QueryPlan[T]](plan: T, append: String => Unit): Unit = {
+  def processPlan[T <: QueryPlan[T]](plan: T, append: String => Unit): Unit = synchronized {
     try {
       // Initialize a reference-unique set of Operators to avoid accdiental overwrites and to allow
       // intentional overwriting of IDs generated in previous AQE iteration
