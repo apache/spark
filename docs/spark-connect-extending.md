@@ -143,6 +143,8 @@ To implement a plugin for the `Relation` message, a developer has to follow the 
 #### Defining the Protobuf Message
 
 ```protobuf
+// This is a very simple message type that only has exactly one
+// member.
 message ExampleRelation {
   string name = 1;
 }
