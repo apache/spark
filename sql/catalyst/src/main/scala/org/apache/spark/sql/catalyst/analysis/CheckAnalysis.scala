@@ -358,7 +358,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
           // Distinct window function only support entire partition frame and
-          // growing frame.
+          // growing frame, and Distinct fields can't all be foldable.
           case w @ WindowExpression(AggregateExpression(f, _, true, _, _),
             WindowSpecDefinition(_, _, frame: SpecifiedWindowFrame))
              if f.children.forall(_.foldable) || frame.lower != UnboundedPreceding =>

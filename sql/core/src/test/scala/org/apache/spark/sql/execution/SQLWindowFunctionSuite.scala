@@ -193,14 +193,26 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
     withTempView("windowData") {
       sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
+      // Not entire partition frame or growing frame.
       val e = intercept[AnalysisException] {
         sql(
           """
-            |select month, area, product, sum(distinct product + 1) over (partition by 1 order by 2)
+            |select month, area, product, sum(distinct product + 1) over
+            |(partition by 1 order by 2 ROWS CURRENT ROW)
             |from windowData
           """.stripMargin)
       }
       assert(e.getMessage.contains("Distinct window functions are not supported"))
+
+      // distinct fields are all foldable.
+      val e2 = intercept[AnalysisException] {
+        sql(
+          """
+            |select month, area, product, sum(distinct 1) over (partition by 1 order by 2)
+            |from windowData
+          """.stripMargin)
+      }
+      assert(e2.getMessage.contains("Distinct window functions are not supported"))
     }
   }
 
