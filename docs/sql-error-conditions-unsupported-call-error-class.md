@@ -34,4 +34,8 @@ This error class has the following derived error classes:
 
 The row shall have a schema to get an index of the field `<fieldName>`.
 
+## WITHOUT_SUGGESTION
+
+
+
 
