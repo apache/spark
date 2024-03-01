@@ -520,7 +520,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       errorClass = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("Cannot parse field value '2021-13-01T25:61:61' for pattern " +
-          "'yyyy-MM-dd HH:mm:ss' as target spark data type [TimestampNTZType]."))
+          "'yyyy-MM-dd HH:mm:ss' as the target spark data type \"TIMESTAMP_NTZ\"."))
     )
   }
 }
