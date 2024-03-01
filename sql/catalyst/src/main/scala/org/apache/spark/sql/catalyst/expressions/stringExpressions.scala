@@ -24,7 +24,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -511,13 +511,12 @@ abstract class StringPredicate extends BinaryExpression
     // Additional check needed for collation compatibility
     val rightCollationId: Int = right.dataType.asInstanceOf[StringType].collationId
     if (collationId != rightCollationId) {
-      throw new SparkException(
-        errorClass = "COLLATION_MISMATCH",
+      DataTypeMismatch(
+        errorSubClass = "COLLATION_MISMATCH",
         messageParameters = Map(
           "collationNameLeft" -> CollationFactory.fetchCollation(collationId).collationName,
           "collationNameRight" -> CollationFactory.fetchCollation(rightCollationId).collationName
-        ),
-        cause = null
+        )
       )
     } else {
       TypeCheckResult.TypeCheckSuccess
