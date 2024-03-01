@@ -63,6 +63,7 @@ To implement a Python UDTF, you first need to define a class implementing the me
             """
             ...
 
+        @staticmethod
         def analyze(self, *args: Any) -> AnalyzeResult:
             """
             Static method to compute the output schema of a particular call to this function in
