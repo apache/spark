@@ -120,7 +120,7 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
         rowWithoutSchema.fieldIndex("foo")
       },
       errorClass = "UNSUPPORTED_CALL.FIELD_INDEX",
-      parameters = Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "foo")
+      parameters = Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "`foo`")
     )
   }
 }
