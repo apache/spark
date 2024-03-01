@@ -76,7 +76,7 @@ class ConfigBehaviorSuite extends QueryTest with SharedSparkSession {
     val numToTake = 50
     import scala.language.reflectiveCalls
     val jobCountListener = new SparkListener {
-      private var count: AtomicInteger = new AtomicInteger(0)
+      private val count: AtomicInteger = new AtomicInteger(0)
       def getCount: Int = count.get
       def reset(): Unit = count.set(0)
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {

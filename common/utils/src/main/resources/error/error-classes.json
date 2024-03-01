@@ -1284,6 +1284,12 @@
     ],
     "sqlState" : "42809"
   },
+  "FOREACH_BATCH_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in foreach batch sink."
+    ],
+    "sqlState" : "39000"
+  },
   "FOUND_MULTIPLE_DATA_SOURCES" : {
     "message" : [
       "Detected multiple data sources with the name '<provider>'. Please check the data source isn't simultaneously registered and located in the classpath."
@@ -2303,6 +2309,12 @@
       }
     },
     "sqlState" : "22023"
+  },
+  "INVALID_PARTITION_COLUMN_DATA_TYPE" : {
+    "message" : [
+      "Cannot use <type> for partition column."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
@@ -5034,11 +5046,6 @@
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1153" : {
-    "message" : [
-      "Cannot use <field> for partition column."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1155" : {
     "message" : [
       "Partition column `<col>` not found in schema <schemaCatalog>."
@@ -5142,7 +5149,7 @@
   },
   "_LEGACY_ERROR_TEMP_1183" : {
     "message" : [
-      "Cannot use interval type in the table schema."
+      "Cannot use \"INTERVAL\" type in the table schema."
     ]
   },
   "_LEGACY_ERROR_TEMP_1184" : {
