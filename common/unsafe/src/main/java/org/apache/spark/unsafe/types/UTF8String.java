@@ -352,7 +352,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
     // TODO: enable ICU collation support for "contains"
     Map<String, String> params = new HashMap<>();
-    params.put("functionName", Thread.currentThread().getStackTrace()[1].getMethodName());
+    params.put("functionName", "contains");
     params.put("collationName", CollationFactory.fetchCollation(collationId).collationName);
     throw new SparkException("COLLATION_NOT_SUPPORTED_FOR_FUNCTION",
             SparkException.constructMessageParams(params), null);
