@@ -3320,6 +3320,13 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
+    "message" : [
+      "The handle has not been initialized for this StatefulProcessor.",
+      "Please only use the StatefulProcessor with the transformWithState operator."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
     "message" : [
       "Store does not support multiple values per key"

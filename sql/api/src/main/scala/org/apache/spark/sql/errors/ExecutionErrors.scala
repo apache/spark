@@ -53,6 +53,12 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       e)
   }
 
+  def stateStoreHandleNotInitialized(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",
+      messageParameters = Map.empty)
+  }
+
   def failToRecognizePatternAfterUpgradeError(
       pattern: String, e: Throwable): SparkUpgradeException = {
     new SparkUpgradeException(
