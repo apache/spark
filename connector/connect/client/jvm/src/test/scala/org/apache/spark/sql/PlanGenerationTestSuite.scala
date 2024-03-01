@@ -698,6 +698,11 @@ class PlanGenerationTestSuite
     simple.distinct()
   }
 
+  test("select collated string") {
+    val schema = StructType(StructField("s", StringType(1)) :: Nil)
+    createLocalRelation(schema.catalogString).select("s")
+  }
+
   /* Column API */
   private def columnTest(name: String)(f: => Column): Unit = {
     test("column " + name) {

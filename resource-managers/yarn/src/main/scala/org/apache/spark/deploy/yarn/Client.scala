@@ -535,7 +535,7 @@ private[spark] class Client(
     // If preload is enabled, preload the statCache with the files in the directories
     val statCache = if (statCachePreloadEnabled) {
       // Consider only following configurations, as they involve the distribution of multiple files
-      var files = sparkConf.get(SPARK_JARS).getOrElse(Nil) ++ sparkConf.get(JARS_TO_DISTRIBUTE) ++
+      val files = sparkConf.get(SPARK_JARS).getOrElse(Nil) ++ sparkConf.get(JARS_TO_DISTRIBUTE) ++
         sparkConf.get(FILES_TO_DISTRIBUTE) ++ sparkConf.get(ARCHIVES_TO_DISTRIBUTE) ++
         sparkConf.get(PY_FILES) ++ pySparkArchives
 

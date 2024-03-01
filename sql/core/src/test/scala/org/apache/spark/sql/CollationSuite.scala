@@ -289,4 +289,34 @@ class CollationSuite extends DatasourceV2SQLBase {
       assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
     }
   }
+
+  test("disable partition on collated string column") {
+    def createTable(partitionColumns: String*): Unit = {
+      val tableName = "test_partition_tbl"
+      withTable(tableName) {
+        sql(
+          s"""
+             |CREATE TABLE $tableName
+             |(id INT, c1 STRING COLLATE 'UNICODE', c2 string)
+             |USING parquet
+             |PARTITIONED BY (${partitionColumns.mkString(",")})
+             |""".stripMargin)
+      }
+    }
+
+    // should work fine on non collated columns
+    createTable("id")
+    createTable("c2")
+    createTable("id", "c2")
+
+    Seq(Seq("c1"), Seq("c1", "id"), Seq("c1", "c2")).foreach { partitionColumns =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          createTable(partitionColumns: _*)
+        },
+        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"STRING COLLATE 'UNICODE'\"")
+      );
+    }
+  }
 }

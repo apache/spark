@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, File
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
-import org.apache.spark.util.ArrayImplicits._
 
 /** Holds a cached logical plan and its data */
 case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
@@ -170,22 +169,20 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     plan match {
       case SubqueryAlias(ident, LogicalRelation(_, _, Some(catalogTable), _)) =>
         val v1Ident = catalogTable.identifier
-        isSameName(ident.qualifier :+ ident.name) &&
-          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+        isSameName(ident.qualifier :+ ident.name) && isSameName(v1Ident.nameParts)
 
       case SubqueryAlias(ident, DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _)) =>
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
         isSameName(ident.qualifier :+ ident.name) &&
-          isSameName((catalog.name() +: v2Ident.namespace() :+ v2Ident.name()).toImmutableArraySeq)
+          isSameName(v2Ident.toQualifiedNameParts(catalog))
 
       case SubqueryAlias(ident, View(catalogTable, _, _)) =>
         val v1Ident = catalogTable.identifier
-        isSameName(ident.qualifier :+ ident.name) &&
-          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+        isSameName(ident.qualifier :+ ident.name) && isSameName(v1Ident.nameParts)
 
       case SubqueryAlias(ident, HiveTableRelation(catalogTable, _, _, _, _)) =>
         val v1Ident = catalogTable.identifier
-        isSameName(ident.qualifier :+ ident.name) &&
-          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+        isSameName(ident.qualifier :+ ident.name) && isSameName(v1Ident.nameParts)
 
       case _ => false
     }

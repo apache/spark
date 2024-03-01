@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import com.univocity.parsers.csv.CsvParser
+import com.univocity.parsers.common.AbstractParser
+import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
@@ -110,7 +111,7 @@ class CSVHeaderChecker(
   }
 
   // This is currently only used to parse CSV with multiLine mode.
-  private[csv] def checkHeaderColumnNames(tokenizer: CsvParser): Unit = {
+  private[csv] def checkHeaderColumnNames(tokenizer: AbstractParser[CsvParserSettings]): Unit = {
     assert(options.multiLine, "This method should be executed with multiLine.")
     if (options.headerFlag) {
       val firstRecord = tokenizer.parseNext()
@@ -119,7 +120,8 @@ class CSVHeaderChecker(
   }
 
   // This is currently only used to parse CSV with non-multiLine mode.
-  private[csv] def checkHeaderColumnNames(lines: Iterator[String], tokenizer: CsvParser): Unit = {
+  private[csv] def checkHeaderColumnNames(
+      lines: Iterator[String], tokenizer: AbstractParser[CsvParserSettings]): Unit = {
     assert(!options.multiLine, "This method should not be executed with multiline.")
     // Checking that column names in the header are matched to field names of the schema.
     // The header will be removed from lines.

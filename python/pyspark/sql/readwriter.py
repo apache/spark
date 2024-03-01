@@ -96,7 +96,7 @@ class DataFrameReader(OptionUtils):
         Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="format") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -139,7 +139,7 @@ class DataFrameReader(OptionUtils):
         Specify the schema with reading a CSV file.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="schema") as d:
         ...     spark.read.schema("col0 INT, col1 DOUBLE").format("csv").load(d).printSchema()
         root
          |-- col0: integer (nullable = true)
@@ -187,7 +187,7 @@ class DataFrameReader(OptionUtils):
         Specify the option 'nullValue' with reading a CSV file.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="option") as d:
         ...     # Write a DataFrame into a CSV file
         ...     df = spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}])
         ...     df.write.mode("overwrite").format("csv").save(d)
@@ -231,7 +231,7 @@ class DataFrameReader(OptionUtils):
         Specify the option 'nullValue' and 'header' with reading a CSV file.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="options") as d:
         ...     # Write a DataFrame into a CSV file with a header.
         ...     df = spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}])
         ...     df.write.option("header", True).mode("overwrite").format("csv").save(d)
@@ -283,7 +283,7 @@ class DataFrameReader(OptionUtils):
         Load a CSV file with format, schema and options specified.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="load") as d:
         ...     # Write a DataFrame into a CSV file with a header
         ...     df = spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}])
         ...     df.write.option("header", True).mode("overwrite").format("csv").save(d)
@@ -383,7 +383,7 @@ class DataFrameReader(OptionUtils):
         Example 1: Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="json1") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin"}]
@@ -399,8 +399,8 @@ class DataFrameReader(OptionUtils):
 
         Example 2: Read JSON from multiple files in a directory
 
-        >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory(prefix="json2") as d1, TemporaryDirectory(prefix="json3") as d2:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 30, "name": "Bob"}]
@@ -421,7 +421,7 @@ class DataFrameReader(OptionUtils):
         Example 3: Read JSON with a custom schema
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="json4") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...        [{"age": 30, "name": "Bob"}]
@@ -564,7 +564,7 @@ class DataFrameReader(OptionUtils):
         Write a DataFrame into a Parquet file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="parquet1") as d:
         ...     # Write a DataFrame into a Parquet file.
         ...     df.write.mode("overwrite").format("parquet").save(d)
         ...
@@ -580,7 +580,7 @@ class DataFrameReader(OptionUtils):
 
         Read a Parquet file with a specific column.
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="parquet2") as d:
         ...     df.write.mode("overwrite").format("parquet").save(d)
         ...
         ...     # Read the Parquet file with only the 'name' column.
@@ -595,15 +595,16 @@ class DataFrameReader(OptionUtils):
 
         Read multiple Parquet files and merge schema.
 
-        >>> with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
-        ...     df.write.mode("overwrite").format("parquet").save(d1)
-        ...     df2.write.mode("overwrite").format("parquet").save(d2)
+        >>> with tempfile.TemporaryDirectory(prefix="parquet3") as d1:
+        ...     with tempfile.TemporaryDirectory(prefix="parquet4") as d2:
+        ...         df.write.mode("overwrite").format("parquet").save(d1)
+        ...         df2.write.mode("overwrite").format("parquet").save(d2)
         ...
-        ...     spark.read.option(
-        ...         "mergeSchema", "true"
-        ...     ).parquet(d1, d2).select(
-        ...         "name", "age", "height"
-        ...     ).orderBy("name", "age").show()
+        ...         spark.read.option(
+        ...             "mergeSchema", "true"
+        ...         ).parquet(d1, d2).select(
+        ...             "name", "age", "height"
+        ...         ).orderBy("name", "age").show()
         +-----+----+------+
         | name| age|height|
         +-----+----+------+
@@ -675,7 +676,7 @@ class DataFrameReader(OptionUtils):
         Write a DataFrame into a text file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="text") as d:
         ...     # Write a DataFrame into a text file
         ...     df = spark.createDataFrame([("a",), ("b",), ("c",)], schema=["alphabets"])
         ...     df.write.mode("overwrite").format("text").save(d)
@@ -775,7 +776,7 @@ class DataFrameReader(OptionUtils):
         Write a DataFrame into a CSV file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="csv") as d:
         ...     # Write a DataFrame into a CSV file
         ...     df = spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}])
         ...     df.write.mode("overwrite").format("csv").save(d)
@@ -911,7 +912,7 @@ class DataFrameReader(OptionUtils):
         Write a DataFrame into a XML file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="xml") as d:
         ...     # Write a DataFrame into a XML file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -1015,7 +1016,7 @@ class DataFrameReader(OptionUtils):
         Write a DataFrame into a ORC file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="orc") as d:
         ...     # Write a DataFrame into a ORC file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -1201,7 +1202,7 @@ class DataFrameWriter(OptionUtils):
         Raise an error when writing to an existing path.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="mode1") as d:
         ...     spark.createDataFrame(
         ...         [{"age": 80, "name": "Xinrong Meng"}]
         ...     ).write.mode("error").format("parquet").save(d) # doctest: +SKIP
@@ -1211,7 +1212,7 @@ class DataFrameWriter(OptionUtils):
 
         Write a Parquet file back with various options, and read it back.
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="mode2") as d:
         ...     # Overwrite the path with a new Parquet file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -1263,7 +1264,7 @@ class DataFrameWriter(OptionUtils):
         Write a DataFrame into a Parquet file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="format") as d:
         ...     # Write a DataFrame into a Parquet file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -1304,7 +1305,7 @@ class DataFrameWriter(OptionUtils):
         Specify the option 'nullValue' with writing a CSV file.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="option") as d:
         ...     # Write a DataFrame into a CSV file with 'nullValue' option set to 'Hyukjin Kwon'.
         ...     df = spark.createDataFrame([(100, None)], "age INT, name STRING")
         ...     df.write.option("nullValue", "Hyukjin Kwon").mode("overwrite").format("csv").save(d)
@@ -1353,7 +1354,7 @@ class DataFrameWriter(OptionUtils):
         ...     StructField("name",StringType(),True),
         ... ])
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="options") as d:
         ...     # Write a DataFrame into a CSV file with 'nullValue' option set to 'Hyukjin Kwon',
         ...     # and 'header' option set to `True`.
         ...     df = spark.createDataFrame([(100, None)], schema=schema)
@@ -1402,7 +1403,7 @@ class DataFrameWriter(OptionUtils):
 
         >>> import tempfile
         >>> import os
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="partitionBy") as d:
         ...     # Write a DataFrame into a Parquet file in a partitioned manner.
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}, {"age": 120, "name": "Ruifeng Zheng"}]
@@ -1656,7 +1657,7 @@ class DataFrameWriter(OptionUtils):
         Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="save") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -1850,7 +1851,7 @@ class DataFrameWriter(OptionUtils):
         Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="json") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -1918,7 +1919,7 @@ class DataFrameWriter(OptionUtils):
         Write a DataFrame into a Parquet file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="parquet") as d:
         ...     # Write a DataFrame into a Parquet file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -1973,7 +1974,7 @@ class DataFrameWriter(OptionUtils):
         Write a DataFrame into a text file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="text") as d:
         ...     # Write a DataFrame into a text file
         ...     df = spark.createDataFrame([("a",), ("b",), ("c",)], schema=["alphabets"])
         ...     df.write.mode("overwrite").text(d)
@@ -2046,7 +2047,7 @@ class DataFrameWriter(OptionUtils):
         Write a DataFrame into a CSV file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="csv") as d:
         ...     # Write a DataFrame into a CSV file
         ...     df = spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}])
         ...     df.write.csv(d, mode="overwrite")
@@ -2129,7 +2130,7 @@ class DataFrameWriter(OptionUtils):
         Write a DataFrame into a XML file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="xml") as d:
         ...     # Write a DataFrame into a XML file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -2203,7 +2204,7 @@ class DataFrameWriter(OptionUtils):
         Write a DataFrame into a ORC file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="orc") as d:
         ...     # Write a DataFrame into a ORC file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
