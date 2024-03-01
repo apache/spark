@@ -350,7 +350,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().contains(substring.toLowerCase());
     }
-    // TODO: enable ICU collation support for "contains"
+    // TODO: enable ICU collation support for "contains" (SPARK-47248)
     Map<String, String> params = new HashMap<>();
     params.put("functionName", "contains");
     params.put("collationName", CollationFactory.fetchCollation(collationId).collationName);
@@ -390,7 +390,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
-    // ICU collation support
     return matchAt(prefix, 0, collationId);
   }
 
@@ -405,7 +404,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
-    // ICU collation support
     return matchAt(suffix, numBytes - suffix.numBytes, collationId);
   }
 
