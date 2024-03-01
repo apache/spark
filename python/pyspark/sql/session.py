@@ -1299,7 +1299,7 @@ class SparkSession(SparkConversionMixin):
         ----------
         data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
-            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
+            :class:`tuple`, ``int``, ``boolean``, ``dict``, etc.), or :class:`list`,
             :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
@@ -1325,6 +1325,9 @@ class SparkSession(SparkConversionMixin):
             if ``samplingRatio`` is ``None``.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
+            When the input is :class:`pandas.DataFrame` and
+            `spark.sql.execution.arrow.pyspark.enabled` is enabled, this option is not
+            effective. It follows Arrow type coercion.
 
             .. versionadded:: 2.1.0
 
@@ -1748,7 +1751,7 @@ class SparkSession(SparkConversionMixin):
         Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="read") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]

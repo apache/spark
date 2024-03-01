@@ -899,7 +899,7 @@ class SparkContext:
         --------
         >>> import os
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="pickleFile") as d:
         ...     # Write a temporary pickled file
         ...     path1 = os.path.join(d, "pickled1")
         ...     sc.parallelize(range(10)).saveAsPickleFile(path1, 3)
@@ -962,7 +962,7 @@ class SparkContext:
         --------
         >>> import os
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="textFile") as d:
         ...     path1 = os.path.join(d, "text1")
         ...     path2 = os.path.join(d, "text2")
         ...
@@ -1052,7 +1052,7 @@ class SparkContext:
         --------
         >>> import os
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="wholeTextFiles") as d:
         ...     # Write a temporary text file
         ...     with open(os.path.join(d, "1.txt"), "w") as f:
         ...         _ = f.write("123")
@@ -1107,7 +1107,7 @@ class SparkContext:
         --------
         >>> import os
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="binaryFiles") as d:
         ...     # Write a temporary binary file
         ...     with open(os.path.join(d, "1.bin"), "wb") as f1:
         ...         _ = f1.write(b"binary data I")
@@ -1156,7 +1156,7 @@ class SparkContext:
         --------
         >>> import os
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="binaryRecords") as d:
         ...     # Write a temporary file
         ...     with open(os.path.join(d, "1.bin"), "w") as f:
         ...         for i in range(3):
@@ -1247,7 +1247,7 @@ class SparkContext:
 
         >>> output_format_class = "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="sequenceFile") as d:
         ...     path = os.path.join(d, "hadoop_file")
         ...
         ...     # Write a temporary Hadoop file
@@ -1345,7 +1345,7 @@ class SparkContext:
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="newAPIHadoopFile") as d:
         ...     path = os.path.join(d, "new_hadoop_file")
         ...
         ...     # Write a temporary Hadoop file
@@ -1437,7 +1437,7 @@ class SparkContext:
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="newAPIHadoopRDD") as d:
         ...     path = os.path.join(d, "new_hadoop_file")
         ...
         ...     # Create the conf for writing
@@ -1544,7 +1544,7 @@ class SparkContext:
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="hadoopFile") as d:
         ...     path = os.path.join(d, "old_hadoop_file")
         ...
         ...     # Write a temporary Hadoop file
@@ -1634,7 +1634,7 @@ class SparkContext:
         >>> key_class = "org.apache.hadoop.io.IntWritable"
         >>> value_class = "org.apache.hadoop.io.Text"
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="hadoopRDD") as d:
         ...     path = os.path.join(d, "old_hadoop_file")
         ...
         ...     # Create the conf for writing
@@ -1694,7 +1694,7 @@ class SparkContext:
         --------
         >>> import os
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="union") as d:
         ...     # generate a text RDD
         ...     with open(os.path.join(d, "union-text.txt"), "w") as f:
         ...         _ = f.write("Hello")
@@ -1860,7 +1860,7 @@ class SparkContext:
         >>> import tempfile
         >>> from pyspark import SparkFiles
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="addFile") as d:
         ...     path1 = os.path.join(d, "test1.txt")
         ...     with open(path1, "w") as f:
         ...         _ = f.write("100")
@@ -1984,7 +1984,7 @@ class SparkContext:
         >>> import zipfile
         >>> from pyspark import SparkFiles
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="addArchive") as d:
         ...     path = os.path.join(d, "test.txt")
         ...     with open(path, "w") as f:
         ...         _ = f.write("100")

@@ -92,6 +92,7 @@ __all__ = [
     "MapType",
     "StructField",
     "StructType",
+    "VariantType",
 ]
 
 
@@ -244,10 +245,39 @@ class FractionalType(NumericType):
     """Fractional data types."""
 
 
-class StringType(AtomicType, metaclass=DataTypeSingleton):
-    """String data type."""
+class StringType(AtomicType):
+    """String data type.
 
-    pass
+    Parameters
+    ----------
+    collationId : int
+        the collation id number.
+    """
+
+    collationNames = ["UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI"]
+
+    def __init__(self, collationId: int = 0):
+        self.collationId = collationId
+
+    def collationIdToName(self) -> str:
+        return (
+            " COLLATE '%s'" % StringType.collationNames[self.collationId]
+            if self.collationId != 0
+            else ""
+        )
+
+    @classmethod
+    def collationNameToId(cls, collationName: str) -> int:
+        return StringType.collationNames.index(collationName)
+
+    def simpleString(self) -> str:
+        return "string" + self.collationIdToName()
+
+    def jsonValue(self) -> str:
+        return "string" + self.collationIdToName()
+
+    def __repr__(self) -> str:
+        return "StringType(%d)" % (self.collationId) if self.collationId != 0 else "StringType()"
 
 
 class CharType(AtomicType):
@@ -1299,6 +1329,16 @@ class StructType(DataType):
         return _create_row(self.names, values)
 
 
+class VariantType(AtomicType):
+    """
+    Variant data type, representing semi-structured values.
+
+    .. versionadded:: 4.0.0
+    """
+
+    pass
+
+
 class UserDefinedType(DataType):
     """User-defined type (UDT).
 
@@ -1437,6 +1477,7 @@ _atomic_types: List[Type[DataType]] = [
     TimestampType,
     TimestampNTZType,
     NullType,
+    VariantType,
 ]
 _all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
 
@@ -1445,6 +1486,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
+_COLLATED_STRING = re.compile(r"string\s+COLLATE\s+'([\w_]+)'")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
@@ -1610,6 +1652,9 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return YearMonthIntervalType(first_field, second_field)
         elif json_value == "interval":
             return CalendarIntervalType()
+        elif _COLLATED_STRING.match(json_value):
+            m = _COLLATED_STRING.match(json_value)
+            return StringType(StringType.collationNameToId(m.group(1)))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -2110,6 +2155,22 @@ _acceptable_types = {
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),
+    VariantType: (
+        bool,
+        int,
+        float,
+        decimal.Decimal,
+        str,
+        bytearray,
+        bytes,
+        datetime.date,
+        datetime.datetime,
+        datetime.timedelta,
+        tuple,
+        list,
+        dict,
+        array,
+    ),
 }
 
 
@@ -2434,6 +2495,14 @@ def _make_type_verifier(
                 )
 
         verify_value = verify_struct
+
+    elif isinstance(dataType, VariantType):
+
+        def verify_variant(obj: Any) -> None:
+            # The variant data type can take in any type.
+            pass
+
+        verify_value = verify_variant
 
     else:
 
