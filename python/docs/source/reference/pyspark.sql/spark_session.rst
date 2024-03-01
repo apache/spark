@@ -86,3 +86,12 @@ Spark Connect Only
     SparkSession.removeTag
     SparkSession.getTags
     SparkSession.clearTags
+
+Runtime Profiling
+-----------------
+
+.. autosummary::
+    :toctree: api/
+
+    SparkSession.profile.show
+    SparkSession.profile.dump
