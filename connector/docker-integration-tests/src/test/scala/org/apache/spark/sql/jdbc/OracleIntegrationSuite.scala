@@ -145,6 +145,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
         |(4, {d '2018-07-12'}, {ts '2018-07-12 09:51:15'})
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
+
+    conn.prepareStatement("CREATE TABLE test_ltz(t TIMESTAMP WITH LOCAL TIME ZONE)")
+      .executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO test_ltz (t) VALUES (TIMESTAMP '2018-11-17 13:33:33')")
+      .executeUpdate()
+    conn.commit()
   }
 
   test("SPARK-16625 : Importing Oracle numeric types") {
@@ -523,5 +530,25 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .collect()
     assert(rows(0).getString(0).nonEmpty)
     assert(rows(1).getString(0) == null)
+  }
+
+  test("SPARK-42627: Support ORACLE TIMESTAMP WITH LOCAL TIME ZONE") {
+    val reader = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "test_ltz")
+    val df = reader.load()
+    val row1 = df.collect().head.getTimestamp(0)
+    assert(df.count() === 1)
+    assert(row1 === Timestamp.valueOf("2018-11-17 13:33:33"))
+
+    df.write.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "test_ltz")
+      .mode("append")
+      .save()
+
+    val df2 = reader.load()
+    assert(df.count() === 2)
+    assert(df2.collect().forall(_.getTimestamp(0) === row1))
   }
 }

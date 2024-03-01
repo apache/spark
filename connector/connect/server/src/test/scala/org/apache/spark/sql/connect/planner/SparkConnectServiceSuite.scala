@@ -650,7 +650,7 @@ class SparkConnectServiceSuite
       // the SparkConnectService. If we throw an exception inside it, it will be caught by
       // the ErrorUtils.handleError wrapping instance.executePlan and turned into an onError
       // call with StatusRuntimeException, which will be eaten here.
-      var failures: mutable.ArrayBuffer[String] = new mutable.ArrayBuffer[String]()
+      val failures: mutable.ArrayBuffer[String] = new mutable.ArrayBuffer[String]()
       instance.executePlan(
         request,
         new StreamObserver[proto.ExecutePlanResponse] {

@@ -82,7 +82,7 @@ class UDFProfilerTests(unittest.TestCase):
         finally:
             sys.stdout = old_stdout
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udf_profiler") as d:
             self.sc.dump_profiles(d)
 
             for i, udf_name in enumerate(["add1", "add2", "add1", "add2"]):
@@ -185,7 +185,7 @@ class UDFProfiler2TestsMixin:
         with self.trap_stdout() as io_all:
             self.spark.profile.show(type="perf")
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_perf_profiler_udf") as d:
             self.spark.profile.dump(d, type="perf")
 
             for id in self.profile_results:
