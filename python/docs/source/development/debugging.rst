@@ -215,10 +215,10 @@ Python/Pandas UDF
 ~~~~~~~~~~~~~~~~~
 
 PySpark provides remote `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ for
-Python/Pandas UDFs. UDFs with iterators as inputs/outputs are not supported.
+Python/Pandas UDFs. That can be used on editors with line numbers such as Jupyter notebooks. UDFs with iterators as inputs/outputs are not supported.
 
 SparkSession-based memory profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
-``spark.sql.pyspark.udf.profiler`` to ``memory``. That can be used on editors with line numbers such as Jupyter notebooks. An example on a Jupyter notebook is as shown below.
+``spark.sql.pyspark.udf.profiler`` to ``memory``. An example on a Jupyter notebook is as shown below.
 
 .. code-block:: python
 
@@ -256,7 +256,6 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
 
     added.explain()
 
-
 .. code-block:: text
 
     == Physical Plan ==
@@ -269,9 +268,8 @@ This feature is supported on both Spark Connect and non-Spark-Connect, including
 Legacy (for non-Spark-Connect)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-SparkContext-based(legacy) memory profiler can be enabled by setting ``spark.python.profile.memory`` configuration to ``true``.
-That can be used on editors with line numbers such as Jupyter notebooks. An example on a Jupyter notebook is as shown
-below.
+The legacy, SparkContext-based memory profiler can be enabled by setting ``spark.python.profile.memory`` configuration to ``true``.
+The same example as above is as shown below.
 
 .. code-block:: bash
 
@@ -391,8 +389,8 @@ This feature is supported on both Spark Connect and non-Spark-Connect, including
 Legacy (for RDD or non-Spark-Connect)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To use this on executor side, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
-executor side, which can be enabled by setting ``spark.python.profile`` configuration to ``true``. An example for RDD is shown as below.
+The legacy, RDD/SparkContext-based performance profiler can be enabled by setting ``spark.python.profile`` configuration to ``true``.
+An example for RDD is shown as below.
 
 .. code-block:: bash
 
@@ -419,7 +417,7 @@ executor side, which can be enabled by setting ``spark.python.profile`` configur
            12    0.000    0.000    0.001    0.000 context.py:506(f)
     ...
 
-This legacy profiler also supports SparkContext-based performance profiling of Python/Pandas UDF. An example is as shown below.
+This legacy profiler also supports SparkContext-based performance profiling of Python/Pandas UDF. The same example as is as shown below.
 
 .. code-block:: python
 
