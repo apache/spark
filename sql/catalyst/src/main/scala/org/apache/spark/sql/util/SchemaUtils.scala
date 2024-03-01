@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -293,29 +293,4 @@ private[spark] object SchemaUtils {
    * @return The escaped string.
    */
   def escapeMetaCharacters(str: String): String = SparkSchemaUtils.escapeMetaCharacters(str)
-
-  /**
-   * Checks if a given data type has a non-default collation string type.
-   */
-  def hasNonDefaultCollatedString(dt: DataType): Boolean = {
-    typeExistsRecursively(dt) {
-      case st: StringType => !st.isDefaultCollation
-      case _ => false
-    }
-  }
-
-  /**
-   * Recursively checks whether a given predicate holds true for any data type
-   * within the specified data type.
-   */
-  def typeExistsRecursively(dt: DataType)(f: DataType => Boolean): Boolean = dt match {
-      case struct: StructType =>
-        f(struct) || struct.fields.exists(field => typeExistsRecursively(field.dataType)(f))
-      case arr: ArrayType =>
-        typeExistsRecursively(arr.elementType)(f)
-      case map: MapType =>
-        typeExistsRecursively(map.keyType)(f) || typeExistsRecursively(map.valueType)(f)
-      case other =>
-        f(other)
-  }
 }
