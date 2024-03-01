@@ -970,7 +970,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(FloatType))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
       Some(DoubleType))
-    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_TZ, "TIMESTAMP", 0, null) ==
+      Some(TimestampType))
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
   }
 
