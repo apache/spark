@@ -2186,7 +2186,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create a [[Collate]] expression.
    */
   override def visitCollate(ctx: CollateContext): Expression = withOrigin(ctx) {
-    lazy val collationName = visitCollateClause(ctx.collateClause())
+    val collationName = visitCollateClause(ctx.collateClause())
     Collate(expression(ctx.primaryExpression), collationName)
   }
 
