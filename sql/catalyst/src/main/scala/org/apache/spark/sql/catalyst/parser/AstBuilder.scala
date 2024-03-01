@@ -3205,7 +3205,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         commentSpec = Some(spec)
       }
     }
-    
+
     ColumnDefinition(
       name = name,
       dataType = typedVisit[DataType](ctx.dataType),
