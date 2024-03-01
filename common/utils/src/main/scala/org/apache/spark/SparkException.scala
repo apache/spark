@@ -262,7 +262,8 @@ private[spark] object SparkUnsupportedOperationException {
     } else {
       Map("className" -> "?", "methodName" -> "?")
     }
-    new SparkUnsupportedOperationException("UNSUPPORTED_CALL", messageParameters)
+    new SparkUnsupportedOperationException(
+      "UNSUPPORTED_CALL.WITHOUT_SUGGESTION", messageParameters)
   }
 }
 
