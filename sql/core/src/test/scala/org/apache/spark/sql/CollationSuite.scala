@@ -183,144 +183,6 @@ class CollationSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("create table with collation") {
-    val tableName = "parquet_dummy_tbl"
-    val collationName = "UCS_BASIC_LCASE"
-    val collationId = CollationFactory.collationNameToId(collationName)
-
-    withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TABLE $tableName (c1 STRING COLLATE '$collationName')
-           |USING PARQUET
-           |""".stripMargin)
-
-      sql(s"INSERT INTO $tableName VALUES ('aaa')")
-      sql(s"INSERT INTO $tableName VALUES ('AAA')")
-
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
-      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
-    }
-  }
-
-  test("create table with collations inside a struct") {
-    val tableName = "struct_collation_tbl"
-    val collationName = "UCS_BASIC_LCASE"
-    val collationId = CollationFactory.collationNameToId(collationName)
-
-    withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TABLE $tableName
-           |(c1 STRUCT<name: STRING COLLATE '$collationName', age: INT>)
-           |USING PARQUET
-           |""".stripMargin)
-
-      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'aaa', 'id', 1))")
-      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'AAA', 'id', 2))")
-
-      checkAnswer(sql(s"SELECT DISTINCT collation(c1.name) FROM $tableName"),
-        Seq(Row(collationName)))
-      assert(sql(s"SELECT c1.name FROM $tableName").schema.head.dataType == StringType(collationId))
-    }
-  }
-
-  test("add collated column with alter table") {
-    val tableName = "alter_column_tbl"
-    val defaultCollation = "UCS_BASIC"
-    val collationName = "UCS_BASIC_LCASE"
-    val collationId = CollationFactory.collationNameToId(collationName)
-
-    withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TABLE $tableName (c1 STRING)
-           |USING PARQUET
-           |""".stripMargin)
-
-      sql(s"INSERT INTO $tableName VALUES ('aaa')")
-      sql(s"INSERT INTO $tableName VALUES ('AAA')")
-
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
-          Seq(Row(defaultCollation)))
-
-      sql(
-      s"""
-         |ALTER TABLE $tableName
-         |ADD COLUMN c2 STRING COLLATE '$collationName'
-         |""".stripMargin)
-
-      sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
-      sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
-
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName"),
-        Seq(Row(collationName)))
-      assert(sql(s"select c2 FROM $tableName").schema.head.dataType == StringType(collationId))
-    }
-  }
-
-  test("create v2 table with collation column") {
-    val tableName = "testcat.table_name"
-    val collationName = "UCS_BASIC_LCASE"
-    val collationId = CollationFactory.collationNameToId(collationName)
-
-    withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TABLE $tableName (c1 string COLLATE '$collationName')
-           |USING $v2Source
-           |""".stripMargin)
-
-      val testCatalog = catalog("testcat").asTableCatalog
-      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
-
-      assert(table.name == tableName)
-      assert(table.partitioning.isEmpty)
-      assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
-      assert(table.columns().head.dataType() == StringType(collationId))
-
-      val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
-
-      sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
-
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
-        Seq(Row(collationName)))
-      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
-    }
-  }
-
-  test("disable partition on collated string column") {
-    def createTable(partitionColumns: String*): Unit = {
-      val tableName = "test_partition_tbl"
-      withTable(tableName) {
-        sql(
-          s"""
-             |CREATE TABLE $tableName
-             |(id INT, c1 STRING COLLATE 'UNICODE', c2 string)
-             |USING parquet
-             |PARTITIONED BY (${partitionColumns.mkString(",")})
-             |""".stripMargin)
-      }
-    }
-
-    // should work fine on non collated columns
-    createTable("id")
-    createTable("c2")
-    createTable("id", "c2")
-
-    Seq(Seq("c1"), Seq("c1", "id"), Seq("c1", "c2")).foreach { partitionColumns =>
-      checkError(
-        exception = intercept[AnalysisException] {
-          createTable(partitionColumns: _*)
-        },
-        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"STRING COLLATE 'UNICODE'\"")
-      );
-
-    }
-  }
-
   test("checkCollation throws exception for incompatible collationIds") {
     val left: String = "abc" // collate with 'UNICODE_CI'
     val leftCollationName: String = "UNICODE_CI";
@@ -578,6 +440,143 @@ class CollationSuite extends DatasourceV2SQLBase {
       // UNICODE_CI
       checkAnswer(sql("SELECT endswith(collate('" + left + "', 'UNICODE_CI'), collate('" +
         right + "', 'UNICODE_CI'))"), Row(expectedAnswer))
+    }
+  }
+
+  test("create table with collation") {
+    val tableName = "parquet_dummy_tbl"
+    val collationName = "UCS_BASIC_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 STRING COLLATE '$collationName')
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
+      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+    }
+  }
+
+  test("create table with collations inside a struct") {
+    val tableName = "struct_collation_tbl"
+    val collationName = "UCS_BASIC_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |(c1 STRUCT<name: STRING COLLATE '$collationName', age: INT>)
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'aaa', 'id', 1))")
+      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'AAA', 'id', 2))")
+
+      checkAnswer(sql(s"SELECT DISTINCT collation(c1.name) FROM $tableName"),
+        Seq(Row(collationName)))
+      assert(sql(s"SELECT c1.name FROM $tableName").schema.head.dataType == StringType(collationId))
+    }
+  }
+
+  test("add collated column with alter table") {
+    val tableName = "alter_column_tbl"
+    val defaultCollation = "UCS_BASIC"
+    val collationName = "UCS_BASIC_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 STRING)
+           |USING PARQUET
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
+        Seq(Row(defaultCollation)))
+
+      sql(
+        s"""
+           |ALTER TABLE $tableName
+           |ADD COLUMN c2 STRING COLLATE '$collationName'
+           |""".stripMargin)
+
+      sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
+
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c2) FROM $tableName"),
+        Seq(Row(collationName)))
+      assert(sql(s"select c2 FROM $tableName").schema.head.dataType == StringType(collationId))
+    }
+  }
+
+  test("create v2 table with collation column") {
+    val tableName = "testcat.table_name"
+    val collationName = "UCS_BASIC_LCASE"
+    val collationId = CollationFactory.collationNameToId(collationName)
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (c1 string COLLATE '$collationName')
+           |USING $v2Source
+           |""".stripMargin)
+
+      val testCatalog = catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+
+      assert(table.name == tableName)
+      assert(table.partitioning.isEmpty)
+      assert(table.properties == withDefaultOwnership(Map("provider" -> v2Source)).asJava)
+      assert(table.columns().head.dataType() == StringType(collationId))
+
+      val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+
+      sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
+
+      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
+        Seq(Row(collationName)))
+      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+    }
+  }
+
+  test("disable partition on collated string column") {
+    def createTable(partitionColumns: String*): Unit = {
+      val tableName = "test_partition_tbl"
+      withTable(tableName) {
+        sql(
+          s"""
+             |CREATE TABLE $tableName
+             |(id INT, c1 STRING COLLATE 'UNICODE', c2 string)
+             |USING parquet
+             |PARTITIONED BY (${partitionColumns.mkString(",")})
+             |""".stripMargin)
+      }
+    }
+
+    // should work fine on non collated columns
+    createTable("id")
+    createTable("c2")
+    createTable("id", "c2")
+
+    Seq(Seq("c1"), Seq("c1", "id"), Seq("c1", "c2")).foreach { partitionColumns =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          createTable(partitionColumns: _*)
+        },
+        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"STRING COLLATE 'UNICODE'\"")
+      );
     }
   }
 }
