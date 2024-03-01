@@ -416,9 +416,8 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
 
   test("SPARK-47249: non-abandoned executions are not added to tombstone cache upon close") {
     val dummyOpId = UUID.randomUUID().toString
-    val dummyRequest = buildExecutePlanRequest(
-      buildPlan("select * from range(1)"),
-      operationId = dummyOpId)
+    val dummyRequest =
+      buildExecutePlanRequest(buildPlan("select * from range(1)"), operationId = dummyOpId)
     val manager = SparkConnectService.executionManager
     val holder = manager.createExecuteHolder(dummyRequest)
     holder.eventsManager.postStarted()
