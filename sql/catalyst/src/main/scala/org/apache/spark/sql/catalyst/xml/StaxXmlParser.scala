@@ -624,6 +624,8 @@ class XmlTokenizer(
   private var buffer = new StringBuilder()
   private val startTag = s"<${options.rowTag}>"
   private val endTag = s"</${options.rowTag}>"
+  private val commentStart = s"<!--"
+  private val commentEnd = s"-->"
 
     /**
    * Finds the start of the next record.
@@ -671,9 +673,35 @@ class XmlTokenizer(
       nextString
     }
 
+  private def readUntilCommentClose(): Boolean = {
+    var i = 0
+    while (true) {
+      val cOrEOF = reader.read()
+      if (cOrEOF == -1) {
+        // End of file.
+        return false
+      }
+      val c = cOrEOF.toChar
+      if (c == commentEnd(i)) {
+        if (i >= commentEnd.length - 1) {
+          // Found comment close.
+          return true
+        }
+        i += 1
+      } else {
+        i = 0
+      }
+    }
+
+    // Unreachable (a comment tag must close)
+    false
+  }
+
   private def readUntilStartElement(): Boolean = {
     currentStartTag = startTag
     var i = 0
+    var commentIdx = 0
+
     while (true) {
       val cOrEOF = reader.read()
       if (cOrEOF == -1) { // || (i == 0 && getFilePosition() > end)) {
@@ -681,6 +709,19 @@ class XmlTokenizer(
         return false
       }
       val c = cOrEOF.toChar
+
+      if (c == commentStart(commentIdx)) {
+        if (commentIdx >= commentStart.length - 1) {
+          //  If a comment beigns we must ignore all character until its end
+          commentIdx = 0
+          readUntilCommentClose()
+        } else {
+          commentIdx += 1
+        }
+      } else {
+        commentIdx = 0
+      }
+
       if (c == startTag(i)) {
         if (i >= startTag.length - 1) {
           // Found start tag.
@@ -708,6 +749,8 @@ class XmlTokenizer(
     // Index into the start or end tag that has matched so far
     var si = 0
     var ei = 0
+    // Index into the start of a comment tag that matched so far
+    var commentIdx = 0
     // How many other start tags enclose the one that's started already?
     var depth = 0
     // Previously read character
@@ -729,6 +772,19 @@ class XmlTokenizer(
 
       val c = cOrEOF.toChar
       buffer.append(c)
+
+      if (c == commentStart(commentIdx)) {
+        if (commentIdx >= commentStart.length - 1) {
+          //  If a comment beigns we must ignore everything until its end
+          buffer.setLength(buffer.length - commentStart.length)
+          commentIdx = 0
+          readUntilCommentClose()
+        } else {
+          commentIdx += 1
+        }
+      } else {
+        commentIdx = 0
+      }
 
       if (c == '>' && prevC != '/') {
         canSelfClose = false
