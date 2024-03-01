@@ -215,19 +215,10 @@ Python/Pandas UDF
 ~~~~~~~~~~~~~~~~~
 
 PySpark provides remote `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ for
-Python/Pandas UDFs.
+Python/Pandas UDFs. UDFs with iterators as inputs/outputs are not supported.
 
-SparkContext-based
-^^^^^^^^^^^^^^^^^^
-
-SparkContext-based memory profiler can be enabled by setting ``spark.python.profile.memory`` configuration to ``true``.
-That can be used on editors with line numbers such as Jupyter notebooks. An example on a Jupyter notebook is as shown
-below.
-
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile.memory=true
-
+SparkSession-based memory profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
+``spark.sql.pyspark.udf.profiler`` to ``memory``. That can be used on editors with line numbers such as Jupyter notebooks. An example on a Jupyter notebook is as shown below.
 
 .. code-block:: python
 
@@ -238,10 +229,11 @@ below.
     def add1(x):
       return x + 1
 
+    spark.conf.set("spark.sql.pyspark.udf.profiler", "memory")
+
     added = df.select(add1("id"))
     added.show()
-    sc.show_profiles()
-
+    spark.profile.show(type="memory")
 
 The result profile is as shown below.
 
@@ -272,14 +264,18 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
 
-This feature is not supported with registered UDFs or UDFs with iterators as inputs/outputs.
+This feature is supported on both Spark Connect and non-Spark-Connect, including registered UDFs.
 
-SparkSession-based
-^^^^^^^^^^^^^^^^^^
+Legacy (for non-Spark-Connect)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-SparkSession-based memory profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
-``spark.sql.pyspark.udf.profiler`` to ``memory``. That can be used on editors with line numbers such as Jupyter notebooks.
-The above example is modified to use the SparkSession-based memory profiler as shown below.
+SparkContext-based(legacy) memory profiler can be enabled by setting ``spark.python.profile.memory`` configuration to ``true``.
+That can be used on editors with line numbers such as Jupyter notebooks. An example on a Jupyter notebook is as shown
+below.
+
+.. code-block:: bash
+
+    pyspark --conf spark.python.profile.memory=true
 
 .. code-block:: python
 
@@ -290,15 +286,13 @@ The above example is modified to use the SparkSession-based memory profiler as s
     def add1(x):
       return x + 1
 
-    spark.conf.set("spark.sql.pyspark.udf.profiler", "memory")
-
     added = df.select(add1("id"))
     added.show()
-    spark.profile.show(type="memory")
+    sc.show_profiles()
 
-The result profile is the same as that profiled by the SparkContext-based memory profiler. The UDF IDs can also be seen in the query plan.
+The result profile is the same as that profiled by the above SparkSession-based memory profiler. The UDF IDs can also be seen in the query plan.
 
-This feature is supported on both Spark Connect and non-Spark-Connect, including registered UDFs.
+This legacy feature is not supported with registered UDFs or Spark Connect.
 
 Identifying Hot Loops (Python Profilers)
 ----------------------------------------
@@ -340,8 +334,65 @@ regular Python process unless you are running your driver program in another mac
 Executor Side
 ~~~~~~~~~~~~~
 
+Python/Pandas UDF
+^^^^^^^^^^^^^^^^^
+
+To use this on Python/Pandas UDFs, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
+Python/Pandas UDFs. UDFs with iterators as inputs/outputs are not supported.
+
+SparkSession-based performance profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
+``spark.sql.pyspark.udf.profiler`` to ``perf``. An example is as shown below.
+
+.. code-block:: python
+
+    >>> from pyspark.sql.functions import pandas_udf
+    >>> df = spark.range(10)
+    >>> @pandas_udf("long")
+    ... def add1(x):
+    ...     return x + 1
+    ...
+    >>> added = df.select(add1("id"))
+
+    >>> spark.conf.set("spark.sql.pyspark.udf.profiler", "perf")
+    >>> added.show()
+    +--------+
+    |add1(id)|
+    +--------+
+    ...
+    +--------+
+
+    >>> spark.profile.show(type="perf")
+    ============================================================
+    Profile of UDF<id=2>
+    ============================================================
+             2300 function calls (2270 primitive calls) in 0.006 seconds
+
+       Ordered by: internal time, cumulative time
+
+       ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+           10    0.001    0.000    0.005    0.001 series.py:5515(_arith_method)
+           10    0.001    0.000    0.001    0.000 _ufunc_config.py:425(__init__)
+           10    0.000    0.000    0.000    0.000 {built-in method _operator.add}
+           10    0.000    0.000    0.002    0.000 series.py:315(__init__)
+    ...
+
+The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``ArrowEvalPython`` below.
+
+.. code-block:: python
+
+    >>> added.explain()
+    == Physical Plan ==
+    *(2) Project [pythonUDF0#11L AS add1(id)#3L]
+    +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
+       +- *(1) Range (0, 10, step=1, splits=16)
+
+This feature is supported on both Spark Connect and non-Spark-Connect, including registered UDFs.
+
+Legacy (for RDD or non-Spark-Connect)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 To use this on executor side, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
-executor side, which can be enabled by setting ``spark.python.profile`` configuration to ``true``.
+executor side, which can be enabled by setting ``spark.python.profile`` configuration to ``true``. An example for RDD is shown as below.
 
 .. code-block:: bash
 
@@ -368,21 +419,7 @@ executor side, which can be enabled by setting ``spark.python.profile`` configur
            12    0.000    0.000    0.001    0.000 context.py:506(f)
     ...
 
-Python/Pandas UDF
-~~~~~~~~~~~~~~~~~
-
-To use this on Python/Pandas UDFs, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
-Python/Pandas UDFs.
-
-SparkContext-based
-^^^^^^^^^^^^^^^^^^
-
-SparkContext-based performance profiler can be enabled by setting ``spark.python.profile`` configuration to ``true``.
-
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile=true
-
+This legacy profiler also supports SparkContext-based performance profiling of Python/Pandas UDF. An example is as shown below.
 
 .. code-block:: python
 
@@ -402,63 +439,11 @@ SparkContext-based performance profiler can be enabled by setting ``spark.python
     +--------+
 
     >>> sc.show_profiles()
-    ============================================================
-    Profile of UDF<id=2>
-    ============================================================
-             2300 function calls (2270 primitive calls) in 0.006 seconds
-
-       Ordered by: internal time, cumulative time
-
-       ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-           10    0.001    0.000    0.005    0.001 series.py:5515(_arith_method)
-           10    0.001    0.000    0.001    0.000 _ufunc_config.py:425(__init__)
-           10    0.000    0.000    0.000    0.000 {built-in method _operator.add}
-           10    0.000    0.000    0.002    0.000 series.py:315(__init__)
     ...
 
-The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``ArrowEvalPython`` below.
+The result profile is the same as that profiled by the SparkSession-based performance profiler. The UDF IDs can also be seen in the query plan.
 
-.. code-block:: python
-
-    >>> added.explain()
-    == Physical Plan ==
-    *(2) Project [pythonUDF0#11L AS add1(id)#3L]
-    +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
-       +- *(1) Range (0, 10, step=1, splits=16)
-
-
-This feature is not supported with registered UDFs.
-
-SparkSession-based
-^^^^^^^^^^^^^^^^^^
-
-SparkSession-based performance profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
-``spark.sql.pyspark.udf.profiler`` to ``perf``. The above example is modified to use the SparkSession-based performance profiler as shown below.
-
-.. code-block:: python
-
-    >>> from pyspark.sql.functions import pandas_udf
-    >>> df = spark.range(10)
-    >>> @pandas_udf("long")
-    ... def add1(x):
-    ...     return x + 1
-    ...
-    >>> added = df.select(add1("id"))
-
-    >>> spark.conf.set("spark.sql.pyspark.udf.profiler", "perf")
-    >>> added.show()
-    +--------+
-    |add1(id)|
-    +--------+
-    ...
-    +--------+
-
-    >>> spark.profile.show(type="perf")
-    ...
-
-The result profile is the same as that profiled by the SparkContext-based memory profiler. The UDF IDs can also be seen in the query plan.
-
-This feature is supported on both Spark Connect and non-Spark-Connect, including registered UDFs.
+This legacy feature is not supported with registered UDFs or Spark Connect.
 
 Common Exceptions / Errors
 --------------------------
