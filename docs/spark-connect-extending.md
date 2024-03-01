@@ -95,9 +95,13 @@ message Plan {
 - on the server, the request is parsed and handed over to the `SparkConnectPlanner`
 - the role of the planner is to transform the input request into a Spark `LogicalPlan`
   that will be executed
+    - The planner recursively walks the plan to translate all protobuf types
+      into the corresponding Spark types.
 
-To be able to deal with extensions, every `Relation` and `Command` message carries a
-special field that captures the intent for extensions.
+To be able to deal with extensions, every `Relation` and `Command` message
+carries a special field that captures the intent for extensions. Similarily, the
+`Expression` message contains such an extension point.
+
 
 ```protobuf
 message Relation {
@@ -129,6 +133,112 @@ message specification.
 
 ### Relation Plugin
 
+To implement a plugin for the `Relation` message, a developer has to follow the following steps:
+
+  1. Defining the Protobuf message
+  1. Implementing the `RelationPlugin` interface
+  2. Registering the class in the registry
+  3. Embedding the new message type in messages from the client.
+
+#### Defining the Protobuf Message
+
+```protobuf
+message ExampleRelation {
+  string name = 1;
+}
+```
+
+#### Implementing the interface
+
+The interface defines a single method that needs to be implemented by the plugin:
+
+```
+Optional<LogicalPlan> transform(byte[] relation, SparkConnectPlanner planner);
+```
+
+Every plugin is responsible for checking if the serialized message is of the
+expected type. This indirection is necessary to allow every plugin to define
+their own types without having to make Spark aware of this specific type. To
+signal the planning process that this plugin is properly handling this message
+type it needs to return a non empty `Optional<LogicalPlan>` instance.
+
+```scala
+class ExampleRelationPlugin extends RelationPlugin {
+  override def transform(
+      relation: Array[Byte],
+      planner: SparkConnectPlanner): Optional[LogicalPlan] = {
+    // Parse the protobuf Any type from the bytes.
+    val rel = protobuf.Any.parseFrom(relation)
+    // Check if the serialized message is of the type supported of this plugin.
+    if (rel.is(classOf[proto.ExamplePluginRelation])) {
+      val plugin = rel.unpack(classOf[proto.ExamplePluginRelation])
+      // The root of any transformation starts in SparkConnectPlanner::transformRelation.
+      // Create a range plan and give it the alias based on the name parameter.
+      val range = logical.Range(1, 100, 1, 2)
+      val alias = logical.SubqueryAlias(AliasIdentifier(plugin.getName()), range)
+      Optional.of(alias)
+    } else {
+      Optional.empty()
+    }
+  }
+}
+```
+
+#### Registering the Class
+
+To register a class with the Spark Connect planner, you have to specify the
+fully qualified class name in the following Spark config:
+
+```
+spark.connect.extensions.relation.classes
+```
+
+This Spark config takes a comma-separated list of class names and makes them
+available in the plugin registry so that the plugins can be reused everywhere.
+
+
+#### Calling the plugin from the client
+
+From a high-level, to invoke the new transformation the client simply needs to
+inject the plugin at the right level.
+
+For example, in the Python client, all instances of `DataFrame` have a member
+`_plan` that is of the type `connect.LogicalPlan`. This superclass provides the
+interface that is called, again recursively, to serialize the plan object before
+the request is send to the server.
+
+First, implement the python class for the Spark Connect logical plan on the client:
+
+```python
+from pyspark.sql.connect.plan import LogicalPlan
+import pyspark.sql.connect.proto as proto
+from google.protobuf import any_pb2
+
+from extension import ExampleRelation
+
+class ExampleRelationPlugin(LogicalPlan):
+  def plan(self): proto.Relation
+    plan = self._create_proto_relation()
+    # Fill the message.
+    ext = ExampleRelation()
+    ext.name = "Test"
+    # Pack the message into the Any type
+    plan.extension.Pack(ext)
+    return plan
+```
+
+Now, this code can be seamlessly integrated into Spark.
+
+```python
+from pyspark.sql.connect.session import SparkSession
+from pyspark.sql.connect.data_frame import DataFrame
+SparkSession.example = lambda self, name: DataFrame(ExampleRelationPlugin(), self)
+
+
+spark = SparkSession.builder.remote("...").getOrCreate()
+spark.example().collect()
+
+```
 
 ### Expression Plugin
 
