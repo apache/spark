@@ -261,8 +261,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // If we have introduced new `exists`-attributes that:
           // 1) are referenced by aggregateExpressions within a non-aggregateFunction expression
           // 2) are not referenced by groupingExpressions
-          // we wrap them in Max() aggregate function.
-          // Ideally we want to use any_value(), but Spark doesn't fully support any_value().
+          // we wrap them in Max() aggregate function. Ideally we want to use any_value(), but
+          // Spark doesn't fully support any_value().
+          // We do this to keep the aggregation valid, i.e avoid references outside of aggregate
+          // functions that are not in grouping expressions.
+          // Here, the value of `exists` is functionally determined by grouping expressions, so
+          // applying any aggregate function is semantically safe.
           val aggFunctionReferences = a.aggregateExpressions.
             flatMap(extractAggregateExpressions).
             flatMap(_.references).toSet
