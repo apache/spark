@@ -207,11 +207,9 @@ object UnsafeRowUtils {
   def isBinaryStable(dataType: DataType): Boolean = dataType match {
     case st: StringType => CollationFactory.fetchCollation(st.collationId).isBinaryCollation
     case _: AtomicType => true
-    case _: ArrayType => isBinaryStable(dataType.asInstanceOf[ArrayType].elementType)
-    case _: MapType => isBinaryStable(dataType.asInstanceOf[MapType].keyType) &&
-      isBinaryStable(dataType.asInstanceOf[MapType].valueType)
-    case _: StructType =>
-      dataType.asInstanceOf[StructType].fields.forall(f => isBinaryStable(f.dataType))
+    case ArrayType(et, _) => isBinaryStable(et)
+    case MapType(k, v, _) => isBinaryStable(k) && isBinaryStable(v)
+    case StructType(fields) => fields.forall(f => isBinaryStable(f.dataType))
     case _ => false
   }
 }

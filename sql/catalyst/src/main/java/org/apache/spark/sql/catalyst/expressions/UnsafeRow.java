@@ -30,7 +30,6 @@ import com.esotericsoftware.kryo.io.Output;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.types.*;
-import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
