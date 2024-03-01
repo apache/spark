@@ -604,7 +604,17 @@ object CollationCheck extends (LogicalPlan => Unit) {
               throw QueryCompilationErrors.collationNotEnabledError()
             }
             e
+          case other =>
+            if (other.children.exists(hasCollationExpression)) {
+              if (!SQLConf.get.collationEnabled) {
+                throw QueryCompilationErrors.collationNotEnabledError()
+              }
+            }
+            other
         }
     }
   }
+
+  private def hasCollationExpression(expression: Expression): Boolean =
+    expression.isInstanceOf[Collation] || expression.isInstanceOf[Collate]
 }
