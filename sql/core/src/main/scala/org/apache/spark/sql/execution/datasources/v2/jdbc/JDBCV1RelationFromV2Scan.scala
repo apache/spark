@@ -16,54 +16,42 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ArrayImplicits._
 
-case class JDBCScan(
-    relation: JDBCRelation,
+/**
+ * Relation that is compatible with V1 TableScan,
+ * but it uses JDBCRelation's buildScan which accepts all v2 pushdowns
+ */
+case class JDBCV1RelationFromV2Scan(
+    context: SQLContext,
     prunedSchema: StructType,
+    relation: JDBCRelation,
     pushedPredicates: Array[Predicate],
     pushedAggregateColumn: Array[String] = Array(),
     groupByColumns: Option[Array[String]],
     tableSample: Option[TableSampleInfo],
     pushedLimit: Int,
     sortOrders: Array[String],
-    pushedOffset: Int) extends V1Scan {
-
-  override def readSchema(): StructType = prunedSchema
-
-  override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
-    JDBCV1RelationFromV2Scan(
-      context,
-      prunedSchema,
-      relation,
-      pushedPredicates,
-      pushedAggregateColumn,
-      groupByColumns,
-      tableSample,
-      pushedLimit,
-      sortOrders,
-      pushedOffset).asInstanceOf[T]
-  }
-
-  override def description(): String = {
-    val (aggString, groupByString) = if (groupByColumns.nonEmpty) {
-      val groupByColumnsLength = groupByColumns.get.length
-      (seqToString(pushedAggregateColumn.drop(groupByColumnsLength).toImmutableArraySeq),
-        seqToString(pushedAggregateColumn.take(groupByColumnsLength).toImmutableArraySeq))
+    pushedOffset: Int) extends BaseRelation with TableScan {
+  override def sqlContext: SQLContext = context
+  override def schema: StructType = prunedSchema
+  override def needConversion: Boolean = relation.needConversion
+  override def buildScan(): RDD[Row] = {
+    val columnList = if (groupByColumns.isEmpty) {
+      prunedSchema.map(_.name).toArray
     } else {
-      ("[]", "[]")
+      pushedAggregateColumn
     }
-    super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
-      ", PushedPredicates: " + seqToString(pushedPredicates.toImmutableArraySeq) +
-      ", PushedAggregates: " + aggString + ", PushedGroupBy: " + groupByString
+
+    relation.buildScan(columnList, prunedSchema, pushedPredicates, groupByColumns, tableSample,
+      pushedLimit, sortOrders, pushedOffset)
   }
 
-  private def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+  override def toString: String = "JDBC v1 Relation from v2 scan"
 }
