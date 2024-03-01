@@ -1797,7 +1797,7 @@ object SQLConf {
       .internal()
       .doc("A threshold (in string length) to determine if we should make the generated code a" +
         "broadcast variable in whole stage codegen. To disable this, set the threshold to < 0; " +
-        "otherwise if the size if above the threshold, it'll use broadcast variable. Note that " +
+        "otherwise if the size is above the threshold, it'll use broadcast variable. Note that " +
         "maximum string length allowed in Java is Integer.MAX_VALUE, so anything above it would " +
         "be meaningless. The default value is set to -1 (disabled by default).")
       .version("4.0.0")
