@@ -571,10 +571,10 @@ public class JavaDataFrameSuite {
 
     //Create table 3 DataFrame
     List<Row> table3Data = Arrays.asList(RowFactory.create(1, 2, 3), RowFactory.create(1, 2, 3));
-    StructType table3Schema = new StructType().
-      add("col31", DataTypes.IntegerType).
-      add("col32", DataTypes.IntegerType).
-      add("col33", DataTypes.IntegerType);
+    StructType table3Schema = new StructType()
+      .add("col31", DataTypes.IntegerType)
+      .add("col32", DataTypes.IntegerType)
+      .add("col33", DataTypes.IntegerType);
 
     Dataset<Row> table3 = spark.createDataFrame(table3Data, table3Schema);
 
@@ -591,16 +591,15 @@ public class JavaDataFrameSuite {
     //Perform leftouter join for exchange table2(firstjoin)
     srcDf = srcDf.join(
             broadcast(table3),
-            srcDf.col("col12").equalTo(
-                table3.col("col32")), "left_outer").
-        select(srcDf.col("col11"), srcDf.col("col12"),
+            srcDf.col("col12").equalTo(table3.col("col32")),
+            "left_outer").select(srcDf.col("col11"),
+            srcDf.col("col12"),
             srcDf.col("col13"),
             table3.col("col33").as("col33_1"));
 
     //Perform left outer joinfor exchangeRateTable1 again(secondjoin)
     Dataset<Row> temp = srcDf.join(broadcast(table3),
-        srcDf.col("col11").equalTo(
-            table3.col("col31")), "left_outer");
+        srcDf.col("col11").equalTo(table3.col("col31")), "left_outer");
 
     srcDf = temp.select(srcDf.col("col11"), srcDf.col("col12"),
         srcDf.col("col13"), srcDf.col("col33_1"),
