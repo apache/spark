@@ -1763,6 +1763,12 @@ Row ID attributes cannot be nullable: `<nullableRowIdAttrs>`.
 
 Cannot use null as map key.
 
+### NULL_ROW_VALUE
+
+[SQLSTATE: 2200E](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Row value at the position `<index>` is NULL.
+
 ### NUMERIC_OUT_OF_SUPPORTED_RANGE
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)

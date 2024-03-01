@@ -3004,6 +3004,12 @@
     ],
     "sqlState" : "2200E"
   },
+  "NULL_ROW_VALUE" : {
+    "message" : [
+      "Row value at the position <index> is NULL."
+    ],
+    "sqlState" : "2200E"
+  },
   "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
     "message" : [
       "The value <value> cannot be interpreted as a numeric since it has more than 38 digits."
@@ -6520,11 +6526,6 @@
   "_LEGACY_ERROR_TEMP_2231" : {
     "message" : [
       "fieldIndex on a Row without schema is undefined."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2232" : {
-    "message" : [
-      "Value at index <index> is null."
     ]
   },
   "_LEGACY_ERROR_TEMP_2233" : {
