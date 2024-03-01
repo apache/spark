@@ -62,7 +62,7 @@ struct<count(1):bigint>
 -- !query
 select * from t1 where ucs_basic = 'aaa'
 -- !query schema
-struct<ucs_basic:string,ucs_basic_lcase:string COLLATE UCS_BASIC_LCASE>
+struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
 -- !query output
 aaa	aaa
 
@@ -70,7 +70,7 @@ aaa	aaa
 -- !query
 select * from t1 where ucs_basic_lcase = 'aaa' collate 'ucs_basic_lcase'
 -- !query schema
-struct<ucs_basic:string,ucs_basic_lcase:string COLLATE UCS_BASIC_LCASE>
+struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
 -- !query output
 aaa	aaa
 
@@ -78,7 +78,7 @@ aaa	aaa
 -- !query
 select * from t1 where ucs_basic < 'bbb'
 -- !query schema
-struct<ucs_basic:string,ucs_basic_lcase:string COLLATE UCS_BASIC_LCASE>
+struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
 -- !query output
 AAA	AAA
 BBB	BBB
@@ -88,7 +88,7 @@ aaa	aaa
 -- !query
 select * from t1 where ucs_basic_lcase < 'bbb' collate 'ucs_basic_lcase'
 -- !query schema
-struct<ucs_basic:string,ucs_basic_lcase:string COLLATE UCS_BASIC_LCASE>
+struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
 -- !query output
 AAA	AAA
 aaa	aaa
