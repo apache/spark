@@ -134,6 +134,33 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  test("get, put. delete etc operations on non-default col family should fail") {
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
+      minDeltasForSnapshot = 5)) { provider =>
+      val store = provider.getStore(0)
+      val keyRow = dataToKeyRow("a", 0)
+      val valueRow = dataToValueRow(1)
+      val colFamilyName = "test"
+      val ex1 = intercept[Exception] {
+        store.put(keyRow, valueRow, colFamilyName)
+      }
+      assert(ex1.isInstanceOf[UnsupportedOperationException])
+      assert(ex1.getMessage.contains("not supported"))
+
+      val ex2 = intercept[Exception] {
+        store.remove(keyRow, colFamilyName)
+      }
+      assert(ex2.isInstanceOf[UnsupportedOperationException])
+      assert(ex2.getMessage.contains("not supported"))
+
+      val ex3 = intercept[Exception] {
+        store.get(keyRow, colFamilyName)
+      }
+      assert(ex3.isInstanceOf[UnsupportedOperationException])
+      assert(ex3.getMessage.contains("not supported"))
+    }
+  }
+
   test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       numOfVersToRetainInMemory = 1)) { provider =>
