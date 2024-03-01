@@ -5730,11 +5730,6 @@
       "not resolved."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2020" : {
-    "message" : [
-      "Couldn't find a valid constructor on <cls>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2023" : {
     "message" : [
       "Unresolved encoder expected, but <attr> was found."
