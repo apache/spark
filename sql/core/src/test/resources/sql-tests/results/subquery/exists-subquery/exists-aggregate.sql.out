@@ -289,3 +289,16 @@ NULL	0
 30	1
 70	1
 100	0
+
+
+-- !query
+SELECT
+ cast(EXISTS (SELECT id FROM dept where dept.dept_id = emp.dept_id) AS int)
+FROM emp
+GROUP BY
+ cast(EXISTS (SELECT id FROM dept where dept.dept_id = emp.dept_id) AS int)
+-- !query schema
+struct<CAST(exists(id, dept_id) AS INT):int>
+-- !query output
+0
+1

@@ -165,3 +165,10 @@ SELECT
     ELSE 0 END)
 FROM emp
 GROUP BY emp.dept_id ORDER BY emp.dept_id;
+
+---- Grouping expression contains a subquery
+SELECT
+ cast(EXISTS (SELECT id FROM dept where dept.dept_id = emp.dept_id) AS int)
+FROM emp
+GROUP BY
+ cast(EXISTS (SELECT id FROM dept where dept.dept_id = emp.dept_id) AS int)
