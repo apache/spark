@@ -3724,14 +3724,14 @@
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
     ],
     "subClass" : {
-      "WITHOUT_SUGGESTION" : {
-        "message" : [
-          ""
-        ]
-      },
       "FIELD_INDEX" : {
         "message" : [
           "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
         ]
       }
     },
