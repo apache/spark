@@ -19,6 +19,7 @@ import itertools
 import os
 import re
 from collections import namedtuple
+from pyspark.conf import SparkConf
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
@@ -239,7 +240,9 @@ def generate_functions_examples_html(jvm, jspark, html_output_dir):
 
 
 if __name__ == "__main__":
-    jvm = launch_gateway().jvm
+    conf = SparkConf()
+    conf.set("spark.sql.collation.enabled", "true")
+    jvm = launch_gateway(conf = conf).jvm
     jspark = jvm.org.apache.spark.sql.SparkSession.builder().getOrCreate()
     jspark.sparkContext().setLogLevel("ERROR")  # Make it less noisy.
     spark_root_dir = os.path.dirname(os.path.dirname(__file__))
