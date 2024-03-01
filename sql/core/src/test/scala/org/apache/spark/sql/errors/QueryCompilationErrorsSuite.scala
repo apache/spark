@@ -958,7 +958,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[SparkUnsupportedOperationException] {
         new UnsafeRow(1).update(0, 1)
       },
-      errorClass = "UNSUPPORTED_CALL",
+      errorClass = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
       parameters = Map(
         "methodName" -> "update",
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
