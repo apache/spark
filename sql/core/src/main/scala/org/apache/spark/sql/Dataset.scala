@@ -1591,7 +1591,8 @@ class Dataset[T] private[sql](
       case al: Alias if !al.references.subsetOf(inputSet) &&
         al.nonInheritableMetadataKeys.contains(Dataset.DATASET_ID_KEY) =>
         val unresolvedExpr = al.child.transformUp {
-          case attr: AttributeReference if !inputSet.contains(attr) =>
+          case attr: AttributeReference if !inputSet.contains(attr) &&
+            attr.metadata.contains(Dataset.DATASET_ID_KEY) =>
             UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
         }
         val newAl = al.copy(child = unresolvedExpr, name = al.name)(exprId = al.exprId,
