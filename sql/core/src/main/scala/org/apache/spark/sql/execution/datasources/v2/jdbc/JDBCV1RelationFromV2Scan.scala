@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType
  * Relation that is compatible with V1 TableScan,
  * but it uses JDBCRelation's buildScan which accepts all v2 pushdowns
  */
-case class JDBCV1CompatibleRelation(
+case class JDBCV1RelationFromV2Scan(
     context: SQLContext,
     prunedSchema: StructType,
     relation: JDBCRelation,
@@ -53,5 +53,5 @@ case class JDBCV1CompatibleRelation(
       pushedLimit, sortOrders, pushedOffset)
   }
 
-  override def toString: String = "JDBC V1 Compatible Relation"
+  override def toString: String = "JDBC v1 Relation from v2 scan"
 }

@@ -39,7 +39,7 @@ case class JDBCScan(
   override def readSchema(): StructType = prunedSchema
 
   override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T = {
-    JDBCV1CompatibleRelation(
+    JDBCV1RelationFromV2Scan(
       context,
       prunedSchema,
       relation,
