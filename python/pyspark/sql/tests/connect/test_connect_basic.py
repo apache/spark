@@ -1400,6 +1400,18 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df2 = self.spark.sql(sqlText, args=[SF.array(SF.lit(1)), 7])
         self.assert_eq(df.toPandas(), df2.toPandas())
 
+    def test_sql_with_invalid_args(self):
+        sqlText = "SELECT ?, ?, ?"
+        for session in [self.connect, self.spark]:
+            with self.assertRaises(PySparkTypeError) as pe:
+                session.sql(sqlText, args={1, 2, 3})
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="INVALID_TYPE",
+                message_parameters={"arg_name": "args", "arg_type": "<class 'set'>"},
+            )
+
     def test_head(self):
         # SPARK-41002: test `head` API in Python Client
         df = self.connect.read.table(self.tbl_name)
