@@ -85,13 +85,15 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
     }
-    taskContext.addTaskCompletionListener(context -> {
-      try {
-        close();
-      } catch (IOException e) {
-        logger.info("error while closing UnsafeSorterSpillReader", e);
-      }
-    });
+    if (taskContext != null) {
+      taskContext.addTaskCompletionListener(context -> {
+        try {
+          close();
+        } catch (IOException e) {
+          logger.info("error while closing UnsafeSorterSpillReader", e);
+        }
+      });
+    }
   }
 
   @Override
