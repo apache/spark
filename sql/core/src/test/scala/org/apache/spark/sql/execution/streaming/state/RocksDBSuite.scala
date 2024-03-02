@@ -536,6 +536,69 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithColumnFamilies(s"RocksDB: column family creation with invalid names",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      Seq("default", "", " ", "    ", " default", " default ").foreach { colFamilyName =>
+        val ex = intercept[Exception] {
+          db.createColFamilyIfAbsent(colFamilyName)
+        }
+        ex.getCause.isInstanceOf[UnsupportedOperationException]
+      }
+    }
+  }
+
+  private def verifyStoreOperationUnsupported(
+      colFamilyName: String,
+      operationName: String)
+      (testFn: => Unit): Unit = {
+    val ex = intercept[UnsupportedOperationException] {
+      testFn
+    }
+    assert(ex.getMessage.contains("not supported"))
+    assert(ex.getMessage.contains(operationName))
+    assert(ex.getMessage.contains(colFamilyName))
+  }
+
+  testWithColumnFamilies(s"RocksDB: operations on absent column family",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      db.load(0)
+      val colFamilyName = "test"
+      verifyStoreOperationUnsupported(colFamilyName, "put") {
+        db.put("a", "1", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported(colFamilyName, "remove") {
+        db.remove("a", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported(colFamilyName, "get") {
+        db.get("a", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported(colFamilyName, "iterator") {
+        db.iterator(colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported(colFamilyName, "merge") {
+        db.merge("a", "1", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported(colFamilyName, "prefixScan") {
+        db.prefixScan("a", colFamilyName)
+      }
+    }
+  }
+
   testWithColumnFamilies(s"RocksDB: get, put, iterator, commit, load " +
     s"with multiple column families",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
@@ -545,13 +608,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val colFamily2: String = "xyz"
 
     val conf = RocksDBConf().copy()
-    withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
-      val ex = intercept[Exception] {
-        db.createColFamilyIfAbsent("default")
-      }
-      ex.getCause.isInstanceOf[UnsupportedOperationException]
-    }
-
     withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
       db.createColFamilyIfAbsent(colFamily1)
       db.createColFamilyIfAbsent(colFamily2)
@@ -582,7 +638,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         assert(iterator(db, colFamily2).isEmpty)
       }
       assert(ex.isInstanceOf[RuntimeException])
-      assert(ex.getMessage.contains("does not exist"))
+      assert(ex.getMessage.contains("missing column family"))
     }
 
     withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>

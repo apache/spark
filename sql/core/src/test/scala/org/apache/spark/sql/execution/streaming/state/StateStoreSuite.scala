@@ -134,30 +134,43 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("get, put. delete etc operations on non-default col family should fail") {
+  private def verifyStoreOperationUnsupported()(testFn: => Unit): Unit = {
+    val ex = intercept[UnsupportedOperationException] {
+      testFn
+    }
+    assert(ex.getMessage.contains("not supported"))
+  }
+
+  test("get, put, remove etc operations on non-default col family should fail") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       minDeltasForSnapshot = 5)) { provider =>
       val store = provider.getStore(0)
       val keyRow = dataToKeyRow("a", 0)
       val valueRow = dataToValueRow(1)
       val colFamilyName = "test"
-      val ex1 = intercept[Exception] {
+      verifyStoreOperationUnsupported() {
         store.put(keyRow, valueRow, colFamilyName)
       }
-      assert(ex1.isInstanceOf[UnsupportedOperationException])
-      assert(ex1.getMessage.contains("not supported"))
 
-      val ex2 = intercept[Exception] {
+      verifyStoreOperationUnsupported() {
         store.remove(keyRow, colFamilyName)
       }
-      assert(ex2.isInstanceOf[UnsupportedOperationException])
-      assert(ex2.getMessage.contains("not supported"))
 
-      val ex3 = intercept[Exception] {
+      verifyStoreOperationUnsupported() {
         store.get(keyRow, colFamilyName)
       }
-      assert(ex3.isInstanceOf[UnsupportedOperationException])
-      assert(ex3.getMessage.contains("not supported"))
+
+      verifyStoreOperationUnsupported() {
+        store.merge(keyRow, valueRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported() {
+        store.iterator(colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported() {
+        store.prefixScan(keyRow, colFamilyName)
+      }
     }
   }
 

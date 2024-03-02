@@ -3314,6 +3314,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
+    "message" : [
+      "Failed to create column family with invalid name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
     "message" : [
       "Failed to remove default column family with reserved name=<colFamilyName>."
@@ -3331,6 +3337,12 @@
       "<operationType> operation not supported with <entity>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
+    "message" : [
+      "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
   },
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [
