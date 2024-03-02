@@ -44,7 +44,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
@@ -281,25 +281,41 @@ class SparkConnectPlanner(
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
-    val args = sql.getArgsMap
-    val namedArguments = sql.getNamedArgumentsMap
-    val posArgs = sql.getPosArgsList
-    val posArguments = sql.getPosArgumentsList
-    val parsedPlan = parser.parsePlan(sql.getQuery)
-    if (!namedArguments.isEmpty) {
-      NameParameterizedQuery(
-        parsedPlan,
-        namedArguments.asScala.toMap.transform((_, v) => transformExpression(v)))
-    } else if (!posArguments.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
-    } else if (!args.isEmpty) {
-      NameParameterizedQuery(
-        parsedPlan,
-        args.asScala.toMap.transform((_, v) => transformLiteral(v)))
-    } else if (!posArgs.isEmpty) {
-      PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
+    if (sql.getViewsCount > 0) {
+      val views = sql.getViewsList.asScala
+      val sqlCommand = proto.SqlCommand
+        .newBuilder()
+        .setSql(sql.getQuery)
+        .putAllArgs(sql.getArgsMap)
+        .putAllNamedArguments(sql.getNamedArgumentsMap)
+        .addAllPosArgs(sql.getPosArgsList)
+        .addAllPosArguments(sql.getPosArgumentsList)
+        .addAllViews(sql.getViewsList)
+        .build()
+
+      val df = executeSQLCommand(sqlCommand)
+      df.logicalPlan
     } else {
-      parsedPlan
+      val args = sql.getArgsMap
+      val namedArguments = sql.getNamedArgumentsMap
+      val posArgs = sql.getPosArgsList
+      val posArguments = sql.getPosArgumentsList
+      val parsedPlan = parser.parsePlan(sql.getQuery)
+      if (!namedArguments.isEmpty) {
+        NameParameterizedQuery(
+          parsedPlan,
+          namedArguments.asScala.toMap.transform((_, v) => transformExpression(v)))
+      } else if (!posArguments.isEmpty) {
+        PosParameterizedQuery(parsedPlan, posArguments.asScala.map(transformExpression).toSeq)
+      } else if (!args.isEmpty) {
+        NameParameterizedQuery(
+          parsedPlan,
+          args.asScala.toMap.transform((_, v) => transformLiteral(v)))
+      } else if (!posArgs.isEmpty) {
+        PosParameterizedQuery(parsedPlan, posArgs.asScala.map(transformLiteral).toSeq)
+      } else {
+        parsedPlan
+      }
     }
   }
 
@@ -2518,35 +2534,12 @@ class SparkConnectPlanner(
     }
   }
 
-  def handleSqlCommand(
-      getSqlCommand: SqlCommand,
+  private def handleSqlCommand(
+      sqlCommand: SqlCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-    // Eagerly execute commands of the provided SQL string.
-    val args = getSqlCommand.getArgsMap
-    val namedArguments = getSqlCommand.getNamedArgumentsMap
-    val posArgs = getSqlCommand.getPosArgsList
-    val posArguments = getSqlCommand.getPosArgumentsList
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    val df = if (!namedArguments.isEmpty) {
-      session.sql(
-        getSqlCommand.getSql,
-        namedArguments.asScala.toMap.transform((_, e) => Column(transformExpression(e))),
-        tracker)
-    } else if (!posArguments.isEmpty) {
-      session.sql(
-        getSqlCommand.getSql,
-        posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
-        tracker)
-    } else if (!args.isEmpty) {
-      session.sql(
-        getSqlCommand.getSql,
-        args.asScala.toMap.transform((_, v) => transformLiteral(v)),
-        tracker)
-    } else if (!posArgs.isEmpty) {
-      session.sql(getSqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
-    } else {
-      session.sql(getSqlCommand.getSql, Map.empty[String, Any], tracker)
-    }
+    val df = executeSQLCommand(sqlCommand, tracker)
+
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
     val rows = df.logicalPlan match {
@@ -2603,11 +2596,12 @@ class SparkConnectPlanner(
           .setSql(
             proto.SQL
               .newBuilder()
-              .setQuery(getSqlCommand.getSql)
-              .putAllNamedArguments(getSqlCommand.getNamedArgumentsMap)
-              .addAllPosArguments(getSqlCommand.getPosArgumentsList)
-              .putAllArgs(getSqlCommand.getArgsMap)
-              .addAllPosArgs(getSqlCommand.getPosArgsList)))
+              .setQuery(sqlCommand.getSql)
+              .putAllNamedArguments(sqlCommand.getNamedArgumentsMap)
+              .addAllPosArguments(sqlCommand.getPosArgumentsList)
+              .putAllArgs(sqlCommand.getArgsMap)
+              .addAllPosArgs(sqlCommand.getPosArgsList)
+              .addAllViews(sqlCommand.getViewsList)))
     }
     executeHolder.eventsManager.postFinished(Some(rows.size))
     // Exactly one SQL Command Result Batch
@@ -2629,6 +2623,60 @@ class SparkConnectPlanner(
           .setServerSideSessionId(sessionHolder.serverSessionId)
           .setMetrics(metrics.build)
           .build)
+    }
+  }
+
+  private def executeSQLCommand(
+      sqlCommand: SqlCommand,
+      tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
+    if (sqlCommand.getViewsCount > 0) {
+      val views = sqlCommand.getViewsList.asScala
+      this.synchronized {
+        try {
+          views.foreach { view =>
+            Dataset
+              .ofRows(session, transformRelation(view.getInput))
+              .createOrReplaceTempView(view.getAlias)
+          }
+          executeSQLCommandImpl(sqlCommand, tracker)
+        } finally {
+          views.foreach { view =>
+            session.catalog.dropTempView(view.getAlias)
+          }
+        }
+      }
+    } else {
+      executeSQLCommandImpl(sqlCommand, tracker)
+    }
+  }
+
+  private def executeSQLCommandImpl(
+      sqlCommand: SqlCommand,
+      tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
+    // Eagerly execute commands of the provided SQL string.
+    val args = sqlCommand.getArgsMap
+    val namedArguments = sqlCommand.getNamedArgumentsMap
+    val posArgs = sqlCommand.getPosArgsList
+    val posArguments = sqlCommand.getPosArgumentsList
+    if (!namedArguments.isEmpty) {
+      session.sql(
+        sqlCommand.getSql,
+        namedArguments.asScala.toMap.transform((_, e) => Column(transformExpression(e))),
+        tracker)
+    } else if (!posArguments.isEmpty) {
+      session.sql(
+        sqlCommand.getSql,
+        posArguments.asScala.map(e => Column(transformExpression(e))).toArray,
+        tracker)
+    } else if (!args.isEmpty) {
+      session.sql(
+        sqlCommand.getSql,
+        args.asScala.toMap.transform((_, v) => transformLiteral(v)),
+        tracker)
+    } else if (!posArgs.isEmpty) {
+      session.sql(sqlCommand.getSql, posArgs.asScala.map(transformLiteral).toArray, tracker)
+    } else {
+      session.sql(sqlCommand.getSql, Map.empty[String, Any], tracker)
     }
   }
 

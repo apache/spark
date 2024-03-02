@@ -282,6 +282,7 @@ class SqlCommand(google.protobuf.message.Message):
     POS_ARGS_FIELD_NUMBER: builtins.int
     NAMED_ARGUMENTS_FIELD_NUMBER: builtins.int
     POS_ARGUMENTS_FIELD_NUMBER: builtins.int
+    VIEWS_FIELD_NUMBER: builtins.int
     sql: builtins.str
     """(Required) SQL Query."""
     @property
@@ -316,6 +317,13 @@ class SqlCommand(google.protobuf.message.Message):
         """(Optional) A sequence of expressions for positional parameters in the SQL query text.
         It cannot coexist with `named_arguments`.
         """
+    @property
+    def views(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.relations_pb2.SubqueryAlias
+    ]:
+        """(Optional) dataframes that can be referenced in the query"""
     def __init__(
         self,
         *,
@@ -336,6 +344,8 @@ class SqlCommand(google.protobuf.message.Message):
             pyspark.sql.connect.proto.expressions_pb2.Expression
         ]
         | None = ...,
+        views: collections.abc.Iterable[pyspark.sql.connect.proto.relations_pb2.SubqueryAlias]
+        | None = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -350,6 +360,8 @@ class SqlCommand(google.protobuf.message.Message):
             b"pos_arguments",
             "sql",
             b"sql",
+            "views",
+            b"views",
         ],
     ) -> None: ...
 
