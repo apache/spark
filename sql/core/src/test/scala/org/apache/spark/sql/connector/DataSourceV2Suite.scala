@@ -25,7 +25,7 @@ import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -964,20 +964,6 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           "tableName" -> "`spark_catalog`.`default`.`test`",
           "operation" -> "overwrite by filter in batch mode")
       )
-    }
-  }
-
-  test("SPARK-46973: cache v2 table") {
-    val cls = classOf[SimpleDataSourceV2]
-    withTable("test") {
-      val catalog = spark.sessionState.catalog
-      val table = QualifiedTableName(catalog.getCurrentDatabase, "test")
-      sql(s"CREATE TABLE test using ${cls.getName}")
-      assert(catalog.getCachedV2Table(table) === null)
-      sql("SELECT * FROM test").collect()
-      assert(catalog.getCachedV2Table(table) !== null)
-      sql("REFRESH TABLE test")
-      assert(catalog.getCachedV2Table(table) === null)
     }
   }
 }
