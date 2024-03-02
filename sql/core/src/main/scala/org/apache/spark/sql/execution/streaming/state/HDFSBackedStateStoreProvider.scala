@@ -129,19 +129,19 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     // Multiple col families are not supported with HDFSBackedStateStoreProvider. Throw an exception
     // if the user tries to use a non-default col family.
-    private def verifyUsingDefaultColFamily(colFamilyName: String): Unit = {
+    private def assertUseOfDefaultColFamily(colFamilyName: String): Unit = {
       if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
         throw StateStoreErrors.multipleColumnFamiliesNotSupported("HDFSStateStoreProvider")
       }
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
-      verifyUsingDefaultColFamily(colFamilyName)
+      assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.get(key)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
-      verifyUsingDefaultColFamily(colFamilyName)
+      assertUseOfDefaultColFamily(colFamilyName)
       require(value != null, "Cannot put a null value")
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       val keyCopy = key.copy()
@@ -151,7 +151,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
-      verifyUsingDefaultColFamily(colFamilyName)
+      assertUseOfDefaultColFamily(colFamilyName)
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
@@ -191,13 +191,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * This can be called only after committing all the updates made in the current thread.
      */
     override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-      verifyUsingDefaultColFamily(colFamilyName)
+      assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.iterator()
     }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
       Iterator[UnsafeRowPair] = {
-      verifyUsingDefaultColFamily(colFamilyName)
+      assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.prefixScan(prefixKey)
     }
 

@@ -553,7 +553,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   private def verifyStoreOperationUnsupported(
-      colFamilyName: String,
       operationName: String)
       (testFn: => Unit): Unit = {
     val ex = intercept[UnsupportedOperationException] {
@@ -561,7 +560,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
     assert(ex.getMessage.contains("not supported"))
     assert(ex.getMessage.contains(operationName))
-    assert(ex.getMessage.contains(colFamilyName))
   }
 
   testWithColumnFamilies(s"RocksDB: operations on absent column family",
@@ -573,27 +571,27 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       db.load(0)
       val colFamilyName = "test"
-      verifyStoreOperationUnsupported(colFamilyName, "put") {
+      verifyStoreOperationUnsupported("put") {
         db.put("a", "1", colFamilyName)
       }
 
-      verifyStoreOperationUnsupported(colFamilyName, "remove") {
+      verifyStoreOperationUnsupported("remove") {
         db.remove("a", colFamilyName)
       }
 
-      verifyStoreOperationUnsupported(colFamilyName, "get") {
+      verifyStoreOperationUnsupported("get") {
         db.get("a", colFamilyName)
       }
 
-      verifyStoreOperationUnsupported(colFamilyName, "iterator") {
+      verifyStoreOperationUnsupported("iterator") {
         db.iterator(colFamilyName)
       }
 
-      verifyStoreOperationUnsupported(colFamilyName, "merge") {
+      verifyStoreOperationUnsupported("merge") {
         db.merge("a", "1", colFamilyName)
       }
 
-      verifyStoreOperationUnsupported(colFamilyName, "prefixScan") {
+      verifyStoreOperationUnsupported("prefixScan") {
         db.prefixScan("a", colFamilyName)
       }
     }

@@ -249,7 +249,8 @@ class RocksDB(
   private def verifyColFamilyExists(operationName: String, colFamilyName: String): Unit = {
     if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
       if (!useColumnFamilies) {
-        throw StateStoreErrors.unsupportedOperationException(operationName, colFamilyName)
+        throw StateStoreErrors.unsupportedOperationException(operationName,
+          "RocksDBStateStoreProvider and multiple column families disabled")
       }
 
       if (!checkColFamilyExists(colFamilyName)) {
@@ -345,11 +346,11 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    verifyColFamilyExists("merge", colFamilyName)
     if (!useColumnFamilies) {
       throw StateStoreErrors.unsupportedOperationException("merge",
         "RocksDBStateStoreProvider and multiple column families disabled")
     }
+    verifyColFamilyExists("merge", colFamilyName)
 
     if (conf.trackTotalNumberOfRows) {
       val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
