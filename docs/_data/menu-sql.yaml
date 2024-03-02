@@ -53,14 +53,12 @@
 - text: Performance Tuning
   url: sql-performance-tuning.html
   subitems:
-    - text: Caching Data In Memory
-      url: sql-performance-tuning.html#caching-data-in-memory
-    - text: Other Configuration Options
-      url: sql-performance-tuning.html#other-configuration-options
-    - text: Join Strategy Hints for SQL Queries
-      url: sql-performance-tuning.html#join-strategy-hints-for-sql-queries
-    - text: Coalesce Hints for SQL Queries
-      url: sql-performance-tuning.html#coalesce-hints-for-sql-queries
+    - text: Caching Data
+      url: sql-performance-tuning.html#caching-data
+    - text: Tuning Partitions
+      url: sql-performance-tuning.html#tuning-partitions
+    - text: Optimizing the Join Strategy
+      url: sql-performance-tuning.html#optimizing-the-join-strategy
     - text: Adaptive Query Execution
       url: sql-performance-tuning.html#adaptive-query-execution
 - text: Distributed SQL Engine
