@@ -3748,7 +3748,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
-    val hiveVersion = "2.3.101"
+    val hiveVersion = "2.3.9" // TODO update to 2.3.10 after jar available in maven central
     // transitive=false, only download specified jar
     sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion?transitive=false")
     assert(sc.listJars()
