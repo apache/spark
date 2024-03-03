@@ -1014,6 +1014,15 @@ package object config {
       .timeConf(TimeUnit.NANOSECONDS)
       .createWithDefaultString("1s")
 
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_WAIT_FOR_EVENT_DISPATCH_EXIT_ON_STOP =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.waitForEventDispatchExitOnStop")
+      .doc("Whether wait until the dispatch thread exit when stop invoked. " +
+        "This is set to true by default for graceful shutdown of the event queue, " +
+        "but allow user to configure the behavior if they don't need.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .version("2.1.0")
