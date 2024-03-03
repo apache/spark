@@ -1179,8 +1179,11 @@ class SQL(LogicalPlan):
             if isinstance(args, Dict):
                 for k, v in args.items():
                     assert isinstance(k, str)
-            else:
-                assert isinstance(args, List)
+            elif not isinstance(args, List):
+                raise PySparkTypeError(
+                    error_class="INVALID_TYPE",
+                    message_parameters={"arg_name": "args", "arg_type": str(type(args))},
+                )
 
         self._query = query
         self._args = args
