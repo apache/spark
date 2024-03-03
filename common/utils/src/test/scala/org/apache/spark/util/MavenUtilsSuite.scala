@@ -78,11 +78,12 @@ class MavenUtilsSuite
     val settings = new IvySettings
     val res1 = MavenUtils.createRepoResolvers(settings.getDefaultIvyUserDir)
     // should have central and spark-packages by default
-    assert(res1.getResolvers.size() === 4)
+    assert(res1.getResolvers.size() === 5)
     assert(res1.getResolvers.get(0).asInstanceOf[IBiblioResolver].getName === "local-m2-cache")
     assert(res1.getResolvers.get(1).asInstanceOf[FileSystemResolver].getName === "local-ivy-cache")
     assert(res1.getResolvers.get(2).asInstanceOf[IBiblioResolver].getName === "central")
     assert(res1.getResolvers.get(3).asInstanceOf[IBiblioResolver].getName === "spark-packages")
+    assert(res1.getResolvers.get(4).asInstanceOf[IBiblioResolver].getName === "hive-staging-repo")
   }
 
   test("create additional resolvers") {
