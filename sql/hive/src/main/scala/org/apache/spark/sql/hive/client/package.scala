@@ -64,7 +64,6 @@ package object client {
       exclusions = Seq("org.apache.calcite:calcite-core",
         "org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
-        "com.fasterxml.jackson.core:*",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
