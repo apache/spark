@@ -308,7 +308,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3252",
+      errorClass = "NONEXISTENT_FIELD_NAME",
       parameters = Map("name" -> "invalid attr", "fieldNames" -> "i"))
 
     checkError(
@@ -319,7 +319,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
           filters = Seq(EqualTo("i", 1)),
           expected = Some(InternalRow.empty))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3252",
+      errorClass = "NONEXISTENT_FIELD_NAME",
       parameters = Map("name" -> "i", "fieldNames" -> ""))
   }
 

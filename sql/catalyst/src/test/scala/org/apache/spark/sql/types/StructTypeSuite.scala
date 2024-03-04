@@ -53,7 +53,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("lookup fieldIndex for missing field should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s.fieldIndex("c")),
-      errorClass = "_LEGACY_ERROR_TEMP_3252",
+      errorClass = "NONEXISTENT_FIELD_NAME",
       parameters = Map("name" -> "c", "fieldNames" -> "a, b"))
   }
 

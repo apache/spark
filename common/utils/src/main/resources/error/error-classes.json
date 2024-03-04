@@ -7818,9 +7818,9 @@
       "Failed to convert the JSON string '<other>' to a data type. Please enter a valid data type."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3252" : {
+  "NONEXISTENT_FIELD_NAME" : {
     "message" : [
-      "<name> does not exist. Available: <fieldNames>"
+      "Field with name '<name>' does not exist. Available fields: <fieldNames>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3253" : {
