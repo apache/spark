@@ -158,9 +158,10 @@ def main(infile: IO, outfile: IO) -> None:
         data_source = data_source_cls(options=options)  # type: ignore
 
         if is_streaming:
-            # Instantiate the data source writer.
+            # Instantiate the streaming data source writer.
             writer = data_source.streamWriter(schema, overwrite)
         else:
+            # Instantiate the data source writer.
             writer = data_source.writer(schema, overwrite)
 
         # Create a function that can be used in mapInArrow.

@@ -412,7 +412,7 @@ class DataSourceStreamWriter(ABC):
         This method is invoked on the driver when all tasks run successfully. The
         commit messages are collected from the ``write`` method call from each task,
         and are passed to this method. The implementation should use the commit messages
-        to commit the writing job to the data source.
+        to commit the microbatch in the streaming sink.
 
         Parameters
         ----------
@@ -428,7 +428,7 @@ class DataSourceStreamWriter(ABC):
         This method is invoked on the driver when one or more tasks failed. The commit
         messages are collected from the ``write`` method call from each task, and are
         passed to this method. The implementation should use the commit messages to
-        abort the writing job to the data source.
+        abort the microbatch in the streaming sink.
 
         Parameters
         ----------

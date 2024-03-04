@@ -116,7 +116,7 @@ def main(infile: IO, outfile: IO) -> None:
             error_msg = 'data source {} throw exception: {}'.format(data_source.name, e)
             raise PySparkRuntimeError(
                 error_class="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-                message_parameters={"type": "reader", "error": error_msg},
+                message_parameters={"action": "commitOrAbort", "error": error_msg},
             )
     except BaseException as e:
         handle_worker_exception(e, outfile)

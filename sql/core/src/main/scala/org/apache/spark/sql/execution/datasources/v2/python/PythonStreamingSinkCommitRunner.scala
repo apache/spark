@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 
 class PythonStreamingSinkCommitRunner(
@@ -50,7 +50,7 @@ class PythonStreamingSinkCommitRunner(
   private var dataIn: DataInputStream = null
 
   /**
-   * Initializes the Python worker for running the streaming source.
+   * Initializes the Python worker for running the streaming sink committer.
    */
   def init(): Unit = {
     logInfo(s"Initializing Python runner pythonExec: $pythonExec")
@@ -98,8 +98,8 @@ class PythonStreamingSinkCommitRunner(
     val initStatus = dataIn.readInt()
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "initialize sink", msg = msg)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "initial streaming sink", msg)
     }
   }
 
@@ -125,9 +125,8 @@ class PythonStreamingSinkCommitRunner(
     val status = dataIn.readInt()
     if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "initialize source", msg = msg)
+      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
+        action = "commitOrAbort", msg)
     }
-
   }
 }
