@@ -497,7 +497,7 @@ case class Lower(child: Expression)
 abstract class StringPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
-  final val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
+  final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
   def compare(l: UTF8String, r: UTF8String): Boolean
 
