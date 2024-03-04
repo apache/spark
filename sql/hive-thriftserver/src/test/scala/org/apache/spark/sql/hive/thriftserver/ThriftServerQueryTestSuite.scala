@@ -101,7 +101,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "subquery/in-subquery/in-order-by.sql",
     "subquery/in-subquery/in-set-operations.sql",
     // SPARK-42921
-    "timestampNTZ/datetime-special-ansi.sql"
+    "timestampNTZ/datetime-special-ansi.sql",
+    // SPARK-47264
+    "collations.sql"
   )
 
   override def runQueries(

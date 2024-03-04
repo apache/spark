@@ -27,9 +27,11 @@ import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCu
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.types.StringType
 
-class CollationSuite extends DatasourceV2SQLBase {
+class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   test("collate returns proper type") {
@@ -180,6 +182,57 @@ class CollationSuite extends DatasourceV2SQLBase {
         checkAnswer(
           sql(s"select collate('$left', '$collationName') < collate('$right', '$collationName')"),
           Row(expected))
+    }
+  }
+
+  test("aggregates count respects collation") {
+    Seq(
+      ("ucs_basic", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("ucs_basic", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("ucs_basic", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("ucs_basic_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("ucs_basic_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("ucs_basic_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
+    ).foreach {
+      case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
+        checkAnswer(sql(
+          s"""
+          with t as (
+          select collate(col1, '$collationName') as c
+          from
+          values ${input.map(s => s"('$s')").mkString(", ")}
+        )
+        SELECT COUNT(*), c FROM t GROUP BY c
+        """), expected)
+    }
+  }
+
+  test("hash agg is not used for non binary collations") {
+    val tableNameNonBinary = "T_NON_BINARY"
+    val tableNameBinary = "T_BINARY"
+    withTable(tableNameNonBinary) {
+      withTable(tableNameBinary) {
+        sql(s"CREATE TABLE $tableNameNonBinary (c STRING COLLATE 'UCS_BASIC_LCASE') USING PARQUET")
+        sql(s"INSERT INTO $tableNameNonBinary VALUES ('aaa')")
+        sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE 'UCS_BASIC') USING PARQUET")
+        sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
+
+        val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
+        assert(collectFirst(dfNonBinary.queryExecution.executedPlan) {
+          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
+        }.isEmpty)
+
+        val dfBinary = sql(s"SELECT COUNT(*), c FROM $tableNameBinary GROUP BY c")
+        assert(collectFirst(dfBinary.queryExecution.executedPlan) {
+          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
+        }.nonEmpty)
+      }
     }
   }
 

@@ -34,6 +34,14 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   def isDefaultCollation: Boolean = collationId == StringType.DEFAULT_COLLATION_ID
 
   /**
+   * Binary collation implies that strings are considered equal only if they are
+   * byte for byte equal. E.g. all accent or case-insensitive collations are considered non-binary.
+   * If this field is true, byte level operations can be used against this datatype (e.g. for
+   * equality and hashing).
+   */
+  def isBinaryCollation: Boolean = CollationFactory.fetchCollation(collationId).isBinaryCollation
+
+  /**
    * Type name that is shown to the customer.
    * If this is an UCS_BASIC collation output is `string` due to backwards compatibility.
    */
