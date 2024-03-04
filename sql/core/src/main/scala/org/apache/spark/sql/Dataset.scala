@@ -655,8 +655,17 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.4.0
    */
-  def isEmpty: Boolean = withAction("isEmpty", select().limit(1).queryExecution) { plan =>
-    plan.executeTake(1).isEmpty
+  def isEmpty: Boolean = {
+    val newDf = logicalPlan match {
+      case c: CommandResult =>
+        // Convert to `LocalRelation` and let `ConvertToLocalRelation` do the casting locally to
+        // avoid triggering a job
+        Dataset.ofRows(sparkSession, LocalRelation(c.output, c.rows))
+      case _ => toDF()
+    }
+    withAction("isEmpty", newDf.select().limit(1).queryExecution) { plan =>
+      plan.executeTake(1).isEmpty
+    }
   }
 
   /**
