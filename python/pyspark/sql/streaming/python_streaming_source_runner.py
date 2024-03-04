@@ -45,10 +45,10 @@ from pyspark.worker_util import (
     utf8_deserializer,
 )
 
-initial_offset_func_id = 884
-latest_offset_func_id = 885
-partitions_func_id = 886
-commit_func_id = 887
+INITIAL_OFFSET_FUNC_ID = 884
+LATEST_OFFSET_FUNC_ID = 885
+PARTITIONS_FUNC_ID = 886
+COMMIT_FUNC_ID = 887
 
 
 def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
@@ -121,13 +121,13 @@ def main(infile: IO, outfile: IO) -> None:
             # handle method call from socket
             while True:
                 func_id = read_int(infile)
-                if func_id == initial_offset_func_id:
+                if func_id == INITIAL_OFFSET_FUNC_ID:
                     initial_offset_func(reader, outfile)
-                elif func_id == latest_offset_func_id:
+                elif func_id == LATEST_OFFSET_FUNC_ID:
                     latest_offset_func(reader, outfile)
-                elif func_id == partitions_func_id:
+                elif func_id == PARTITIONS_FUNC_ID:
                     partitions_func(reader, infile, outfile)
-                elif func_id == commit_func_id:
+                elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
                 outfile.flush()
         except Exception as e:
