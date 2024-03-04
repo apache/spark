@@ -388,6 +388,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(sql(s"SELECT endswith(collate('${testCase.left}', '${testCase.collation}')," +
         s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
     })
+  }
 
   test("aggregates count respects collation") {
     Seq(
