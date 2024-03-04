@@ -90,8 +90,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    createTable(ident, schema, partitions, properties, Distributions.unspecified(),
-      Array.empty, None, None)
+    val columns = CatalogV2Util.structTypeToV2Columns(schema)
+    createTable(ident, columns, partitions, properties)
   }
 
   override def createTable(
@@ -99,30 +99,13 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
-    createTable(ident, schema, partitions, properties)
+    createTable(ident, columns, partitions, properties, Distributions.unspecified(),
+      Array.empty, None, None)
   }
 
   def createTable(
       ident: Identifier,
       columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String],
-      distribution: Distribution,
-      ordering: Array[SortOrder],
-      requiredNumPartitions: Option[Int],
-      advisoryPartitionSize: Option[Long],
-      distributionStrictlyRequired: Boolean,
-      numRowsPerSplit: Int): Table = {
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
-    createTable(ident, schema, partitions, properties, distribution, ordering,
-      requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired, numRowsPerSplit)
-  }
-
-  @deprecated("use createTable(..., columns: Array[Column], ...) instead", "4.0.0")
-  def createTable(
-      ident: Identifier,
-      schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String],
       distribution: Distribution,
@@ -131,6 +114,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       advisoryPartitionSize: Option[Long],
       distributionStrictlyRequired: Boolean = true,
       numRowsPerSplit: Int = Int.MaxValue): Table = {
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
