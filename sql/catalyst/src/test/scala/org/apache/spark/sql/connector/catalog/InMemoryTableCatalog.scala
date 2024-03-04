@@ -105,6 +105,23 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   def createTable(
       ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String],
+      distribution: Distribution,
+      ordering: Array[SortOrder],
+      requiredNumPartitions: Option[Int],
+      advisoryPartitionSize: Option[Long],
+      distributionStrictlyRequired: Boolean,
+      numRowsPerSplit: Int): Table = {
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
+    createTable(ident, schema, partitions, properties, distribution, ordering,
+      requiredNumPartitions, advisoryPartitionSize, distributionStrictlyRequired, numRowsPerSplit)
+  }
+
+  @deprecated("use createTable(..., columns: Array[Column], ...) instead", "4.0.0")
+  def createTable(
+      ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String],
