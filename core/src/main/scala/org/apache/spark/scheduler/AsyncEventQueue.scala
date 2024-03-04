@@ -210,6 +210,11 @@ private class AsyncEventQueue(
     bus.removeListener(listener)
   }
 
+  /**
+   * Wait for the dispatch exit on queue stop or not.
+   *
+   * @return true if wait for event dispatch exit.
+   */
   private def waitForEventDispatchExit(): Boolean = {
     conf.get(LISTENER_BUS_EVENT_QUEUE_WAIT_FOR_EVENT_DISPATCH_EXIT_ON_STOP)
   }
