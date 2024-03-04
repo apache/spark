@@ -189,8 +189,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",
       parameters = Map.empty
     )
-    assert(ex.getMessage.contains("The handle has not been initialized" +
-      " for this StatefulProcessor."))
   }
 
   test("transformWithState - batch should succeed") {
