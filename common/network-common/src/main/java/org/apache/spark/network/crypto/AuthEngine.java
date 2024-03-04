@@ -17,23 +17,21 @@
 
 package org.apache.spark.network.crypto;
 
-import javax.crypto.spec.SecretKeySpec;
 import java.io.Closeable;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
-import java.util.Properties;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Bytes;
-import com.google.crypto.tink.subtle.AesGcmJce;
-import com.google.crypto.tink.subtle.Hkdf;
-import com.google.crypto.tink.subtle.Random;
-import com.google.crypto.tink.subtle.X25519;
+import com.google.crypto.tink.StreamingAead;
+import com.google.crypto.tink.subtle.*;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import org.apache.spark.network.util.TransportConf;
+
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * A helper class for abstracting authentication and key negotiation details.
@@ -41,27 +39,24 @@ import org.apache.spark.network.util.TransportConf;
  * Exchange, using a pre-shared key to derive an AES-GCM key encrypting key.
  */
 class AuthEngine implements Closeable {
-  public static final byte[] INPUT_IV_INFO = "inputIv".getBytes(UTF_8);
-  public static final byte[] OUTPUT_IV_INFO = "outputIv".getBytes(UTF_8);
+  public static final byte[] DERIVE_KEY_INFO = "derivedKey".getBytes(UTF_8);
+  public static final byte[] TRANSCRIPT_ID_INFO = "transcript".getBytes(UTF_8);
   private static final String MAC_ALGORITHM = "HMACSHA256";
   private static final int AES_GCM_KEY_SIZE_BYTES = 16;
+  // This will be used by Tink as a buffer size. We're defaulting to 32KB.
   private static final byte[] EMPTY_TRANSCRIPT = new byte[0];
 
   private final String appId;
   private final byte[] preSharedSecret;
-  private final TransportConf conf;
-  private final Properties cryptoConf;
 
   private byte[] clientPrivateKey;
   private TransportCipher sessionCipher;
 
-  AuthEngine(String appId, String preSharedSecret, TransportConf conf) {
+  AuthEngine(String appId, String preSharedSecret) {
     Preconditions.checkNotNull(appId);
     Preconditions.checkNotNull(preSharedSecret);
     this.appId = appId;
     this.preSharedSecret = preSharedSecret.getBytes(UTF_8);
-    this.conf = conf;
-    this.cryptoConf = conf.cryptoConf();
   }
 
   @VisibleForTesting
@@ -164,13 +159,12 @@ class AuthEngine implements Closeable {
     AuthMessage ephemeralServerPublicKey = encryptEphemeralPublicKey(
         X25519.publicFromPrivate(serverEphemeralPrivateKey),
         getTranscript(encryptedClientPublicKey));
-    // Compute a shared secret given the client public key and the server private key
-    byte[] sharedSecret =
-        X25519.computeSharedSecret(serverEphemeralPrivateKey, clientPublicKey);
     byte[] challengeResponseTranscript =
         getTranscript(encryptedClientPublicKey, ephemeralServerPublicKey);
-    this.sessionCipher =
-        generateTransportCipher(sharedSecret, false, challengeResponseTranscript);
+    String transcriptId = getTranscriptId(challengeResponseTranscript);
+    // Compute a shared secret given the client public key and the server private key\
+    SecretKeySpec derivedAesKey = deriveAesKey(clientPublicKey, serverEphemeralPrivateKey, challengeResponseTranscript);
+    this.sessionCipher = new TransportCipher(transcriptId, derivedAesKey);
     return ephemeralServerPublicKey;
   }
 
@@ -189,42 +183,40 @@ class AuthEngine implements Closeable {
     byte[] serverPublicKey = decryptEphemeralPublicKey(
         encryptedServerPublicKey,
         getTranscript(encryptedClientPublicKey));
-    // Compute a shared secret given the client public key and the server private key
-    byte[] sharedSecret = X25519.computeSharedSecret(clientPrivateKey, serverPublicKey);
     byte[] challengeResponseTranscript =
         getTranscript(encryptedClientPublicKey, encryptedServerPublicKey);
-    this.sessionCipher =
-        generateTransportCipher(sharedSecret, true, challengeResponseTranscript);
+    String transcriptId = getTranscriptId(challengeResponseTranscript);
+    // Compute a shared secret given the client public key and the server private key
+    SecretKeySpec derivedAesKey = deriveAesKey(serverPublicKey, clientPrivateKey, challengeResponseTranscript);
+    this.sessionCipher = new TransportCipher(transcriptId, derivedAesKey);
   }
 
-  private TransportCipher generateTransportCipher(
-      byte[] sharedSecret,
-      boolean isClient,
-      byte[] transcript) throws GeneralSecurityException {
-    byte[] clientIv = Hkdf.computeHkdf(
-        MAC_ALGORITHM,
-        sharedSecret,
-        transcript,  // Passing this as the HKDF salt
-        INPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
-        AES_GCM_KEY_SIZE_BYTES);
-    byte[] serverIv = Hkdf.computeHkdf(
-        MAC_ALGORITHM,
-        sharedSecret,
-        transcript,  // Passing this as the HKDF salt
-        OUTPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
-        AES_GCM_KEY_SIZE_BYTES);
-    SecretKeySpec sessionKey = new SecretKeySpec(sharedSecret, "AES");
-    return new TransportCipher(
-        cryptoConf,
-        conf.cipherTransformation(),
-        sessionKey,
-        isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
-        isClient ? serverIv : clientIv);
+  private static String getTranscriptId(byte[] challengeResponseTranscript) throws GeneralSecurityException {
+    byte[] hashedTranscript = Hkdf.computeHkdf(
+            MAC_ALGORITHM,
+            challengeResponseTranscript,  // Passing this as non-secret key material
+            null, // Not passing a salt
+            TRANSCRIPT_ID_INFO,  // This is the HKDF info field used to differentiate key and IV values
+            32);
+    return Base64.urlSafeEncode(hashedTranscript);
+  }
+
+  private static SecretKeySpec deriveAesKey(byte[] publicKeyBytes,
+                                            byte[] privateKeyBytes,
+                                            byte[] challengeResponseTranscript) throws GeneralSecurityException {
+    byte[] sharedSecret = X25519.computeSharedSecret(privateKeyBytes, publicKeyBytes);
+    byte[] derivedKeyMaterial = Hkdf.computeHkdf(
+            MAC_ALGORITHM,
+            sharedSecret,
+            challengeResponseTranscript,  // Passing this as the HKDF salt
+            DERIVE_KEY_INFO,  // This is the HKDF info field used to differentiate key and IV values
+            AES_GCM_KEY_SIZE_BYTES);
+    return new SecretKeySpec(derivedKeyMaterial, "AES");
   }
 
   private byte[] getTranscript(AuthMessage... encryptedPublicKeys) {
     ByteBuf transcript = Unpooled.buffer(
-        Arrays.stream(encryptedPublicKeys).mapToInt(k -> k.encodedLength()).sum());
+        Arrays.stream(encryptedPublicKeys).mapToInt(AuthMessage::encodedLength).sum());
     Arrays.stream(encryptedPublicKeys).forEachOrdered(k -> k.encode(transcript));
     return transcript.array();
   }

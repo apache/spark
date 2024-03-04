@@ -119,7 +119,7 @@ public class AuthIntegrationSuite {
   @Test
   public void testLargeMessageEncryption() throws Exception {
     // Use a big length to create a message that cannot be put into the encryption buffer completely
-    final int testErrorMessageLength = TransportCipher.STREAM_BUFFER_SIZE;
+    final int testErrorMessageLength = TransportCipher.PLAINTEXT_SEGMENT_SIZE_32K_BYTES;
     ctx = new AuthTestCtx(new RpcHandler() {
       @Override
       public void receive(

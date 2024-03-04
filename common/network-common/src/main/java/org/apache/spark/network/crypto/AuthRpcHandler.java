@@ -112,7 +112,7 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
       Preconditions.checkState(secret != null,
         "Trying to authenticate non-registered app %s.", challenge.appId());
       LOG.debug("Authenticating challenge for app {}.", challenge.appId());
-      engine = new AuthEngine(challenge.appId(), secret, conf);
+      engine = new AuthEngine(challenge.appId(), secret);
       AuthMessage response = engine.response(challenge);
       ByteBuf responseData = Unpooled.buffer(response.encodedLength());
       response.encode(responseData);

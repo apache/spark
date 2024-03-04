@@ -17,362 +17,283 @@
 
 package org.apache.spark.network.crypto;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.WritableByteChannel;
-import java.util.Properties;
-import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.spec.IvParameterSpec;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.crypto.tink.subtle.AesGcmHkdfStreaming;
+import com.google.crypto.tink.subtle.Hex;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
-import org.apache.commons.crypto.stream.CryptoInputStream;
-import org.apache.commons.crypto.stream.CryptoOutputStream;
-
+import io.netty.util.ReferenceCounted;
 import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteArrayReadableChannel;
-import org.apache.spark.network.util.ByteArrayWritableChannel;
+
+import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
+import java.security.GeneralSecurityException;
 
 /**
  * Cipher for encryption and decryption.
  */
 public class TransportCipher {
-  @VisibleForTesting
-  static final String ENCRYPTION_HANDLER_NAME = "TransportEncryption";
-  private static final String DECRYPTION_HANDLER_NAME = "TransportDecryption";
-  @VisibleForTesting
-  static final int STREAM_BUFFER_SIZE = 1024 * 32;
-
-  private final Properties conf;
-  private final String cipher;
-  private final SecretKeySpec key;
-  private final byte[] inIv;
-  private final byte[] outIv;
-
-  public TransportCipher(
-      Properties conf,
-      String cipher,
-      SecretKeySpec key,
-      byte[] inIv,
-      byte[] outIv) {
-    this.conf = conf;
-    this.cipher = cipher;
-    this.key = key;
-    this.inIv = inIv;
-    this.outIv = outIv;
-  }
-
-  public String getCipherTransformation() {
-    return cipher;
-  }
-
-  @VisibleForTesting
-  SecretKeySpec getKey() {
-    return key;
-  }
-
-  /** The IV for the input channel (i.e. output channel of the remote side). */
-  public byte[] getInputIv() {
-    return inIv;
-  }
-
-  /** The IV for the output channel (i.e. input channel of the remote side). */
-  public byte[] getOutputIv() {
-    return outIv;
-  }
-
-  @VisibleForTesting
-  CryptoOutputStream createOutputStream(WritableByteChannel ch) throws IOException {
-    return new CryptoOutputStream(cipher, conf, ch, key, new IvParameterSpec(outIv));
-  }
-
-  @VisibleForTesting
-  CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
-    return new CryptoInputStream(cipher, conf, ch, key, new IvParameterSpec(inIv));
-  }
-
-  /**
-   * Add handlers to channel.
-   *
-   * @param ch the channel for adding handlers
-   * @throws IOException
-   */
-  public void addToChannel(Channel ch) throws IOException {
-    ch.pipeline()
-      .addFirst(ENCRYPTION_HANDLER_NAME, new EncryptionHandler(this))
-      .addFirst(DECRYPTION_HANDLER_NAME, new DecryptionHandler(this));
-  }
-
-  @VisibleForTesting
-  static class EncryptionHandler extends ChannelOutboundHandlerAdapter {
-    private final ByteArrayWritableChannel byteEncChannel;
-    private final CryptoOutputStream cos;
-    private final ByteArrayWritableChannel byteRawChannel;
-    private boolean isCipherValid;
-
-    EncryptionHandler(TransportCipher cipher) throws IOException {
-      byteEncChannel = new ByteArrayWritableChannel(STREAM_BUFFER_SIZE);
-      cos = cipher.createOutputStream(byteEncChannel);
-      byteRawChannel = new ByteArrayWritableChannel(STREAM_BUFFER_SIZE);
-      isCipherValid = true;
-    }
-
-    @Override
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-      throws Exception {
-      ctx.write(createEncryptedMessage(msg), promise);
-    }
-
     @VisibleForTesting
-    EncryptedMessage createEncryptedMessage(Object msg) {
-      return new EncryptedMessage(this, cos, msg, byteEncChannel, byteRawChannel);
+    static final String ENCRYPTION_HANDLER_NAME = "TransportEncryption";
+    @VisibleForTesting
+    static final int PLAINTEXT_SEGMENT_SIZE_32K_BYTES = 1024 * 32;
+    private static final String DECRYPTION_HANDLER_NAME = "TransportDecryption";
+    private static final int SEGMENT_ENCRYPTER_OVERHEAD_BYTES = 40;
+    private static final String MAC_ALGORITHM = "HMACSHA256";
+    private final String identifier;
+    private final AesGcmHkdfStreaming gcmStreamer;
+
+    public TransportCipher(String identifier, SecretKeySpec derivedAesKey) throws GeneralSecurityException {
+        this.identifier = identifier;
+        gcmStreamer = new AesGcmHkdfStreaming(
+                derivedAesKey.getEncoded(),
+                MAC_ALGORITHM,
+                derivedAesKey.getEncoded().length,
+                PLAINTEXT_SEGMENT_SIZE_32K_BYTES + SEGMENT_ENCRYPTER_OVERHEAD_BYTES,
+                0
+        );
     }
 
     @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-      try {
-        if (isCipherValid) {
-          cos.close();
-        }
-      } finally {
-        super.close(ctx, promise);
-      }
+    public String toString() {
+        return "TransportCipher(id=" + identifier + ")";
+    }
+
+    AesGcmHkdfStreaming getGcmStreamer() {
+        return gcmStreamer;
+    }
+
+    public long expectedCiphertextSize(long plaintextSize) {
+        return gcmStreamer.expectedCiphertextSize(plaintextSize);
     }
 
     /**
-     * SPARK-25535. Workaround for CRYPTO-141. Avoid further interaction with the underlying cipher
-     * after an error occurs.
+     * Add handlers to channel.
+     *
+     * @param ch the channel for adding handlers
      */
-    void reportError() {
-      this.isCipherValid = false;
+    public void addToChannel(Channel ch) throws GeneralSecurityException {
+        ch.pipeline()
+                .addFirst(ENCRYPTION_HANDLER_NAME, new EncryptionHandler(this))
+                .addFirst(DECRYPTION_HANDLER_NAME, new DecryptionHandler(this));
     }
 
-    boolean isCipherValid() {
-      return isCipherValid;
-    }
-  }
+    @VisibleForTesting
+    static class EncryptionHandler extends ChannelOutboundHandlerAdapter {
+        private final ByteBuffer plaintextBuffer;
+        private final ByteBuffer ciphertextBuffer;
+        private final AesGcmHkdfStreaming gcmStreamer;
 
-  private static class DecryptionHandler extends ChannelInboundHandlerAdapter {
-    private final CryptoInputStream cis;
-    private final ByteArrayReadableChannel byteChannel;
-    private boolean isCipherValid;
-
-    DecryptionHandler(TransportCipher cipher) throws IOException {
-      byteChannel = new ByteArrayReadableChannel();
-      cis = cipher.createInputStream(byteChannel);
-      isCipherValid = true;
-    }
-
-    @Override
-    public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
-      ByteBuf buffer = (ByteBuf) data;
-
-      try {
-        if (!isCipherValid) {
-          throw new IOException("Cipher is in invalid state.");
-        }
-        byte[] decryptedData = new byte[buffer.readableBytes()];
-        byteChannel.feedData(buffer);
-
-        int offset = 0;
-        while (offset < decryptedData.length) {
-          // SPARK-25535: workaround for CRYPTO-141.
-          try {
-            offset += cis.read(decryptedData, offset, decryptedData.length - offset);
-          } catch (InternalError ie) {
-            isCipherValid = false;
-            throw ie;
-          }
+        EncryptionHandler(TransportCipher transportCipher) {
+            this.gcmStreamer = transportCipher.getGcmStreamer();
+            plaintextBuffer = ByteBuffer.allocate(PLAINTEXT_SEGMENT_SIZE_32K_BYTES);
+            ciphertextBuffer =
+                    ByteBuffer.allocate((int) gcmStreamer.expectedCiphertextSize(PLAINTEXT_SEGMENT_SIZE_32K_BYTES));
         }
 
-        ctx.fireChannelRead(Unpooled.wrappedBuffer(decryptedData, 0, decryptedData.length));
-      } finally {
-        buffer.release();
-      }
-    }
-
-    @Override
-    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-      // We do the closing of the stream / channel in handlerRemoved(...) as
-      // this method will be called in all cases:
-      //
-      //     - when the Channel becomes inactive
-      //     - when the handler is removed from the ChannelPipeline
-      try {
-        if (isCipherValid) {
-          cis.close();
-        }
-      } finally {
-        super.handlerRemoved(ctx);
-      }
-    }
-  }
-
-  @VisibleForTesting
-  static class EncryptedMessage extends AbstractFileRegion {
-    private final boolean isByteBuf;
-    private final ByteBuf buf;
-    private final FileRegion region;
-    private final CryptoOutputStream cos;
-    private final EncryptionHandler handler;
-    private final long count;
-    private long transferred;
-
-    // Due to streaming issue CRYPTO-125: https://issues.apache.org/jira/browse/CRYPTO-125, it has
-    // to utilize two helper ByteArrayWritableChannel for streaming. One is used to receive raw data
-    // from upper handler, another is used to store encrypted data.
-    private final ByteArrayWritableChannel byteEncChannel;
-    private final ByteArrayWritableChannel byteRawChannel;
-
-    private ByteBuffer currentEncrypted;
-
-    EncryptedMessage(
-        EncryptionHandler handler,
-        CryptoOutputStream cos,
-        Object msg,
-        ByteArrayWritableChannel byteEncChannel,
-        ByteArrayWritableChannel byteRawChannel) {
-      Preconditions.checkArgument(msg instanceof ByteBuf || msg instanceof FileRegion,
-        "Unrecognized message type: %s", msg.getClass().getName());
-      this.handler = handler;
-      this.isByteBuf = msg instanceof ByteBuf;
-      this.buf = isByteBuf ? (ByteBuf) msg : null;
-      this.region = isByteBuf ? null : (FileRegion) msg;
-      this.transferred = 0;
-      this.cos = cos;
-      this.byteEncChannel = byteEncChannel;
-      this.byteRawChannel = byteRawChannel;
-      this.count = isByteBuf ? buf.readableBytes() : region.count();
-    }
-
-    @Override
-    public long count() {
-      return count;
-    }
-
-    @Override
-    public long position() {
-      return 0;
-    }
-
-    @Override
-    public long transferred() {
-      return transferred;
-    }
-
-    @Override
-    public EncryptedMessage touch(Object o) {
-      super.touch(o);
-      if (region != null) {
-        region.touch(o);
-      }
-      if (buf != null) {
-        buf.touch(o);
-      }
-      return this;
-    }
-
-    @Override
-    public EncryptedMessage retain(int increment) {
-      super.retain(increment);
-      if (region != null) {
-        region.retain(increment);
-      }
-      if (buf != null) {
-        buf.retain(increment);
-      }
-      return this;
-    }
-
-    @Override
-    public boolean release(int decrement) {
-      if (region != null) {
-        region.release(decrement);
-      }
-      if (buf != null) {
-        buf.release(decrement);
-      }
-      return super.release(decrement);
-    }
-
-    @Override
-    public long transferTo(WritableByteChannel target, long position) throws IOException {
-      Preconditions.checkArgument(position == transferred(), "Invalid position.");
-
-      if (transferred == count) {
-        return 0;
-      }
-
-      long totalBytesWritten = 0L;
-      do {
-        if (currentEncrypted == null) {
-          encryptMore();
+        @Override
+        public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+            EncryptedMessage<?> emsg;
+            if (msg instanceof ByteBuf byteBuf) {
+                emsg = createEncryptedMessage(byteBuf);
+            } else if (msg instanceof FileRegion fileRegion) {
+                emsg = createEncryptedMessage(fileRegion);
+            } else {
+                throw new Exception("Input message is not ByteBuf or FileRegion");
+            }
+            ctx.write(emsg, promise);
         }
 
-        long remaining = currentEncrypted.remaining();
-        if (remaining == 0)  {
-          // Just for safety to avoid endless loop. It usually won't happen, but since the
-          // underlying `region.transferTo` is allowed to transfer 0 bytes, we should handle it for
-          // safety.
-          currentEncrypted = null;
-          byteEncChannel.reset();
-          return totalBytesWritten;
+        @VisibleForTesting
+        EncryptedMessage<ByteBuf> createEncryptedMessage(ByteBuf msg) throws GeneralSecurityException {
+            return new EncryptedMessage<>(gcmStreamer, msg, plaintextBuffer, ciphertextBuffer);
         }
 
-        long bytesWritten = target.write(currentEncrypted);
-        totalBytesWritten += bytesWritten;
-        transferred += bytesWritten;
-        if (bytesWritten < remaining) {
-          // break as the underlying buffer in "target" is full
-          break;
+        @VisibleForTesting
+        EncryptedMessage<FileRegion> createEncryptedMessage(FileRegion msg) throws GeneralSecurityException {
+            return new EncryptedMessage<>(gcmStreamer, msg, plaintextBuffer, ciphertextBuffer);
         }
-        currentEncrypted = null;
-        byteEncChannel.reset();
-      } while (transferred < count);
-
-      return totalBytesWritten;
     }
 
-    private void encryptMore() throws IOException {
-      if (!handler.isCipherValid()) {
-        throw new IOException("Cipher is in invalid state.");
-      }
-      byteRawChannel.reset();
+    private static class DecryptionHandler extends ChannelInboundHandlerAdapter {
+        private final InternalStreamingAeadDecryptingChannel decryptingChannel;
+        private final ByteArrayReadableChannel ciphertextChannel;
+        private static int count = 0;
+        private int localCount;
+        DecryptionHandler(TransportCipher transportCipher) throws GeneralSecurityException {
+            count++;
+            localCount = count;
+            System.out.println("New DecryptionHandler? " + localCount);
+            ByteBuffer plaintextBuffer = ByteBuffer.allocate(PLAINTEXT_SEGMENT_SIZE_32K_BYTES);
+            ByteBuffer ciphertextBuffer = ByteBuffer.allocate((int)
+                    transportCipher.getGcmStreamer().expectedCiphertextSize(PLAINTEXT_SEGMENT_SIZE_32K_BYTES));
+            decryptingChannel = new InternalStreamingAeadDecryptingChannel(
+                    transportCipher.getGcmStreamer(),
+                    plaintextBuffer,
+                    ciphertextBuffer);
+            ciphertextChannel = new ByteArrayReadableChannel();
+            decryptingChannel.setCiphertextChannel(ciphertextChannel);
+        }
 
-      if (isByteBuf) {
-        int copied = byteRawChannel.write(buf.nioBuffer());
-        buf.skipBytes(copied);
-      } else {
-        region.transferTo(byteRawChannel, region.transferred());
-      }
+        @Override
+        public void channelRead(ChannelHandlerContext ctx, Object data) throws Exception {
+            ByteBuf buffer = (ByteBuf) data;
+            try {
+                ByteBuffer decryptedByteBuffer = ByteBuffer.allocate(buffer.readableBytes());
+                int bytesRead = 0;
+                do {
+                    ciphertextChannel.feedData(buffer);
+                    bytesRead += decryptingChannel.read(decryptedByteBuffer);
+                    ByteBuffer slice = decryptedByteBuffer.slice();
+                    slice.limit(bytesRead);
+                    System.out.println("Bytes Read: " + bytesRead);
+                    System.out.println(decryptingChannel);
+                    System.out.println(Hex.encode(decryptedByteBuffer.array()));
+                    ctx.fireChannelRead(Unpooled.wrappedBuffer(slice));
+                    System.out.println(Hex.encode(decryptedByteBuffer.array()));
+                } while (bytesRead > 0);
+            } finally {
+                buffer.release();
+            }
+        }
 
-      try {
-        cos.write(byteRawChannel.getData(), 0, byteRawChannel.length());
-        cos.flush();
-      } catch (InternalError ie) {
-        handler.reportError();
-        throw ie;
-      }
+        @Override
+        public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+            System.out.println("Channel read complete? Local count " + localCount + " Count "+ count + " " + decryptingChannel);
+            //decryptingChannel.close();
+            ctx.fireChannelReadComplete();
+        }
 
-      currentEncrypted = ByteBuffer.wrap(byteEncChannel.getData(),
-        0, byteEncChannel.length());
+        @Override
+        public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+            System.out.println("Handler removed? Local count " + localCount + " Count "+ count + " " + decryptingChannel);
+            super.handlerRemoved(ctx);
+        }
     }
 
-    @Override
-    protected void deallocate() {
-      byteRawChannel.reset();
-      byteEncChannel.reset();
-      if (region != null) {
-        region.release();
-      }
-      if (buf != null) {
-        buf.release();
-      }
-    }
-  }
+    @VisibleForTesting
+    static class EncryptedMessage<T extends ReferenceCounted> extends AbstractFileRegion {
+        private final T plaintextMessage;
+        private final long outputExpectedCount;
+        private final long inputCount;
+        private final ByteBuffer plaintextBuffer;
+        private final ByteBuffer ciphertextBuffer;
+        private final AesGcmHkdfStreaming gcmStreamer;
+        private final InternalStreamingAeadEncryptingChannel encryptingChannel;
 
+
+        EncryptedMessage(
+                AesGcmHkdfStreaming gcmStreamer,
+                T plaintextMessage,
+                ByteBuffer plaintextBuffer,
+                ByteBuffer ciphertextBuffer) throws GeneralSecurityException {
+            Preconditions.checkArgument(plaintextMessage instanceof ByteBuf || plaintextMessage instanceof FileRegion,
+                    "Unrecognized message type: %s", plaintextMessage.getClass().getName());
+            this.gcmStreamer = gcmStreamer;
+            this.plaintextBuffer = plaintextBuffer;
+            this.ciphertextBuffer = ciphertextBuffer;
+            this.plaintextMessage = plaintextMessage;
+            encryptingChannel = new InternalStreamingAeadEncryptingChannel(gcmStreamer, plaintextBuffer, ciphertextBuffer);
+
+            // Set the expected count of bytes to read and the count of bytes transferred
+            if (plaintextMessage instanceof ByteBuf byteBuf) {
+                inputCount = byteBuf.readableBytes();
+            } else {
+                inputCount = ((FileRegion) plaintextMessage).count();
+            }
+            outputExpectedCount = expectedCiphertextSize((int) inputCount);
+        }
+
+        public long expectedCiphertextSize(int plaintextSizeBytes) {
+            return gcmStreamer.expectedCiphertextSize(plaintextSizeBytes);
+        }
+
+
+
+        @Override
+        public long count() {
+            return outputExpectedCount;
+        }
+
+        @Override
+        public long position() {
+            return 0;
+        }
+
+        @Override
+        public long transferred() {
+            return encryptingChannel.getWritten();
+        }
+
+        @Override
+        public EncryptedMessage<T> touch(Object o) {
+            super.touch(o);
+            plaintextMessage.touch(o);
+            return this;
+        }
+
+        @Override
+        public EncryptedMessage<T> retain(int increment) {
+            super.retain(increment);
+            plaintextMessage.retain(increment);
+            return this;
+        }
+
+        @Override
+        public boolean release(int decrement) {
+            plaintextMessage.release(decrement);
+            return super.release(decrement);
+        }
+
+
+        @Override
+        protected void deallocate() {
+            System.out.println("EncryptMessage.deallocating()");
+            plaintextMessage.release();
+            plaintextBuffer.clear();
+            ciphertextBuffer.clear();
+        }
+
+        @Override
+        public long transferTo(WritableByteChannel target, long position) throws IOException {
+            Preconditions.checkArgument(position == transferred(), "Invalid position.");
+            Preconditions.checkState(encryptingChannel.isOpen());
+            if (encryptingChannel.getInputTransferred() == outputExpectedCount) {
+                return 0;
+            }
+            encryptingChannel.setCiphertextChannel(target);
+            do {
+                if (plaintextMessage instanceof ByteBuf byteBuf) {
+                    encryptingChannel.write(byteBuf.nioBuffer());
+                } else if (plaintextMessage instanceof FileRegion fileRegion) {
+                    // It's allowable for FileRegions to transfer 0 bytes. If they do, we just skip.
+                    if (fileRegion.transferTo(encryptingChannel, fileRegion.transferred()) == 0) {
+                        return 0;
+                    }
+                } else {
+                  // This should not be reachable because we have preconditions in the constructor.
+                  throw new RuntimeException("Plaintext Message is not a ByteBuf or FileRegion");
+                }
+            } while (encryptingChannel.getInputTransferred() < inputCount);
+            encryptingChannel.close();
+            return encryptingChannel.getWritten();
+        }
+
+        @Override
+        public String toString() {
+            return "EncryptedMessage [" +
+                    "\ninputCount: " + inputCount +
+                    "\noutputExpectedCount: " + outputExpectedCount +
+                    "\nciphertextTransferred: " + encryptingChannel.getWritten() +
+                    "\nChannel Open? " + encryptingChannel.isOpen() +
+                    "\n]";
+        }
+    }
 }

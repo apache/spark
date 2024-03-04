@@ -214,13 +214,6 @@ public class TransportConf {
   }
 
   /**
-   * The cipher transformation to use for encrypting session data.
-   */
-  public String cipherTransformation() {
-    return conf.get("spark.network.crypto.cipher", "AES/CTR/NoPadding");
-  }
-
-  /**
    * Whether to fall back to SASL if the new auth protocol fails. Enabled by default for
    * backwards compatibility.
    */

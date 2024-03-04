@@ -16,50 +16,26 @@
  */
 package org.apache.spark.network.crypto;
 
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.WritableByteChannel;
+import java.security.GeneralSecurityException;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
-import org.apache.commons.crypto.stream.CryptoInputStream;
-import org.apache.commons.crypto.stream.CryptoOutputStream;
-import org.apache.spark.network.util.MapConfigProvider;
-import org.apache.spark.network.util.TransportConf;
 import org.junit.jupiter.api.Test;
+
+import javax.crypto.spec.SecretKeySpec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 public class TransportCipherSuite {
 
   @Test
-  public void testBufferNotLeaksOnInternalError() throws IOException {
-    String algorithm = "TestAlgorithm";
-    TransportConf conf = new TransportConf("Test", MapConfigProvider.EMPTY);
-    TransportCipher cipher = new TransportCipher(conf.cryptoConf(), conf.cipherTransformation(),
-      new SecretKeySpec(new byte[256], algorithm), new byte[0], new byte[0]) {
-
-      @Override
-      CryptoOutputStream createOutputStream(WritableByteChannel ch) {
-        return null;
-      }
-
-      @Override
-      CryptoInputStream createInputStream(ReadableByteChannel ch) throws IOException {
-        CryptoInputStream mockInputStream = mock(CryptoInputStream.class);
-        when(mockInputStream.read(any(byte[].class), anyInt(), anyInt()))
-          .thenThrow(new InternalError());
-        return mockInputStream;
-      }
-    };
+  public void testBufferNotLeaksOnInternalError() throws GeneralSecurityException {
+    SecretKeySpec fakeAesKey = new SecretKeySpec(new byte[16], "AES");
+    TransportCipher cipher = new TransportCipher("ID", fakeAesKey);
 
     EmbeddedChannel channel = new EmbeddedChannel();
     cipher.addToChannel(channel);
