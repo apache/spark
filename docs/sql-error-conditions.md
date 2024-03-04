@@ -392,12 +392,6 @@ Cannot find a short name for the codec `<codecName>`.
 
 The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
 
-### COLLATION_MISMATCH
-
-[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Collations `<collationNameLeft>` and `<collationNameRight>` are not compatible. Please use the same collation for both strings.
-
 ### COLLATION_NOT_SUPPORTED_FOR_FUNCTION
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -2459,6 +2453,14 @@ Cannot call the method "`<methodName>`" of the class "`<className>`".
 
 The char/varchar type can't be used in the table schema.
 If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
+
+### [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Collation `<collationName>` is not supported for:
+
+For more details see [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
 
 ### UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY
 
