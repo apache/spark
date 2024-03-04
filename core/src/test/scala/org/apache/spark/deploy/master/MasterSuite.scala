@@ -33,7 +33,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{doNothing, mock, times, verify, when}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -152,11 +152,7 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
 }
 
 class MasterSuite extends SparkFunSuite
-  with Matchers
-  with Eventually
-  with PrivateMethodTester
-  with BeforeAndAfter
-  with BeforeAndAfterEach {
+  with Matchers with Eventually with PrivateMethodTester with BeforeAndAfter {
 
   // regex to extract worker links from the master webui HTML
   // groups represent URL and worker ID
@@ -170,11 +166,6 @@ class MasterSuite extends SparkFunSuite
       _master.rpcEnv.awaitTermination()
       _master = null
     }
-  }
-
-  override def afterEach(): Unit = {
-    super.afterEach()
-    System.gc()
   }
 
   test("can use a custom recovery mode factory") {
@@ -726,7 +717,7 @@ class MasterSuite extends SparkFunSuite
           worker.self.address.port,
           worker.self,
           4 + idx,
-          10240 * (if (idx < 2) idx else (6 - idx)),
+          1280 * (if (idx < 2) idx else (6 - idx)),
           "http://localhost:8080",
           RpcAddress("localhost", 10000))
         master.self.send(workerReg)
@@ -736,7 +727,7 @@ class MasterSuite extends SparkFunSuite
       }
 
       // An application with two executors
-      val appInfo = makeAppInfo(1024, Some(2), Some(4))
+      val appInfo = makeAppInfo(128, Some(2), Some(4))
       master.registerApplication(appInfo)
       startExecutorsOnWorkers(master)
       assert(appInfo.executors.map(_._2.worker.id).toSeq.distinct.sorted === expected)
