@@ -469,12 +469,6 @@
     ],
     "sqlState" : "42704"
   },
-  "COLLATION_NOT_SUPPORTED_FOR_FUNCTION" : {
-    "message" : [
-      "Function <functionName> does not support collation <collationName>. Please try another collation type."
-    ],
-    "sqlState" : "0A000"
-  },
   "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
       "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"

@@ -392,12 +392,6 @@ Cannot find a short name for the codec `<codecName>`.
 
 The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
 
-### COLLATION_NOT_SUPPORTED_FOR_FUNCTION
-
-[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
-
-Function `<functionName>` does not support collation `<collationName>`. Please try another collation type.
-
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 [SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
