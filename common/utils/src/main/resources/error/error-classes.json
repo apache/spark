@@ -433,6 +433,12 @@
     ],
     "sqlState" : "56000"
   },
+  "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
+    "message" : [
+      "<className> must override either <method1> or <method2>."
+    ],
+    "sqlState" : "38000"
+  },
   "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
     "message" : [
       "`MapObjects` does not support the class <cls> as resulting collection."
@@ -688,6 +694,11 @@
         "message" : [
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
+        ]
+      },
+      "COLLATION_MISMATCH" : {
+        "message" : [
+          "Collations <collationNameLeft> and <collationNameRight> are not compatible. Please use the same collation for both strings."
         ]
       },
       "CREATE_MAP_KEY_DIFF_TYPES" : {
@@ -2956,6 +2967,12 @@
     },
     "sqlState" : "0A000"
   },
+  "NOT_UNRESOLVED_ENCODER" : {
+    "message" : [
+      "Unresolved encoder expected, but <attr> was found."
+    ],
+    "sqlState" : "42601"
+  },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [
       "Can't determine the default value for <colName> since it is not nullable and it has no default value."
@@ -3754,6 +3771,19 @@
       "The char/varchar type can't be used in the table schema.",
       "If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set \"spark.sql.legacy.charVarcharAsString\" to \"true\"."
     ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_COLLATION" : {
+    "message" : [
+      "Collation <collationName> is not supported for:"
+    ],
+    "subClass" : {
+      "FOR_FUNCTION" : {
+        "message" : [
+          "function <functionName>. Please try to use a different collation."
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
@@ -5728,16 +5758,6 @@
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2023" : {
-    "message" : [
-      "Unresolved encoder expected, but <attr> was found."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2025" : {
-    "message" : [
-      "<className> must override either <m1> or <m2>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2026" : {

@@ -31,7 +31,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   /**
    * Returns whether assigned collation is the default spark collation (UCS_BASIC).
    */
-  def isDefaultCollation: Boolean = collationId == StringType.DEFAULT_COLLATION_ID
+  def isDefaultCollation: Boolean = collationId == CollationFactory.DEFAULT_COLLATION_ID
 
   /**
    * Binary collation implies that strings are considered equal only if they are
@@ -69,6 +69,5 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
  */
 @Stable
 case object StringType extends StringType(0) {
-  val DEFAULT_COLLATION_ID = 0
   def apply(collationId: Int): StringType = new StringType(collationId)
 }
