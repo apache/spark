@@ -277,7 +277,7 @@ object SparkBuild extends PomBuild {
       Resolver.mavenLocal,
       Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ) ++ Seq(
-      "github-deploy" at "https://raw.github.com/pan3793/mvn-repo/release-2.3.101/",
+      "github-deploy" at "https://raw.github.com/pan3793/mvn-repo/release-2.3.102/",
       Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ),
     externalResolvers := resolvers.value,

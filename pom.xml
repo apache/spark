@@ -132,8 +132,8 @@
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.101</hive.version>
-    <hive23.version>2.3.101</hive23.version>
+    <hive.version>2.3.102</hive.version>
+    <hive23.version>2.3.102</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
@@ -145,8 +145,6 @@
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.20</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
-    <!-- SPARK-46938: Required by Hive / LibThrift libs -->
-    <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.2</ivy.version>
     <oro.version>2.0.8</oro.version>
@@ -362,7 +360,7 @@
 
     <repository>
       <id>github-deploy</id>
-      <url>https://raw.github.com/pan3793/mvn-repo/release-2.3.101/</url>
+      <url>https://raw.github.com/pan3793/mvn-repo/release-2.3.102/</url>
       <snapshots>
         <enabled>true</enabled>
         <updatePolicy>always</updatePolicy>
@@ -2936,11 +2934,6 @@
         <groupId>jakarta.servlet</groupId>
         <artifactId>jakarta.servlet-api</artifactId>
         <version>${jakartaservlet.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>javax.servlet</groupId>
-        <artifactId>javax.servlet-api</artifactId>
-        <version>${javaxservlet.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

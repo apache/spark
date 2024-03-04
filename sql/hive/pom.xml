@@ -137,10 +137,6 @@
     </dependency>
     <!-- transitive dependencies of hive-exec-core doesn't declare -->
     <dependency>
-      <groupId>javax.servlet</groupId>
-      <artifactId>javax.servlet-api</artifactId>
-    </dependency>
-    <dependency>
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>
     </dependency>
