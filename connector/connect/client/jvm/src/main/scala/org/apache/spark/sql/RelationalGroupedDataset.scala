@@ -259,18 +259,14 @@ class RelationalGroupedDataset private[sql] (
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    *
+   * Spark will '''eagerly''' compute the distinct values in `pivotColumn` so it can determine the
+   * resulting schema of the transformation. To avoid any eager computations, provide an explicit
+   * list of values via `pivot(pivotColumn: String, values: Seq[Any])`.
+   *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
    *   df.groupBy("year").pivot("course").sum("earnings")
    * }}}
-   *
-   * @note
-   *   Spark will '''eagerly''' compute the distinct values in `pivotColumn` so it can determine
-   *   the resulting schema of the transformation. Depending on the size and complexity of your
-   *   data, this may take some time. In other words, though the pivot transformation is lazy like
-   *   most DataFrame transformations, computing the distinct pivot values is not. To avoid any
-   *   eager computations, provide an explicit list of values via `pivot(pivotColumn: String,
-   *   values: Seq[Any])`.
    *
    * @see
    *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
@@ -395,18 +391,14 @@ class RelationalGroupedDataset private[sql] (
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    *
+   * Spark will '''eagerly''' compute the distinct values in `pivotColumn` so it can determine the
+   * resulting schema of the transformation. To avoid any eager computations, provide an explicit
+   * list of values via `pivot(pivotColumn: Column, values: Seq[Any])`.
+   *
    * {{{
    *   // Compute the sum of earnings for each year by course with each course as a separate column
    *   df.groupBy($"year").pivot($"course").sum($"earnings");
    * }}}
-   *
-   * @note
-   *   Spark will '''eagerly''' compute the distinct values in `pivotColumn` so it can determine
-   *   the resulting schema of the transformation. Depending on the size and complexity of your
-   *   data, this may take some time. In other words, though the pivot transformation is lazy like
-   *   most DataFrame transformations, computing the distinct pivot values is not. To avoid any
-   *   eager computations, provide an explicit list of values via `pivot(pivotColumn: Column,
-   *   values: Seq[Any])`.
    *
    * @see
    *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the

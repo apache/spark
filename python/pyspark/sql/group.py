@@ -448,11 +448,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
             .. note:: If ``values`` is not provided, Spark will **eagerly** compute the distinct
                 values in ``pivot_col`` so it can determine the resulting schema of the
-                transformation. Depending on the size and complexity of your data, this may take
-                some time.
-                In other words, though the pivot transformation is lazy like most DataFrame
-                transformations, computing the distinct pivot values is not. To avoid any eager
-                computations, provide an explicit list of values.
+                transformation. To avoid any eager computations, provide an explicit list of values.
 
         Examples
         --------
