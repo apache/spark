@@ -199,8 +199,6 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       leftKeys, rightKeys)
 
     // Returns a predicate that drops data less than the state watermark.
-    // oneSideInputAttributes is the side from which state will be dropped, while
-    // otherSideInputAttributes is the side on which a watermark must be defined.
     def getOneSideStateWatermarkPredicate(
         stateRemovalSideAttributes: Seq[Attribute],
         stateRemovalSideJoinKeys: Seq[Expression],
