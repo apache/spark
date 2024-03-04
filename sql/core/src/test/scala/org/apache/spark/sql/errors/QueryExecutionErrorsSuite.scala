@@ -1192,7 +1192,7 @@ class QueryExecutionErrorsSuite
 
 
   test("UnaryExpression should override eval or nullSafeEval") {
-    case class NyUnaryExpression(child: Expression)
+    case class MyUnaryExpression(child: Expression)
       extends UnaryExpression {
       override def dataType: DataType = IntegerType
 
@@ -1201,13 +1201,14 @@ class QueryExecutionErrorsSuite
       override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = null
     }
 
+    val expr = MyUnaryExpression(Literal.create(1, IntegerType))
     checkError(
       exception = intercept[SparkRuntimeException] {
-        NyUnaryExpression(Literal.create(1, IntegerType)).eval(EmptyRow)
+        expr.eval(EmptyRow)
       },
       errorClass = "CLASS_NOT_OVERRIDE_EXPECTED_METHOD",
       parameters = Map(
-        "className" -> "UnaryExpression",
+        "className" -> expr.getClass.getName,
         "method1" -> "eval",
         "method2" -> "nullSafeEval"
       )
