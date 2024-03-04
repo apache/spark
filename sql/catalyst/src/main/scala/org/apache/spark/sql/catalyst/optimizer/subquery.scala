@@ -258,24 +258,22 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }).withNewChildren(Seq(newChild))
       updatedNode match {
         case a: Aggregate =>
-          // If we have introduced new `exists`-attributes that:
-          // 1) are referenced by aggregateExpressions within a non-aggregateFunction expression
-          // 2) are not referenced by groupingExpressions
-          // we wrap them in first() aggregate function. first() is Spark's executable version of
-          // any_value() aggregate function.
+          // If we have introduced new `exists`-attributes that are referenced by
+          // aggregateExpressions within a non-aggregateFunction expression, we wrap them in
+          // first() aggregate function. first() is Spark's executable version of any_value()
+          // aggregate function.
           // We do this to keep the aggregation valid, i.e avoid references outside of aggregate
           // functions that are not in grouping expressions.
-          // Here, the value of `exists` is functionally determined by grouping expressions, so
-          // applying any aggregate function is semantically safe.
+          // Note that the same `exists` attr will never appear in groupingExpressions due to
+          // PullOutGroupingExpressions rule.
+          // Also note: the value of `exists` is functionally determined by grouping expressions,
+          // so applying any aggregate function is semantically safe.
           val aggFunctionReferences = a.aggregateExpressions.
             flatMap(extractAggregateExpressions).
             flatMap(_.references).toSet
           val nonAggFuncReferences =
             a.aggregateExpressions.flatMap(_.references).filterNot(aggFunctionReferences.contains)
-          val groupingReferences = a.groupingExpressions.flatMap(_.references)
-          val toBeWrappedExistsAttrs = introducedAttrs
-            .filter(nonAggFuncReferences.contains)
-            .filterNot(groupingReferences.contains)
+          val toBeWrappedExistsAttrs = introducedAttrs.filter(nonAggFuncReferences.contains)
 
           // Replace all eligible `exists` by `First(exists)` among aggregateExpressions.
           val newAggregateExpressions = a.aggregateExpressions.map { aggExpr =>

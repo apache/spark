@@ -469,3 +469,19 @@ FROM t1
 struct<v1:bigint,ct:bigint>
 -- !query output
 0	8
+
+
+-- !query
+SELECT
+    cast(t1a in (select t2a from t2) as int) + 1 as groupExpr,
+    sum(cast(t1a in (select t2a from t2) as int) + 1) as aggExpr,
+    cast(t1a in (select t2a from t2) as int) + 1 + cast(exists (select t2a from t2) as int)
+        as complexExpr
+FROM t1
+GROUP BY
+    cast(t1a in (select t2a from t2) as int) + 1
+-- !query schema
+struct<groupExpr:int,aggExpr:bigint,complexExpr:int>
+-- !query output
+1	7	2
+2	10	3

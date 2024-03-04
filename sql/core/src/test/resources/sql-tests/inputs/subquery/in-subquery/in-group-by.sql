@@ -308,3 +308,12 @@ SELECT
   count(t1.t1c) as ct
 FROM t1;
 
+-- Group-by statement contains an in-subquery, and there's an additional exists in select clause.
+SELECT
+    cast(t1a in (select t2a from t2) as int) + 1 as groupExpr,
+    sum(cast(t1a in (select t2a from t2) as int) + 1) as aggExpr,
+    cast(t1a in (select t2a from t2) as int) + 1 + cast(exists (select t2a from t2) as int)
+        as complexExpr
+FROM t1
+GROUP BY
+    cast(t1a in (select t2a from t2) as int) + 1;
