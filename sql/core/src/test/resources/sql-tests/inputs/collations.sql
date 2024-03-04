@@ -25,6 +25,9 @@ select * from t1 where ucs_basic < 'bbb';
 -- filter less then ucs_basic_lcase
 select * from t1 where ucs_basic_lcase < 'bbb' collate 'ucs_basic_lcase';
 
+-- inner join
+select l.ucs_basic, r.ucs_basic_lcase from t1 l join t1 r on l.ucs_basic_lcase = r.ucs_basic_lcase;
+
 drop table t1;
 
 -- create table with struct field

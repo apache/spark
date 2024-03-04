@@ -95,6 +95,21 @@ aaa	aaa
 
 
 -- !query
+select l.ucs_basic, r.ucs_basic_lcase from t1 l join t1 r on l.ucs_basic_lcase = r.ucs_basic_lcase
+-- !query schema
+struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
+-- !query output
+AAA	AAA
+AAA	aaa
+BBB	BBB
+BBB	bbb
+aaa	AAA
+aaa	aaa
+bbb	BBB
+bbb	bbb
+
+
+-- !query
 drop table t1
 -- !query schema
 struct<>

@@ -90,6 +90,19 @@ Project [ucs_basic#x, ucs_basic_lcase#x]
 
 
 -- !query
+select l.ucs_basic, r.ucs_basic_lcase from t1 l join t1 r on l.ucs_basic_lcase = r.ucs_basic_lcase
+-- !query analysis
+Project [ucs_basic#x, ucs_basic_lcase#x]
++- Join Inner, (ucs_basic_lcase#x = ucs_basic_lcase#x)
+   :- SubqueryAlias l
+   :  +- SubqueryAlias spark_catalog.default.t1
+   :     +- Relation spark_catalog.default.t1[ucs_basic#x,ucs_basic_lcase#x] parquet
+   +- SubqueryAlias r
+      +- SubqueryAlias spark_catalog.default.t1
+         +- Relation spark_catalog.default.t1[ucs_basic#x,ucs_basic_lcase#x] parquet
+
+
+-- !query
 drop table t1
 -- !query analysis
 DropTable false, false
