@@ -34,8 +34,12 @@ import org.apache.spark.sql.types._
   """,
   examples = """
     Examples:
+      > SET spark.sql.collation.enabled=true;
+      spark.sql.collation.enabled true
       > SELECT COLLATION('Spark SQL' _FUNC_ 'UCS_BASIC_LCASE');
        UCS_BASIC_LCASE
+      > SET spark.sql.collation.enabled=false;
+      spark.sql.collation.enabled false
   """,
   since = "4.0.0",
   group = "string_funcs")
@@ -91,8 +95,12 @@ case class Collate(child: Expression, collationName: String)
   usage = "_FUNC_(expr) - Returns the collation name of a given expression.",
   examples = """
     Examples:
+      > SET spark.sql.collation.enabled=true;
+      spark.sql.collation.enabled true
       > SELECT _FUNC_('Spark SQL');
        UCS_BASIC
+      > SET spark.sql.collation.enabled=false;
+      spark.sql.collation.enabled false
   """,
   since = "4.0.0",
   group = "string_funcs")
