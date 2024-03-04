@@ -173,4 +173,23 @@ class TransformWithStateWithInitialStateSuite extends StreamTest {
       }
     )
   }
+
+  test("transformWithStateWithInitialState - batch mode is supported") {
+    val inputData = MemoryStream[InputRow]
+    val result = inputData.toDS()
+      .groupByKey(x => x.key)
+      .transformWithState(new
+          StatefulProcessorWithInitialStateTestClass(),
+        TimeoutMode.NoTimeouts(), OutputMode.Append(), createInitialDfForTest
+      )
+
+    testStream(result, OutputMode.Update())(
+      AddData(inputData, InputRow("a", "update", -1.0)),
+      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
+        (t: Throwable) => {
+          assert(t.getMessage.contains("not supported"))
+        }
+      }
+    )
+  }
 }

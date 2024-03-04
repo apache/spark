@@ -906,7 +906,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           initialStateDeserializer, initialState) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
           groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
-          keyEncoder, outputObjAttr, planLater(child)) :: Nil
+          keyEncoder, outputObjAttr, planLater(child),
+          hasInitialState, initialStateGroupingAttrs, initialStateDataAttrs,
+          initialStateDeserializer, planLater(initialState)) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query

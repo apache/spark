@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, Expression, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
@@ -49,6 +50,9 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  * @param eventTimeWatermarkForEviction event time watermark for state eviction
  * @param isStreaming defines whether the query is streaming or batch
  * @param child the physical plan for the underlying data
+ * @param hasInitialState
+ * @param initialState
+ * @param isStreaming
  */
 case class TransformWithStateExec(
     keyDeserializer: Expression,
@@ -236,53 +240,57 @@ case class TransformWithStateExec(
     metrics // force lazy init at driver
 
     if (hasInitialState) {
-      // If the user provided initial state we need to have the initial state and the
-      // data in the same partition so that we can still have just one commit at the end.
-      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
-      val hadoopConfBroadcast = sparkContext.broadcast(
-        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
-      child.execute().stateStoreAwareZipPartitions(
-        initialState.execute(),
-        getStateInfo,
-        storeNames = Seq(),
-        session.sqlContext.streams.stateStoreCoordinator) {
-        // The state store aware zip partitions will provide us with two iterators,
-        // child data iterator and the initial state iterator per partition.
-        case (partitionId, childDataIterator, initStateIterator) =>
-          val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
-            stateInfo.get.operatorId, partitionId)
-          val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
-          val store = StateStore.get(
-            storeProviderId,
-            schemaForKeyRow,
-            schemaForValueRow,
-            0,
-            stateInfo.get.storeVersion,
-            useColumnFamilies = true,
-            storeConf, hadoopConfBroadcast.value.value
-          )
-          val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-            keyEncoder)
-          assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
-          statefulProcessor.init(processorHandle, outputMode)
-          processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
-
-          // Check if is first batch
-          // Only process initial states for first batch
-          if (processorHandle.getQueryInfo().getBatchId == 0) {
-            val groupedInitialStateIter =
-              GroupedIterator(initStateIterator,
-                initialStateGroupingAttributes, initialState.output)
-            groupedInitialStateIter.foreach {
-              case (keyRow, valueRowIter) =>
-                processInitialStateRows(keyRow.asInstanceOf[UnsafeRow],
-                  valueRowIter)
+      if (isStreaming) {
+        val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
+        val hadoopConfBroadcast = sparkContext.broadcast(
+          new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+        child.execute().stateStoreAwareZipPartitions(
+          initialState.execute(),
+          getStateInfo,
+          storeNames = Seq(),
+          session.sqlContext.streams.stateStoreCoordinator) {
+          // The state store aware zip partitions will provide us with two iterators,
+          // child data iterator and the initial state iterator per partition.
+          case (partitionId, childDataIterator, initStateIterator) =>
+            processDataWithInitialState(partitionId, childDataIterator, initStateIterator,
+              storeConf, hadoopConfBroadcast)
+        }
+      } else {
+        // If the query is running in batch mode, we need to create a new StateStore and instantiate
+        // a temp directory on the executors in mapPartitionsWithIndex.
+        val broadcastedHadoopConf =
+        new SerializableConfiguration(session.sessionState.newHadoopConf())
+        child.execute().mapPartitionsWithIndex[InternalRow](
+          (i, iter) => {
+            val providerId = {
+              val tempDirPath = Utils.createTempDir().getAbsolutePath
+              new StateStoreProviderId(
+                StateStoreId(tempDirPath, 0, i), getStateInfo.queryRunId)
             }
-          }
 
-          val result = processDataWithPartition(childDataIterator, store,
-            processorHandle, Option(initStateIterator))
-          result
+            val sqlConf = new SQLConf()
+            sqlConf.setConfString(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+              classOf[RocksDBStateStoreProvider].getName)
+            val storeConf = new StateStoreConf(sqlConf)
+
+            // Create StateStoreProvider for this partition
+            val stateStoreProvider = StateStoreProvider.createAndInit(
+              providerId,
+              schemaForKeyRow,
+              schemaForValueRow,
+              numColsPrefixKey = 0,
+              useColumnFamilies = true,
+              storeConf = storeConf,
+              hadoopConf = broadcastedHadoopConf.value)
+
+            val store = stateStoreProvider.getStore(0)
+            val outputIterator = processData(store, iter)
+            CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
+              stateStoreProvider.close()
+              statefulProcessor.close()
+            })
+          }
+        )
       }
     } else {
       if (isStreaming) {
@@ -353,8 +361,54 @@ case class TransformWithStateExec(
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
     processDataWithPartition(singleIterator, store, processorHandle)
   }
+
+  private def processDataWithInitialState(
+      partitionId: Int,
+      childDataIterator: Iterator[InternalRow],
+      initStateIterator: Iterator[InternalRow],
+      storeConf: StateStoreConf,
+      hadoopConfBroadcast: Broadcast[SerializableConfiguration]):
+    CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    // If the user provided initial state we need to have the initial state and the
+    // data in the same partition so that we can still have just one commit at the end.
+    val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
+      stateInfo.get.operatorId, partitionId)
+    val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
+    val store = StateStore.get(
+      storeProviderId,
+      schemaForKeyRow,
+      schemaForValueRow,
+      0,
+      stateInfo.get.storeVersion,
+      useColumnFamilies = true,
+      storeConf, hadoopConfBroadcast.value.value
+    )
+    val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
+      keyEncoder)
+    assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
+    statefulProcessor.init(processorHandle, outputMode)
+    processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+
+    // Check if is first batch
+    // Only process initial states for first batch
+    if (processorHandle.getQueryInfo().getBatchId == 0) {
+      val groupedInitialStateIter =
+        GroupedIterator(initStateIterator,
+          initialStateGroupingAttributes, initialState.output)
+      groupedInitialStateIter.foreach {
+        case (keyRow, valueRowIter) =>
+          processInitialStateRows(keyRow.asInstanceOf[UnsafeRow],
+            valueRowIter)
+      }
+    }
+
+    val result = processDataWithPartition(childDataIterator, store,
+      processorHandle, Option(initStateIterator))
+    result
+  }
 }
 
+// scalastyle:off
 object TransformWithStateExec {
 
   // Plan logical transformWithState for batch queries
@@ -368,7 +422,12 @@ object TransformWithStateExec {
       outputMode: OutputMode,
       keyEncoder: ExpressionEncoder[Any],
       outputObjAttr: Attribute,
-      child: SparkPlan): SparkPlan = {
+      child: SparkPlan,
+      hasInitialState: Boolean,
+      initialStateGroupingAttrs: Seq[Attribute],
+      initialStateDataAttrs: Seq[Attribute],
+      initialStateDeserializer: Expression,
+      initialState: SparkPlan): SparkPlan = {
     val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
     val statefulOperatorStateInfo = StatefulOperatorStateInfo(
       checkpointLocation = "", // empty checkpointLocation will be populated in doExecute
@@ -381,23 +440,24 @@ object TransformWithStateExec {
     new TransformWithStateExec(
       keyDeserializer,
       valueDeserializer,
-      keyDeserializer,
-      groupingAttributes,
-      dataAttributes,
-      AttributeSet.empty.toSeq,
-      AttributeSet.empty.toSeq,
-      statefulProcessor,
-      timeoutMode,
-      outputMode,
-      keyEncoder,
-      outputObjAttr,
-      Some(statefulOperatorStateInfo),
-      Some(System.currentTimeMillis),
-      None,
-      None,
-      child,
-      false,
-      child,
+      initialStateDeserializer = initialStateDeserializer,
+      groupingAttributes = groupingAttributes,
+      dataAttributes = dataAttributes,
+      initialStateGroupingAttributes = initialStateGroupingAttrs,
+      initialStateDataAttributes = initialStateDataAttrs,
+      statefulProcessor = statefulProcessor,
+      timeoutMode = timeoutMode,
+      outputMode = outputMode,
+      keyEncoder = keyEncoder,
+      outputObjAttr = outputObjAttr,
+      stateInfo = Some(statefulOperatorStateInfo),
+      batchTimestampMs = Some(System.currentTimeMillis),
+      eventTimeWatermarkForLateEvents = None,
+      eventTimeWatermarkForEviction = None,
+      child = child,
+      hasInitialState = hasInitialState,
+      initialState = initialState,
       isStreaming = false)
   }
 }
+// scalastyle:on
