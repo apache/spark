@@ -366,6 +366,12 @@ Checkpoint block `<rddBlockId>` not found!
 Either the executor that originally checkpointed this partition is no longer alive, or the original RDD is unpersisted.
 If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant.
 
+### CLASS_NOT_OVERRIDE_EXPECTED_METHOD
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+`<className>` must override either `<method1>` or `<method2>`.
+
 ### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -1714,6 +1720,12 @@ ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing `<table>`'s column
 Not supported command in JDBC catalog:
 
 For more details see [NOT_SUPPORTED_IN_JDBC_CATALOG](sql-error-conditions-not-supported-in-jdbc-catalog-error-class.html)
+
+### NOT_UNRESOLVED_ENCODER
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unresolved encoder expected, but `<attr>` was found.
 
 ### NO_DEFAULT_COLUMN_VALUE_AVAILABLE
 
