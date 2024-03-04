@@ -33,7 +33,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{doNothing, mock, times, verify, when}
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -152,7 +152,11 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
 }
 
 class MasterSuite extends SparkFunSuite
-  with Matchers with Eventually with PrivateMethodTester with BeforeAndAfter {
+  with Matchers
+  with Eventually
+  with PrivateMethodTester
+  with BeforeAndAfter
+  with BeforeAndAfterEach {
 
   // regex to extract worker links from the master webui HTML
   // groups represent URL and worker ID
@@ -166,6 +170,11 @@ class MasterSuite extends SparkFunSuite
       _master.rpcEnv.awaitTermination()
       _master = null
     }
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
+    System.gc()
   }
 
   test("can use a custom recovery mode factory") {
@@ -731,7 +740,6 @@ class MasterSuite extends SparkFunSuite
       master.registerApplication(appInfo)
       startExecutorsOnWorkers(master)
       assert(appInfo.executors.map(_._2.worker.id).toSeq.distinct.sorted === expected)
-      System.gc()
     }
   }
 
