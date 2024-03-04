@@ -265,33 +265,6 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
 
 This feature is supported on both Spark Connect and non-Spark-Connect, including registered UDFs.
 
-Legacy (for non-Spark-Connect)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The legacy, SparkContext-based memory profiler can be enabled by setting ``spark.python.profile.memory`` configuration to ``true``.
-The same example as above is as shown below.
-
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile.memory=true
-
-.. code-block:: python
-
-    from pyspark.sql.functions import pandas_udf
-    df = spark.range(10)
-
-    @pandas_udf("long")
-    def add1(x):
-      return x + 1
-
-    added = df.select(add1("id"))
-    added.show()
-    sc.show_profiles()
-
-The result profile is the same as that profiled by the above SparkSession-based memory profiler. The UDF IDs can also be seen in the query plan.
-
-This legacy feature is not supported with registered UDFs or Spark Connect.
-
 Identifying Hot Loops (Python Profilers)
 ----------------------------------------
 
@@ -385,63 +358,6 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
        +- *(1) Range (0, 10, step=1, splits=16)
 
 This feature is supported on both Spark Connect and non-Spark-Connect, including registered UDFs.
-
-Legacy (for RDD or non-Spark-Connect)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The legacy, RDD/SparkContext-based performance profiler can be enabled by setting ``spark.python.profile`` configuration to ``true``.
-An example for RDD is shown as below.
-
-.. code-block:: bash
-
-    pyspark --conf spark.python.profile=true
-
-
-.. code-block:: python
-
-    >>> rdd = sc.parallelize(range(100)).map(str)
-    >>> rdd.count()
-    100
-    >>> sc.show_profiles()
-    ============================================================
-    Profile of RDD<id=1>
-    ============================================================
-             728 function calls (692 primitive calls) in 0.004 seconds
-
-       Ordered by: internal time, cumulative time
-
-       ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-           12    0.001    0.000    0.001    0.000 serializers.py:210(load_stream)
-           12    0.000    0.000    0.000    0.000 {built-in method _pickle.dumps}
-           12    0.000    0.000    0.001    0.000 serializers.py:252(dump_stream)
-           12    0.000    0.000    0.001    0.000 context.py:506(f)
-    ...
-
-This legacy profiler also supports SparkContext-based performance profiling of Python/Pandas UDF. The same example as is as shown below.
-
-.. code-block:: python
-
-    >>> from pyspark.sql.functions import pandas_udf
-    >>> df = spark.range(10)
-    >>> @pandas_udf("long")
-    ... def add1(x):
-    ...     return x + 1
-    ...
-    >>> added = df.select(add1("id"))
-
-    >>> added.show()
-    +--------+
-    |add1(id)|
-    +--------+
-    ...
-    +--------+
-
-    >>> sc.show_profiles()
-    ...
-
-The result profile is the same as that profiled by the SparkSession-based performance profiler. The UDF IDs can also be seen in the query plan.
-
-This legacy feature is not supported with registered UDFs or Spark Connect.
 
 Common Exceptions / Errors
 --------------------------
