@@ -263,8 +263,6 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
 
-This feature is supported on both Spark Connect and non-Spark-Connect, including registered UDFs.
-
 Identifying Hot Loops (Python Profilers)
 ----------------------------------------
 
@@ -308,7 +306,7 @@ Executor Side
 Python/Pandas UDF
 ^^^^^^^^^^^^^^^^^
 
-To use this on Python/Pandas UDFs, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
+PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
 Python/Pandas UDFs. UDFs with iterators as inputs/outputs are not supported.
 
 SparkSession-based performance profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
@@ -356,8 +354,6 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     *(2) Project [pythonUDF0#11L AS add1(id)#3L]
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
-
-This feature is supported on both Spark Connect and non-Spark-Connect, including registered UDFs.
 
 Common Exceptions / Errors
 --------------------------
