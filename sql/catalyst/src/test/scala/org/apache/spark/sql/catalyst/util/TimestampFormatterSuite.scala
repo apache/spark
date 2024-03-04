@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{DateTimeException, LocalDateTime}
+import java.time.{DateTimeException, LocalDateTime, ZoneId}
+import java.util.Locale
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -501,5 +503,24 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       isParsing = true, zoneId = DateTimeTestUtils.LA)
     assert(formatter.parseOptional("9999-12-31 23:59:59.999").isEmpty)
     assert(formatter.parseWithoutTimeZoneOptional("9999-12-31 23:59:59.999", true).isEmpty)
+  }
+
+  test("fail to parse string as TimestampNTZ with invalid format") {
+    val zoneId = ZoneId.systemDefault()
+    val locale = Locale.getDefault()
+    val formatter = new DefaultTimestampFormatter(
+      zoneId, locale, LENIENT_SIMPLE_DATE_FORMAT, isParsing = true)
+
+    val invalidTimestampStr = "2021-13-01T25:61:61"
+
+    checkError(
+      exception = intercept[SparkException] {
+        formatter.parseWithoutTimeZone(invalidTimestampStr, allowTimeZone = false)
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("Cannot parse field value '2021-13-01T25:61:61' for pattern " +
+          "'yyyy-MM-dd HH:mm:ss' as the target spark data type \"TIMESTAMP_NTZ\"."))
+    )
   }
 }

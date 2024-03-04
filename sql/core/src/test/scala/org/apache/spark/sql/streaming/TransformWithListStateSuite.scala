@@ -27,12 +27,10 @@ case class InputRow(key: String, action: String, value: String)
 class TestListStateProcessor
   extends StatefulProcessor[String, InputRow, (String, String)] {
 
-  @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _listState: ListState[String] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
-    _processorHandle = handle
-    _listState = handle.getListState("testListState")
+  override def init(outputMode: OutputMode): Unit = {
+    _listState = getHandle.getListState("testListState")
   }
 
   override def handleInputRows(
@@ -84,14 +82,12 @@ class TestListStateProcessor
 class ToggleSaveAndEmitProcessor
   extends StatefulProcessor[String, String, String] {
 
-  @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _listState: ListState[String] = _
   @transient var _valueState: ValueState[Boolean] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
-    _processorHandle = handle
-    _listState = handle.getListState("testListState")
-    _valueState = handle.getValueState("testValueState")
+  override def init(outputMode: OutputMode): Unit = {
+    _listState = getHandle.getListState("testListState")
+    _valueState = getHandle.getValueState("testValueState")
   }
 
   override def handleInputRows(
