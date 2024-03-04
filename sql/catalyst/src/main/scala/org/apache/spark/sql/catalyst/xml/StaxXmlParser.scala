@@ -36,7 +36,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
@@ -327,9 +327,9 @@ class StaxXmlParser(
 
     if (valuesMap.isEmpty) {
       // Return an empty row with all nested elements by the schema set to null.
-      InternalRow.fromSeq(Seq.fill(schema.fieldNames.length)(null))
+      new GenericInternalRow(Array.fill[Any](schema.length)(null))
     } else {
-      InternalRow.fromSeq(row.toIndexedSeq)
+      new GenericInternalRow(row)
     }
   }
 
@@ -431,9 +431,9 @@ class StaxXmlParser(
     }
 
     if (badRecordException.isEmpty) {
-      InternalRow.fromSeq(newRow.toIndexedSeq)
+      new GenericInternalRow(newRow)
     } else {
-      throw PartialResultException(InternalRow.fromSeq(newRow.toIndexedSeq),
+      throw PartialResultException(new GenericInternalRow(newRow),
         badRecordException.get)
     }
   }
@@ -605,7 +605,7 @@ class StaxXmlParser(
         }
       case None => // do nothing
     }
-    InternalRow.fromSeq(row.toIndexedSeq)
+    new GenericInternalRow(row)
   }
 }
 
