@@ -68,6 +68,21 @@ FROM
   l;
 
 
+-- Same as above but with a filter (HAVING) above the aggregate
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    WHERE
+      null_view.a = l.a
+    having count(*) > -1
+  )
+FROM
+  l;
+
+
 set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true;
 
 -- With legacy behavior flag set, both cases evaluate to 0

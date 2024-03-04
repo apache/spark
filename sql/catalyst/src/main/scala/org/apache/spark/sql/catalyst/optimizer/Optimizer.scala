@@ -328,7 +328,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // Do not optimize DPP subquery, as it was created from optimized plan and we should not
       // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
       case d: DynamicPruningSubquery => d
-      case s@ScalarSubquery(a@Aggregate(group, _, child), _, _, _, _, mayHaveCountBug)
+      case s @ ScalarSubquery(a @ Aggregate(group, _, child), _, _, _, _, mayHaveCountBug)
         if mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
         // This is a subquery with an aggregate that may suffer from a COUNT bug.
         // Detailed COUNT bug detection is done at a later stage (e.g. in
@@ -339,14 +339,14 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // decorrelation is done, the subquery's body becomes part of the main plan and all
         // optimization rules are applied again.
         val groupRefs = group.flatMap(x => x.references)
-        val projectOverSubqueryBody = Project(groupRefs ++ a.references.toSeq, child)
+        val projectOverAggregateChild = Project(groupRefs ++ a.references.toSeq, child)
         val optimizedPlan = Optimizer.this.execute(Subquery.fromExpression(
-          s.withNewPlan(projectOverSubqueryBody)))
+          s.withNewPlan(projectOverAggregateChild)))
         assert(optimizedPlan.isInstanceOf[Subquery])
         val optimizedInput = optimizedPlan.asInstanceOf[Subquery].child
 
-        assert(optimizedInput.output.size == projectOverSubqueryBody.output.size)
-        val updatedProjectList = projectOverSubqueryBody.output.zip(optimizedInput.output).map {
+        assert(optimizedInput.output.size == projectOverAggregateChild.output.size)
+        val updatedProjectList = projectOverAggregateChild.output.zip(optimizedInput.output).map {
           case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
         }
 
