@@ -3740,6 +3740,18 @@
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
     ],
+    "subClass" : {
+      "FIELD_INDEX" : {
+        "message" : [
+          "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
@@ -6190,11 +6202,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2134" : {
-    "message" : [
-      "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2138" : {
     "message" : [
       "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
@@ -6533,11 +6540,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2231" : {
-    "message" : [
-      "fieldIndex on a Row without schema is undefined."
     ]
   },
   "_LEGACY_ERROR_TEMP_2232" : {

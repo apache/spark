@@ -59,7 +59,7 @@ case class HashAggregateExec(
     child: SparkPlan)
   extends AggregateCodegenSupport {
 
-  require(Aggregate.supportsHashAggregate(aggregateBufferAttributes))
+  require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
 
   override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
