@@ -582,11 +582,7 @@ object SQLConf {
 
   val AUTO_BROADCASTJOIN_THRESHOLD = buildConf("spark.sql.autoBroadcastJoinThreshold")
     .doc("Configures the maximum size in bytes for a table that will be broadcast to all worker " +
-      "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled. " +
-      "Note that currently statistics are only supported for Hive Metastore tables where the " +
-      "command `ANALYZE TABLE <tableName> COMPUTE STATISTICS noscan` has been " +
-      "run, and file-based data source tables where the statistics are computed directly on " +
-      "the files of data.")
+      "nodes when performing a join.  By setting this value to -1 broadcasting can be disabled.")
     .version("1.1.0")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")

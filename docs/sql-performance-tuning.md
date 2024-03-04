@@ -180,9 +180,7 @@ Missing or inaccurate statistics will hinder Spark's ability to select an optima
     <td>10485760 (10 MB)</td>
     <td>
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
-      performing a join. By setting this value to -1, broadcasting can be disabled. Note that currently
-      statistics are only supported for Hive Metastore tables where the command
-      <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.
+      performing a join. By setting this value to -1, broadcasting can be disabled.
     </td>
     <td>1.1.0</td>
   </tr>
