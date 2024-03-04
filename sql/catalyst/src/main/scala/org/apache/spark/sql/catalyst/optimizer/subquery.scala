@@ -261,8 +261,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // If we have introduced new `exists`-attributes that:
           // 1) are referenced by aggregateExpressions within a non-aggregateFunction expression
           // 2) are not referenced by groupingExpressions
-          // we wrap them in Max() aggregate function. Ideally we want to use any_value(), but
-          // Spark doesn't fully support any_value().
+          // we wrap them in first() aggregate function. first() is Spark's executable version of
+          // any_value() aggregate function.
           // We do this to keep the aggregation valid, i.e avoid references outside of aggregate
           // functions that are not in grouping expressions.
           // Here, the value of `exists` is functionally determined by grouping expressions, so
@@ -277,11 +277,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
             .filter(nonAggFuncReferences.contains)
             .filterNot(groupingReferences.contains)
 
-          // Replace all eligible `exists` by `Max(exists)` among aggregateExpressions.
+          // Replace all eligible `exists` by `First(exists)` among aggregateExpressions.
           val newAggregateExpressions = a.aggregateExpressions.map { aggExpr =>
             aggExpr.transformUp {
               case attr: Attribute if toBeWrappedExistsAttrs.contains(attr) =>
-                Max(attr).toAggregateExpression()
+                new First(attr).toAggregateExpression()
             }.asInstanceOf[NamedExpression]
           }
           a.copy(aggregateExpressions = newAggregateExpressions)
