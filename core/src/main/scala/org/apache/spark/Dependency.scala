@@ -206,17 +206,15 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     finalizeTask = Option(task)
   }
 
-  private val numberOfShuffleBlocks = numPartitions.toLong * partitioner.numPartitions.toLong
-
   // Set the threshold to 1 billion which leads to an 128MB bitmap and
   // the actual size of `HighlyCompressedMapStatus` can be much larger than 128MB.
   // This may crash the driver with an OOM error.
-  if (numberOfShuffleBlocks > (1L << 30)) {
+  if (numPartitions.toLong * partitioner.numPartitions.toLong > (1L << 30)) {
     logWarning(
-      s"The number of shuffle blocks (${numberOfShuffleBlocks}) for shuffleId ${shuffleId} " +
-        s"for ${_rdd} with ${numPartitions} partitions is possibly too large, " +
-        "which could cause the driver to crash with an out-of-memory error. " +
-        "Consider decreasing the number of partitions in this shuffle stage."
+      s"The number of shuffle blocks (${numPartitions.toLong * partitioner.numPartitions.toLong})" +
+        s" for shuffleId ${shuffleId} for ${_rdd} with ${numPartitions} partitions" +
+        " is possibly too large, which could cause the driver to crash with an out-of-memory" +
+        " error. Consider decreasing the number of partitions in this shuffle stage."
     )
   }
 
