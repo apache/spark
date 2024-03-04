@@ -19,7 +19,6 @@ import itertools
 import os
 import re
 from collections import namedtuple
-from pyspark.conf import SparkConf
 
 # To avoid adding a new direct dependency, we import markdown from within mkdocs.
 from mkdocs.structure.pages import markdown
