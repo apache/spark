@@ -35,7 +35,8 @@ case class Origin(
     stackTrace: Option[Array[StackTraceElement]] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
-    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq)
+    val pysparkCallSite = PySparkCurrentOrigin.get()
+    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkCallSite)
   } else {
     SQLQueryContext(
       line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
@@ -83,4 +84,20 @@ object CurrentOrigin {
     val ret = try f finally { set(previous) }
     ret
   }
+}
+
+/**
+ * Provides detailed call site information on PySpark.
+ * This information is generated in PySpark in the form of a String.
+ */
+object PySparkCurrentOrigin {
+  private val pysparkCallSite = new ThreadLocal[String]() {
+    override def initialValue(): String = ""
+  }
+
+  def set(value: String): Unit = pysparkCallSite.set(value)
+
+  def get(): String = pysparkCallSite.get()
+
+  def clear(): Unit = pysparkCallSite.remove()
 }

@@ -16,9 +16,14 @@
 #
 
 import re
-from typing import Dict, Match
+import functools
+import inspect
+from typing import Any, Callable, Dict, Match, TypeVar, Type
 
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
+
+
+T = TypeVar("T")
 
 
 class ErrorClassesReader:
@@ -119,3 +124,62 @@ class ErrorClassesReader:
             message_template = main_message_template + " " + sub_message_template
 
         return message_template
+
+
+def _capture_call_site(func_name: str) -> None:
+    """
+    Capture the call site information including file name, line number, and function name.
+
+    This function updates the thread-local storage from server side (PySparkCurrentOrigin)
+    with the current call site information when a PySpark API function is called.
+
+    Parameters
+    ----------
+    func_name : str
+        The name of the PySpark API function being captured.
+
+    Notes
+    -----
+    The call site information is used to enhance error messages with the exact location
+    in the user code that led to the error.
+    """
+    from pyspark.sql.session import SparkSession
+
+    spark = SparkSession._getActiveSessionOrCreate()
+    assert spark._jvm is not None
+
+    stack = inspect.stack()
+    frame_info = stack[-1]
+    function = func_name
+    filename = frame_info.filename
+    lineno = frame_info.lineno
+    call_site = f'"{function}" was called from\n{filename}:{lineno}'
+
+    pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+    pyspark_origin.set(call_site)
+
+
+def with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    A decorator to capture and provide the call site information to the server side
+    when PySpark API functions are invoked.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Update call site when the function is called
+        _capture_call_site(func.__name__)
+
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def with_origin_to_class(cls: Type[T]) -> Type[T]:
+    """
+    Decorate all methods of a class with `with_origin` to capture call site information.
+    """
+    for name, method in cls.__dict__.items():
+        if callable(method) and name != "__init__":
+            setattr(cls, name, with_origin(method))
+    return cls

@@ -134,7 +134,8 @@ case class SQLQueryContext(
   override def callSite: String = throw SparkUnsupportedOperationException()
 }
 
-case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement]) extends QueryContext {
+case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement], pysparkCallSite: String)
+  extends QueryContext {
   override val contextType = QueryContextType.DataFrame
 
   override def objectType: String = throw SparkUnsupportedOperationException()
@@ -165,6 +166,12 @@ case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement]) extends Que
     builder ++= " was called from\n"
     builder ++= callSite
     builder += '\n'
+
+    if (pysparkCallSite.nonEmpty) {
+      builder ++= "\n== PySpark call site ==\n"
+      builder ++= pysparkCallSite
+      builder += '\n'
+    }
     builder.result()
   }
 }
