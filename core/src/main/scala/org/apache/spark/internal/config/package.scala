@@ -1019,7 +1019,7 @@ package object config {
       .doc("Whether wait until the dispatch thread exit when stop invoked. " +
         "This is set to true by default for graceful shutdown of the event queue, " +
         "but allow user to configure the behavior if they don't need.")
-      .version("3.5.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 
