@@ -70,7 +70,11 @@ case class TransformWithStateExec(
   override def shortName: String = "transformWithStateExec"
 
   // TODO: update this to run no-data batches when timer support is added
-  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = false
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
+    (outputMode == OutputMode.Append || outputMode == OutputMode.Update) &&
+      eventTimeWatermarkForEviction.isDefined &&
+      newInputWatermark > eventTimeWatermarkForEviction.get
+  }
 
   override protected def withNewChildInternal(
     newChild: SparkPlan): TransformWithStateExec = copy(child = newChild)
@@ -104,7 +108,7 @@ case class TransformWithStateExec(
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val valueObjIter = valueRowIter.map(getValueObj.apply)
     val mappedIterator = statefulProcessor.handleInputRows(keyObj, valueObjIter,
-      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents)).map { obj =>
+      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction)).map { obj =>
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()

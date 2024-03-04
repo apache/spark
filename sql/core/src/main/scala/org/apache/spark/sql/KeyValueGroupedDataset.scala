@@ -20,9 +20,11 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.java.function._
+import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.TypedAggUtils
@@ -674,6 +676,43 @@ class KeyValueGroupedDataset[K, V] private[sql](
         child = logicalPlan
       )
     )
+  }
+
+  private[sql] def transformWithState[U: Encoder](
+       statefulProcessor: StatefulProcessor[K, V, U],
+       timeoutMode: TimeoutMode,
+       eventTimeColumnName: String,
+       outputMode: OutputMode): Dataset[U] = {
+    val existingWatermarkDelay = logicalPlan.flatMap {
+      case EventTimeWatermark(_, delay, _) => Seq(delay)
+      case _ => Seq()
+    }
+
+    if (existingWatermarkDelay.isEmpty) {
+      throw QueryCompilationErrors.cannotAssignEventTimeColumn()
+    }
+
+    val transformWithState = TransformWithState[K, V, U](
+      groupingAttributes,
+      dataAttributes,
+      statefulProcessor,
+      timeoutMode,
+      outputMode,
+      child = logicalPlan
+    )
+
+    val twsDS = Dataset[U](
+      sparkSession,
+      transformWithState
+    )
+
+    val delay = existingWatermarkDelay.head
+
+    Dataset[U](sparkSession, EliminateEventTimeWatermark(
+      UpdateEventTimeWatermarkColumn(
+        UnresolvedAttribute(eventTimeColumnName),
+        delay,
+        twsDS.logicalPlan)))
   }
 
   /**
