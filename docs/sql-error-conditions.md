@@ -1320,7 +1320,7 @@ For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-para
 
 ### INVALID_PARTITION_COLUMN_DATA_TYPE
 
-[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot use `<type>` for partition column.
 
