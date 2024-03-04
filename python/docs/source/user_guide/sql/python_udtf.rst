@@ -98,10 +98,10 @@ To implement a Python UDTF, you first need to define a class implementing the me
             `AnalyzeResult` can also include a requested way to partition and order the rows of
             the input table across several UDTF calls. See below for more information about UDTF
             table arguments and how to call them in SQL queries, including the WITH SINGLE
-            PARTITION clause (corresponding to the "withSinglePartition" field here), PARTITION BY
-            clause (corresponding to the "partitionBy" field here), ORDER BY clause (corresponding
-            to the "orderBy" field here), and passing table subqueries as arugments (corresponding
-            to the "select" field here).
+            PARTITION clause (corresponding to the `withSinglePartition` field here), PARTITION BY
+            clause (corresponding to the `partitionBy` field here), ORDER BY clause (corresponding
+            to the `orderBy` field here), and passing table subqueries as arguments (corresponding
+            to the `select` field here).
 
             `AnalyzeResult` fields
             ----------------------
