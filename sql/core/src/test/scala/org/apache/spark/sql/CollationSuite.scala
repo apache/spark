@@ -185,6 +185,211 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("checkCollation throws exception for incompatible collationIds") {
+    val left: String = "abc" // collate with 'UNICODE_CI'
+    val leftCollationName: String = "UNICODE_CI";
+    var right: String = null // collate with 'UNICODE'
+    val rightCollationName: String = "UNICODE";
+    // contains
+    right = left.substring(1, 2);
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        spark.sql(s"SELECT contains(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))")
+      },
+      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName",
+        "sqlExpr" -> "\"contains(collate(abc), collate(b))\""
+      ),
+      context = ExpectedContext(fragment =
+        s"contains(collate('abc', 'UNICODE_CI'),collate('b', 'UNICODE'))",
+        start = 7, stop = 68)
+    )
+    // startsWith
+    right = left.substring(0, 1);
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        spark.sql(s"SELECT startsWith(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))")
+      },
+      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName",
+        "sqlExpr" -> "\"startswith(collate(abc), collate(a))\""
+      ),
+      context = ExpectedContext(fragment =
+        s"startsWith(collate('abc', 'UNICODE_CI'),collate('a', 'UNICODE'))",
+        start = 7, stop = 70)
+    )
+    // endsWith
+    right = left.substring(2, 3);
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        spark.sql(s"SELECT endsWith(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))")
+      },
+      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName",
+        "sqlExpr" -> "\"endswith(collate(abc), collate(c))\""
+      ),
+      context = ExpectedContext(fragment =
+        s"endsWith(collate('abc', 'UNICODE_CI'),collate('c', 'UNICODE'))",
+        start = 7, stop = 68)
+    )
+  }
+
+  case class CollationTestCase[R](left: String, right: String, collation: String, expectedResult: R)
+
+  test("Support contains string expression with Collation") {
+    // Supported collations
+    val checks = Seq(
+      CollationTestCase("", "", "UCS_BASIC", true),
+      CollationTestCase("c", "", "UCS_BASIC", true),
+      CollationTestCase("", "c", "UCS_BASIC", false),
+      CollationTestCase("abcde", "c", "UCS_BASIC", true),
+      CollationTestCase("abcde", "C", "UCS_BASIC", false),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC", true),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
+      CollationTestCase("abcde", "fgh", "UCS_BASIC", false),
+      CollationTestCase("abcde", "FGH", "UCS_BASIC", false),
+      CollationTestCase("", "", "UNICODE", true),
+      CollationTestCase("c", "", "UNICODE", true),
+      CollationTestCase("", "c", "UNICODE", false),
+      CollationTestCase("abcde", "c", "UNICODE", true),
+      CollationTestCase("abcde", "C", "UNICODE", false),
+      CollationTestCase("abcde", "bcd", "UNICODE", true),
+      CollationTestCase("abcde", "BCD", "UNICODE", false),
+      CollationTestCase("abcde", "fgh", "UNICODE", false),
+      CollationTestCase("abcde", "FGH", "UNICODE", false),
+      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "c", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "C", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "fgh", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "FGH", "UCS_BASIC_LCASE", false)
+    )
+    checks.foreach(testCase => {
+      checkAnswer(sql(s"SELECT contains(collate('${testCase.left}', '${testCase.collation}')," +
+        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
+    })
+    // Unsupported collations
+    checkError(
+      exception = intercept[SparkException] {
+        sql(s"SELECT contains(collate('abcde', 'UNICODE_CI')," +
+          s"collate('BCD', 'UNICODE_CI'))")
+      },
+      errorClass = "UNSUPPORTED_COLLATION.FOR_FUNCTION",
+      sqlState = "0A000",
+      parameters = Map(
+        "functionName" -> "contains",
+        "collationName" -> "UNICODE_CI"
+      )
+    )
+  }
+
+  test("Support startsWith string expression with Collation") {
+    // Supported collations
+    val checks = Seq(
+      CollationTestCase("", "", "UCS_BASIC", true),
+      CollationTestCase("c", "", "UCS_BASIC", true),
+      CollationTestCase("", "c", "UCS_BASIC", false),
+      CollationTestCase("abcde", "a", "UCS_BASIC", true),
+      CollationTestCase("abcde", "A", "UCS_BASIC", false),
+      CollationTestCase("abcde", "abc", "UCS_BASIC", true),
+      CollationTestCase("abcde", "ABC", "UCS_BASIC", false),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC", false),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
+      CollationTestCase("", "", "UNICODE", true),
+      CollationTestCase("c", "", "UNICODE", true),
+      CollationTestCase("", "c", "UNICODE", false),
+      CollationTestCase("abcde", "a", "UNICODE", true),
+      CollationTestCase("abcde", "A", "UNICODE", false),
+      CollationTestCase("abcde", "abc", "UNICODE", true),
+      CollationTestCase("abcde", "ABC", "UNICODE", false),
+      CollationTestCase("abcde", "bcd", "UNICODE", false),
+      CollationTestCase("abcde", "BCD", "UNICODE", false),
+      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "a", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "A", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "abc", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "ABC", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UNICODE_CI", true),
+      CollationTestCase("c", "", "UNICODE_CI", true),
+      CollationTestCase("", "c", "UNICODE_CI", false),
+      CollationTestCase("abcde", "a", "UNICODE_CI", true),
+      CollationTestCase("abcde", "A", "UNICODE_CI", true),
+      CollationTestCase("abcde", "abc", "UNICODE_CI", true),
+      CollationTestCase("abcde", "ABC", "UNICODE_CI", true),
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", false),
+      CollationTestCase("abcde", "BCD", "UNICODE_CI", false)
+    )
+    checks.foreach(testCase => {
+      checkAnswer(sql(s"SELECT startswith(collate('${testCase.left}', '${testCase.collation}')," +
+        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
+    })
+  }
+
+  test("Support endsWith string expression with Collation") {
+    // Supported collations
+    val checks = Seq(
+      CollationTestCase("", "", "UCS_BASIC", true),
+      CollationTestCase("c", "", "UCS_BASIC", true),
+      CollationTestCase("", "c", "UCS_BASIC", false),
+      CollationTestCase("abcde", "e", "UCS_BASIC", true),
+      CollationTestCase("abcde", "E", "UCS_BASIC", false),
+      CollationTestCase("abcde", "cde", "UCS_BASIC", true),
+      CollationTestCase("abcde", "CDE", "UCS_BASIC", false),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC", false),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
+      CollationTestCase("", "", "UNICODE", true),
+      CollationTestCase("c", "", "UNICODE", true),
+      CollationTestCase("", "c", "UNICODE", false),
+      CollationTestCase("abcde", "e", "UNICODE", true),
+      CollationTestCase("abcde", "E", "UNICODE", false),
+      CollationTestCase("abcde", "cde", "UNICODE", true),
+      CollationTestCase("abcde", "CDE", "UNICODE", false),
+      CollationTestCase("abcde", "bcd", "UNICODE", false),
+      CollationTestCase("abcde", "BCD", "UNICODE", false),
+      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "e", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "E", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "cde", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "CDE", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UNICODE_CI", true),
+      CollationTestCase("c", "", "UNICODE_CI", true),
+      CollationTestCase("", "c", "UNICODE_CI", false),
+      CollationTestCase("abcde", "e", "UNICODE_CI", true),
+      CollationTestCase("abcde", "E", "UNICODE_CI", true),
+      CollationTestCase("abcde", "cde", "UNICODE_CI", true),
+      CollationTestCase("abcde", "CDE", "UNICODE_CI", true),
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", false),
+      CollationTestCase("abcde", "BCD", "UNICODE_CI", false)
+    )
+    checks.foreach(testCase => {
+      checkAnswer(sql(s"SELECT endswith(collate('${testCase.left}', '${testCase.collation}')," +
+        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
+    })
+  }
+
   test("aggregates count respects collation") {
     Seq(
       ("ucs_basic", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
@@ -234,6 +439,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         }.nonEmpty)
       }
     }
+
   }
 
   test("create table with collation") {
@@ -295,13 +501,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"INSERT INTO $tableName VALUES ('AAA')")
 
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
-          Seq(Row(defaultCollation)))
+        Seq(Row(defaultCollation)))
 
       sql(
-      s"""
-         |ALTER TABLE $tableName
-         |ADD COLUMN c2 STRING COLLATE '$collationName'
-         |""".stripMargin)
+        s"""
+           |ALTER TABLE $tableName
+           |ADD COLUMN c2 STRING COLLATE '$collationName'
+           |""".stripMargin)
 
       sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")

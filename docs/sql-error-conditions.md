@@ -2462,6 +2462,14 @@ For more details see [UNSUPPORTED_CALL](sql-error-conditions-unsupported-call-er
 The char/varchar type can't be used in the table schema.
 If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
 
+### [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Collation `<collationName>` is not supported for:
+
+For more details see [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
+
 ### UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)

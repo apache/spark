@@ -696,6 +696,11 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
+      "COLLATION_MISMATCH" : {
+        "message" : [
+          "Collations <collationNameLeft> and <collationNameRight> are not compatible. Please use the same collation for both strings."
+        ]
+      },
       "CREATE_MAP_KEY_DIFF_TYPES" : {
         "message" : [
           "The given keys of function <functionName> should all be the same type, but they are <dataType>."
@@ -3766,6 +3771,19 @@
       "The char/varchar type can't be used in the table schema.",
       "If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set \"spark.sql.legacy.charVarcharAsString\" to \"true\"."
     ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_COLLATION" : {
+    "message" : [
+      "Collation <collationName> is not supported for:"
+    ],
+    "subClass" : {
+      "FOR_FUNCTION" : {
+        "message" : [
+          "function <functionName>. Please try to use a different collation."
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
