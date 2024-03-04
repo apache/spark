@@ -210,6 +210,57 @@ def python_udtf_table_argument(spark: SparkSession) -> None:
     # +---+
 
 
+def python_udtf_table_argument_with_partitioning(spark: SparkSession) -> None:
+
+    from pyspark.sql.functions import udtf
+    from pyspark.sql.types import Row
+
+    @udtf(returnType="a: string, b: int")
+    class FilterUDTF:
+        def __init__(self):
+            self.key = ""
+            self.max = 0
+
+        def eval(self, row: Row):
+            self.key = row["a"]
+            self.max = max(self.max, row["b"])
+
+        def terminate(self):
+            yield self.key, self.max
+
+    spark.udtf.register("filter_udtf", FilterUDTF)
+    spark.sql("DROP TABLE IF EXISTS values_table")
+    spark.sql("CREATE TABLE values_table (a STRING, b INT)")
+    spark.sql("INSERT INTO values_table VALUES ('abc', 2), ('abc', 4), ('def', 6), ('def', 8)")
+    spark.table("values_table").show()
+    spark.sql("""
+        SELECT * FROM filter_udtf(TABLE(values_table) PARTITION BY a ORDER BY b) ORDER BY 1
+        """).show()
+    # +-------+----+
+    # |     a |  b |
+    # +-------+----+
+    # | "abc" | 4  |
+    # | "def" | 8  |
+    # +-------+----+
+    spark.sql("""
+        SELECT * FROM filter_udtf(TABLE(values_table) PARTITION BY LENGTH(a) ORDER BY b) ORDER BY 1
+        """).show()
+    # +-------+---+
+    # |     a | b |
+    # +-------+---+
+    # | "def" | 8 |
+    # +-------+---+
+    spark.sql("""
+        SELECT * FROM filter_udtf(TABLE(values_table) WITH SINGLE PARTITION ORDER BY b) ORDER BY 1
+        """).show()
+    # +-------+----+
+    # |     a |  b |
+    # +-------+----+
+    # | "def" | 8 |
+    # +-------+----+
+    spark.sql("DROP TABLE values_table")
+
+
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
@@ -236,5 +287,8 @@ if __name__ == "__main__":
 
     print("Running Python UDTF table argument example")
     python_udtf_table_argument(spark)
+
+    print("Running Python UDTF table argument with partitioning example")
+    python_udtf_table_argument_with_partitioning(spark)
 
     spark.stop()
