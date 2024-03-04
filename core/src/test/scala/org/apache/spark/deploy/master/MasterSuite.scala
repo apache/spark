@@ -731,6 +731,7 @@ class MasterSuite extends SparkFunSuite
       master.registerApplication(appInfo)
       startExecutorsOnWorkers(master)
       assert(appInfo.executors.map(_._2.worker.id).toSeq.distinct.sorted === expected)
+      System.gc()
     }
   }
 
