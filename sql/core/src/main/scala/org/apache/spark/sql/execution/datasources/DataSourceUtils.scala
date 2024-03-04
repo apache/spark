@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.Utils
 
 
@@ -287,18 +287,13 @@ object DataSourceUtils extends PredicateHelper {
    * @return A boolean indicating whether the filter should be pushed down or not.
    */
   def shouldPushFilter(expression: Expression): Boolean = {
-    def checkRecursive(expression: Expression): Boolean = !expression.exists {
-      case e @ (_: Attribute | _: GetStructField) =>
+    expression.deterministic && !expression.exists {
+      case childExpression @ (_: Attribute | _: GetStructField) =>
         // don't push down filters for types with non-default collation
         // as it could lead to incorrect results
-        e.dataType.existsRecursively {
-          case st: StringType => !st.isDefaultCollation
-          case _ => false
-        }
+        SchemaUtils.hasNonDefaultCollatedString(childExpression.dataType)
 
       case _ => false
     }
-
-    expression.deterministic && checkRecursive(expression)
   }
 }
