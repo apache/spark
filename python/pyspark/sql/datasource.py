@@ -338,7 +338,8 @@ class DataSourceStreamReader(ABC):
         Returns
         -------
         dict
-            A dict or recursive dict whose key and value are primitive types(Integer, String, Boolean).
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
 
         Examples
         --------
@@ -359,7 +360,8 @@ class DataSourceStreamReader(ABC):
         Returns
         -------
         dict
-            A dict or recursive dict whose key and value are primitive types(Integer, String, Boolean).
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
 
         Examples
         --------
