@@ -49,6 +49,7 @@ from pyspark.errors import (
     PySparkIndexError,
     PySparkAttributeError,
 )
+from pyspark.errors.utils import add_error_context_to_class
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
@@ -87,6 +88,7 @@ if TYPE_CHECKING:
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
+@add_error_context_to_class
 class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     """A distributed collection of data grouped into named columns.
 

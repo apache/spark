@@ -15,10 +15,18 @@
 # limitations under the License.
 #
 
+import builtins
 import re
-from typing import Dict, Match
+import functools
+import inspect
+from typing import Dict, Match, Any, Callable, TypeVar, Type
+
+from IPython import get_ipython
 
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
+
+
+T = TypeVar("T")
 
 
 class ErrorClassesReader:
@@ -119,3 +127,73 @@ class ErrorClassesReader:
             message_template = main_message_template + " " + sub_message_template
 
         return message_template
+
+
+def is_builtin_exception(e: BaseException) -> bool:
+    """
+    Check if the given exception is a builtin exception or not
+    """
+    builtin_exceptions = [
+        exc
+        for name, exc in vars(builtins).items()
+        if isinstance(exc, type) and issubclass(exc, BaseException)
+    ]
+    return isinstance(e, tuple(builtin_exceptions))
+
+
+def add_error_context(func: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    A decorator that captures PySpark exceptions occurring during the function execution,
+    and adds user code location information to the exception message.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            from pyspark.errors import PySparkException
+            from pyspark.errors.exceptions.captured import CapturedException
+
+            inspect_stack = inspect.stack()
+            # Stack location is different when Python running on IPython (e.g. Jupyter Notebook)
+            user_code_space = inspect_stack[-1] if get_ipython() is None else inspect_stack[1]
+
+            user_code_location = f"{user_code_space.filename}:{user_code_space.lineno}"
+            user_code_context = user_code_space.code_context
+
+            # Add user code location to the original exception message and re-raise the exception.
+            error_location_details = (
+                f"\n== Error Location (PySpark Code) =="
+                f"\n{user_code_context} was called from {user_code_location}"
+            )
+            if isinstance(e, CapturedException):
+                origin = e._origin
+                raise type(e)(
+                    e._desc if origin is None else None,
+                    e._stackTrace if origin is None else None,
+                    e._cause,
+                    origin,
+                    error_location_details,
+                ) from None
+            if isinstance(e, PySparkException):
+                raise type(e)(
+                    e._message + error_location_details,
+                    e.getErrorClass(),
+                    e.getMessageParameters(),
+                    e.getQueryContext(),
+                ) from None
+            if is_builtin_exception(e):
+                raise type(e)(str(e) + error_location_details) from None
+
+    return wrapper
+
+
+def add_error_context_to_class(cls: Type[T]) -> Type[T]:
+    """
+    Class decorator that applies add_error_context decorator to all public methods of the class.
+    """
+    for name, method in cls.__dict__.items():
+        if callable(method) and not name.startswith("_"):
+            setattr(cls, name, add_error_context(method))
+    return cls
