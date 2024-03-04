@@ -446,9 +446,9 @@ class GroupedData(PandasGroupedOpsMixin):
         values : list, optional
             List of values that will be translated to columns in the output DataFrame.
 
-            .. note:: If ``values`` is not provided, Spark will **eagerly** compute the distinct
-                values in ``pivot_col`` so it can determine the resulting schema of the
-                transformation. To avoid any eager computations, provide an explicit list of values.
+            If ``values`` is not provided, Spark will eagerly compute the distinct values in
+            ``pivot_col`` so it can determine the resulting schema of the transformation. To avoid
+            any eager computations, provide an explicit list of values.
 
         Examples
         --------

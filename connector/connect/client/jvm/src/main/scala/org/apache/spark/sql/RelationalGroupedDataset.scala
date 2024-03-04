@@ -259,7 +259,7 @@ class RelationalGroupedDataset private[sql] (
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    *
-   * Spark will '''eagerly''' compute the distinct values in `pivotColumn` so it can determine the
+   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine the
    * resulting schema of the transformation. To avoid any eager computations, provide an explicit
    * list of values via `pivot(pivotColumn: String, values: Seq[Any])`.
    *
@@ -391,7 +391,7 @@ class RelationalGroupedDataset private[sql] (
   /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    *
-   * Spark will '''eagerly''' compute the distinct values in `pivotColumn` so it can determine the
+   * Spark will eagerly compute the distinct values in `pivotColumn` so it can determine the
    * resulting schema of the transformation. To avoid any eager computations, provide an explicit
    * list of values via `pivot(pivotColumn: Column, values: Seq[Any])`.
    *
