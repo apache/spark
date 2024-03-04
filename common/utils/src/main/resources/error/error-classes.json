@@ -435,7 +435,7 @@
   },
   "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
     "message" : [
-      "<className> must override either <m1> or <m2>."
+      "<className> must override either <method1> or <method2>."
     ],
     "sqlState" : "38000"
   },
@@ -2908,12 +2908,6 @@
     ],
     "sqlState" : "42809"
   },
-  "NOT_A_UNRESOLVED_ENCODER" : {
-    "message" : [
-      "Unresolved encoder expected, but <attr> was found."
-    ],
-    "sqlState" : "42601"
-  },
   "NOT_NULL_CONSTRAINT_VIOLATION" : {
     "message" : [
       "Assigning a NULL is not allowed here."
@@ -2967,6 +2961,12 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "NOT_UNRESOLVED_ENCODER" : {
+    "message" : [
+      "Unresolved encoder expected, but <attr> was found."
+    ],
+    "sqlState" : "42601"
   },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [

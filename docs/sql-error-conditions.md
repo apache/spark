@@ -370,7 +370,7 @@ If this problem persists, you may consider using `rdd.checkpoint()` instead, whi
 
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
-`<className>` must override either `<m1>` or `<m2>`.
+`<className>` must override either `<method1>` or `<method2>`.
 
 ### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
 
@@ -1687,12 +1687,6 @@ For more details see [NOT_A_CONSTANT_STRING](sql-error-conditions-not-a-constant
 
 Operation `<operation>` is not allowed for `<tableIdentWithDB>` because it is not a partitioned table.
 
-### NOT_A_UNRESOLVED_ENCODER
-
-[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Unresolved encoder expected, but `<attr>` was found.
-
 ### [NOT_NULL_CONSTRAINT_VIOLATION](sql-error-conditions-not-null-constraint-violation-error-class.html)
 
 [SQLSTATE: 42000](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1726,6 +1720,12 @@ ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing `<table>`'s column
 Not supported command in JDBC catalog:
 
 For more details see [NOT_SUPPORTED_IN_JDBC_CATALOG](sql-error-conditions-not-supported-in-jdbc-catalog-error-class.html)
+
+### NOT_UNRESOLVED_ENCODER
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unresolved encoder expected, but `<attr>` was found.
 
 ### NO_DEFAULT_COLUMN_VALUE_AVAILABLE
 

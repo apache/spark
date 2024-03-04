@@ -53,7 +53,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, LongType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
@@ -1184,7 +1183,7 @@ class QueryExecutionErrorsSuite
       exception = intercept[SparkRuntimeException] {
         spark.createDataset(Seq(Row(1))).collect()
       },
-      errorClass = "NOT_A_UNRESOLVED_ENCODER",
+      errorClass = "NOT_UNRESOLVED_ENCODER",
       parameters = Map(
         "attr" -> deserializer.toString
       )
@@ -1209,8 +1208,8 @@ class QueryExecutionErrorsSuite
       errorClass = "CLASS_NOT_OVERRIDE_EXPECTED_METHOD",
       parameters = Map(
         "className" -> "UnaryExpression",
-        "m1" -> "eval",
-        "m2" -> "nullSafeEval"
+        "method1" -> "eval",
+        "method2" -> "nullSafeEval"
       )
     )
   }
