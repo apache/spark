@@ -329,7 +329,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
       case d: DynamicPruningSubquery => d
       case s @ ScalarSubquery(a @ Aggregate(group, _, child), _, _, _, _, mayHaveCountBug)
-        if mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
+        if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
+          mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
         // This is a subquery with an aggregate that may suffer from a COUNT bug.
         // Detailed COUNT bug detection is done at a later stage (e.g. in
         // RewriteCorrelatedScalarSubquery).
