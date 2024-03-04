@@ -195,7 +195,7 @@ object DataType {
       case other => otherTypes.getOrElse(
         other,
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3251",
+          errorClass = "INVALID_JSON_DATA_TYPE",
           messageParameters = Map("other" -> name)))
     }
   }
@@ -247,7 +247,7 @@ object DataType {
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
     case other => throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3251",
+      errorClass = "INVALID_JSON_DATA_TYPE",
       messageParameters = Map("other" -> compact(render(other))))
   }
 

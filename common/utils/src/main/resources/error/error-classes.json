@@ -7813,9 +7813,9 @@
       "Failed to convert the JSON string '<other>' to a field."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3251" : {
+  "INVALID_JSON_DATA_TYPE" : {
     "message" : [
-      "Failed to convert the JSON string '<other>' to a data type."
+      "Failed to convert the JSON string '<other>' to a data type. Please enter a valid data type."
     ]
   },
   "_LEGACY_ERROR_TEMP_3252" : {
