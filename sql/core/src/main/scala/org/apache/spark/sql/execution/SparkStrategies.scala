@@ -237,44 +237,36 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           _, left, right, hint) =>
         val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
-          if (hashJoinSupport) {
-            val buildSide = getBroadcastBuildSide(
-              left, right, joinType, hint, onlyLookingAtHint, conf)
-            checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
-            buildSide.map {
-              buildSide =>
-                Seq(joins.BroadcastHashJoinExec(
-                  leftKeys,
-                  rightKeys,
-                  joinType,
-                  buildSide,
-                  nonEquiCond,
-                  planLater(left),
-                  planLater(right)))
-            }
-          } else {
-            None
+          val buildSide = Option(hashJoinSupport).filter(identity).flatMap(
+            _ => getBroadcastBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf))
+          checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
+          buildSide.map {
+            buildSide =>
+              Seq(joins.BroadcastHashJoinExec(
+                leftKeys,
+                rightKeys,
+                joinType,
+                buildSide,
+                nonEquiCond,
+                planLater(left),
+                planLater(right)))
           }
         }
 
         def createShuffleHashJoin(onlyLookingAtHint: Boolean) = {
-          if (hashJoinSupport) {
-            val buildSide = getShuffleHashJoinBuildSide(
-              left, right, joinType, hint, onlyLookingAtHint, conf)
-            checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, false)
-            buildSide.map {
-              buildSide =>
-                Seq(joins.ShuffledHashJoinExec(
-                  leftKeys,
-                  rightKeys,
-                  joinType,
-                  buildSide,
-                  nonEquiCond,
-                  planLater(left),
-                  planLater(right)))
-            }
-          } else {
-            None
+          val buildSide = Option(hashJoinSupport).filter(identity).flatMap(
+            _ => getShuffleHashJoinBuildSide(left, right, joinType, hint, onlyLookingAtHint, conf))
+          checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, false)
+          buildSide.map {
+            buildSide =>
+              Seq(joins.ShuffledHashJoinExec(
+                leftKeys,
+                rightKeys,
+                joinType,
+                buildSide,
+                nonEquiCond,
+                planLater(left),
+                planLater(right)))
           }
         }
 
