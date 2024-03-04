@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -577,5 +577,24 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         parameters = Map("type" -> "\"STRING COLLATE 'UNICODE'\"")
       );
     }
+  }
+
+  test("shuffle respects collation") {
+    val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(Row.apply(_))
+
+    val schema = StructType(StructField(
+      "col",
+      StringType(CollationFactory.collationNameToId("UCS_BASIC_LCASE"))) :: Nil)
+    val df = spark.createDataFrame(sparkContext.parallelize(in), schema)
+
+    df.repartition(10, df.col("col")).foreachPartition(
+      (rowIterator: Iterator[Row]) => {
+        val partitionData = rowIterator.map(r => r.getString(0)).toArray
+        partitionData.foreach(s => {
+          // assert that both lower and upper case of the string are present in the same partition.
+          assert(partitionData.contains(s.toLowerCase()))
+          assert(partitionData.contains(s.toUpperCase()))
+        })
+    })
   }
 }
