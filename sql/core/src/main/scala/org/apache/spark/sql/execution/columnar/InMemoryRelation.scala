@@ -111,8 +111,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
             rowCount += 1
           }
 
-          val stats = InternalRow.fromSeq(
-            columnBuilders.flatMap(_.columnStats.collectedStatistics).toImmutableArraySeq)
+          val stats = new GenericInternalRow(
+            columnBuilders.flatMap(_.columnStats.collectedStatistics))
           DefaultCachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
