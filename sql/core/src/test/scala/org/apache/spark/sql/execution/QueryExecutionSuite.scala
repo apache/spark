@@ -343,8 +343,7 @@ class QueryExecutionSuite extends SharedSparkSession {
       "EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm AS parm;")
     val newQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm;")
 
-    val columns = originalQuery.columns zip newQuery.columns
-    assert(columns.count(x => x._1 != x._2) == 0)
+    assert(originalQuery.columns sameElements newQuery.columns)
 
     assert(originalQuery.head() == newQuery.head())
   }
