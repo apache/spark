@@ -41,8 +41,9 @@ import org.apache.spark.sql.types._
   group = "string_funcs")
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    // We need to throw this error first, as we do not want user to see
-    // misleading hints that collation is enabled
+    // We need to throw collationNotEnabledError before unexpectedNullError
+    // and nonFoldableArgumentError, as we do not want user to see misleading
+    // messages that collation is enabled
     if (!SQLConf.get.collationEnabled) {
       throw QueryCompilationErrors.collationNotEnabledError()
     }
