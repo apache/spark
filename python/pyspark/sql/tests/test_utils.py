@@ -1657,8 +1657,56 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
         try:
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
+<<<<<<< HEAD
             self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
             self.assertEquals(e.getSqlState(), "42703")
+=======
+            exception = e
+
+        self.assertIsNotNone(exception)
+        self.assertEqual(exception.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+        self.assertEqual(exception.getSqlState(), "42703")
+        self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
+        self.assertIn(
+            (
+                "[UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A column, variable, or function "
+                "parameter with name `a` cannot be resolved.  SQLSTATE: 42703"
+            ),
+            exception.getMessage(),
+        )
+        self.assertEqual(len(exception.getQueryContext()), 1)
+        qc = exception.getQueryContext()[0]
+        self.assertEqual(qc.fragment(), "a")
+        self.assertEqual(qc.stopIndex(), 7)
+        self.assertEqual(qc.startIndex(), 7)
+        self.assertEqual(qc.contextType(), QueryContextType.SQL)
+        self.assertEqual(qc.objectName(), "")
+        self.assertEqual(qc.objectType(), "")
+
+        try:
+            self.spark.sql("""SELECT assert_true(FALSE)""")
+        except AnalysisException as e:
+            self.assertIsNone(e.getErrorClass())
+            self.assertIsNone(e.getSqlState())
+            self.assertEqual(e.getMessageParameters(), {})
+            self.assertEqual(e.getMessage(), "")
+
+    def test_assert_data_frame_equal_not_support_streaming(self):
+        df1 = self.spark.readStream.format("rate").load()
+        df2 = self.spark.readStream.format("rate").load()
+        exception_thrown = False
+        try:
+            assertDataFrameEqual(df1, df2)
+        except PySparkAssertionError as e:
+            self.assertEqual(e.getErrorClass(), "UNSUPPORTED_OPERATION")
+            exception_thrown = True
+
+        self.assertTrue(exception_thrown)
+
+
+class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
+    pass
+>>>>>>> 4743103478 ([SPARK-47277] PySpark util function assertDataFrameEqual should not support streaming DF)
 
 
 if __name__ == "__main__":
