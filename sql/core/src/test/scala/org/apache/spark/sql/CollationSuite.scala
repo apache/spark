@@ -439,7 +439,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         }.nonEmpty)
       }
     }
-
   }
 
   test("create table with collation") {
@@ -574,7 +573,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           createTable(partitionColumns: _*)
         },
         errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"STRING COLLATE 'UNICODE'\"")
+        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
       );
     }
   }
