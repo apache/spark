@@ -32,8 +32,7 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
       assert(originalQuery.columns sameElements newQuery.columns)
 
       checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
-    }
-    finally {
+    } finally {
       spark.stop()
     }
   }
