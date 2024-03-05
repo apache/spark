@@ -250,7 +250,7 @@ class RocksDB(
     if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
       if (!useColumnFamilies) {
         throw StateStoreErrors.unsupportedOperationException(operationName,
-          "RocksDBStateStoreProvider and multiple column families disabled")
+          "multiple column families disabled in RocksDBStateStoreProvider")
       }
 
       if (!checkColFamilyExists(colFamilyName)) {
