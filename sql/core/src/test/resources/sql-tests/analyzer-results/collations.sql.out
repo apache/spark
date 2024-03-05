@@ -8,53 +8,33 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
 -- !query
 insert into t1 values('aaa', 'aaa')
 -- !query analysis
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "UNSUPPORTED_DATATYPE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "typeName" : "{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]}[1.1] failure: 'TimestampType' expected but '{' found\n\n{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]}\n^"
-  }
-}
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [ucs_basic, ucs_basic_lcase]
++- Project [cast(col1#x as string) AS ucs_basic#x, cast(col2#x as string COLLATE UCS_BASIC_LCASE) AS ucs_basic_lcase#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 insert into t1 values('AAA', 'AAA')
 -- !query analysis
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "UNSUPPORTED_DATATYPE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "typeName" : "{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]}[1.1] failure: 'TimestampType' expected but '{' found\n\n{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]}\n^"
-  }
-}
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [ucs_basic, ucs_basic_lcase]
++- Project [cast(col1#x as string) AS ucs_basic#x, cast(col2#x as string COLLATE UCS_BASIC_LCASE) AS ucs_basic_lcase#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 insert into t1 values('bbb', 'bbb')
 -- !query analysis
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "UNSUPPORTED_DATATYPE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "typeName" : "{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]}[1.1] failure: 'TimestampType' expected but '{' found\n\n{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]}\n^"
-  }
-}
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [ucs_basic, ucs_basic_lcase]
++- Project [cast(col1#x as string) AS ucs_basic#x, cast(col2#x as string COLLATE UCS_BASIC_LCASE) AS ucs_basic_lcase#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 insert into t1 values('BBB', 'BBB')
 -- !query analysis
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "UNSUPPORTED_DATATYPE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "typeName" : "{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]}[1.1] failure: 'TimestampType' expected but '{' found\n\n{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]}\n^"
-  }
-}
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [ucs_basic, ucs_basic_lcase]
++- Project [cast(col1#x as string) AS ucs_basic#x, cast(col2#x as string COLLATE UCS_BASIC_LCASE) AS ucs_basic_lcase#x]
+   +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -125,27 +105,17 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
 -- !query
 INSERT INTO t1 VALUES (named_struct('ucs_basic', 'aaa', 'ucs_basic_lcase', 'aaa'))
 -- !query analysis
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "UNSUPPORTED_DATATYPE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "typeName" : "{\"type\":\"struct\",\"fields\":[{\"name\":\"c1\",\"type\":{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]},\"nullable\":false,\"metadata\":{}}]}[1.1] failure: 'TimestampType' expected but '{' found\n\n{\"type\":\"struct\",\"fields\":[{\"name\":\"c1\",\"type\":{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]},\"nullable\":false,\"metadata\":{}}]}\n^"
-  }
-}
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [c1]
++- Project [named_struct(ucs_basic, col1#x.ucs_basic, ucs_basic_lcase, cast(col1#x.ucs_basic_lcase as string COLLATE UCS_BASIC_LCASE)) AS c1#x]
+   +- LocalRelation [col1#x]
 
 
 -- !query
 INSERT INTO t1 VALUES (named_struct('ucs_basic', 'AAA', 'ucs_basic_lcase', 'AAA'))
 -- !query analysis
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "UNSUPPORTED_DATATYPE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "typeName" : "{\"type\":\"struct\",\"fields\":[{\"name\":\"c1\",\"type\":{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]},\"nullable\":false,\"metadata\":{}}]}[1.1] failure: 'TimestampType' expected but '{' found\n\n{\"type\":\"struct\",\"fields\":[{\"name\":\"c1\",\"type\":{\"type\":\"struct\",\"fields\":[{\"name\":\"ucs_basic\",\"type\":\"string\",\"nullable\":false,\"metadata\":{}},{\"name\":\"ucs_basic_lcase\",\"type\":\"string COLLATE UCS_BASIC_LCASE\",\"nullable\":true,\"metadata\":{}}]},\"nullable\":false,\"metadata\":{}}]}\n^"
-  }
-}
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t1, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t1], Append, `spark_catalog`.`default`.`t1`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t1), [c1]
++- Project [named_struct(ucs_basic, col1#x.ucs_basic, ucs_basic_lcase, cast(col1#x.ucs_basic_lcase as string COLLATE UCS_BASIC_LCASE)) AS c1#x]
+   +- LocalRelation [col1#x]
 
 
 -- !query
