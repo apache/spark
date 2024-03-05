@@ -22,14 +22,19 @@ import org.apache.spark.sql.test.SharedSparkSession
 class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-47033: EXECUTE IMMEDIATE USING does not recognize session variable names") {
-    spark.sql("DECLARE parm = 'Hello';")
+    try {
+      spark.sql("DECLARE parm = 'Hello';")
 
-    val originalQuery = spark.sql(
-      "EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm AS parm;")
-    val newQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm;")
+      val originalQuery = spark.sql(
+        "EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm AS parm;")
+      val newQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm;")
 
-    assert(originalQuery.columns sameElements newQuery.columns)
+      assert(originalQuery.columns sameElements newQuery.columns)
 
-    checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
+      checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
+    }
+    finally {
+      super.spark.stop()
+    }
   }
 }
