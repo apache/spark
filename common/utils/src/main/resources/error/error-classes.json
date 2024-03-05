@@ -7861,10 +7861,11 @@
     ],
     "sqlState": "22007"
   },
-  "_LEGACY_ERROR_TEMP_3259" : {
+  "INVALID_DATETIME_PATTERN_LENGTH" : {
     "message" : [
-      "Too many pattern letters: <style>"
-    ]
+      "Too many pattern letters: <style>. Please reduce pattern length."
+    ],
+    "sqlState": "22007"
   },
   "_LEGACY_ERROR_TEMP_3260" : {
     "message" : [

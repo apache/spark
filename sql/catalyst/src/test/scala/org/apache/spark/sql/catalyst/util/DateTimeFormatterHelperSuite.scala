@@ -66,13 +66,13 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
         exception = intercept[SparkIllegalArgumentException] {
           convertIncompatiblePattern(s"yyyy-MM-dd $style")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3259",
+        errorClass = "INVALID_DATETIME_PATTERN_LENGTH",
         parameters = Map("style" -> style.head.toString))
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
           convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3259",
+        errorClass = "INVALID_DATETIME_PATTERN_LENGTH",
         parameters = Map("style" -> style.head.toString))
     }
     assert(convertIncompatiblePattern("yyyy-MM-dd EEEE") === "uuuu-MM-dd EEEE")

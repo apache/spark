@@ -40,7 +40,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3259",
+  "errorClass" : "INVALID_DATETIME_PATTERN_LENGTH",
   "messageParameters" : {
     "style" : "q"
   }
@@ -54,7 +54,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3259",
+  "errorClass" : "INVALID_DATETIME_PATTERN_LENGTH",
   "messageParameters" : {
     "style" : "Q"
   }
