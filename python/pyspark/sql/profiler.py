@@ -236,11 +236,18 @@ class ProfilerCollector(ABC):
             The UDF ID whose profiling results should be cleared.
             If not specified, all the results will be cleared.
         """
+        ids_to_remove = [
+            result_id
+            for result_id, (perf, _, *_) in self._profile_results.items()
+            if perf is not None
+        ]
         with self._lock:
             if id is not None:
-                self._perf_profile_results.pop(id, None)
+                if id in ids_to_remove:
+                    self._profile_results.pop(id, None)
             else:
-                self._perf_profile_results.clear()
+                for id_to_remove in ids_to_remove:
+                    self._profile_results.pop(id_to_remove, None)
 
     def clear_memory_profiles(self, id: Optional[int] = None) -> None:
         """
@@ -255,10 +262,15 @@ class ProfilerCollector(ABC):
             If not specified, all the results will be cleared.
         """
         with self._lock:
+            ids_to_remove = [
+                id for id, (_, mem, *_) in self._profile_results.items() if mem is not None
+            ]
             if id is not None:
-                self._memory_profile_results.pop(id, None)
+                if id in ids_to_remove:
+                    self._profile_results.pop(id, None)
             else:
-                self._memory_profile_results.clear()
+                for id_to_remove in ids_to_remove:
+                    self._profile_results.pop(id_to_remove, None)
 
 
 class AccumulatorProfilerCollector(ProfilerCollector):
