@@ -299,7 +299,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3253",
+        errorClass = "NONEXISTENT_FIELD_NAME_IN_LIST",
         messageParameters = immutable.Map(
           "nonExistFields" -> nonExistFields.mkString(", "),
           "fieldNames" -> fieldNames.mkString(", ")))

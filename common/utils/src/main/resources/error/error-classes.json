@@ -7816,17 +7816,20 @@
   "INVALID_JSON_DATA_TYPE" : {
     "message" : [
       "Failed to convert the JSON string '<other>' to a data type. Please enter a valid data type."
-    ]
+    ],
+    "sqlState" : "HV004"
   },
   "NONEXISTENT_FIELD_NAME" : {
     "message" : [
       "Field with name '<name>' does not exist. Available fields: <fieldNames>"
-    ]
+    ],
+    "sqlState" : "HV091"
   },
-  "_LEGACY_ERROR_TEMP_3253" : {
+  "NONEXISTENT_FIELD_NAME_IN_LIST" : {
     "message" : [
-      "<nonExistFields> do(es) not exist. Available: <fieldNames>"
-    ]
+      "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
+    ],
+    "sqlState" : "HV091"
   },
   "_LEGACY_ERROR_TEMP_3254" : {
     "message" : [
