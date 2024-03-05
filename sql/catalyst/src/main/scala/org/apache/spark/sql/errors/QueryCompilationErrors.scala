@@ -3605,6 +3605,30 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def implicitCollationMismatchError(): Throwable = {
+    new AnalysisException(
+      errorClass = "COLLATION_MISMATCH.IMPLICIT",
+      messageParameters = Map.empty
+    )
+  }
+
+  def explicitCollationMismatchError(left: String, right: String): Throwable = {
+    new AnalysisException(
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      messageParameters = Map(
+        "left" -> left,
+        "right" -> right
+      )
+    )
+  }
+
+  def indeterminateCollationError(): Throwable = {
+    new AnalysisException(
+      errorClass = "INDETERMINATE_COLLATION",
+      messageParameters = Map.empty
+    )
+  }
+
   def cannotConvertProtobufTypeToSqlTypeError(
       protobufColumn: String,
       sqlColumn: Seq[String],

@@ -95,22 +95,22 @@ object Cast extends QueryErrorsBase {
 
     case (_, _: StringType) => true
 
-    case (StringType, _: BinaryType) => true
+    case (_: StringType, _: BinaryType) => true
 
-    case (StringType, BooleanType) => true
+    case (_: StringType, BooleanType) => true
     case (_: NumericType, BooleanType) => true
 
-    case (StringType, TimestampType) => true
+    case (_: StringType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
 
-    case (StringType, TimestampNTZType) => true
+    case (_: StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (StringType, _: CalendarIntervalType) => true
-    case (StringType, _: AnsiIntervalType) => true
+    case (_: StringType, _: CalendarIntervalType) => true
+    case (_: StringType, _: AnsiIntervalType) => true
 
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
     case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
@@ -118,12 +118,12 @@ object Cast extends QueryErrorsBase {
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
-    case (StringType, DateType) => true
+    case (_: StringType, DateType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
 
     case (_: NumericType, _: NumericType) => true
-    case (StringType, _: NumericType) => true
+    case (_: StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
 
@@ -192,33 +192,33 @@ object Cast extends QueryErrorsBase {
 
     case (NullType, _) => true
 
-    case (_, StringType) => true
+    case (_, _: StringType) => true
 
-    case (StringType, BinaryType) => true
+    case (_: StringType, BinaryType) => true
     case (_: IntegralType, BinaryType) => true
 
-    case (StringType, BooleanType) => true
+    case (_: StringType, BooleanType) => true
     case (DateType, BooleanType) => true
     case (TimestampType, BooleanType) => true
     case (_: NumericType, BooleanType) => true
 
-    case (StringType, TimestampType) => true
+    case (_: StringType, TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
 
-    case (StringType, TimestampNTZType) => true
+    case (_: StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (StringType, DateType) => true
+    case (_: StringType, DateType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
 
-    case (StringType, CalendarIntervalType) => true
-    case (StringType, _: DayTimeIntervalType) => true
-    case (StringType, _: YearMonthIntervalType) => true
+    case (_: StringType, CalendarIntervalType) => true
+    case (_: StringType, _: DayTimeIntervalType) => true
+    case (_: StringType, _: YearMonthIntervalType) => true
     case (_: IntegralType, DayTimeIntervalType(s, e)) if s == e => true
     case (_: IntegralType, YearMonthIntervalType(s, e)) if s == e => true
 
@@ -227,7 +227,7 @@ object Cast extends QueryErrorsBase {
     case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => true
     case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => true
 
-    case (StringType, _: NumericType) => true
+    case (_: StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
     case (DateType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
@@ -341,9 +341,9 @@ object Cast extends QueryErrorsBase {
     case (NullType, _) => false // empty array or map case
     case (_, _) if from == to => false
 
-    case (StringType, BinaryType) => false
-    case (StringType, _) => true
-    case (_, StringType) => false
+    case (_: StringType, BinaryType) => false
+    case (_: StringType, _) => true
+    case (_, _: StringType) => false
 
     case (TimestampType, ByteType | ShortType | IntegerType) => true
     case (FloatType | DoubleType, TimestampType) => true
@@ -522,7 +522,7 @@ case class Cast(
     child.nullable || Cast.forceNullable(child.dataType, dataType)
   } else {
     (child.dataType, dataType) match {
-      case (StringType, BinaryType) => child.nullable
+      case (_: StringType, BinaryType) => child.nullable
       // TODO: Implement a more accurate method for checking whether a decimal value can be cast
       //       as integral types without overflow. Currently, the cast can overflow even if
       //       "Cast.canUpCast" method returns true.
@@ -870,9 +870,9 @@ case class Cast(
 
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
-    case StringType if ansiEnabled =>
+    case _: StringType if ansiEnabled =>
       buildCast[UTF8String](_, v => UTF8StringUtils.toByteExact(v, getContextOrNull()))
-    case StringType =>
+    case _: StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
         result.value.toByte
@@ -1158,8 +1158,8 @@ case class Cast(
       false
     } else {
       (child.dataType, dataType) match {
-        case (StringType, _: FractionalType) => true
-        case (StringType, _: DatetimeType) => true
+        case (_: StringType, _: FractionalType) => true
+        case (_: StringType, _: DatetimeType) => true
         case _ => false
       }
     }
@@ -1251,7 +1251,7 @@ case class Cast(
   }
 
   private[this] def castToBinaryCode(from: DataType): CastFunction = from match {
-    case StringType =>
+    case _: StringType =>
       (c, evPrim, evNull) =>
         code"$evPrim = $c.getBytes();"
     case _: IntegralType =>
@@ -1775,11 +1775,11 @@ case class Cast(
   }
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
-    case StringType if ansiEnabled =>
+    case _: StringType if ansiEnabled =>
       val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
       (c, evPrim, evNull) => code"$evPrim = $stringUtils.toByteExact($c, $errorContext);"
-    case StringType =>
+    case _: StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
         code"""

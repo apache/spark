@@ -475,6 +475,24 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_MISMATCH" : {
+    "message" : [
+      "Could not determine which collation to use for string comparison."
+    ],
+    "subClass" : {
+      "EXPLICIT" : {
+        "message" : [
+          "Error occurred due to the mismatch between explicit collations \"<left>\" and \"<right>\""
+        ]
+      },
+      "IMPLICIT" : {
+        "message" : [
+          "Error occurred due to the mismatch between multiple implicit collations. Use COLLATE function to set the collation explicitly."
+        ]
+      }
+    },
+    "sqlState" : "42P21"
+  },
   "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
       "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"
@@ -1573,6 +1591,12 @@
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
     ],
     "sqlState" : "22003"
+  },
+  "INDETERMINATE_COLLATION" : {
+    "message" : [
+      "Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
   },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [

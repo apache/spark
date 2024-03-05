@@ -2643,7 +2643,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
         val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
         ByteArray.concat(inputs: _*)
       }
-    case StringType =>
+    case _: StringType =>
       input => {
         val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
         UTF8String.concat(inputs: _*)
@@ -2714,7 +2714,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val (concat, initCode) = dataType match {
       case BinaryType =>
         (s"${classOf[ByteArray].getName}.concat", s"byte[][] $args = new byte[${evals.length}][];")
-      case StringType =>
+      case _: StringType =>
         ("UTF8String.concat", s"UTF8String[] $args = new UTF8String[${evals.length}];")
       case ArrayType(elementType, containsNull) =>
         val concat = genCodeForArrays(ctx, elementType, containsNull)
