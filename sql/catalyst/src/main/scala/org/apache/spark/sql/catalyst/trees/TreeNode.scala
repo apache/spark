@@ -1030,10 +1030,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     append(str)
     append("\n")
 
-    if (innerChildren.nonEmpty) {
+    val innerChildrenLocal = innerChildren
+    if (innerChildrenLocal.nonEmpty) {
       lastChildren.add(children.isEmpty)
       lastChildren.add(false)
-      innerChildren.init.foreach(_.generateTreeString(
+      innerChildrenLocal.init.foreach(_.generateTreeString(
         depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
       lastChildren.remove(lastChildren.size() - 1)
@@ -1041,7 +1042,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
       lastChildren.add(children.isEmpty)
       lastChildren.add(true)
-      innerChildren.last.generateTreeString(
+      innerChildrenLocal.last.generateTreeString(
         depth + 2, lastChildren, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
       lastChildren.remove(lastChildren.size() - 1)
