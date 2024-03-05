@@ -34,7 +34,7 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
       checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
     }
     finally {
-      super.spark.stop()
+      spark.stop()
     }
   }
 }
