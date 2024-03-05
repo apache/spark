@@ -161,12 +161,12 @@ class MasterSuite extends MasterSuiteBase {
       9999,
       fakeWorker,
       10,
-      1024,
+      128,
       "http://localhost:8080",
       RpcAddress("localhost", 9999)))
     val executors = (0 until 3).map { i =>
       new ExecutorDescription(appId = i.toString, execId = i,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, 2, 1024, ExecutorState.RUNNING)
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, 2, 128, ExecutorState.RUNNING)
     }
     master.self.send(WorkerLatestState("1", executors, driverIds = Seq("0", "1", "2")))
 

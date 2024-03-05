@@ -183,9 +183,9 @@ trait MasterSuiteBase extends SparkFunSuite
   protected def verifyDrivers(
       spreadOut: Boolean, answer1: Int, answer2: Int, answer3: Int): Unit = {
     val master = makeMaster(new SparkConf().set(SPREAD_OUT_DRIVERS, spreadOut))
-    val worker1 = makeWorkerInfo(4096, 10)
-    val worker2 = makeWorkerInfo(4096, 10)
-    val worker3 = makeWorkerInfo(4096, 10)
+    val worker1 = makeWorkerInfo(512, 10)
+    val worker2 = makeWorkerInfo(512, 10)
+    val worker3 = makeWorkerInfo(512, 10)
     master.state = RecoveryState.ALIVE
     master.workers += worker1
     master.workers += worker2
@@ -214,10 +214,10 @@ trait MasterSuiteBase extends SparkFunSuite
   protected def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
     val appInfo: ApplicationInfo = if (withMaxCores) {
       makeAppInfo(
-        1024, maxCores = Some(30), initialExecutorLimit = Some(0))
+        128, maxCores = Some(30), initialExecutorLimit = Some(0))
     } else {
       makeAppInfo(
-        1024, maxCores = None, initialExecutorLimit = Some(0))
+        128, maxCores = None, initialExecutorLimit = Some(0))
     }
 
     val master = makeAliveMaster()
@@ -231,7 +231,7 @@ trait MasterSuiteBase extends SparkFunSuite
         worker.self.address.port,
         worker.self,
         10,
-        4096,
+        512,
         "http://localhost:8080",
         RpcAddress("localhost", 10000))
       master.self.send(workerReg)
@@ -246,10 +246,10 @@ trait MasterSuiteBase extends SparkFunSuite
     // Request executors with multiple resource profile.
     // rp1 with 15 cores per executor, rp2 with 8192MB memory per executor, no worker can
     // fulfill the resource requirement.
-    val rp1 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(15))
-    val rp2 = DeployTestUtils.createResourceProfile(Some(8192), Map.empty, Some(5))
-    val rp3 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(5))
-    val rp4 = DeployTestUtils.createResourceProfile(Some(2048), Map.empty, Some(10))
+    val rp1 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(15))
+    val rp2 = DeployTestUtils.createResourceProfile(Some(1024), Map.empty, Some(5))
+    val rp3 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(5))
+    val rp4 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(10))
     val requests = Map(
       appInfo.desc.defaultProfile -> 1,
       rp1 -> 1,
@@ -281,7 +281,7 @@ trait MasterSuiteBase extends SparkFunSuite
     // Verify executor information.
     val executorForRp3 = appInfo.executors(appInfo.getOrUpdateExecutorsForRPId(rp3.id).head)
     assert(executorForRp3.cores === 5)
-    assert(executorForRp3.memory === 2048)
+    assert(executorForRp3.memory === 256)
     assert(executorForRp3.rpId === rp3.id)
 
     // Verify LaunchExecutor message.
@@ -290,28 +290,28 @@ trait MasterSuiteBase extends SparkFunSuite
       .map(_.launchedExecutors(appInfo.id + "/" + executorForRp3.id))
       .get
     assert(launchExecutorMsg.cores === 5)
-    assert(launchExecutorMsg.memory === 2048)
+    assert(launchExecutorMsg.memory === 256)
     assert(launchExecutorMsg.rpId === rp3.id)
   }
 
   protected def basicScheduling(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo = makeAppInfo(1024)
+    val appInfo = makeAppInfo(128)
     val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores === Array(10, 10, 10))
   }
 
   protected def basicSchedulingWithMoreMemory(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo = makeAppInfo(3072)
+    val appInfo = makeAppInfo(384)
     val scheduledCores = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     assert(scheduledCores === Array(10, 10, 10))
   }
 
   protected def schedulingWithMaxCores(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo1 = makeAppInfo(1024, maxCores = Some(8))
-    val appInfo2 = makeAppInfo(1024, maxCores = Some(16))
+    val appInfo1 = makeAppInfo(128, maxCores = Some(8))
+    val appInfo2 = makeAppInfo(128, maxCores = Some(16))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
     if (spreadOut) {
@@ -325,9 +325,9 @@ trait MasterSuiteBase extends SparkFunSuite
 
   protected def schedulingWithCoresPerExecutor(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo1 = makeAppInfo(1024, coresPerExecutor = Some(2))
-    val appInfo2 = makeAppInfo(256, coresPerExecutor = Some(2))
-    val appInfo3 = makeAppInfo(256, coresPerExecutor = Some(3))
+    val appInfo1 = makeAppInfo(128, coresPerExecutor = Some(2))
+    val appInfo2 = makeAppInfo(32, coresPerExecutor = Some(2))
+    val appInfo3 = makeAppInfo(32, coresPerExecutor = Some(3))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo3, workerInfos, spreadOut)
@@ -339,9 +339,9 @@ trait MasterSuiteBase extends SparkFunSuite
   // Sorry for the long method name!
   protected def schedulingWithCoresPerExecutorAndMaxCores(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo1 = makeAppInfo(256, coresPerExecutor = Some(2), maxCores = Some(4))
-    val appInfo2 = makeAppInfo(256, coresPerExecutor = Some(2), maxCores = Some(20))
-    val appInfo3 = makeAppInfo(256, coresPerExecutor = Some(3), maxCores = Some(20))
+    val appInfo1 = makeAppInfo(32, coresPerExecutor = Some(2), maxCores = Some(4))
+    val appInfo2 = makeAppInfo(32, coresPerExecutor = Some(2), maxCores = Some(20))
+    val appInfo3 = makeAppInfo(32, coresPerExecutor = Some(3), maxCores = Some(20))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
     val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
     val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo3, workerInfos, spreadOut)
@@ -358,7 +358,7 @@ trait MasterSuiteBase extends SparkFunSuite
 
   protected def schedulingWithExecutorLimit(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo = makeAppInfo(256)
+    val appInfo = makeAppInfo(32)
     appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 0))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 2))
@@ -372,7 +372,7 @@ trait MasterSuiteBase extends SparkFunSuite
 
   protected def schedulingWithExecutorLimitAndMaxCores(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo = makeAppInfo(256, maxCores = Some(16))
+    val appInfo = makeAppInfo(32, maxCores = Some(16))
     appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 0))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 2))
@@ -391,7 +391,7 @@ trait MasterSuiteBase extends SparkFunSuite
 
   protected def schedulingWithExecutorLimitAndCoresPerExecutor(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo = makeAppInfo(256, coresPerExecutor = Some(4))
+    val appInfo = makeAppInfo(32, coresPerExecutor = Some(4))
     appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 0))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 2))
@@ -410,7 +410,7 @@ trait MasterSuiteBase extends SparkFunSuite
   // Everything being: executor limit + cores per executor + max cores
   protected def schedulingWithEverything(spreadOut: Boolean): Unit = {
     val master = makeMaster()
-    val appInfo = makeAppInfo(256, coresPerExecutor = Some(4), maxCores = Some(18))
+    val appInfo = makeAppInfo(32, coresPerExecutor = Some(4), maxCores = Some(18))
     appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 0))
     val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo, workerInfos, spreadOut)
     appInfo.requestExecutors(Map(appInfo.desc.defaultProfile -> 2))
@@ -445,7 +445,7 @@ trait MasterSuiteBase extends SparkFunSuite
   protected val _createApplication = PrivateMethod[ApplicationInfo](Symbol("createApplication"))
   protected val _persistenceEngine = PrivateMethod[PersistenceEngine](Symbol("persistenceEngine"))
 
-  protected val workerInfo = makeWorkerInfo(4096, 10)
+  protected val workerInfo = makeWorkerInfo(512, 10)
   private val workerInfos = Array(workerInfo, workerInfo, workerInfo)
 
   protected def makeMaster(conf: SparkConf = new SparkConf): Master = {
@@ -524,7 +524,7 @@ trait MasterSuiteBase extends SparkFunSuite
         worker.self.address.port,
         worker.self,
         10,
-        1024,
+        128,
         "http://localhost:8080",
         RpcAddress("localhost", 10000))
       master.self.send(workerReg)
