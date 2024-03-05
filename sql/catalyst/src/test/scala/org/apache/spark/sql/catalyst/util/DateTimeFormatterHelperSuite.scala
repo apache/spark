@@ -42,7 +42,7 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
         exception = intercept[SparkIllegalArgumentException] {
           convertIncompatiblePattern(s"yyyy-MM-dd $l G")
         },
-        errorClass = "UNSUPPORTED_WEEK_BASED_PATTERN",
+        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
         parameters = Map("c" -> l.toString))
     }
     unsupportedLetters.foreach { l =>

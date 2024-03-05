@@ -1529,6 +1529,12 @@
           "2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       },
+      "DATETIME_WEEK_BASED_PATTERN" : {
+        "message": [
+          "Spark >= 3.0",
+          "All week-based patterns are unsupported since Spark 3.0, detected week-based character: <c>. Please use the SQL function EXTRACT instead."
+        ]
+      },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
         "message" : [
           "Spark >= 3.0:",
@@ -7846,12 +7852,6 @@
   "INVALID_DATETIME_PATTERN" : {
     "message" : [
       "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern"
-    ],
-    "sqlState": "22007"
-  },
-  "UNSUPPORTED_WEEK_BASED_PATTERN" : {
-    "message" : [
-      "All week-based patterns are unsupported since Spark 3.0, detected week-based character: <c>. Please use the SQL function EXTRACT instead."
     ],
     "sqlState": "22007"
   },

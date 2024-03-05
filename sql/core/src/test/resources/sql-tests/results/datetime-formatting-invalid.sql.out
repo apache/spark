@@ -500,7 +500,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3257",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
   "messageParameters" : {
     "c" : "e"
   }
@@ -514,7 +514,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3257",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
   "messageParameters" : {
     "c" : "c"
   }
