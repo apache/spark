@@ -133,7 +133,7 @@ trait SparkIntervalUtils {
     import ParseState._
     def throwIAE(msg: String, e: Exception = null) = {
       throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3255",
+        errorClass = "INVALID_INTERVAL_FORMAT",
         messageParameters = Map(
           "input" -> Option(input).map(_.toString).getOrElse("null"),
           "msg" -> msg),

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
@@ -38,7 +38,14 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
-    failFuncWithInvalidInput(input, errorMsg, s => stringToInterval(UTF8String.fromString(s)))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "msg" -> errorMsg))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -72,11 +79,11 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     testSingleUnit("MilliSecond", 3, 0, 0, millisToMicros(3))
     testSingleUnit("MicroSecond", 3, 0, 0, 3)
 
-    checkFromInvalidString(null, "cannot be null")
-
-    for (input <- Seq("", "interval", "foo", "foo 1 day")) {
-      checkFromInvalidString(input, "Error parsing")
-    }
+    checkFromInvalidString(null, "interval string cannot be null")
+    checkFromInvalidString("", "interval string cannot be empty")
+    checkFromInvalidString("interval", "interval string cannot be empty")
+    checkFromInvalidString("foo", "unrecognized number 'foo'")
+    checkFromInvalidString("foo 1 day", "unrecognized number 'foo'")
   }
 
   test("string to interval: interval with dangling parts should not results null") {
@@ -124,9 +131,9 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("string to interval: whitespaces") {
-    checkFromInvalidString(" ", "Error parsing ' ' to interval")
-    checkFromInvalidString("\n", "Error parsing '\n' to interval")
-    checkFromInvalidString("\t", "Error parsing '\t' to interval")
+    checkFromInvalidString(" ", "interval string cannot be empty")
+    checkFromInvalidString("\n", "interval string cannot be empty")
+    checkFromInvalidString("\t", "interval string cannot be empty")
     checkFromString("1 \t day \n 2 \r hour", new CalendarInterval(0, 1, 2 * MICROS_PER_HOUR))
     checkFromInvalidString("interval1 \t day \n 2 \r hour", "invalid interval prefix interval1")
     checkFromString("interval\r1\tday", new CalendarInterval(0, 1, 0))
@@ -150,7 +157,8 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     // truncate nanoseconds to microseconds
     checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
     checkFromString(".999999999 seconds", new CalendarInterval(0, 0, 999999))
-    checkFromInvalidString("0.123456789123 seconds", "'0.123456789123' is out of range")
+    checkFromInvalidString("0.123456789123 seconds",
+      "interval can only support nanosecond precision, '0.123456789123' is out of range")
   }
 
   test("from year-month string") {

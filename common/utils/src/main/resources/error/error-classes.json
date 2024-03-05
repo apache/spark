@@ -7817,7 +7817,7 @@
     "message" : [
       "Failed to convert the JSON string '<other>' to a data type. Please enter a valid data type."
     ],
-    "sqlState" : "HV004"
+    "sqlState" : "2203G"
   },
   "NONEXISTENT_FIELD_NAME_INDEXING" : {
     "message" : [
@@ -7837,10 +7837,11 @@
     ],
     "sqlState" : "HV091"
   },
-  "_LEGACY_ERROR_TEMP_3255" : {
+  "INVALID_INTERVAL_FORMAT" : {
     "message" : [
-      "Error parsing '<input>' to interval, <msg>"
-    ]
+      "Error parsing '<input>' to interval, <msg>. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again.\""
+    ],
+    "sqlState" : "22006"
   },
   "_LEGACY_ERROR_TEMP_3256" : {
     "message" : [
