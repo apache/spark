@@ -2845,7 +2845,7 @@
   },
   "NONEXISTENT_FIELD_NAME_INDEXING" : {
     "message" : [
-      "Field with name '<name>' does not exist. Available fields: <fieldNames>"
+      "Field with name <name> does not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
   },
@@ -2857,7 +2857,7 @@
   },
   "NONEXISTENT_FIELD_NAME_LOOKUP" : {
     "message" : [
-      "Field with name '<name>' does not exist. Available fields: <fieldNames>"
+      "Field with name <name> does not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
   },
