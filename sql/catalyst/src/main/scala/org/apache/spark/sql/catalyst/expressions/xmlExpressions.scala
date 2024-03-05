@@ -189,8 +189,12 @@ case class SchemaOfXml(
   private lazy val xmlFactory = xmlOptions.buildXmlFactory()
 
   @transient
-  private lazy val xmlInferSchema =
+  private lazy val xmlInferSchema = {
+    if (xmlOptions.parseMode == DropMalformedMode) {
+      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
+    }
     new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
+  }
 
   @transient
   private lazy val xml = child.eval().asInstanceOf[UTF8String]

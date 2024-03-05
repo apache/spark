@@ -1302,6 +1302,22 @@ class XmlSuite
     assert(result.select("decoded._corrupt_record").head().getString(0).nonEmpty)
   }
 
+  test("schema_of_xml parse error test") {
+    val e = intercept[AnalysisException] {
+       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
+         .collect()
+    }
+    checkError(
+      exception = e,
+      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      parameters = Map(
+        "funcName" -> "schema_of_xml",
+        "mode" -> "DROPMALFORMED",
+        "permissiveMode" -> "PERMISSIVE",
+        "failFastMode" -> "FAILFAST")
+    )
+  }
+
   test("from_xml with PERMISSIVE parse mode with no corrupt col schema") {
     // XML contains error
     val xmlData =
