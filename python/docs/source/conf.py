@@ -188,17 +188,12 @@ autodoc_typehints = "none"
 # a list of builtin themes.
 html_theme = 'pydata_sphinx_theme'
 
-html_context = {
-    "switcher_json_url": "_static/versions.json",
-    "switcher_template_url": "https://spark.apache.org/docs/{version}/api/python/index.html",
-}
-
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
     "header_links_before_dropdown": 6,
-    "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
+    "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "footer_start": ["spark_footer", "sphinx-version"],
     "logo": {
         "image_light": "_static/spark-logo-light.png",
