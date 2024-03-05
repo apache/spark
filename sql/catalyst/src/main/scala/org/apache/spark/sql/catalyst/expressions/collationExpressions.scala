@@ -25,6 +25,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+// scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(expr, collationName) - Marks a given expression with the specified collation.",
   arguments = """
@@ -43,6 +44,7 @@ import org.apache.spark.sql.types._
   """,
   since = "4.0.0",
   group = "string_funcs")
+// scalastyle:on line.contains.tab
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     // We need to throw collationNotEnabledError before unexpectedNullError
@@ -91,6 +93,7 @@ case class Collate(child: Expression, collationName: String)
     defineCodeGen(ctx, ev, (in) => in)
 }
 
+// scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the collation name of a given expression.",
   arguments = """
@@ -108,6 +111,7 @@ case class Collate(child: Expression, collationName: String)
   """,
   since = "4.0.0",
   group = "string_funcs")
+// scalastyle:on line.contains.tab
 case class Collation(child: Expression) extends UnaryExpression with RuntimeReplaceable {
   override def dataType: DataType = StringType
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
