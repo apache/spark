@@ -87,7 +87,9 @@ class CatalogFileIndex(
         userSpecifiedSchema = Some(partitionSpec.partitionColumns),
         fileStatusCache = fileStatusCache,
         userSpecifiedPartitionSpec = Some(partitionSpec),
-        metadataOpsTimeNs = Some(timeNs))
+        metadataOpsTimeNs = Some(timeNs),
+        catalogTableOpt = Option(table),
+        catalogTablePartitionsOpt = Option(selectedPartitions))
     } else {
       new InMemoryFileIndex(sparkSession, rootPaths, parameters = table.storage.properties,
         userSpecifiedSchema = None, fileStatusCache = fileStatusCache)
