@@ -31,6 +31,15 @@ class InMemoryTableWithV2FilterCatalog extends InMemoryTableCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
+    val columns = CatalogV2Util.structTypeToV2Columns(schema)
+    createTable(ident, columns, partitions, properties)
+  }
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
@@ -38,6 +47,7 @@ class InMemoryTableWithV2FilterCatalog extends InMemoryTableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     val table = new InMemoryTableWithV2Filter(tableName, schema, partitions, properties)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())

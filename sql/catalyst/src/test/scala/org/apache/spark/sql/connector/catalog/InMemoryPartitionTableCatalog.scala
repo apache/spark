@@ -31,12 +31,22 @@ class InMemoryPartitionTableCatalog extends InMemoryTableCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
+    val columns = CatalogV2Util.structTypeToV2Columns(schema)
+    createTable(ident, columns, partitions, properties)
+  }
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     val table = new InMemoryAtomicPartitionTable(
       s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
