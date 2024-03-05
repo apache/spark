@@ -313,7 +313,7 @@ private object DateTimeFormatterHelper {
         if (index % 2 == 0) {
           for (c <- patternPart if weekBasedLetters.contains(c)) {
             throw new SparkIllegalArgumentException(
-              errorClass = "_LEGACY_ERROR_TEMP_3257",
+              errorClass = "UNSUPPORTED_WEEK_BASED_PATTERN",
               messageParameters = Map("c" -> c.toString))
           }
           for (c <- patternPart if unsupportedLetters.contains(c) ||

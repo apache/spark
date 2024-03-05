@@ -7839,7 +7839,7 @@
   },
   "INVALID_INTERVAL_FORMAT" : {
     "message" : [
-      "Error parsing '<input>' to interval, <msg>. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again.\""
+      "Error parsing '<input>' to interval, <msg>. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
     ],
     "sqlState" : "22006"
   },
@@ -7849,10 +7849,11 @@
     ],
     "sqlState": "22007"
   },
-  "_LEGACY_ERROR_TEMP_3257" : {
+  "UNSUPPORTED_WEEK_BASED_PATTERN" : {
     "message" : [
-      "All week-based patterns are unsupported since Spark 3.0, detected: <c>, Please use the SQL function EXTRACT instead"
-    ]
+      "All week-based patterns are unsupported since Spark 3.0, detected week-based character: <c>. Please use the SQL function EXTRACT instead."
+    ],
+    "sqlState": "22007"
   },
   "_LEGACY_ERROR_TEMP_3258" : {
     "message" : [
