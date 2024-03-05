@@ -7819,7 +7819,7 @@
     ],
     "sqlState" : "HV004"
   },
-  "NONEXISTENT_FIELD_NAME" : {
+  "NONEXISTENT_FIELD_NAME_INDEXING" : {
     "message" : [
       "Field with name '<name>' does not exist. Available fields: <fieldNames>"
     ],
@@ -7831,10 +7831,11 @@
     ],
     "sqlState" : "HV091"
   },
-  "_LEGACY_ERROR_TEMP_3254" : {
+  "NONEXISTENT_FIELD_NAME_LOOKUP" : {
     "message" : [
-      "<name> does not exist. Available: <fieldNames>"
-    ]
+      "Field with name '<name>' does not exist. Available fields: <fieldNames>"
+    ],
+    "sqlState" : "HV091"
   },
   "_LEGACY_ERROR_TEMP_3255" : {
     "message" : [

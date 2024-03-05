@@ -283,7 +283,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
       throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3254",
+        errorClass = "NONEXISTENT_FIELD_NAME_LOOKUP",
         messageParameters = immutable.Map(
           "name" -> name,
           "fieldNames" -> fieldNames.mkString(", "))))
@@ -316,7 +316,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
       throw new SparkIllegalArgumentException(
-        errorClass = "NONEXISTENT_FIELD_NAME",
+        errorClass = "NONEXISTENT_FIELD_NAME_INDEXING",
         messageParameters = immutable.Map(
           "name" -> name,
           "fieldNames" -> fieldNames.mkString(", "))))
