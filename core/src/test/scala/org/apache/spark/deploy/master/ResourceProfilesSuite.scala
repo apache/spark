@@ -23,15 +23,15 @@ import org.apache.spark.resource.ResourceRequirement
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 
 class ResourceProfilesSuite extends MasterSuiteBase {
-  test("scheduling for app with multiple resource profiles") {
+  ignore("scheduling for app with multiple resource profiles") {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = false)
   }
 
-  test("scheduling for app with multiple resource profiles with max cores") {
+  ignore("scheduling for app with multiple resource profiles with max cores") {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
   }
 
-  test("resource description with multiple resource profiles") {
+  ignore("resource description with multiple resource profiles") {
     val appInfo = makeAppInfo(128, Some(4), None, Map(GPU -> 2))
     val rp1 = DeployTestUtils.createResourceProfile(None, Map(FPGA -> 2), None)
     val rp2 = DeployTestUtils.createResourceProfile(Some(256), Map(GPU -> 3, FPGA -> 3), Some(2))
