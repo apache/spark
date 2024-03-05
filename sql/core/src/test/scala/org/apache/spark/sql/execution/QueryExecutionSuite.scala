@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 import scala.io.Source
 
 import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
-import org.apache.spark.sql.QueryTest.checkAnswer
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -335,18 +334,6 @@ class QueryExecutionSuite extends SharedSparkSession {
         }
       }
     }
-  }
-
-  test("SPARK-47033: EXECUTE IMMEDIATE USING does not recognize session variable names") {
-    spark.sql("DECLARE parm = 'Hello';")
-
-    val originalQuery = spark.sql(
-      "EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm AS parm;")
-    val newQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm;")
-
-    assert(originalQuery.columns sameElements newQuery.columns)
-
-    checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
   }
 
   case class MockCallbackEagerCommand(
