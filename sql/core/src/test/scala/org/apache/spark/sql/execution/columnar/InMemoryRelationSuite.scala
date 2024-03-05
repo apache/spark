@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions.expr
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSessionBase
 import org.apache.spark.storage.StorageLevel
 
@@ -44,16 +45,18 @@ class InMemoryRelationSuite extends SparkFunSuite
       tableCache.get.asInstanceOf[InMemoryTableScanExec].relation.innerChildren.head
     }
 
-    val d1 = spark.range(1).withColumn("key", expr("id % 100"))
-      .groupBy("key").agg(Map("key" -> "count"))
-    val cached_d2 = d1.cache()
-    val df = cached_d2.withColumn("key2", expr("key % 10"))
-      .groupBy("key2").agg(Map("key2" -> "count"))
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val d1 = spark.range(1).withColumn("key", expr("id % 100"))
+        .groupBy("key").agg(Map("key" -> "count"))
+      val cached_d2 = d1.cache()
+      val df = cached_d2.withColumn("key2", expr("key % 10"))
+        .groupBy("key2").agg(Map("key2" -> "count"))
 
-    assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
-      .contains("AdaptiveSparkPlan isFinalPlan=false"))
-    df.collect()
-    assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
-      .contains("AdaptiveSparkPlan isFinalPlan=true"))
+      assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
+        .contains("AdaptiveSparkPlan isFinalPlan=false"))
+      df.collect()
+      assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
+        .contains("AdaptiveSparkPlan isFinalPlan=true"))
+    }
   }
 }
