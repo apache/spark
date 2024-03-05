@@ -70,8 +70,12 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    * Given a input physical plan, performs the following tasks.
    *   1. Generates the explain output for the input plan excluding the subquery plans.
    *   2. Generates the explain output for each subquery referenced in the plan.
+   *
+   * Note that, ideally this is a no-op as different explain actions operate on different plan,
+   * instances but cached plan is an exception. The `InMemoryRelation#innerChildren` use a shared
+   * plan instance across multi-queries. Add lock for this method to avoid tag race condition.
    */
-  def processPlan[T <: QueryPlan[T]](plan: T, append: String => Unit): Unit = {
+  def processPlan[T <: QueryPlan[T]](plan: T, append: String => Unit): Unit = synchronized {
     try {
       var currentOperatorID = 0
       currentOperatorID = generateOperatorIDs(plan, currentOperatorID)
