@@ -151,7 +151,7 @@ def main(infile: IO, outfile: IO) -> None:
             except NotImplementedError:
                 raise PySparkRuntimeError(
                     error_class="NOT_IMPLEMENTED",
-                    message_parameters={"feature": "Reader.schema"},
+                    message_parameters={"feature": "DataSource.schema"},
                 )
         else:
             schema = user_specified_schema  # type: ignore
