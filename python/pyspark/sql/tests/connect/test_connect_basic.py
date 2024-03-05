@@ -1409,7 +1409,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.check_error(
                 exception=pe.exception,
                 error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "args", "arg_type": "<class 'set'>"},
+                message_parameters={"arg_name": "args", "arg_type": "set"},
             )
 
     def test_head(self):
