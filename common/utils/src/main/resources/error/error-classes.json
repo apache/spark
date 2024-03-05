@@ -3921,6 +3921,11 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
+      "COLLATION" : {
+        "message" : [
+          "Collation is not yet supported."
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
