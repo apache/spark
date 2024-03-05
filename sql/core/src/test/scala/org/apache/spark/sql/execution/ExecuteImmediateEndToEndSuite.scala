@@ -33,7 +33,7 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
     } finally {
-      spark.sql("DROP TEMPORARY VARIABLE parm;")
+      spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
     }
   }
 }
