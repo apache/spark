@@ -257,9 +257,6 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
-  test("wei comment") {
-
-  }
 
   test("stream stream inner join with one time-interval condition " +
     "- with one watermark") {
