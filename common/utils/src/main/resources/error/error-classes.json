@@ -1776,6 +1776,12 @@
     ],
     "sqlState" : "22P03"
   },
+  "INVALID_CHARACTER_IN_DATETIME_PATTERN" : {
+    "message" : [
+      "Illegal pattern character found in datetime patter: <c>. Please provide legal character."
+    ],
+    "sqlState": "22007"
+  },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
       "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
@@ -1828,6 +1834,18 @@
       }
     },
     "sqlState" : "HY109"
+  },
+  "INVALID_DATETIME_PATTERN" : {
+    "message" : [
+      "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern"
+    ],
+    "sqlState": "22007"
+  },
+  "INVALID_DATETIME_PATTERN_LENGTH" : {
+    "message" : [
+      "Too many pattern letters: <style>. Please reduce pattern length."
+    ],
+    "sqlState": "22007"
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
@@ -2066,6 +2084,12 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_INTERVAL_FORMAT" : {
+    "message" : [
+      "Error parsing '<input>' to interval, <msg>. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
+    ],
+    "sqlState" : "22006"
+  },
   "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
     "message" : [
       "Invalid inverse distribution function <funcName>."
@@ -2088,6 +2112,12 @@
       }
     },
     "sqlState" : "42K0K"
+  },
+  "INVALID_JSON_DATA_TYPE" : {
+    "message" : [
+      "Failed to convert the JSON string '<other>' to a data type. Please enter a valid data type."
+    ],
+    "sqlState" : "2203G"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -2812,6 +2842,24 @@
       "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
     ],
     "sqlState" : "07501"
+  },
+  "NONEXISTENT_FIELD_NAME_INDEXING" : {
+    "message" : [
+      "Field with name '<name>' does not exist. Available fields: <fieldNames>"
+    ],
+    "sqlState" : "HV091"
+  },
+  "NONEXISTENT_FIELD_NAME_IN_LIST" : {
+    "message" : [
+      "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
+    ],
+    "sqlState" : "HV091"
+  },
+  "NONEXISTENT_FIELD_NAME_LOOKUP" : {
+    "message" : [
+      "Field with name '<name>' does not exist. Available fields: <fieldNames>"
+    ],
+    "sqlState" : "HV091"
   },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [
@@ -7818,54 +7866,6 @@
     "message" : [
       "Failed to convert the JSON string '<other>' to a field."
     ]
-  },
-  "INVALID_JSON_DATA_TYPE" : {
-    "message" : [
-      "Failed to convert the JSON string '<other>' to a data type. Please enter a valid data type."
-    ],
-    "sqlState" : "2203G"
-  },
-  "NONEXISTENT_FIELD_NAME_INDEXING" : {
-    "message" : [
-      "Field with name '<name>' does not exist. Available fields: <fieldNames>"
-    ],
-    "sqlState" : "HV091"
-  },
-  "NONEXISTENT_FIELD_NAME_IN_LIST" : {
-    "message" : [
-      "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
-    ],
-    "sqlState" : "HV091"
-  },
-  "NONEXISTENT_FIELD_NAME_LOOKUP" : {
-    "message" : [
-      "Field with name '<name>' does not exist. Available fields: <fieldNames>"
-    ],
-    "sqlState" : "HV091"
-  },
-  "INVALID_INTERVAL_FORMAT" : {
-    "message" : [
-      "Error parsing '<input>' to interval, <msg>. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
-    ],
-    "sqlState" : "22006"
-  },
-  "INVALID_DATETIME_PATTERN" : {
-    "message" : [
-      "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern"
-    ],
-    "sqlState": "22007"
-  },
-  "INVALID_CHARACTER_IN_DATETIME_PATTERN" : {
-    "message" : [
-      "Illegal pattern character found in datetime patter: <c>. Please provide legal character."
-    ],
-    "sqlState": "22007"
-  },
-  "INVALID_DATETIME_PATTERN_LENGTH" : {
-    "message" : [
-      "Too many pattern letters: <style>. Please reduce pattern length."
-    ],
-    "sqlState": "22007"
   },
   "_LEGACY_ERROR_TEMP_3260" : {
     "message" : [
