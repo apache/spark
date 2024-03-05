@@ -224,6 +224,42 @@ class ProfilerCollector(ABC):
             for id in sorted(code_map.keys()):
                 dump(id)
 
+    def clear_perf_profiles(self, id: Optional[int] = None) -> None:
+        """
+        Clear the perf profile results.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        id : int, optional
+            The UDF ID whose profiling results should be cleared.
+            If not specified, all the results will be cleared.
+        """
+        with self._lock:
+            if id is not None:
+                self._perf_profile_results.pop(id, None)
+            else:
+                self._perf_profile_results.clear()
+
+    def clear_memory_profiles(self, id: Optional[int] = None) -> None:
+        """
+        Clear the memory profile results.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        id : int, optional
+            The UDF ID whose profiling results should be cleared.
+            If not specified, all the results will be cleared.
+        """
+        with self._lock:
+            if id is not None:
+                self._memory_profile_results.pop(id, None)
+            else:
+                self._memory_profile_results.clear()
+
 
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:
@@ -301,6 +337,35 @@ class Profile:
             self.profiler_collector.dump_perf_profiles(path, id)
             if type is None:  # Dump both perf and memory profiles
                 self.profiler_collector.dump_memory_profiles(path, id)
+        else:
+            raise PySparkValueError(
+                error_class="VALUE_NOT_ALLOWED",
+                message_parameters={
+                    "arg_name": "type",
+                    "allowed_values": str(["perf", "memory"]),
+                },
+            )
+
+    def clear(self, id: Optional[int] = None, *, type: Optional[str] = None) -> None:
+        """
+        Clear the profile results.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        id : int, optional
+            The UDF ID whose profiling results should be cleared.
+            If not specified, all the results will be cleared.
+        type : str, optional
+            The profiler type to clear results for, which can be either "perf" or "memory".
+        """
+        if type == "memory":
+            self.profiler_collector.clear_memory_profiles(id)
+        elif type == "perf" or type is None:
+            self.profiler_collector.clear_perf_profiles(id)
+            if type is None:  # Clear both perf and memory profiles
+                self.profiler_collector.clear_memory_profiles(id)
         else:
             raise PySparkValueError(
                 error_class="VALUE_NOT_ALLOWED",
