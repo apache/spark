@@ -50,5 +50,5 @@ trait MapState[K, V] extends Serializable {
   def removeKey(key: K): Unit
 
   /** Remove this state. */
-  def remove(): Unit
+  def clear(): Unit
 }

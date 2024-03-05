@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 import java.io.Serializable
 
 import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.sql.Encoder
 
 /**
  * Represents the operation handle provided to the stateful processor used in the
@@ -52,7 +53,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * Creates new or returns existing map state associated with stateName.
    * The MapState persists Key-Value pairs of type [K, V].
    */
-  def getMapState[K, V](stateName: String): MapState[K, V]
+  def getMapState[K, V](stateName: String, userKeyEnc: Encoder[K]): MapState[K, V]
 
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo

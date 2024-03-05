@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.commons.lang3.SerializationUtils
 
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Serializer
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types.{BinaryType, StructType}
@@ -66,12 +68,36 @@ class StateTypesEncoder[GK](
     keyRow
   }
 
-  def encodeUserKey[K](userKey: K): UnsafeRow = {
-    val schemaForKeyRow: StructType = new StructType().add("userKey", BinaryType)
-    val keyByteArr = SerializationUtils.serialize(userKey.asInstanceOf[Serializable])
-    val keyEncoder = UnsafeProjection.create(schemaForKeyRow)
-    val keyRow = keyEncoder(InternalRow(keyByteArr))
-    keyRow
+  def encodeCompositeKey[K](userKey: K, userKeyEnc: Encoder[K]): UnsafeRow = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+    val groupingKey = keyOption.get.asInstanceOf[GK]
+    // get grouping key byte array
+    val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
+    // get user key byte array
+    val userKeySerializer = encoderFor(userKeyEnc).createSerializer()
+    val userKeyBytesArr = userKeySerializer.apply(userKey).asInstanceOf[UnsafeRow].getBytes()
+
+    val schemaForCompositeKeyRow: StructType =
+      new StructType()
+        .add("key", BinaryType)
+        .add("userKey", BinaryType)
+
+    val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
+    val compositeKeyRow = compositeKeyProjection(InternalRow(keyByteArr, userKeyBytesArr))
+    compositeKeyRow
+  }
+
+  def decodeCompositeKey[K](row: UnsafeRow, userKeyEnc: Encoder[K]): K = {
+    val bytes = row.getBinary(1)
+    val reuseRow = new UnsafeRow(userKeyEnc.schema.fields.length)
+    reuseRow.pointTo(bytes, bytes.length)
+    val valExpressionEnc = encoderFor(userKeyEnc)
+    val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
+    val value = rowToObjDeserializer.apply(reuseRow)
+    value
   }
 
   def encodeValue[S](value: S): UnsafeRow = {

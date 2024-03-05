@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.{StateStore, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
@@ -25,17 +26,19 @@ import org.apache.spark.sql.types.{BinaryType, StructType}
 class MapStateImpl[K, V](
     store: StateStore,
     stateName: String,
-    keyExprEnc: ExpressionEncoder[Any]) extends MapState[K, V] with Logging {
+    keyExprEnc: ExpressionEncoder[Any],
+    userKeyExprEnc: Encoder[K]) extends MapState[K, V] with Logging {
 
-  store.setUseCompositeKey()
-
-  private val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  private val schemaForKeyRow: StructType =
+    new StructType()
+    .add("key", BinaryType)
+    .add("userKey", BinaryType)
   private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, stateName)
 
-  store.createColFamilyIfAbsent(stateName, schemaForKeyRow, numColsPrefixKey = 0,
+  store.createColFamilyIfAbsent(stateName, schemaForKeyRow, numColsPrefixKey = 1,
     schemaForValueRow)
 
   /** Whether state exists or not. */
@@ -46,9 +49,8 @@ class MapStateImpl[K, V](
   /** Get the state value if it exists */
   override def getValue(key: K): V = {
     require(key != null, "User key cannot be null.")
-    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    val encodeUserKey = stateTypesEncoder.encodeUserKey(key)
-    val unsafeRowValue = store.getWithCompositeKey(encodedGroupingKey, encodeUserKey, stateName)
+    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key, userKeyExprEnc)
+    val unsafeRowValue = store.get(encodedCompositeKey, stateName)
     if (unsafeRowValue == null) {
       throw new UnsupportedOperationException(
         "No value found for given grouping key and user key in the map.")
@@ -71,19 +73,18 @@ class MapStateImpl[K, V](
     require(key != null, "User key cannot be null.")
     require(value != null, "Value put to map cannot be null.")
     val encodedValue = stateTypesEncoder.encodeValue(value)
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    val encodedUserKey = stateTypesEncoder.encodeUserKey(key)
-    store.putWithCompositeKey(encodedKey, encodedUserKey, encodedValue, stateName)
+    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key, userKeyExprEnc)
+    store.put(encodedCompositeKey, encodedValue, stateName)
   }
 
   /** Get the map associated with grouping key */
   override def getMap(): Map[K, V] = {
-    assert(store.useCompositeKey == true, "composite key not set")
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     store.prefixScan(encodedGroupingKey, stateName)
       .map {
         case iter: UnsafeRowPair =>
-          (stateTypesEncoder.decodeValue(iter.key), stateTypesEncoder.decodeValue(iter.value))
+          (stateTypesEncoder.decodeCompositeKey(iter.key, userKeyExprEnc),
+            stateTypesEncoder.decodeValue(iter.value))
       }.toMap
   }
 
@@ -100,13 +101,12 @@ class MapStateImpl[K, V](
   /** Remove user key from map state */
   override def removeKey(key: K): Unit = {
     require(key != null, "User key cannot be null.")
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    val encodedUserKey = stateTypesEncoder.encodeUserKey(key)
-    store.removeWithCompositeKey(encodedKey, encodedUserKey, stateName)
+    val compositeKey = stateTypesEncoder.encodeCompositeKey(key, userKeyExprEnc)
+    store.remove(compositeKey, stateName)
   }
 
   /** Remove this state. */
-  override def remove(): Unit = {
+  override def clear(): Unit = {
     getKeys().foreach { itr =>
       removeKey(itr)
     }

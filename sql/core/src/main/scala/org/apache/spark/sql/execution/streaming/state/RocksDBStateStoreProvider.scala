@@ -48,10 +48,6 @@ private[sql] class RocksDBStateStoreProvider
 
     override def version: Long = lastVersion
 
-    override def setUseCompositeKey(colFamilyName: String): Unit = {
-      useCompositeKey = true
-    }
-
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
@@ -116,48 +112,6 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
     }
 
-    override def getWithCompositeKey(
-        groupingKey: UnsafeRow,
-        userKey: UnsafeRow,
-        colFamilyName: String): UnsafeRow = {
-      verify(useCompositeKey, "Please setUseCompositeKey first")
-      verify(groupingKey != null, "Grouping Key cannot be null")
-      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      val value = kvEncoder._2.decodeValue(
-        rocksDB.get(kvEncoder._1.encodeCompositeKey(groupingKey, userKey), colFamilyName))
-      if (!isValidated && value != null) {
-        StateStoreProvider.validateStateRowFormat(
-          groupingKey, keySchema, value, valueSchema, storeConf)
-        isValidated = true
-      }
-      value
-    }
-
-    override def putWithCompositeKey(
-        groupingKey: UnsafeRow,
-        userKey: UnsafeRow,
-        value: UnsafeRow,
-        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-      verify(useCompositeKey, "Please setUseCompositeKey first")
-      verify(state == UPDATING, "Cannot put after already committed or aborted")
-      verify(groupingKey != null, "Key cannot be null")
-      require(value != null, "Cannot put a null value")
-      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.put(kvEncoder._1.encodeCompositeKey(groupingKey, userKey),
-        kvEncoder._2.encodeValue(value), colFamilyName)
-    }
-
-    override def removeWithCompositeKey(
-        groupingKey: UnsafeRow,
-        userKey: UnsafeRow,
-        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-      verify(useCompositeKey, "Please setUseCompositeKey first")
-      verify(state == UPDATING, "Cannot remove after already committed or aborted")
-      verify(groupingKey != null, "Grouping Key cannot be null")
-      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-      rocksDB.remove(kvEncoder._1.encodeCompositeKey(groupingKey, userKey), colFamilyName)
-    }
-
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
@@ -191,27 +145,16 @@ private[sql] class RocksDBStateStoreProvider
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
       Iterator[UnsafeRowPair] = {
-      if (!useCompositeKey) {
-        val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-        require(kvEncoder._1.supportPrefixKeyScan,
-          "Prefix scan requires setting prefix key!")
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      require(kvEncoder._1.supportPrefixKeyScan,
+        "Prefix scan requires setting prefix key!")
 
-        val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
-        val rowPair = new UnsafeRowPair()
-        rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
-            kvEncoder._2.decodeValue(kv.value))
-          rowPair
-        }
-      } else {
-        val kvEncoder = keyValueEncoderMap.get(colFamilyName)
-        val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
-        val rowPair = new UnsafeRowPair()
-        rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
-          rowPair.withRows(kvEncoder._1.decodeCompositeKey(kv.key)._2,
-            kvEncoder._2.decodeValue(kv.value))
-          rowPair
-        }
+      val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
+      val rowPair = new UnsafeRowPair()
+      rocksDB.prefixScan(prefix, colFamilyName).map { kv =>
+        rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
+          kvEncoder._2.decodeValue(kv.value))
+        rowPair
       }
     }
 

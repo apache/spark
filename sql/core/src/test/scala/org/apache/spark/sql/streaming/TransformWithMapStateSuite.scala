@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
@@ -32,7 +33,7 @@ class TestMapStateProcessor
 
   override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
     _processorHandle = handle
-    _mapState = handle.getMapState("sessionState")
+    _mapState = handle.getMapState("sessionState", Encoders.STRING)
   }
 
   override def handleInputRows(
@@ -68,7 +69,7 @@ class TestMapStateProcessor
       } else if (row.action == "removeKey") {
         _mapState.removeKey(row.value._1)
       } else if (row.action == "remove") {
-        _mapState.remove()
+        _mapState.clear()
       }
     }
     output.iterator
