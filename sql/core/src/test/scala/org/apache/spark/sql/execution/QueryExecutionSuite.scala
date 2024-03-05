@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 import scala.io.Source
 
 import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
+import org.apache.spark.sql.QueryTest.checkAnswer
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -345,7 +346,7 @@ class QueryExecutionSuite extends SharedSparkSession {
 
     assert(originalQuery.columns sameElements newQuery.columns)
 
-    assert(originalQuery.head() == newQuery.head())
+    checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
   }
 
   case class MockCallbackEagerCommand(
