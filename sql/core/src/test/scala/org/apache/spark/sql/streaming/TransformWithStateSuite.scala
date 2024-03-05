@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
@@ -30,14 +30,9 @@ object TransformWithStateSuiteUtils {
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
   @transient private var _countState: ValueState[Long] = _
-  @transient var _processorHandle: StatefulProcessorHandle = _
 
-  override def init(
-      handle: StatefulProcessorHandle,
-      outputMode: OutputMode) : Unit = {
-    _processorHandle = handle
-    assert(handle.getQueryInfo().getBatchId >= 0)
-    _countState = _processorHandle.getValueState[Long]("countState")
+  override def init(outputMode: OutputMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState")
   }
 
   override def handleInputRows(
@@ -62,17 +57,11 @@ class RunningCountMostRecentStatefulProcessor
   with Logging {
   @transient private var _countState: ValueState[Long] = _
   @transient private var _mostRecent: ValueState[String] = _
-  @transient var _processorHandle: StatefulProcessorHandle = _
 
-  override def init(
-      handle: StatefulProcessorHandle,
-      outputMode: OutputMode) : Unit = {
-    _processorHandle = handle
-    assert(handle.getQueryInfo().getBatchId >= 0)
-    _countState = _processorHandle.getValueState[Long]("countState")
-    _mostRecent = _processorHandle.getValueState[String]("mostRecent")
+  override def init(outputMode: OutputMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState")
+    _mostRecent = getHandle.getValueState[String]("mostRecent")
   }
-
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
@@ -96,15 +85,10 @@ class MostRecentStatefulProcessorWithDeletion
   extends StatefulProcessor[String, (String, String), (String, String)]
   with Logging {
   @transient private var _mostRecent: ValueState[String] = _
-  @transient var _processorHandle: StatefulProcessorHandle = _
 
-  override def init(
-       handle: StatefulProcessorHandle,
-       outputMode: OutputMode) : Unit = {
-    _processorHandle = handle
-    assert(handle.getQueryInfo().getBatchId >= 0)
-    _processorHandle.deleteIfExists("countState")
-    _mostRecent = _processorHandle.getValueState[String]("mostRecent")
+  override def init(outputMode: OutputMode): Unit = {
+    getHandle.deleteIfExists("countState")
+    _mostRecent = getHandle.getValueState[String]("mostRecent")
   }
 
   override def handleInputRows(
@@ -132,7 +116,7 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
-    _tempState = _processorHandle.getValueState[Long]("tempState")
+    _tempState = getHandle.getValueState[Long]("tempState")
     Iterator.empty
   }
 }
@@ -193,6 +177,18 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
     }
+  }
+
+  test("Use statefulProcessor without transformWithState - handle should be absent") {
+    val processor = new RunningCountStatefulProcessor()
+    val ex = intercept[Exception] {
+      processor.getHandle
+    }
+    checkError(
+      ex.asInstanceOf[SparkRuntimeException],
+      errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",
+      parameters = Map.empty
+    )
   }
 
   test("transformWithState - batch should succeed") {
