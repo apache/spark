@@ -146,7 +146,8 @@ private class AsyncEventQueue(
     // they can omit the thread join.
     // 2.this thread might be trying to stop itself as part of error handling -- we can't join
     // in that case.
-    if (waitForEventDispatchExit() && Thread.currentThread() != dispatchThread) {
+    if (conf.get(LISTENER_BUS_EVENT_QUEUE_WAIT_FOR_EVENT_DISPATCH_EXIT_ON_STOP) &&
+      Thread.currentThread() != dispatchThread) {
       dispatchThread.join()
     }
   }
@@ -208,15 +209,6 @@ private class AsyncEventQueue(
     // the listener failed in an unrecoverably way, we want to remove it from the entire
     // LiveListenerBus (potentially stopping a queue if it is empty)
     bus.removeListener(listener)
-  }
-
-  /**
-   * Wait for the dispatch exit on queue stop or not.
-   *
-   * @return true if wait for event dispatch exit.
-   */
-  private def waitForEventDispatchExit(): Boolean = {
-    conf.get(LISTENER_BUS_EVENT_QUEUE_WAIT_FOR_EVENT_DISPATCH_EXIT_ON_STOP)
   }
 
 }
