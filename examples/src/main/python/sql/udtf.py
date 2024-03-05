@@ -236,6 +236,14 @@ def python_udtf_table_argument_with_partitioning(spark: SparkSession) -> None:
     spark.sql("CREATE TABLE values_table (a STRING, b INT)")
     spark.sql("INSERT INTO values_table VALUES ('abc', 2), ('abc', 4), ('def', 6), ('def', 8)")
     spark.table("values_table").show()
+    # +-------+----+
+    # |     a |  b |
+    # +-------+----+
+    # | "abc" | 2  |
+    # | "abc" | 4  |
+    # | "def" | 6  |
+    # | "def" | 8  |
+    # +-------+----+
 
     # Query the UDTF with the input table as an argument, and a directive to partition the input
     # rows such that all rows with each unique value of the `a` column are processed by the same

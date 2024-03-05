@@ -518,7 +518,7 @@ For example:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 215-279
+    :lines: 215-287
     :dedent: 4
 
 Note that in for each of these ways of partitioning the input table when calling UDTFs in SQL
