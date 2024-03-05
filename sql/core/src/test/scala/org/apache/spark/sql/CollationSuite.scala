@@ -277,25 +277,21 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", true),
       CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", true),
       CollationTestCase("abcde", "fgh", "UCS_BASIC_LCASE", false),
-      CollationTestCase("abcde", "FGH", "UCS_BASIC_LCASE", false)
+      CollationTestCase("abcde", "FGH", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UNICODE_CI", true),
+      CollationTestCase("c", "", "UNICODE_CI", true),
+      CollationTestCase("", "c", "UNICODE_CI", false),
+      CollationTestCase("abcde", "c", "UNICODE_CI", true),
+      CollationTestCase("abcde", "C", "UNICODE_CI", true),
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", true),
+      CollationTestCase("abcde", "BCD", "UNICODE_CI", true),
+      CollationTestCase("abcde", "fgh", "UNICODE_CI", false),
+      CollationTestCase("abcde", "FGH", "UNICODE_CI", false)
     )
     checks.foreach(testCase => {
       checkAnswer(sql(s"SELECT contains(collate('${testCase.left}', '${testCase.collation}')," +
         s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
     })
-    // Unsupported collations
-    checkError(
-      exception = intercept[SparkException] {
-        sql(s"SELECT contains(collate('abcde', 'UNICODE_CI')," +
-          s"collate('BCD', 'UNICODE_CI'))")
-      },
-      errorClass = "UNSUPPORTED_COLLATION.FOR_FUNCTION",
-      sqlState = "0A000",
-      parameters = Map(
-        "functionName" -> "contains",
-        "collationName" -> "UNICODE_CI"
-      )
-    )
   }
 
   test("Support startsWith string expression with Collation") {
