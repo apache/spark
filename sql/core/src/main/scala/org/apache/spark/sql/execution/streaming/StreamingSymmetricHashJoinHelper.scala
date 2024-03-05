@@ -199,27 +199,29 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       leftKeys, rightKeys)
 
     // Returns a predicate that drops data less than the state watermark.
+    // oneSideInputAttributes are the attributes to base the state watermark off of, while
+    // otherSideInputAttributes are the attributes on which the watermark is defined.
     def getOneSideStateWatermarkPredicate(
-        stateRemovalSideAttributes: Seq[Attribute],
-        stateRemovalSideJoinKeys: Seq[Expression],
-        watermarkSideAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
-      val watermarkAttribute = watermarkSideAttributes.find(_.metadata.contains(delayKey))
+        oneSideInputAttributes: Seq[Attribute],
+        oneSideJoinKeys: Seq[Expression],
+        otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
+      val watermarkAttribute = otherSideInputAttributes.find(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnInput = watermarkAttribute.isDefined
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
         val keyExprWithWatermark = BoundReference(
           joinKeyOrdinalForWatermark.get,
-          stateRemovalSideJoinKeys(joinKeyOrdinalForWatermark.get).dataType,
-          stateRemovalSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable
+          oneSideJoinKeys(joinKeyOrdinalForWatermark.get).dataType,
+          oneSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable
         )
         val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermarkForEviction)
         expr.map(JoinStateKeyWatermarkPredicate.apply _)
 
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = StreamingJoinHelper.getStateValueWatermark(
-          attributesToFindStateWatermarkFor = AttributeSet(stateRemovalSideAttributes),
-          attributesWithEventWatermark = AttributeSet(watermarkSideAttributes),
+          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
+          attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermarkForEviction
         )
