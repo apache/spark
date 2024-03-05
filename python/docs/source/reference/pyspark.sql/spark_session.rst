@@ -90,8 +90,7 @@ Spark Connect Only
 Runtime Profiling
 -----------------
 
-.. autosummary::
-    :toctree: api/
+The ``profile`` property of ``SparkSession`` returns a profiling object that enables users to use below methods:
 
-    SparkSession.profile.show
-    SparkSession.profile.dump
+.. autoclass:: pyspark.sql.profiler.Profile
+   :members: show, dump
