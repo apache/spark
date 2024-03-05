@@ -88,17 +88,13 @@ object StateTypesEncoder {
     new StateTypesEncoder[GK](keySerializer, stateName)
   }
 }
-
 class CompositeKeyStateEncoder[GK, K](
     keySerializer: Serializer[GK],
+    schemaForCompositeKeyRow: StructType,
     stateName: String,
     userKeyEnc: Encoder[K])
   extends StateTypesEncoder[GK](keySerializer: Serializer[GK], stateName: String) {
 
-  private val schemaForCompositeKeyRow: StructType =
-    new StructType()
-      .add("key", BinaryType)
-      .add("userKey", BinaryType)
   private val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
   private val reuseRow = new UnsafeRow(userKeyEnc.schema.fields.length)
   private val userKeyExpressionEnc = encoderFor(userKeyEnc)
@@ -108,11 +104,8 @@ class CompositeKeyStateEncoder[GK, K](
   private val userKeySerializer = encoderFor(userKeyEnc).createSerializer()
 
   /**
-   * Grouping key and user key are encoded as a row of
-   * `schemaForCompositeKeyRow` schema.
-   *
-   * Grouping key will be encoded in `RocksDBStateEncoder` as
-   * the prefix column.
+   * Grouping key and user key are encoded as a row of `schemaForCompositeKeyRow` schema.
+   * Grouping key will be encoded in `RocksDBStateEncoder` as the prefix column.
    */
   def encodeCompositeKey(userKey: K): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
@@ -144,8 +137,10 @@ class CompositeKeyStateEncoder[GK, K](
 object CompositeKeyStateEncoder {
   def apply[GK, K](
       keySerializer: Serializer[GK],
+      schemaForCompositeKeyRow: StructType,
       stateName: String,
       userKeyEnc: Encoder[K]): CompositeKeyStateEncoder[GK, K] = {
-    new CompositeKeyStateEncoder[GK, K](keySerializer, stateName, userKeyEnc)
+    new CompositeKeyStateEncoder[GK, K](
+      keySerializer, schemaForCompositeKeyRow, stateName, userKeyEnc)
   }
 }

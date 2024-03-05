@@ -36,7 +36,8 @@ class MapStateImpl[K, V](
     .add("userKey", BinaryType)
   private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
   private val keySerializer = keyExprEnc.createSerializer()
-  private val stateTypesEncoder = CompositeKeyStateEncoder(keySerializer, stateName, userKeyExprEnc)
+  private val stateTypesEncoder = CompositeKeyStateEncoder(
+    keySerializer, schemaForCompositeKeyRow, stateName, userKeyExprEnc)
 
   store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, numColsPrefixKey = 1,
     schemaForValueRow)
@@ -48,8 +49,6 @@ class MapStateImpl[K, V](
 
   /** Get the state value if it exists */
   override def getValue(key: K): V = {
-    // TODO do we want to reuse this function,
-    // or create a new error for null user key?
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     val unsafeRowValue = store.get(encodedCompositeKey, stateName)
@@ -61,11 +60,7 @@ class MapStateImpl[K, V](
   /** Check if the user key is contained in the map */
   override def containsKey(key: K): Boolean = {
     StateStoreErrors.requireNonNullStateValue(key, stateName)
-    try {
-      getValue(key) != null
-    } catch {
-      case _: Exception => false
-    }
+    getValue(key) != null
   }
 
   /** Update value for given user key */
