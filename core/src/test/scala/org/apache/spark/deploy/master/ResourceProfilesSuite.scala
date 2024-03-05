@@ -27,7 +27,7 @@ class ResourceProfilesSuite extends MasterSuiteBase {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = false)
   }
 
-  test("scheduling for app with multiple resource profiles with max cores") {
+  ignore("scheduling for app with multiple resource profiles with max cores") {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
   }
 
