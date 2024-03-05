@@ -28,12 +28,10 @@ case class InputMapRow(key: String, action: String, value: (String, String))
 class TestMapStateProcessor
   extends StatefulProcessor[String, InputMapRow, (String, String, String)] {
 
-  @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _mapState: MapState[String, String] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
-    _processorHandle = handle
-    _mapState = handle.getMapState("sessionState", Encoders.STRING)
+  override def init(outputMode: OutputMode): Unit = {
+    _mapState = getHandle.getMapState("sessionState", Encoders.STRING)
   }
 
   override def handleInputRows(
