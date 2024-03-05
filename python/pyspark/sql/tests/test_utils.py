@@ -1790,8 +1790,8 @@ class UtilsTestsMixin:
             self.assertEqual(e.getMessage(), "")
 
     def test_assert_data_frame_equal_not_support_streaming(self):
-        df1 = spark.readStream.format("rate").load()
-        df2 = spark.readStream.format("rate").load()
+        df1 = self.spark.readStream.format("rate").load()
+        df2 = self.spark.readStream.format("rate").load()
         exception_thrown = False
         try:
             assertDataFrameEqual(df1, df2)
