@@ -571,6 +571,32 @@ class MemoryProfiler2TestsMixin:
                 io.getvalue(), f"Filename.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
+    def test_memory_profiler_clear(self):
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            _do_computation(self.spark)
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        for id in list(self.profile_results.keys()):
+            self.spark.profile.clear(id)
+            self.assertNotIn(id, self.profile_results)
+        self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            _do_computation(self.spark)
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        self.spark.profile.clear(type="perf")
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+        self.spark.profile.clear(type="memory")
+        self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "memory"}):
+            _do_computation(self.spark)
+        self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
+
+        self.spark.profile.clear()
+        self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
+
 
 class MemoryProfiler2Tests(MemoryProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
