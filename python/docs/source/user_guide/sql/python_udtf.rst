@@ -471,8 +471,8 @@ Here is a Python UDTF with ``__init__`` and ``terminate``:
     :dedent: 4
 
 
-Accepting Input Table Arguments
--------------------------------
+Accepting an Input Table Argument
+---------------------------------
 
 The UDTF examples above show functions that accept scalar input arguments, such as integers or
 strings.
