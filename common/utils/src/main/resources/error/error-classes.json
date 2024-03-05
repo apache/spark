@@ -433,6 +433,12 @@
     ],
     "sqlState" : "56000"
   },
+  "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
+    "message" : [
+      "<className> must override either <method1> or <method2>."
+    ],
+    "sqlState" : "38000"
+  },
   "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
     "message" : [
       "`MapObjects` does not support the class <cls> as resulting collection."
@@ -688,6 +694,11 @@
         "message" : [
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
+        ]
+      },
+      "COLLATION_MISMATCH" : {
+        "message" : [
+          "Collations <collationNameLeft> and <collationNameRight> are not compatible. Please use the same collation for both strings."
         ]
       },
       "CREATE_MAP_KEY_DIFF_TYPES" : {
@@ -2314,7 +2325,7 @@
     "message" : [
       "Cannot use <type> for partition column."
     ],
-    "sqlState" : "42601"
+    "sqlState" : "0A000"
   },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
@@ -2956,6 +2967,12 @@
     },
     "sqlState" : "0A000"
   },
+  "NOT_UNRESOLVED_ENCODER" : {
+    "message" : [
+      "Unresolved encoder expected, but <attr> was found."
+    ],
+    "sqlState" : "42601"
+  },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [
       "Can't determine the default value for <colName> since it is not nullable and it has no default value."
@@ -3317,6 +3334,13 @@
   "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
     "message" : [
       "Failed to remove default column family with reserved name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
+    "message" : [
+      "The handle has not been initialized for this StatefulProcessor.",
+      "Please only use the StatefulProcessor within the transformWithState operator."
     ],
     "sqlState" : "42802"
   },
@@ -3735,6 +3759,18 @@
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
     ],
+    "subClass" : {
+      "FIELD_INDEX" : {
+        "message" : [
+          "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
@@ -3742,6 +3778,19 @@
       "The char/varchar type can't be used in the table schema.",
       "If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set \"spark.sql.legacy.charVarcharAsString\" to \"true\"."
     ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_COLLATION" : {
+    "message" : [
+      "Collation <collationName> is not supported for:"
+    ],
+    "subClass" : {
+      "FOR_FUNCTION" : {
+        "message" : [
+          "function <functionName>. Please try to use a different collation."
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
@@ -5718,21 +5767,6 @@
       "not resolved."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2020" : {
-    "message" : [
-      "Couldn't find a valid constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2023" : {
-    "message" : [
-      "Unresolved encoder expected, but <attr> was found."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2025" : {
-    "message" : [
-      "<className> must override either <m1> or <m2>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2026" : {
     "message" : [
       "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
@@ -6177,11 +6211,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2134" : {
-    "message" : [
-      "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2138" : {
     "message" : [
       "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
@@ -6520,11 +6549,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2231" : {
-    "message" : [
-      "fieldIndex on a Row without schema is undefined."
     ]
   },
   "_LEGACY_ERROR_TEMP_2232" : {
