@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.MapObjects
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.ArrayType
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, StringType, StructType}
 
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
@@ -85,6 +85,102 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
       assert(result.length === 1)
       assert(result === Row(Seq(Seq(Row(1)), Seq(Row(2)), Seq(Row(3)))) :: Nil)
     }
+  }
+
+  test("access complex data") {
+    assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
+    if (!conf.ansiEnabled) {
+      assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    }
+    assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
+  }
+
+  test("SPARK-7133: Implement struct, array, and map field accessor") {
+    assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
+    if (!conf.ansiEnabled) {
+      assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    }
+    assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
+    assert(complexData.filter(complexData("m")(complexData("s")("value")) === 1).count() == 1)
+    assert(complexData.filter(complexData("a")(complexData("s")("key")) === 1).count() == 1)
+  }
+
+  test("SPARK-24313: access map with binary keys") {
+    val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
+    checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
+  }
+
+  test("SPARK-37855: IllegalStateException when transforming an array inside a nested struct") {
+    def makeInput(): DataFrame = {
+      val innerElement1 = Row(3, 3.12)
+      val innerElement2 = Row(4, 2.1)
+      val innerElement3 = Row(1, 985.2)
+      val innerElement4 = Row(10, 757548.0)
+      val innerElement5 = Row(1223, 0.665)
+
+      val outerElement1 = Row(1, Row(List(innerElement1, innerElement2)))
+      val outerElement2 = Row(2, Row(List(innerElement3)))
+      val outerElement3 = Row(3, Row(List(innerElement4, innerElement5)))
+
+      val data = Seq(
+        Row("row1", List(outerElement1)),
+        Row("row2", List(outerElement2, outerElement3))
+      )
+
+      val schema = new StructType()
+        .add("name", StringType)
+        .add("outer_array", ArrayType(new StructType()
+          .add("id", IntegerType)
+          .add("inner_array_struct", new StructType()
+            .add("inner_array", ArrayType(new StructType()
+              .add("id", IntegerType)
+              .add("value", DoubleType)
+            ))
+          )
+        ))
+
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    }
+
+    val df = makeInput().limit(2)
+
+    val res = df.withColumn("extracted", transform(
+      col("outer_array"),
+      c1 => {
+        struct(
+          c1.getField("id").alias("outer_id"),
+          transform(
+            c1.getField("inner_array_struct").getField("inner_array"),
+            c2 => {
+              struct(
+                c2.getField("value").alias("inner_value")
+              )
+            }
+          )
+        )
+      }
+    ))
+
+    assert(res.collect().length == 2)
+  }
+
+  test("SPARK-39293: The accumulator of ArrayAggregate to handle complex types properly") {
+    val reverse = udf((s: String) => s.reverse)
+
+    val df = Seq(Array("abc", "def")).toDF("array")
+    val testArray = df.select(
+      aggregate(
+        col("array"),
+        array().cast("array<string>"),
+        (acc, s) => concat(acc, array(reverse(s)))))
+    checkAnswer(testArray, Row(Array("cba", "fed")) :: Nil)
+
+    val testMap = df.select(
+      aggregate(
+        col("array"),
+        map().cast("map<string, string>"),
+        (acc, s) => map_concat(acc, map(s, reverse(s)))))
+    checkAnswer(testMap, Row(Map("abc" -> "cba", "def" -> "fed")) :: Nil)
   }
 }
 

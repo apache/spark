@@ -22,7 +22,6 @@ import java.lang.{Long => JLong}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
-import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.immutable.ListMap
 import scala.reflect.runtime.universe.TypeTag
@@ -30,9 +29,8 @@ import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -41,7 +39,6 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -51,7 +48,7 @@ import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, DecimalData, StringWrapper, TestData2}
+import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, StringWrapper, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -89,14 +86,6 @@ class DataFrameSuite extends QueryTest
     checkAnswer(
       df.groupBy("_1").agg(sum("_2._1")).toDF("key", "total"),
       Row(1, 1) :: Nil)
-  }
-
-  test("access complex data") {
-    assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
-    if (!conf.ansiEnabled) {
-      assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
-    }
-    assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
   }
 
   test("table scan") {
@@ -204,32 +193,6 @@ class DataFrameSuite extends QueryTest
       structDf.select(xxhash64($"a", $"record.*")))
   }
 
-  private def assertDecimalSumOverflow(
-      df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row): Unit = {
-    if (!ansiEnabled) {
-      checkAnswer(df, expectedAnswer)
-    } else {
-      val e = intercept[ArithmeticException] {
-        df.collect()
-      }
-      assert(e.getMessage.contains("cannot be represented as Decimal") ||
-        e.getMessage.contains("Overflow in sum of decimals"))
-    }
-  }
-
-  test("SPARK-28224: Aggregate sum big decimal overflow") {
-    val largeDecimals = spark.sparkContext.parallelize(
-      DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
-        DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
-
-    Seq(true, false).foreach { ansiEnabled =>
-      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
-        val structDf = largeDecimals.select("a").agg(sum("a"))
-        assertDecimalSumOverflow(structDf, ansiEnabled, Row(null))
-      }
-    }
-  }
-
   test("SPARK-28067: sum of null decimal values") {
     Seq("true", "false").foreach { wholeStageEnabled =>
       withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
@@ -241,85 +204,6 @@ class DataFrameSuite extends QueryTest
         }
       }
     }
-  }
-
-  def checkAggResultsForDecimalOverflow(aggFn: Column => Column): Unit = {
-    Seq("true", "false").foreach { wholeStageEnabled =>
-      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
-        Seq(true, false).foreach { ansiEnabled =>
-          withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
-            val df0 = Seq(
-              (BigDecimal("10000000000000000000"), 1),
-              (BigDecimal("10000000000000000000"), 1),
-              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
-            val df1 = Seq(
-              (BigDecimal("10000000000000000000"), 2),
-              (BigDecimal("10000000000000000000"), 2),
-              (BigDecimal("10000000000000000000"), 2),
-              (BigDecimal("10000000000000000000"), 2),
-              (BigDecimal("10000000000000000000"), 2),
-              (BigDecimal("10000000000000000000"), 2),
-              (BigDecimal("10000000000000000000"), 2),
-              (BigDecimal("10000000000000000000"), 2),
-              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
-            val df = df0.union(df1)
-            val df2 = df.withColumnRenamed("decNum", "decNum2").
-              join(df, "intNum").agg(aggFn($"decNum"))
-
-            val expectedAnswer = Row(null)
-            assertDecimalSumOverflow(df2, ansiEnabled, expectedAnswer)
-
-            val decStr = "1" + "0" * 19
-            val d1 = spark.range(0, 12, 1, 1)
-            val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
-            assertDecimalSumOverflow(d2, ansiEnabled, expectedAnswer)
-
-            val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
-            val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
-            assertDecimalSumOverflow(d4, ansiEnabled, expectedAnswer)
-
-            val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
-              lit(1).as("key")).groupBy("key").agg(aggFn($"d").alias("aggd")).select($"aggd")
-            assertDecimalSumOverflow(d5, ansiEnabled, expectedAnswer)
-
-            val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
-
-            val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
-              toDF("d")
-            assertDecimalSumOverflow(
-              nullsDf.union(largeDecimals).agg(aggFn($"d")), ansiEnabled, expectedAnswer)
-
-            val df3 = Seq(
-              (BigDecimal("10000000000000000000"), 1),
-              (BigDecimal("50000000000000000000"), 1),
-              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
-
-            val df4 = Seq(
-              (BigDecimal("10000000000000000000"), 1),
-              (BigDecimal("10000000000000000000"), 1),
-              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
-
-            val df5 = Seq(
-              (BigDecimal("10000000000000000000"), 1),
-              (BigDecimal("10000000000000000000"), 1),
-              (BigDecimal("20000000000000000000"), 2)).toDF("decNum", "intNum")
-
-            val df6 = df3.union(df4).union(df5)
-            val df7 = df6.groupBy("intNum").agg(sum("decNum"), countDistinct("decNum")).
-              filter("intNum == 1")
-            assertDecimalSumOverflow(df7, ansiEnabled, Row(1, null, 2))
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
-    checkAggResultsForDecimalOverflow(c => sum(c))
-  }
-
-  test("SPARK-35955: Aggregate avg should not return wrong results for decimal overflow") {
-    checkAggResultsForDecimalOverflow(c => avg(c))
   }
 
   test("Star Expansion - ds.explode should fail with a meaningful message if it takes a star") {
@@ -661,24 +545,6 @@ class DataFrameSuite extends QueryTest
     checkAnswer(
       testData.offset(5).limit(10),
       testData.take(15).drop(5).toSeq)
-  }
-
-  test("udf") {
-    val foo = udf((a: Int, b: String) => a.toString + b)
-
-    checkAnswer(
-      // SELECT *, foo(key, value) FROM testData
-      testData.select($"*", foo($"key", $"value")).limit(3),
-      Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
-    )
-  }
-
-  test("callUDF without Hive Support") {
-    val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-    df.sparkSession.udf.register("simpleUDF", (v: Int) => v * v)
-    checkAnswer(
-      df.select($"id", callUDF("simpleUDF", $"value")), // test deprecated one
-      Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
   test("withColumn") {
@@ -1048,15 +914,6 @@ class DataFrameSuite extends QueryTest
     ("David", 60, 192),
     ("Amy", 24, 180)).toDF("name", "age", "height")
 
-  private lazy val person3: DataFrame = Seq(
-    ("Luis", 1, 99),
-    ("Luis", 16, 99),
-    ("Luis", 16, 176),
-    ("Fernando", 32, 99),
-    ("Fernando", 32, 164),
-    ("David", 60, 99),
-    ("Amy", 24, 99)).toDF("name", "age", "height")
-
   test("describe") {
     val describeResult = Seq(
       Row("count", "4", "4", "4"),
@@ -1156,25 +1013,6 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-34165: Add count_distinct to summary") {
-    val summaryDF = person3.summary("count", "count_distinct")
-
-    val summaryResult = Seq(
-      Row("count", "7", "7", "7"),
-      Row("count_distinct", "4", "5", "3"))
-
-    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
-    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
-    checkAnswer(summaryDF, summaryResult)
-
-    val approxSummaryDF = person3.summary("count", "approx_count_distinct")
-    val approxSummaryResult = Seq(
-      Row("count", "7", "7", "7"),
-      Row("approx_count_distinct", "4", "5", "3"))
-    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
-    checkAnswer(approxSummaryDF, approxSummaryResult)
-  }
-
   test("SPARK-41391: Correct the output column name of groupBy.agg(count_distinct)") {
     withTempView("person") {
       person.createOrReplaceTempView("person")
@@ -1185,32 +1023,6 @@ class DataFrameSuite extends QueryTest
       val df4 = spark.sql("SELECT id, COUNT(DISTINCT *) FROM person GROUP BY id")
       assert(df3.columns === df4.columns)
     }
-  }
-
-  test("summary advanced") {
-    import org.apache.spark.util.ArrayImplicits._
-    val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
-    val orderMatters = person2.summary(stats.toImmutableArraySeq: _*)
-    assert(orderMatters.collect().map(_.getString(0)) === stats)
-
-    val onlyPercentiles = person2.summary("0.1%", "99.9%")
-    assert(onlyPercentiles.count() === 2)
-
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        person2.summary("foo")
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_2114",
-      parameters = Map("stats" -> "foo")
-    )
-
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        person2.summary("foo%")
-      },
-      errorClass = "_LEGACY_ERROR_TEMP_2113",
-      parameters = Map("stats" -> "foo%")
-    )
   }
 
   test("apply on query results (SPARK-5462)") {
@@ -1548,59 +1360,6 @@ class DataFrameSuite extends QueryTest
         |""".stripMargin)
   }
 
-  test("SPARK-34308: printSchema: escape meta-characters") {
-    val captured = new ByteArrayOutputStream()
-
-    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
-    Console.withOut(captured) {
-      df1.printSchema()
-    }
-    assert(captured.toString ===
-      """root
-        | |-- aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh: string (nullable = false)
-        |
-        |""".stripMargin)
-    captured.reset()
-
-    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    Console.withOut(captured) {
-      df2.printSchema()
-    }
-    assert(captured.toString ===
-      """root
-        | |-- array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): array (nullable = false)
-        | |    |-- element: string (containsNull = false)
-        |
-        |""".stripMargin)
-    captured.reset()
-
-    val df3 =
-      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    Console.withOut(captured) {
-      df3.printSchema()
-    }
-    assert(captured.toString ===
-      """root
-        | |-- map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): map (nullable = false)
-        | |    |-- key: string
-        | |    |-- value: string (valueContainsNull = false)
-        |
-        |""".stripMargin)
-    captured.reset()
-
-    val df4 =
-      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
-    Console.withOut(captured) {
-      df4.printSchema()
-    }
-    assert(captured.toString ===
-      """root
-        | |-- named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): struct (nullable = false)
-        | |    |-- v: string (nullable = false)
-        |
-        |""".stripMargin)
-  }
-
   test("SPARK-7319 showString") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
@@ -1712,16 +1471,6 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-6899: type should match when using codegen") {
     checkAnswer(decimalData.agg(avg("a")), Row(new java.math.BigDecimal(2)))
-  }
-
-  test("SPARK-7133: Implement struct, array, and map field accessor") {
-    assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
-    if (!conf.ansiEnabled) {
-      assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
-    }
-    assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
-    assert(complexData.filter(complexData("m")(complexData("s")("value")) === 1).count() == 1)
-    assert(complexData.filter(complexData("a")(complexData("s")("key")) === 1).count() == 1)
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
@@ -2296,25 +2045,6 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.withColumnRenamed("d^'a.", "a"), Row(1, "a"))
   }
 
-  test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
-    val df = sparkContext.parallelize(Seq(
-      java.lang.Integer.valueOf(22) -> "John",
-      null.asInstanceOf[java.lang.Integer] -> "Lucy")).toDF("age", "name")
-
-    // passing null into the UDF that could handle it
-    val boxedUDF = udf[java.lang.Integer, java.lang.Integer] {
-      (i: java.lang.Integer) => if (i == null) -10 else null
-    }
-    checkAnswer(df.select(boxedUDF($"age")), Row(null) :: Row(-10) :: Nil)
-
-    spark.udf.register("boxedUDF",
-      (i: java.lang.Integer) => (if (i == null) -10 else null): java.lang.Integer)
-    checkAnswer(sql("select boxedUDF(null), boxedUDF(-1)"), Row(-10, null) :: Nil)
-
-    val primitiveUDF = udf((i: Int) => i * 2)
-    checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
-  }
-
   test("SPARK-12398 truncated toString") {
     val df1 = Seq((1L, "row1")).toDF("id", "name")
     assert(df1.toString() === "[id: bigint, name: string]")
@@ -2611,21 +2341,6 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.select($"i" === $"j"), Row(true) :: Row(false) :: Nil)
   }
 
-  test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
-    val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
-    checkAnswer(df, Row(BigDecimal(0)) :: Nil)
-  }
-
-  test("SPARK-20359: catalyst outer join optimization should not throw npe") {
-    val df1 = Seq("a", "b", "c").toDF("x")
-      .withColumn("y", udf{ (x: String) => x.substring(0, 1) + "!" }.apply($"x"))
-    val df2 = Seq("a", "b").toDF("x1")
-    df1
-      .join(df2, df1("x") === df2("x1"), "left_outer")
-      .filter($"x1".isNotNull || !$"y".isin("a!"))
-      .count()
-  }
-
   // The fix of SPARK-21720 avoid an exception regarding JVM code size limit
   // TODO: When we make a threshold of splitting statements (1024) configurable,
   // we will re-enable this with max threshold to cause an exception
@@ -2648,16 +2363,6 @@ class DataFrameSuite extends QueryTest
         df.filter(filter).count()
       }.getMessage
       assert(e.contains("grows beyond 64 KiB"))
-    }
-  }
-
-  test("SPARK-20897: cached self-join should not fail") {
-    // force to plan sort merge join
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      val df = Seq(1 -> "a").toDF("i", "j")
-      val df1 = df.as("t1")
-      val df2 = df.as("t2")
-      assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
     }
   }
 
@@ -2747,11 +2452,6 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df, df.collect())
   }
 
-  test("SPARK-24313: access map with binary keys") {
-    val mapWithBinaryKey = map(lit(Array[Byte](1.toByte)), lit(1))
-    checkAnswer(spark.range(1).select(mapWithBinaryKey.getItem(Array[Byte](1.toByte))), Row(1))
-  }
-
   test("SPARK-24781: Using a reference from Dataset in Filter/Sort") {
     val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
     val filter1 = df.select(df("name")).filter(df("id") === 0)
@@ -2776,31 +2476,6 @@ class DataFrameSuite extends QueryTest
       val aggPlusFilter2 =
         df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === "test1")
       checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
-    }
-  }
-
-  test("SPARK-25159: json schema inference should only trigger one job") {
-    withTempPath { path =>
-      // This test is to prove that the `JsonInferSchema` does not use `RDD#toLocalIterator` which
-      // triggers one Spark job per RDD partition.
-      Seq(1 -> "a", 2 -> "b").toDF("i", "p")
-        // The data set has 2 partitions, so Spark will write at least 2 json files.
-        // Use a non-splittable compression (gzip), to make sure the json scan RDD has at least 2
-        // partitions.
-        .write.partitionBy("p")
-        .option("compression", GZIP.lowerCaseName()).json(path.getCanonicalPath)
-
-      val numJobs = new AtomicLong(0)
-      sparkContext.addSparkListener(new SparkListener {
-        override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-          numJobs.incrementAndGet()
-        }
-      })
-
-      val df = spark.read.json(path.getCanonicalPath)
-      assert(df.columns === Array("i", "p"))
-      spark.sparkContext.listenerBus.waitUntilEmpty()
-      assert(numJobs.get() == 1L)
     }
   }
 
@@ -3128,10 +2803,6 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.selectExpr("ln(d)"), Row(Double.NaN))
   }
 
-  test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
-     checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
-  }
-
   test("SPARK-32764: -0.0 and 0.0 should be equal") {
     val df = Seq(0.0 -> -0.0).toDF("pos", "neg")
     checkAnswer(df.select($"pos" > $"neg"), Row(false))
@@ -3232,79 +2903,6 @@ class DataFrameSuite extends QueryTest
     checkAnswer(test.select($"best_name.name"), Row("bob") :: Row("bob") :: Row("sam") :: Nil)
   }
 
-  test("SPARK-34829: Multiple applications of typed ScalaUDFs in higher order functions work") {
-    val reverse = udf((s: String) => s.reverse)
-    val reverse2 = udf((b: Bar2) => Bar2(b.s.reverse))
-
-    val df = Seq(Array("abc", "def")).toDF("array")
-    val test = df.select(transform(col("array"), s => reverse(s)))
-    checkAnswer(test, Row(Array("cba", "fed")) :: Nil)
-
-    val df2 = Seq(Array(Bar2("abc"), Bar2("def"))).toDF("array")
-    val test2 = df2.select(transform(col("array"), b => reverse2(b)))
-    checkAnswer(test2, Row(Array(Row("cba"), Row("fed"))) :: Nil)
-
-    val df3 = Seq(Map("abc" -> 1, "def" -> 2)).toDF("map")
-    val test3 = df3.select(transform_keys(col("map"), (s, _) => reverse(s)))
-    checkAnswer(test3, Row(Map("cba" -> 1, "fed" -> 2)) :: Nil)
-
-    val df4 = Seq(Map(Bar2("abc") -> 1, Bar2("def") -> 2)).toDF("map")
-    val test4 = df4.select(transform_keys(col("map"), (b, _) => reverse2(b)))
-    checkAnswer(test4, Row(Map(Row("cba") -> 1, Row("fed") -> 2)) :: Nil)
-
-    val df5 = Seq(Map(1 -> "abc", 2 -> "def")).toDF("map")
-    val test5 = df5.select(transform_values(col("map"), (_, s) => reverse(s)))
-    checkAnswer(test5, Row(Map(1 -> "cba", 2 -> "fed")) :: Nil)
-
-    val df6 = Seq(Map(1 -> Bar2("abc"), 2 -> Bar2("def"))).toDF("map")
-    val test6 = df6.select(transform_values(col("map"), (_, b) => reverse2(b)))
-    checkAnswer(test6, Row(Map(1 -> Row("cba"), 2 -> Row("fed"))) :: Nil)
-
-    val reverseThenConcat = udf((s1: String, s2: String) => s1.reverse ++ s2.reverse)
-    val reverseThenConcat2 = udf((b1: Bar2, b2: Bar2) => Bar2(b1.s.reverse ++ b2.s.reverse))
-
-    val df7 = Seq((Map(1 -> "abc", 2 -> "def"), Map(1 -> "ghi", 2 -> "jkl"))).toDF("map1", "map2")
-    val test7 =
-      df7.select(map_zip_with(col("map1"), col("map2"), (_, s1, s2) => reverseThenConcat(s1, s2)))
-    checkAnswer(test7, Row(Map(1 -> "cbaihg", 2 -> "fedlkj")) :: Nil)
-
-    val df8 = Seq((Map(1 -> Bar2("abc"), 2 -> Bar2("def")),
-      Map(1 -> Bar2("ghi"), 2 -> Bar2("jkl")))).toDF("map1", "map2")
-    val test8 =
-      df8.select(map_zip_with(col("map1"), col("map2"), (_, b1, b2) => reverseThenConcat2(b1, b2)))
-    checkAnswer(test8, Row(Map(1 -> Row("cbaihg"), 2 -> Row("fedlkj"))) :: Nil)
-
-    val df9 = Seq((Array("abc", "def"), Array("ghi", "jkl"))).toDF("array1", "array2")
-    val test9 =
-      df9.select(zip_with(col("array1"), col("array2"), (s1, s2) => reverseThenConcat(s1, s2)))
-    checkAnswer(test9, Row(Array("cbaihg", "fedlkj")) :: Nil)
-
-    val df10 = Seq((Array(Bar2("abc"), Bar2("def")), Array(Bar2("ghi"), Bar2("jkl"))))
-      .toDF("array1", "array2")
-    val test10 =
-      df10.select(zip_with(col("array1"), col("array2"), (b1, b2) => reverseThenConcat2(b1, b2)))
-    checkAnswer(test10, Row(Array(Row("cbaihg"), Row("fedlkj"))) :: Nil)
-  }
-
-  test("SPARK-39293: The accumulator of ArrayAggregate to handle complex types properly") {
-    val reverse = udf((s: String) => s.reverse)
-
-    val df = Seq(Array("abc", "def")).toDF("array")
-    val testArray = df.select(
-      aggregate(
-        col("array"),
-        array().cast("array<string>"),
-        (acc, s) => concat(acc, array(reverse(s)))))
-    checkAnswer(testArray, Row(Array("cba", "fed")) :: Nil)
-
-    val testMap = df.select(
-      aggregate(
-        col("array"),
-        map().cast("map<string, string>"),
-        (acc, s) => map_concat(acc, map(s, reverse(s)))))
-    checkAnswer(testMap, Row(Map("abc" -> "cba", "def" -> "fed")) :: Nil)
-  }
-
   test("SPARK-34882: Aggregate with multiple distinct null sensitive aggregators") {
     withUserDefinedFunction(("countNulls", true)) {
       spark.udf.register("countNulls", udaf(new Aggregator[JLong, JLong, JLong] {
@@ -3403,87 +3001,6 @@ class DataFrameSuite extends QueryTest
     val ids = spark.range(10).repartition(5).withSequenceColumn("default_index")
     assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)
     assert(ids.take(5).map(_.getLong(0)).toSet === Range(0, 5).toSet)
-  }
-
-  test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
-    Seq(
-      (MapType(IntegerType, StringType), """{"1": "test"}"""),
-      (StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
-        """"test": {"1": "test"}"""),
-      (ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]"""),
-      (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}""")
-    ).foreach { case (schema, jsonData) =>
-      withTempDir { dir =>
-        val colName = "col"
-        val msg = "can only contain STRING as a key type for a MAP"
-
-        val thrown1 = intercept[AnalysisException](
-          spark.read.schema(StructType(Seq(StructField(colName, schema))))
-            .json(Seq(jsonData).toDS()).collect())
-        assert(thrown1.getMessage.contains(msg))
-
-        val jsonDir = new File(dir, "json").getCanonicalPath
-        Seq(jsonData).toDF(colName).write.json(jsonDir)
-        val thrown2 = intercept[AnalysisException](
-          spark.read.schema(StructType(Seq(StructField(colName, schema))))
-            .json(jsonDir).collect())
-        assert(thrown2.getMessage.contains(msg))
-      }
-    }
-  }
-
-  test("SPARK-37855: IllegalStateException when transforming an array inside a nested struct") {
-    def makeInput(): DataFrame = {
-      val innerElement1 = Row(3, 3.12)
-      val innerElement2 = Row(4, 2.1)
-      val innerElement3 = Row(1, 985.2)
-      val innerElement4 = Row(10, 757548.0)
-      val innerElement5 = Row(1223, 0.665)
-
-      val outerElement1 = Row(1, Row(List(innerElement1, innerElement2)))
-      val outerElement2 = Row(2, Row(List(innerElement3)))
-      val outerElement3 = Row(3, Row(List(innerElement4, innerElement5)))
-
-      val data = Seq(
-        Row("row1", List(outerElement1)),
-        Row("row2", List(outerElement2, outerElement3))
-      )
-
-      val schema = new StructType()
-        .add("name", StringType)
-        .add("outer_array", ArrayType(new StructType()
-          .add("id", IntegerType)
-          .add("inner_array_struct", new StructType()
-            .add("inner_array", ArrayType(new StructType()
-              .add("id", IntegerType)
-              .add("value", DoubleType)
-            ))
-          )
-        ))
-
-      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
-    }
-
-    val df = makeInput().limit(2)
-
-    val res = df.withColumn("extracted", transform(
-      col("outer_array"),
-      c1 => {
-        struct(
-          c1.getField("id").alias("outer_id"),
-          transform(
-            c1.getField("inner_array_struct").getField("inner_array"),
-            c2 => {
-              struct(
-                c2.getField("value").alias("inner_value")
-              )
-            }
-          )
-        )
-      }
-    ))
-
-    assert(res.collect().length == 2)
   }
 
   test("SPARK-38285: Fix ClassCastException: GenericArrayData cannot be cast to InternalRow") {
