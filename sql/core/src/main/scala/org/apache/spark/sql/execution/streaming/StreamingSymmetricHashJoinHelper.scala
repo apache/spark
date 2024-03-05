@@ -213,8 +213,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         val keyExprWithWatermark = BoundReference(
           joinKeyOrdinalForWatermark.get,
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).dataType,
-          oneSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable
-        )
+          oneSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable)
         val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermarkForEviction)
         expr.map(JoinStateKeyWatermarkPredicate.apply _)
 
