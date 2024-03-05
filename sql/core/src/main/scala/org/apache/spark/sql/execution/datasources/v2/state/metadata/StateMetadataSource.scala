@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.v2.state
+package org.apache.spark.sql.execution.datasources.v2.state.metadata
 
 import java.util
 
@@ -25,9 +25,11 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
+import org.apache.spark.sql.execution.datasources.v2.state.StateDataSourceErrors
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.PATH
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadata, OperatorStateMetadataReader, OperatorStateMetadataV1}
@@ -46,8 +48,8 @@ case class StateMetadataTableEntry(
     maxBatchId: Long,
     numColsPrefixKey: Int) {
   def toRow(): InternalRow = {
-    InternalRow.fromSeq(
-      Seq(operatorId,
+    new GenericInternalRow(
+      Array[Any](operatorId,
         UTF8String.fromString(operatorName),
         UTF8String.fromString(stateStoreName),
         numPartitions,

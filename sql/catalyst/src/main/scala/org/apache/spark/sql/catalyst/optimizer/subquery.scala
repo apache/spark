@@ -248,24 +248,74 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     case u: UnaryNode if u.expressions.exists(
         SubqueryExpression.hasInOrCorrelatedExistsSubquery) =>
       var newChild = u.child
-      u.mapExpressions(expr => {
-        val (newExpr, p) = rewriteExistentialExpr(Seq(expr), newChild)
+      var introducedAttrs = Seq.empty[Attribute]
+      val updatedNode = u.mapExpressions(expr => {
+        val (newExpr, p, newAttrs) = rewriteExistentialExprWithAttrs(Seq(expr), newChild)
         newChild = p
+        introducedAttrs ++= newAttrs
         // The newExpr can not be None
         newExpr.get
       }).withNewChildren(Seq(newChild))
+      updatedNode match {
+        case a: Aggregate =>
+          // If we have introduced new `exists`-attributes that are referenced by
+          // aggregateExpressions within a non-aggregateFunction expression, we wrap them in
+          // first() aggregate function. first() is Spark's executable version of any_value()
+          // aggregate function.
+          // We do this to keep the aggregation valid, i.e avoid references outside of aggregate
+          // functions that are not in grouping expressions.
+          // Note that the same `exists` attr will never appear in groupingExpressions due to
+          // PullOutGroupingExpressions rule.
+          // Also note: the value of `exists` is functionally determined by grouping expressions,
+          // so applying any aggregate function is semantically safe.
+          val aggFunctionReferences = a.aggregateExpressions.
+            flatMap(extractAggregateExpressions).
+            flatMap(_.references).toSet
+          val nonAggFuncReferences =
+            a.aggregateExpressions.flatMap(_.references).filterNot(aggFunctionReferences.contains)
+          val toBeWrappedExistsAttrs = introducedAttrs.filter(nonAggFuncReferences.contains)
+
+          // Replace all eligible `exists` by `First(exists)` among aggregateExpressions.
+          val newAggregateExpressions = a.aggregateExpressions.map { aggExpr =>
+            aggExpr.transformUp {
+              case attr: Attribute if toBeWrappedExistsAttrs.contains(attr) =>
+                new First(attr).toAggregateExpression()
+            }.asInstanceOf[NamedExpression]
+          }
+          a.copy(aggregateExpressions = newAggregateExpressions)
+        case _ => updatedNode
+      }
+  }
+
+  /**
+   * Extract all aggregate expressions from the expression tree routed at `expr`.
+   */
+  private def extractAggregateExpressions(expr: Expression): Seq[AggregateExpression] = {
+    expr match {
+      case a: AggregateExpression => Seq(a)
+      case e: Expression => e.children.flatMap(extractAggregateExpressions)
+    }
   }
 
   /**
    * Given a predicate expression and an input plan, it rewrites any embedded existential sub-query
-   * into an existential join. It returns the rewritten expression together with the updated plan.
+   * into an existential join. It returns the rewritten expression together with the updated plan,
+   * as well as the newly introduced attributes.
    * Currently, it does not support NOT IN nested inside a NOT expression. This case is blocked in
    * the Analyzer.
    */
   private def rewriteExistentialExpr(
-      exprs: Seq[Expression],
-      plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    exprs: Seq[Expression],
+    plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    val (newExpr, newPlan, _) = rewriteExistentialExprWithAttrs(exprs, plan)
+    (newExpr, newPlan)
+  }
+
+  private def rewriteExistentialExprWithAttrs(
+    exprs: Seq[Expression],
+    plan: LogicalPlan): (Option[Expression], LogicalPlan, Seq[Attribute]) = {
     var newPlan = plan
+    val introducedAttrs = ArrayBuffer.empty[Attribute]
     val newExprs = exprs.map { e =>
       e.transformDownWithPruning(_.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
         case Exists(sub, _, _, conditions, subHint) =>
@@ -275,6 +325,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan =
             buildJoin(newPlan, rewriteDomainJoinsIfPresent(newPlan, sub, newCondition),
               existenceJoin, newCondition, subHint)
+          introducedAttrs += exists
           exists
         case Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
@@ -299,6 +350,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           newPlan = Join(newPlan,
             rewriteDomainJoinsIfPresent(newPlan, newSub, Some(finalJoinCond)),
             ExistenceJoin(exists), Some(finalJoinCond), joinHint)
+          introducedAttrs += exists
           Not(exists)
         case InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
@@ -309,10 +361,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val joinHint = JoinHint(None, subHint)
           newPlan = Join(newPlan, rewriteDomainJoinsIfPresent(newPlan, newSub, newConditions),
             ExistenceJoin(exists), newConditions, joinHint)
+          introducedAttrs += exists
           exists
       }
     }
-    (newExprs.reduceOption(And), newPlan)
+    (newExprs.reduceOption(And), newPlan, introducedAttrs.toSeq)
   }
 }
 

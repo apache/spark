@@ -366,6 +366,12 @@ Checkpoint block `<rddBlockId>` not found!
 Either the executor that originally checkpointed this partition is no longer alive, or the original RDD is unpersisted.
 If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant.
 
+### CLASS_NOT_OVERRIDE_EXPECTED_METHOD
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+`<className>` must override either `<method1>` or `<method2>`.
+
 ### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -400,17 +406,17 @@ Can't create array with `<numberOfElements>` elements which exceeding the array 
 
 For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
-### COLUMN_ALIASES_IS_NOT_ALLOWED
+### COLUMN_ALIASES_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Columns aliases are not allowed in `<op>`.
+Column aliases are not allowed in `<op>`.
 
 ### COLUMN_ALREADY_EXISTS
 
 [SQLSTATE: 42711](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The column `<columnName>` already exists. Consider to choose another name or rename the existing column.
+The column `<columnName>` already exists. Choose another name or rename the existing column.
 
 ### COLUMN_NOT_DEFINED_IN_TABLE
 
@@ -767,6 +773,12 @@ No such struct field `<fieldName>` in `<fields>`.
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
+
+### FOREACH_BATCH_USER_FUNCTION_ERROR
+
+[SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
+
+An error occurred in the user provided function in foreach batch sink.
 
 ### FOUND_MULTIPLE_DATA_SOURCES
 
@@ -1306,6 +1318,12 @@ The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
 
 For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-parameter-value-error-class.html)
 
+### INVALID_PARTITION_COLUMN_DATA_TYPE
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot use `<type>` for partition column.
+
 ### [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-partition-operation-error-class.html)
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1377,6 +1395,12 @@ For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-synta
 SQLSTATE: 07501
 
 The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: `<sqlString>`.
+
+### INVALID_STATEMENT_OR_CLAUSE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The statement or clause: `<operation>` is not valid.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
@@ -1696,6 +1720,12 @@ ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing `<table>`'s column
 Not supported command in JDBC catalog:
 
 For more details see [NOT_SUPPORTED_IN_JDBC_CATALOG](sql-error-conditions-not-supported-in-jdbc-catalog-error-class.html)
+
+### NOT_UNRESOLVED_ENCODER
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unresolved encoder expected, but `<attr>` was found.
 
 ### NO_DEFAULT_COLUMN_VALUE_AVAILABLE
 
@@ -2061,6 +2091,13 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 
 Failed to remove default column family with reserved name=`<colFamilyName>`.
 
+### STATE_STORE_HANDLE_NOT_INITIALIZED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The handle has not been initialized for this StatefulProcessor.
+Please only use the StatefulProcessor within the transformWithState operator.
+
 ### STATE_STORE_MULTIPLE_VALUES_PER_KEY
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2417,11 +2454,13 @@ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add
 
 Unsupported arrow type `<typeName>`.
 
-### UNSUPPORTED_CALL
+### [UNSUPPORTED_CALL](sql-error-conditions-unsupported-call-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot call the method "`<methodName>`" of the class "`<className>`".
+
+For more details see [UNSUPPORTED_CALL](sql-error-conditions-unsupported-call-error-class.html)
 
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 
@@ -2429,6 +2468,14 @@ Cannot call the method "`<methodName>`" of the class "`<className>`".
 
 The char/varchar type can't be used in the table schema.
 If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
+
+### [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Collation `<collationName>` is not supported for:
+
+For more details see [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
 
 ### UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY
 
