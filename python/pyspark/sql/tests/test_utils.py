@@ -1796,7 +1796,7 @@ class UtilsTestsMixin:
         try:
             assertDataFrameEqual(df1, df2)
         except PySparkAssertionError as e:
-            self.assertEqual(e.errorClass, "UNSUPPORTED_OPERATION")
+            self.assertEqual(e.error_class, "UNSUPPORTED_OPERATION")
             exception_thrown = True
 
         self.assert_true(exception_thrown)
