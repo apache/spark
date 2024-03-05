@@ -42,7 +42,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
-      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
+      errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
       messageParameters = Map("op" -> toSQLStmt(op)),
       ctx.identifierList())
   }
@@ -384,6 +384,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "_LEGACY_ERROR_TEMP_0035",
       messageParameters = Map("message" -> message),
+      ctx)
+  }
+
+  def invalidStatementError(operation: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      messageParameters = Map("operation" -> toSQLStmt(operation)),
       ctx)
   }
 

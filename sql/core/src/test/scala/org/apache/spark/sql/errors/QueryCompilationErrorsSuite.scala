@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
@@ -957,10 +958,59 @@ class QueryCompilationErrorsSuite
       exception = intercept[SparkUnsupportedOperationException] {
         new UnsafeRow(1).update(0, 1)
       },
-      errorClass = "UNSUPPORTED_CALL",
+      errorClass = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
       parameters = Map(
         "methodName" -> "update",
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
+  }
+
+  test("SPARK-47102: the collation feature is off without collate builder call") {
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "CREATE TABLE t(col STRING COLLATE 'UNICODE_CI') USING parquet",
+        "CREATE TABLE t(col STRING COLLATE 'UNKNOWN_COLLATION_STRING') USING parquet",
+        "SELECT 'aaa' COLLATE 'UNICODE_CI'",
+        "select collation('aaa')"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          errorClass = "UNSUPPORTED_FEATURE.COLLATION")
+      }
+    }
+  }
+
+  test("SPARK-47102: the collation feature is off with collate builder call") {
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "SELECT collate('aaa', 'UNICODE_CI')",
+        "SELECT collate('aaa', 'UNKNOWN_COLLATION_STRING')"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          errorClass = "UNSUPPORTED_FEATURE.COLLATION",
+          parameters = Map.empty,
+          context = ExpectedContext(
+            fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1))
+      }
+    }
+  }
+
+  test("INTERNAL_ERROR: Convert unsupported data type from Spark to Parquet") {
+    val converter = new SparkToParquetSchemaConverter
+    val dummyDataType = new DataType {
+      override def defaultSize: Int = 0
+
+      override def simpleString: String = "Dummy"
+
+      override private[spark] def asNullable = NullType
+    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        converter.convertField(StructField("test", dummyDataType))
+      },
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")
+    )
   }
 }
 

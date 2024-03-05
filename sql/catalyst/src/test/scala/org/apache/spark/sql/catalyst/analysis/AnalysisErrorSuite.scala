@@ -162,7 +162,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL)\"",
-      "paramIndex" -> "1",
+      "paramIndex" -> "first",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -174,7 +174,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
-      "paramIndex" -> "2",
+      "paramIndex" -> "second",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -186,7 +186,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
-      "paramIndex" -> "1",
+      "paramIndex" -> "first",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -389,7 +389,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"nth_value(b, true)\"",
-      "paramIndex" -> "2",
+      "paramIndex" -> "second",
       "inputSql" -> "\"true\"",
       "inputType" -> "\"BOOLEAN\"",
       "requiredType" -> "\"INT\""))
@@ -850,7 +850,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     Map.empty)
 
   test("EXEC IMMEDIATE - non string variable as sqlString parameter") {
-    var execImmediatePlan = ExecuteImmediateQuery(
+    val execImmediatePlan = ExecuteImmediateQuery(
       Seq.empty,
       scala.util.Right(UnresolvedAttribute("testVarA")),
       Seq(UnresolvedAttribute("testVarA")))
@@ -864,7 +864,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   }
 
   test("EXEC IMMEDIATE - Unsupported expr for parameter") {
-    var execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
+    val execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
       Seq(UnresolvedAttribute("testVarA"), NaNvl(Literal(1), Literal(1))),
       scala.util.Left("SELECT ?"),
       Seq.empty)
@@ -878,7 +878,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   }
 
   test("EXEC IMMEDIATE - Name Parametrize query with non named parameters") {
-    var execImmediateSetVariablePlan = ExecuteImmediateQuery(
+    val execImmediateSetVariablePlan = ExecuteImmediateQuery(
       Seq(Literal(2), new Alias(UnresolvedAttribute("testVarA"), "first")(), Literal(3)),
       scala.util.Left("SELECT :first"),
       Seq.empty)
@@ -892,7 +892,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   }
 
   test("EXEC IMMEDIATE - INTO specified for COMMAND query") {
-    var execImmediateSetVariablePlan = ExecuteImmediateQuery(
+    val execImmediateSetVariablePlan = ExecuteImmediateQuery(
       Seq.empty,
       scala.util.Left("SET VAR testVarA = 1"),
       Seq(UnresolvedAttribute("testVarA")))
@@ -1198,7 +1198,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         expectedMessageParameters = Map(
           "sqlExpr" -> sqlExpr,
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> inputSql,
           "inputType" -> inputType,
           "requiredType" -> "(\"INT\" or \"BIGINT\")"),

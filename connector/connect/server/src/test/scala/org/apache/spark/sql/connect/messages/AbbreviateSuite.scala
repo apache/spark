@@ -31,14 +31,12 @@ class AbbreviateSuite extends SparkFunSuite {
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(message, threshold)
-      assert(truncated.isInstanceOf[proto.SQL])
-      val truncatedSQL = truncated.asInstanceOf[proto.SQL]
 
       if (threshold < 1024) {
-        assert(truncatedSQL.getQuery.indexOf("[truncated") === threshold)
+        assert(truncated.getQuery.indexOf("[truncated") === threshold)
       } else {
-        assert(truncatedSQL.getQuery.indexOf("[truncated") === -1)
-        assert(truncatedSQL.getQuery.length === 1024)
+        assert(truncated.getQuery.indexOf("[truncated") === -1)
+        assert(truncated.getQuery.length === 1024)
       }
     }
   }
@@ -73,9 +71,8 @@ class AbbreviateSuite extends SparkFunSuite {
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(limit, threshold)
-      assert(truncated.isInstanceOf[proto.Relation])
 
-      val truncatedLimit = truncated.asInstanceOf[proto.Relation].getLimit
+      val truncatedLimit = truncated.getLimit
       assert(truncatedLimit.getLimit === 100)
 
       val truncatedDrop = truncatedLimit.getInput.getDrop
@@ -102,9 +99,8 @@ class AbbreviateSuite extends SparkFunSuite {
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(drop, threshold)
-      assert(drop.isInstanceOf[proto.Drop])
 
-      val truncatedNames = truncated.asInstanceOf[proto.Drop].getColumnNamesList.asScala.toSeq
+      val truncatedNames = truncated.getColumnNamesList.asScala.toSeq
       assert(truncatedNames.length === 10)
 
       if (threshold < 1024) {
@@ -141,9 +137,8 @@ class AbbreviateSuite extends SparkFunSuite {
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(drop, threshold)
-      assert(drop.isInstanceOf[proto.Drop])
 
-      val truncatedCols = truncated.asInstanceOf[proto.Drop].getColumnsList.asScala.toSeq
+      val truncatedCols = truncated.getColumnsList.asScala.toSeq
       assert(truncatedCols.length === 10)
 
       if (threshold < 1024) {
@@ -175,17 +170,15 @@ class AbbreviateSuite extends SparkFunSuite {
         .build()
 
       val truncated = ProtoUtils.abbreviate(message)
-      assert(truncated.isInstanceOf[proto.PythonUDF])
 
-      val truncatedUDF = truncated.asInstanceOf[proto.PythonUDF]
-      assert(truncatedUDF.getEvalType === 1)
-      assert(truncatedUDF.getOutputType === ProtoDataTypes.BinaryType)
-      assert(truncatedUDF.getPythonVer === "3.12")
+      assert(truncated.getEvalType === 1)
+      assert(truncated.getOutputType === ProtoDataTypes.BinaryType)
+      assert(truncated.getPythonVer === "3.12")
 
       if (numBytes <= 8) {
-        assert(truncatedUDF.getCommand.size() === numBytes)
+        assert(truncated.getCommand.size() === numBytes)
       } else {
-        assert(truncatedUDF.getCommand.size() != numBytes)
+        assert(truncated.getCommand.size() != numBytes)
       }
     }
   }
@@ -202,20 +195,18 @@ class AbbreviateSuite extends SparkFunSuite {
 
     Seq(1, 16, 256, 512, 1024, 2048).foreach { threshold =>
       val truncated = ProtoUtils.abbreviate(message, Map("BYTES" -> threshold))
-      assert(truncated.isInstanceOf[proto.PythonUDF])
 
-      val truncatedUDF = truncated.asInstanceOf[proto.PythonUDF]
-      assert(truncatedUDF.getEvalType === 1)
-      assert(truncatedUDF.getOutputType === ProtoDataTypes.BinaryType)
-      assert(truncatedUDF.getPythonVer === "3.12")
+      assert(truncated.getEvalType === 1)
+      assert(truncated.getOutputType === ProtoDataTypes.BinaryType)
+      assert(truncated.getPythonVer === "3.12")
 
       if (threshold < 1024) {
         // with suffix: [truncated(size=...)]
         assert(
-          threshold < truncatedUDF.getCommand.size() &&
-            truncatedUDF.getCommand.size() < threshold + 64)
+          threshold < truncated.getCommand.size() &&
+            truncated.getCommand.size() < threshold + 64)
       } else {
-        assert(truncatedUDF.getCommand.size() === 1024)
+        assert(truncated.getCommand.size() === 1024)
       }
     }
   }

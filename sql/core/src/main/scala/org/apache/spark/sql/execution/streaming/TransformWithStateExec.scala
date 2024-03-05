@@ -156,6 +156,7 @@ case class TransformWithStateExec(
       setStoreMetrics(store)
       setOperatorMetrics()
       statefulProcessor.close()
+      statefulProcessor.setHandle(null)
       processorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
     })
   }
@@ -171,7 +172,8 @@ case class TransformWithStateExec(
         numColsPrefixKey = 0,
         session.sqlContext.sessionState,
         Some(session.sqlContext.streams.stateStoreCoordinator),
-        useColumnFamilies = true
+        useColumnFamilies = true,
+        useMultipleValuesPerKey = true
       ) {
         case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
           processData(store, singleIterator)
@@ -202,7 +204,8 @@ case class TransformWithStateExec(
             numColsPrefixKey = 0,
             useColumnFamilies = true,
             storeConf = storeConf,
-            hadoopConf = broadcastedHadoopConf.value)
+            hadoopConf = broadcastedHadoopConf.value,
+            useMultipleValuesPerKey = true)
 
           val store = stateStoreProvider.getStore(0)
           val outputIterator = processData(store, iter)
@@ -226,7 +229,8 @@ case class TransformWithStateExec(
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, isStreaming)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
-    statefulProcessor.init(processorHandle, outputMode)
+    statefulProcessor.setHandle(processorHandle)
+    statefulProcessor.init(outputMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
     processDataWithPartition(singleIterator, store, processorHandle)
   }

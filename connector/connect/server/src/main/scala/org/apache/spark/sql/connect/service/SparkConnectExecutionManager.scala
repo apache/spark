@@ -120,8 +120,10 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     // close the execution outside the lock
     executeHolder.foreach { e =>
       e.close()
-      // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
-      abandonedTombstones.put(key, e.getExecuteInfo)
+      if (abandoned) {
+        // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
+        abandonedTombstones.put(key, e.getExecuteInfo)
+      }
     }
   }
 

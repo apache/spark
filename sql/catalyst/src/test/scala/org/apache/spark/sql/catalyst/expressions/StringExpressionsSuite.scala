@@ -69,7 +69,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")",
           "inputSql" -> "\"1\"",
           "inputType" -> "\"INT\""
@@ -177,7 +177,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2...",
+          "paramIndex" -> (ordinalNumber(1) + "..."),
           "requiredType" -> "\"STRING\" or \"BINARY\"",
           "inputSql" -> "\"2\"",
           "inputType" -> "\"INT\""
@@ -765,7 +765,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> "(\"STRING\" or \"BINARY\")",
           "inputSql" -> "\"1\"",
           "inputType" -> "\"INT\""
@@ -777,7 +777,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "(\"STRING\" or \"BINARY\")",
           "inputSql" -> "\"2\"",
           "inputType" -> "\"INT\""
@@ -1539,7 +1539,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "00000") ->
         "00454"
     ).foreach { case ((decimal, format), expected) =>
-      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      val expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1599,7 +1599,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "99999.") ->
         " 4542 "
     ).foreach { case ((decimal, format), expected) =>
-      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      val expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1682,7 +1682,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "999,999") ->
         " 12,454"
     ).foreach { case ((decimal, format), expected) =>
-      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      val expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1696,7 +1696,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "$00.00") ->
         "$78.12"
     ).foreach { case ((decimal, format), expected) =>
-      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      val expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1731,7 +1731,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "99999999999.9999999S") ->
         "   83028485.0000000-"
     ).foreach { case ((decimal, format), expected) =>
-      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      val expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1763,7 +1763,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "MI9999999999999999.999999999999999") ->
         "               -4.310000000000000"
     ).foreach { case ((decimal, format), expected) =>
-      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      val expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1798,7 +1798,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "99G999D9PR") ->
         "<12,454.8>"
     ).foreach { case ((decimal, format), expected) =>
-      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      val expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1820,7 +1820,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "99.9") ->
         "##.#"
     ).foreach { case ((decimal, format), expected) =>
-      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      val expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
     }
@@ -1903,14 +1903,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ParseUrl(Seq(Literal("1"), Literal(2))).checkInputDataTypes() == DataTypeMismatch(
       errorSubClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "paramIndex" -> "2",
+        "paramIndex" -> ordinalNumber(1),
         "requiredType" -> "\"STRING\"",
         "inputSql" -> "\"2\"",
         "inputType" -> "\"INT\"")))
     assert(ParseUrl(Seq(Literal(1), Literal("2"))).checkInputDataTypes() == DataTypeMismatch(
       errorSubClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "paramIndex" -> "1",
+        "paramIndex" -> ordinalNumber(0),
         "requiredType" -> "\"STRING\"",
         "inputSql" -> "\"1\"",
         "inputType" -> "\"INT\"")))
@@ -1918,7 +1918,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(3))).checkInputDataTypes() == DataTypeMismatch(
       errorSubClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "paramIndex" -> "3",
+        "paramIndex" -> ordinalNumber(2),
         "requiredType" -> "\"STRING\"",
         "inputSql" -> "\"3\"",
         "inputType" -> "\"INT\"")))
@@ -2023,7 +2023,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(IntegerType),
           "inputSql" -> toSQLExpr(indexExpr2),
           "inputType" -> toSQLType(indexExpr2.dataType)
@@ -2039,7 +2039,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2...",
+          "paramIndex" -> (ordinalNumber(1) + "..."),
           "requiredType" -> (toSQLType(StringType) + " or " + toSQLType(BinaryType)),
           "inputSql" -> inputExpr3.map(toSQLExpr(_)).mkString(","),
           "inputType" -> inputExpr3.map(expr => toSQLType(expr.dataType)).mkString(",")

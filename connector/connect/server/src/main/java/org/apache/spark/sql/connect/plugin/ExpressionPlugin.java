@@ -14,22 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.connect.plugin;
 
-package org.apache.spark.sql.connect.plugin
+import org.apache.spark.sql.catalyst.expressions.Expression;
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner;
 
-import com.google.protobuf
-
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import java.util.Optional;
 
 /**
  * Behavior trait for supporting extension mechanisms for the Spark Connect planner.
  *
  * Classes implementing the trait must be trivially constructable and should not rely on internal
  * state. Every registered extension will be passed the Any instance. If the plugin supports
- * handling this type it is responsible of constructing the logical catalyst plan from this object
+ * handling this type it is responsible of constructing the logical expression from this object
  * and if necessary traverse it's children.
  */
-trait RelationPlugin {
-  def transform(relation: protobuf.Any, planner: SparkConnectPlanner): Option[LogicalPlan]
+public interface ExpressionPlugin {
+    Optional<Expression> transform(byte[] relation, SparkConnectPlanner planner);
 }

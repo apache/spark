@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -26,14 +27,15 @@ sealed trait RocksDBKeyStateEncoder {
   def supportPrefixKeyScan: Boolean
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def extractPrefixKey(key: UnsafeRow): UnsafeRow
-
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
 }
 
 sealed trait RocksDBValueStateEncoder {
+  def supportsMultipleValuesPerKey: Boolean
   def encodeValue(row: UnsafeRow): Array[Byte]
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
+  def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
 
 object RocksDBStateEncoder {
@@ -47,8 +49,14 @@ object RocksDBStateEncoder {
     }
   }
 
-  def getValueEncoder(valueSchema: StructType): RocksDBValueStateEncoder = {
-    new SingleValueStateEncoder(valueSchema)
+  def getValueEncoder(
+      valueSchema: StructType,
+      useMultipleValuesPerKey: Boolean): RocksDBValueStateEncoder = {
+    if (useMultipleValuesPerKey) {
+      new MultiValuedStateEncoder(valueSchema)
+    } else {
+      new SingleValueStateEncoder(valueSchema)
+    }
   }
 
   /**
@@ -227,6 +235,82 @@ class NoPrefixKeyStateEncoder(keySchema: StructType)
 }
 
 /**
+ * Supports encoding multiple values per key in RocksDB.
+ * A single value is encoded in the format below, where first value is number of bytes
+ * in actual encodedUnsafeRow followed by the encoded value itself.
+ *
+ * |---size(bytes)--|--unsafeRowEncodedBytes--|
+ *
+ * Multiple values are separated by a delimiter character.
+ *
+ * This encoder supports RocksDB StringAppendOperator merge operator. Values encoded can be
+ * merged in RocksDB using merge operation, and all merged values can be read using decodeValues
+ * operation.
+ */
+class MultiValuedStateEncoder(valueSchema: StructType)
+  extends RocksDBValueStateEncoder with Logging {
+
+  import RocksDBStateEncoder._
+
+  // Reusable objects
+  private val valueRow = new UnsafeRow(valueSchema.size)
+
+  override def encodeValue(row: UnsafeRow): Array[Byte] = {
+    val bytes = encodeUnsafeRow(row)
+    val numBytes = bytes.length
+
+    val encodedBytes = new Array[Byte](java.lang.Integer.BYTES + bytes.length)
+    Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, numBytes)
+    Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, java.lang.Integer.BYTES + Platform.BYTE_ARRAY_OFFSET, bytes.length)
+
+    encodedBytes
+  }
+
+  override def decodeValue(valueBytes: Array[Byte]): UnsafeRow = {
+    if (valueBytes == null) {
+      null
+    } else {
+      val numBytes = Platform.getInt(valueBytes, Platform.BYTE_ARRAY_OFFSET)
+      val encodedValue = new Array[Byte](numBytes)
+      Platform.copyMemory(valueBytes, java.lang.Integer.BYTES + Platform.BYTE_ARRAY_OFFSET,
+        encodedValue, Platform.BYTE_ARRAY_OFFSET, numBytes)
+      decodeToUnsafeRow(encodedValue, valueRow)
+    }
+  }
+
+  override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
+    if (valueBytes == null) {
+      Seq().iterator
+    } else {
+      new Iterator[UnsafeRow] {
+        private var pos: Int = Platform.BYTE_ARRAY_OFFSET
+        private val maxPos = Platform.BYTE_ARRAY_OFFSET + valueBytes.length
+
+        override def hasNext: Boolean = {
+          pos < maxPos
+        }
+
+        override def next(): UnsafeRow = {
+          val numBytes = Platform.getInt(valueBytes, pos)
+
+          pos += java.lang.Integer.BYTES
+          val encodedValue = new Array[Byte](numBytes)
+          Platform.copyMemory(valueBytes, pos,
+            encodedValue, Platform.BYTE_ARRAY_OFFSET, numBytes)
+
+          pos += numBytes
+          pos += 1 // eat the delimiter character
+          decodeToUnsafeRow(encodedValue, valueRow)
+        }
+      }
+    }
+  }
+
+  override def supportsMultipleValuesPerKey: Boolean = true
+}
+
+/**
  * RocksDB Value Encoder for UnsafeRow that only supports single value.
  *
  * Encodes/decodes UnsafeRows to versioned byte arrays.
@@ -256,5 +340,11 @@ class SingleValueStateEncoder(valueSchema: StructType)
    */
   override def decodeValue(valueBytes: Array[Byte]): UnsafeRow = {
     decodeToUnsafeRow(valueBytes, valueRow)
+  }
+
+  override def supportsMultipleValuesPerKey: Boolean = false
+
+  override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
+    throw new IllegalStateException("This encoder doesn't support multiple values!")
   }
 }

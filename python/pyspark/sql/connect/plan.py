@@ -93,10 +93,10 @@ class LogicalPlan:
         else:
             return cast(Column, col).to_plan(session)
 
-    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:  # type: ignore[empty-body]
         ...
 
-    def command(self, session: "SparkConnectClient") -> proto.Command:
+    def command(self, session: "SparkConnectClient") -> proto.Command:  # type: ignore[empty-body]
         ...
 
     def _verify(self, session: "SparkConnectClient") -> bool:
@@ -1179,8 +1179,11 @@ class SQL(LogicalPlan):
             if isinstance(args, Dict):
                 for k, v in args.items():
                     assert isinstance(k, str)
-            else:
-                assert isinstance(args, List)
+            elif not isinstance(args, List):
+                raise PySparkTypeError(
+                    error_class="INVALID_TYPE",
+                    message_parameters={"arg_name": "args", "arg_type": str(type(args))},
+                )
 
         self._query = query
         self._args = args
@@ -2396,7 +2399,9 @@ class CommonInlineUserDefinedTableFunction(LogicalPlan):
         plan.deterministic = self._deterministic
         if len(self._arguments) > 0:
             plan.arguments.extend([arg.to_plan(session) for arg in self._arguments])
-        plan.python_udtf.CopyFrom(cast(proto.PythonUDF, self._function.to_plan(session)))
+        plan.python_udtf.CopyFrom(
+            cast(proto.PythonUDF, self._function.to_plan(session))  # type: ignore[arg-type]
+        )
         return plan
 
     def __repr__(self) -> str:

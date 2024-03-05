@@ -124,7 +124,7 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     >>> import sys
     >>> import traceback
     >>> import tempfile
-    >>> with tempfile.TemporaryDirectory() as tmp_dir:
+    >>> with tempfile.TemporaryDirectory(prefix="try_simplify_traceback") as tmp_dir:
     ...     with open("%s/dummy_module.py" % tmp_dir, "w") as f:
     ...         _ = f.write(
     ...             'def raise_stop_iteration():\\n'

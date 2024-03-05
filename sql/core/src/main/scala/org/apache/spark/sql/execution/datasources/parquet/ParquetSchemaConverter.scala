@@ -544,7 +544,7 @@ class SparkToParquetSchemaConverter(
       case DoubleType =>
         Types.primitive(DOUBLE, repetition).named(field.name)
 
-      case StringType =>
+      case _: StringType =>
         Types.primitive(BINARY, repetition)
           .as(LogicalTypeAnnotation.stringType()).named(field.name)
 

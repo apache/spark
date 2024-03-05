@@ -24,6 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
@@ -41,6 +42,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
@@ -107,7 +109,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
-      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _, _)) =>
+      v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _, _)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -115,6 +117,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+
+      val tableIdentifier = v2Relation.identifier.map(_.asMultipartIdentifier) match {
+        case Some(Seq(schema, tableName)) =>
+          Some(new TableIdentifier(tableName, Some(schema), v2Relation.catalog.map(_.name())))
+        case _ =>
+          None
+      }
 
       val dsScan = RowDataSourceScanExec(
         output,
@@ -124,7 +133,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         pushedDownOperators,
         unsafeRowRDD,
         v1Relation,
-        tableIdentifier = None)
+        tableIdentifier)
       withProjectAndFilter(project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
@@ -348,10 +357,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
-      val invalidateFunc = () => session.sharedState.cacheManager.uncacheTableOrView(
-        session,
-        (r.catalog.name() +: r.identifier.namespace() :+ r.identifier.name()).toImmutableArraySeq,
-        cascade = true)
+      val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
       DropTableExec(r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
     case _: NoopCommand =>

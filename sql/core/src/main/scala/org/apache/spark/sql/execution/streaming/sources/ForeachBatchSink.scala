@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.LogicalRDD
@@ -31,10 +34,23 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
       isStreaming = false)
     implicit val enc = encoder
     val ds = Dataset.ofRows(data.sparkSession, node).as[T]
-    batchWriter(ds, batchId)
+    callBatchWriter(ds, batchId)
   }
 
   override def toString(): String = "ForeachBatchSink"
+
+  private def callBatchWriter(ds: Dataset[T], batchId: Long): Unit = {
+    try {
+      batchWriter(ds, batchId)
+    } catch {
+      // The user code can throw any type of exception.
+      case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+        throw new SparkException(
+          errorClass = "FOREACH_BATCH_USER_FUNCTION_ERROR",
+          messageParameters = Map.empty,
+          cause = e)
+    }
+  }
 }
 
 /**

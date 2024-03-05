@@ -753,6 +753,14 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  lazy val COLLATION_ENABLED =
+    buildConf("spark.sql.collation.enabled")
+      .doc("Collations feature is under development and its use should be done under this" +
+        "feature flag.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
       .internal()
@@ -2759,8 +2767,7 @@ object SQLConf {
       "short names are not recommended to use because they can be ambiguous.")
     .version("2.2.0")
     .stringConf
-    .checkValue(isValidTimezone, s"Cannot resolve the given timezone with" +
-      " ZoneId.of(_, ZoneId.SHORT_IDS)")
+    .checkValue(isValidTimezone, errorClass = "TIME_ZONE", parameters = Map.empty)
     .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
@@ -4962,6 +4969,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       defaultNumShufflePartitions
     }
   }
+
+  def collationEnabled: Boolean = getConf(COLLATION_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
