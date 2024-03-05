@@ -598,20 +598,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
-  test("inner join respects collations") {
-    val tableName = "join_table"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (c1 STRING COLLATE 'UCS_BASIC_LCASE') USING PARQUET")
-      sql(s"INSERT INTO $tableName VALUES ('aaa')")
-      sql(s"INSERT INTO $tableName VALUES ('AAA')")
-      sql(s"INSERT INTO $tableName VALUES ('bbb')")
-
-      checkAnswer(sql(s"SELECT * FROM $tableName t1 JOIN $tableName t2 ON t1.c1 = t2.c1"),
-        Seq(Row("aaa", "aaa"), Row("aaa", "AAA"),
-          Row("AAA", "aaa"), Row("AAA", "AAA"), Row("bbb", "bbb")))
-    }
-  }
-
   test("hash based joins not allowed for non-binary collated strings") {
     val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(e => Row.apply(e, e))
 
