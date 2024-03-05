@@ -214,7 +214,7 @@ trait MasterSuiteBase extends SparkFunSuite
   protected def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
     val appInfo: ApplicationInfo = if (withMaxCores) {
       makeAppInfo(
-        128, maxCores = Some(30), initialExecutorLimit = Some(0))
+        128, maxCores = Some(6), initialExecutorLimit = Some(0))
     } else {
       makeAppInfo(
         128, maxCores = None, initialExecutorLimit = Some(0))
@@ -230,7 +230,7 @@ trait MasterSuiteBase extends SparkFunSuite
         "localhost",
         worker.self.address.port,
         worker.self,
-        10,
+        2,
         512,
         "http://localhost:8080",
         RpcAddress("localhost", 10000))
@@ -246,10 +246,10 @@ trait MasterSuiteBase extends SparkFunSuite
     // Request executors with multiple resource profile.
     // rp1 with 15 cores per executor, rp2 with 8192MB memory per executor, no worker can
     // fulfill the resource requirement.
-    val rp1 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(15))
-    val rp2 = DeployTestUtils.createResourceProfile(Some(1024), Map.empty, Some(5))
-    val rp3 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(5))
-    val rp4 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(10))
+    val rp1 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(3))
+    val rp2 = DeployTestUtils.createResourceProfile(Some(1024), Map.empty, Some(1))
+    val rp3 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(1))
+    val rp4 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(2))
     val requests = Map(
       appInfo.desc.defaultProfile -> 1,
       rp1 -> 1,
@@ -280,7 +280,7 @@ trait MasterSuiteBase extends SparkFunSuite
 
     // Verify executor information.
     val executorForRp3 = appInfo.executors(appInfo.getOrUpdateExecutorsForRPId(rp3.id).head)
-    assert(executorForRp3.cores === 5)
+    assert(executorForRp3.cores === 1)
     assert(executorForRp3.memory === 256)
     assert(executorForRp3.rpId === rp3.id)
 
@@ -289,7 +289,7 @@ trait MasterSuiteBase extends SparkFunSuite
       .find(_.id === executorForRp3.worker.id)
       .map(_.launchedExecutors(appInfo.id + "/" + executorForRp3.id))
       .get
-    assert(launchExecutorMsg.cores === 5)
+    assert(launchExecutorMsg.cores === 1)
     assert(launchExecutorMsg.memory === 256)
     assert(launchExecutorMsg.rpId === rp3.id)
   }
