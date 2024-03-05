@@ -1078,11 +1078,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     append(str)
     append("\n")
 
-    if (innerChildren.nonEmpty) {
-      innerChildren.init.foreach(_.generateTreeString(
+    val innerChildrenLocal = innerChildren
+    if (innerChildrenLocal.nonEmpty) {
+      innerChildrenLocal.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent))
-      innerChildren.last.generateTreeString(
+      innerChildrenLocal.last.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
         addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId, indent = indent)
     }
