@@ -107,6 +107,13 @@ class CompositeKeyStateEncoder[GK, K](
     userKeyExpressionEnc.resolveAndBind().createDeserializer()
   private val userKeySerializer = encoderFor(userKeyEnc).createSerializer()
 
+  /**
+   * Grouping key and user key are encoded as a row of
+   * `schemaForCompositeKeyRow` schema.
+   *
+   * Grouping key will be encoded in `RocksDBStateEncoder` as
+   * the prefix column.
+   */
   def encodeCompositeKey(userKey: K): UnsafeRow = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (keyOption.isEmpty) {
@@ -122,11 +129,15 @@ class CompositeKeyStateEncoder[GK, K](
     compositeKeyRow
   }
 
+  /**
+   * The input row is of composite Key schema.
+   * Only user key is returned though grouping key also exist in the row.
+   */
   def decodeCompositeKey(row: UnsafeRow): K = {
     val bytes = row.getBinary(1)
     reuseRow.pointTo(bytes, bytes.length)
-    val value = userKeyRowToObjDeserializer.apply(reuseRow)
-    value
+    val userKey = userKeyRowToObjDeserializer.apply(reuseRow)
+    userKey
   }
 }
 
