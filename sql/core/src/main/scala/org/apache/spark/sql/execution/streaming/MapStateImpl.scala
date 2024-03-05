@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.state.{StateStore, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.{BinaryType, StructType}
 
@@ -29,16 +29,16 @@ class MapStateImpl[K, V](
     keyExprEnc: ExpressionEncoder[Any],
     userKeyExprEnc: Encoder[K]) extends MapState[K, V] with Logging {
 
-  private val schemaForKeyRow: StructType =
+  // Pack grouping key and user key together as a prefixed composite key
+  private val schemaForCompositeKeyRow: StructType =
     new StructType()
     .add("key", BinaryType)
     .add("userKey", BinaryType)
   private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
-
   private val keySerializer = keyExprEnc.createSerializer()
-  private val stateTypesEncoder = StateTypesEncoder(keySerializer, stateName)
+  private val stateTypesEncoder = CompositeKeyStateEncoder(keySerializer, stateName, userKeyExprEnc)
 
-  store.createColFamilyIfAbsent(stateName, schemaForKeyRow, numColsPrefixKey = 1,
+  store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, numColsPrefixKey = 1,
     schemaForValueRow)
 
   /** Whether state exists or not. */
@@ -48,19 +48,19 @@ class MapStateImpl[K, V](
 
   /** Get the state value if it exists */
   override def getValue(key: K): V = {
-    require(key != null, "User key cannot be null.")
-    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key, userKeyExprEnc)
+    // TODO do we want to reuse this function,
+    // or create a new error for user key?
+    StateStoreErrors.requireNonNullStateValue(key, stateName)
+    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     val unsafeRowValue = store.get(encodedCompositeKey, stateName)
-    if (unsafeRowValue == null) {
-      throw new UnsupportedOperationException(
-        "No value found for given grouping key and user key in the map.")
-    }
+
+    if (unsafeRowValue == null) return null.asInstanceOf[V]
     stateTypesEncoder.decodeValue(unsafeRowValue)
   }
 
   /** Check if the user key is contained in the map */
   override def containsKey(key: K): Boolean = {
-    require(key != null, "User key cannot be null.")
+    StateStoreErrors.requireNonNullStateValue(key, stateName)
     try {
       getValue(key) != null
     } catch {
@@ -70,10 +70,10 @@ class MapStateImpl[K, V](
 
   /** Update value for given user key */
   override def updateValue(key: K, value: V): Unit = {
-    require(key != null, "User key cannot be null.")
-    require(value != null, "Value put to map cannot be null.")
+    StateStoreErrors.requireNonNullStateValue(key, stateName)
+    StateStoreErrors.requireNonNullStateValue(value, stateName)
     val encodedValue = stateTypesEncoder.encodeValue(value)
-    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key, userKeyExprEnc)
+    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
   }
 
@@ -83,7 +83,7 @@ class MapStateImpl[K, V](
     store.prefixScan(encodedGroupingKey, stateName)
       .map {
         case iter: UnsafeRowPair =>
-          (stateTypesEncoder.decodeCompositeKey(iter.key, userKeyExprEnc),
+          (stateTypesEncoder.decodeCompositeKey(iter.key),
             stateTypesEncoder.decodeValue(iter.value))
       }.toMap
   }
@@ -100,8 +100,8 @@ class MapStateImpl[K, V](
 
   /** Remove user key from map state */
   override def removeKey(key: K): Unit = {
-    require(key != null, "User key cannot be null.")
-    val compositeKey = stateTypesEncoder.encodeCompositeKey(key, userKeyExprEnc)
+    StateStoreErrors.requireNonNullStateValue(key, stateName)
+    val compositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.remove(compositeKey, stateName)
   }
 

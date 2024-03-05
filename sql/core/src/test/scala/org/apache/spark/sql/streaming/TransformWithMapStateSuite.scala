@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -68,7 +68,7 @@ class TestMapStateProcessor
         }
       } else if (row.action == "removeKey") {
         _mapState.removeKey(row.value._1)
-      } else if (row.action == "remove") {
+      } else if (row.action == "clear") {
         _mapState.clear()
       }
     }
@@ -94,14 +94,14 @@ class TransformWithMapStateSuite extends StreamTest {
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, inputMapRow),
-        ExpectFailure[SparkException](e => {
-          assert(e.getMessage.contains("User key cannot be null"))
+        ExpectFailure[SparkIllegalArgumentException](e => {
+          assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
         })
       )
     }
   }
 
-  test("Test retrieving value with non-exist user key") {
+  test("Test retrieving value with non-existing user key") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -114,10 +114,7 @@ class TransformWithMapStateSuite extends StreamTest {
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputMapRow("k1", "getValue", ("v1", ""))),
-        ExpectFailure[SparkException](e => {
-          assert(e.getMessage.contains(
-            "No value found for given grouping key and user key in the map."))
-        })
+        CheckAnswer(("k1", "v1", "null"))
       )
     }
   }
@@ -141,8 +138,8 @@ class TransformWithMapStateSuite extends StreamTest {
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputMapRow("k1", "updateValue", ("k1", null))),
-        ExpectFailure[SparkException](e => {
-          assert(e.getMessage.contains("Value put to map cannot be null."))
+        ExpectFailure[SparkIllegalArgumentException](e => {
+          assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
         })
       )
     }
@@ -193,7 +190,7 @@ class TransformWithMapStateSuite extends StreamTest {
         AddData(inputData, InputMapRow("k1", "containsKey", ("v2", ""))),
         CheckNewAnswer(("k1", "v2", "false")),
 
-        AddData(inputData, InputMapRow("k2", "remove", ("", ""))),
+        AddData(inputData, InputMapRow("k2", "clear", ("", ""))),
         AddData(inputData, InputMapRow("k2", "getMap", ("", ""))),
         CheckNewAnswer(),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),

@@ -68,38 +68,6 @@ class StateTypesEncoder[GK](
     keyRow
   }
 
-  def encodeCompositeKey[K](userKey: K, userKeyEnc: Encoder[K]): UnsafeRow = {
-    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
-    if (keyOption.isEmpty) {
-      throw StateStoreErrors.implicitKeyNotFound(stateName)
-    }
-    val groupingKey = keyOption.get.asInstanceOf[GK]
-    // get grouping key byte array
-    val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
-    // get user key byte array
-    val userKeySerializer = encoderFor(userKeyEnc).createSerializer()
-    val userKeyBytesArr = userKeySerializer.apply(userKey).asInstanceOf[UnsafeRow].getBytes()
-
-    val schemaForCompositeKeyRow: StructType =
-      new StructType()
-        .add("key", BinaryType)
-        .add("userKey", BinaryType)
-
-    val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
-    val compositeKeyRow = compositeKeyProjection(InternalRow(keyByteArr, userKeyBytesArr))
-    compositeKeyRow
-  }
-
-  def decodeCompositeKey[K](row: UnsafeRow, userKeyEnc: Encoder[K]): K = {
-    val bytes = row.getBinary(1)
-    val reuseRow = new UnsafeRow(userKeyEnc.schema.fields.length)
-    reuseRow.pointTo(bytes, bytes.length)
-    val valExpressionEnc = encoderFor(userKeyEnc)
-    val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
-    val value = rowToObjDeserializer.apply(reuseRow)
-    value
-  }
-
   def encodeValue[S](value: S): UnsafeRow = {
     val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
     val valueRow = valueProjection(InternalRow(valueByteArr))
@@ -118,5 +86,55 @@ object StateTypesEncoder {
       keySerializer: Serializer[GK],
       stateName: String): StateTypesEncoder[GK] = {
     new StateTypesEncoder[GK](keySerializer, stateName)
+  }
+}
+
+class CompositeKeyStateEncoder[GK, K](
+    keySerializer: Serializer[GK],
+    stateName: String,
+    userKeyEnc: Encoder[K])
+  extends StateTypesEncoder[GK](keySerializer: Serializer[GK], stateName: String) {
+
+  private val schemaForCompositeKeyRow: StructType =
+    new StructType()
+      .add("key", BinaryType)
+      .add("userKey", BinaryType)
+  private val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
+  private val reuseRow = new UnsafeRow(userKeyEnc.schema.fields.length)
+  private val userKeyExpressionEnc = encoderFor(userKeyEnc)
+
+  private val userKeyRowToObjDeserializer =
+    userKeyExpressionEnc.resolveAndBind().createDeserializer()
+  private val userKeySerializer = encoderFor(userKeyEnc).createSerializer()
+
+  def encodeCompositeKey(userKey: K): UnsafeRow = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+    val groupingKey = keyOption.get.asInstanceOf[GK]
+    // generate grouping key byte array
+    val groupingKeyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
+    // generate user key byte array
+    val userKeyBytesArr = userKeySerializer.apply(userKey).asInstanceOf[UnsafeRow].getBytes()
+
+    val compositeKeyRow = compositeKeyProjection(InternalRow(groupingKeyByteArr, userKeyBytesArr))
+    compositeKeyRow
+  }
+
+  def decodeCompositeKey(row: UnsafeRow): K = {
+    val bytes = row.getBinary(1)
+    reuseRow.pointTo(bytes, bytes.length)
+    val value = userKeyRowToObjDeserializer.apply(reuseRow)
+    value
+  }
+}
+
+object CompositeKeyStateEncoder {
+  def apply[GK, K](
+      keySerializer: Serializer[GK],
+      stateName: String,
+      userKeyEnc: Encoder[K]): CompositeKeyStateEncoder[GK, K] = {
+    new CompositeKeyStateEncoder[GK, K](keySerializer, stateName, userKeyEnc)
   }
 }
