@@ -23,6 +23,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy._
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.Utils
 
