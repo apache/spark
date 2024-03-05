@@ -45,7 +45,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * Returns whether the collation is indeterminate. An indeterminate collation is
    * a result of combination of conflicting non-default implicit collations.
    */
-  def isIndeterminateCollation: Boolean = collationId == StringType.INDETERMINATE_COLLATION_ID
+  def isIndeterminateCollation: Boolean = collationId == CollationFactory.INDETERMINATE_COLLATION_ID
 
   /**
    * Type name that is shown to the customer.
@@ -75,7 +75,5 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
  */
 @Stable
 case object StringType extends StringType(0) {
-  val DEFAULT_COLLATION_ID = 0
-  val INDETERMINATE_COLLATION_ID = -1
   def apply(collationId: Int): StringType = new StringType(collationId)
 }

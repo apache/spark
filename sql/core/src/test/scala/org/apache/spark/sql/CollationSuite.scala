@@ -193,56 +193,44 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     // contains
     right = left.substring(1, 2);
     checkError(
-      exception = intercept[ExtendedAnalysisException] {
+      exception = intercept[AnalysisException] {
         spark.sql(s"SELECT contains(collate('$left', '$leftCollationName')," +
           s"collate('$right', '$rightCollationName'))")
       },
-      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
-      sqlState = "42K09",
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      sqlState = "42P21",
       parameters = Map(
-        "collationNameLeft" -> s"$leftCollationName",
-        "collationNameRight" -> s"$rightCollationName",
-        "sqlExpr" -> "\"contains(collate(abc), collate(b))\""
-      ),
-      context = ExpectedContext(fragment =
-        s"contains(collate('abc', 'UNICODE_CI'),collate('b', 'UNICODE'))",
-        start = 7, stop = 68)
+        "left" -> s"string COLLATE '$leftCollationName'",
+        "right" -> s"string COLLATE '$rightCollationName'"
+      )
     )
     // startsWith
     right = left.substring(0, 1);
     checkError(
-      exception = intercept[ExtendedAnalysisException] {
+      exception = intercept[AnalysisException] {
         spark.sql(s"SELECT startsWith(collate('$left', '$leftCollationName')," +
           s"collate('$right', '$rightCollationName'))")
       },
-      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
-      sqlState = "42K09",
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      sqlState = "42P21",
       parameters = Map(
-        "collationNameLeft" -> s"$leftCollationName",
-        "collationNameRight" -> s"$rightCollationName",
-        "sqlExpr" -> "\"startswith(collate(abc), collate(a))\""
-      ),
-      context = ExpectedContext(fragment =
-        s"startsWith(collate('abc', 'UNICODE_CI'),collate('a', 'UNICODE'))",
-        start = 7, stop = 70)
+        "left" -> s"string COLLATE '$leftCollationName'",
+        "right" -> s"string COLLATE '$rightCollationName'"
+      )
     )
     // endsWith
     right = left.substring(2, 3);
     checkError(
-      exception = intercept[ExtendedAnalysisException] {
+      exception = intercept[AnalysisException] {
         spark.sql(s"SELECT endsWith(collate('$left', '$leftCollationName')," +
           s"collate('$right', '$rightCollationName'))")
       },
-      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
-      sqlState = "42K09",
+      errorClass = "COLLATION_MISMATCH.EXPLICIT",
+      sqlState = "42P21",
       parameters = Map(
-        "collationNameLeft" -> s"$leftCollationName",
-        "collationNameRight" -> s"$rightCollationName",
-        "sqlExpr" -> "\"endswith(collate(abc), collate(c))\""
-      ),
-      context = ExpectedContext(fragment =
-        s"endsWith(collate('abc', 'UNICODE_CI'),collate('c', 'UNICODE'))",
-        start = 7, stop = 68)
+        "left" -> s"string COLLATE '$leftCollationName'",
+        "right" -> s"string COLLATE '$rightCollationName'"
+      )
     )
   }
 

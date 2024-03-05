@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -509,18 +509,10 @@ abstract class StringPredicate extends BinaryExpression
       return checkResult
     }
     // Additional check needed for collation compatibility
-    val rightCollationId: Int = right.dataType.asInstanceOf[StringType].collationId
-    if (collationId != rightCollationId) {
-      DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> CollationFactory.fetchCollation(collationId).collationName,
-          "collationNameRight" -> CollationFactory.fetchCollation(rightCollationId).collationName
-        )
-      )
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
+    val outputCollationId: Int = TypeCoercion
+      .CollationTypeCasts
+      .getOutputCollation(Seq(left, right))
+    TypeCheckResult.TypeCheckSuccess
   }
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =

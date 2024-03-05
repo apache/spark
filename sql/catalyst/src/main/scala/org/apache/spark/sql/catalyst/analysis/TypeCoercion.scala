@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -718,9 +718,10 @@ abstract class TypeCoercionBase {
         }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
+          case (expr: Expression, st2: StringType) if expr.dataType.isInstanceOf[StringType] => expr
           // If we cannot do the implicit cast, just use the original input.
-          implicitCast(in, expected).getOrElse(in)
+          case (in, expected) => implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
@@ -827,14 +828,14 @@ abstract class TypeCoercionBase {
             if (failOnIndeterminate) {
               throw QueryCompilationErrors.indeterminateCollationError()
             } else {
-              StringType.INDETERMINATE_COLLATION_ID
+              CollationFactory.INDETERMINATE_COLLATION_ID
             }
           }
           else if (hasMultipleImplicits(dataTypes)) {
             if (failOnIndeterminate) {
               throw QueryCompilationErrors.implicitCollationMismatchError()
             } else {
-              StringType.INDETERMINATE_COLLATION_ID
+              CollationFactory.INDETERMINATE_COLLATION_ID
             }
           }
           else {
