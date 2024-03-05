@@ -339,14 +339,17 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Note that this does not limit optimization opportunities for the subquery: after
         // decorrelation is done, the subquery's body becomes part of the main plan and all
         // optimization rules are applied again.
-        val groupRefs = group.flatMap(x => x.references)
-        val projectOverAggregateChild = Project(groupRefs ++ a.references.toSeq, child)
+        val projectOverAggregateChild = Project(a.references.toSeq, child)
         val optimizedPlan = Optimizer.this.execute(Subquery.fromExpression(
           s.withNewPlan(projectOverAggregateChild)))
         assert(optimizedPlan.isInstanceOf[Subquery])
         val optimizedInput = optimizedPlan.asInstanceOf[Subquery].child
 
         assert(optimizedInput.output.size == projectOverAggregateChild.output.size)
+        // We preserve the top aggregation, but its input has been optimized via
+        // Optimizer.execute().
+        // Make sure that the attributes still have IDs expected by the Aggregate node
+        // by inserting a project.
         val updatedProjectList = projectOverAggregateChild.output.zip(optimizedInput.output).map {
           case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
         }
