@@ -334,8 +334,8 @@ To implement a Python UDTF, you first need to define a class implementing the me
             """
             ...
 
-Defining the Return Type
-------------------------
+Defining the Output Schema
+--------------------------
 
 The return type of the UDTF defines the schema of the table it outputs.
 
