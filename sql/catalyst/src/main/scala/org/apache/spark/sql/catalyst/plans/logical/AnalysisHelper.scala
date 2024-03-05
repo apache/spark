@@ -230,14 +230,6 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
-   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
-   * been analyzed.
-   */
-  def resolveExpressionsDown(r: PartialFunction[Expression, Expression]): LogicalPlan = {
-    resolveExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
-  }
-
-  /**
    * Recursively transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    *
@@ -254,6 +246,14 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   def resolveExpressionsWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[Expression, Expression]): LogicalPlan = {
     resolveExpressionsDownWithPruning(cond, ruleId)(rule)
+  }
+
+  /**
+   * Recursively top-down transforms the expressions of a tree, skipping nodes that have already
+   * been analyzed.
+   */
+  def resolveExpressionsDown(r: PartialFunction[Expression, Expression]): LogicalPlan = {
+    resolveExpressionsDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(r)
   }
 
   /**
