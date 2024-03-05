@@ -28,6 +28,8 @@ import org.apache.spark.io.ReadAheadInputStream;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 
@@ -36,6 +38,7 @@ import java.io.*;
  * of the file format).
  */
 public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Closeable {
+  private static final Logger logger = LoggerFactory.getLogger(ReadAheadInputStream.class);
   public static final int MAX_BUFFER_SIZE_BYTES = 16777216; // 16 mb
 
   private InputStream in;
@@ -81,6 +84,15 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     } catch (IOException e) {
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
+    }
+    if (taskContext != null) {
+      taskContext.addTaskCompletionListener(context -> {
+        try {
+          close();
+        } catch (IOException e) {
+          logger.info("error while closing UnsafeSorterSpillReader", e);
+        }
+      });
     }
   }
 

@@ -2325,7 +2325,7 @@
     "message" : [
       "Cannot use <type> for partition column."
     ],
-    "sqlState" : "42601"
+    "sqlState" : "0A000"
   },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
@@ -3337,6 +3337,13 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
+    "message" : [
+      "The handle has not been initialized for this StatefulProcessor.",
+      "Please only use the StatefulProcessor within the transformWithState operator."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
     "message" : [
       "Store does not support multiple values per key"
@@ -3912,6 +3919,11 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "COLLATION" : {
+        "message" : [
+          "Collation is not yet supported."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {

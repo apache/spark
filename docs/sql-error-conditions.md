@@ -1320,7 +1320,7 @@ For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-para
 
 ### INVALID_PARTITION_COLUMN_DATA_TYPE
 
-[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot use `<type>` for partition column.
 
@@ -2090,6 +2090,13 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to remove default column family with reserved name=`<colFamilyName>`.
+
+### STATE_STORE_HANDLE_NOT_INITIALIZED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The handle has not been initialized for this StatefulProcessor.
+Please only use the StatefulProcessor within the transformWithState operator.
 
 ### STATE_STORE_MULTIPLE_VALUES_PER_KEY
 
