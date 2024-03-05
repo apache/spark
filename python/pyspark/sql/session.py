@@ -1687,7 +1687,7 @@ class SparkSession(SparkConversionMixin):
             else:
                 raise PySparkTypeError(
                     error_class="INVALID_TYPE",
-                    message_parameters={"arg_name": "args", "arg_type": str(type(args))},
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
