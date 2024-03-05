@@ -376,7 +376,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
   "messageParameters" : {
     "c" : "A"
   }
@@ -390,7 +390,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
   "messageParameters" : {
     "c" : "n"
   }
@@ -404,7 +404,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
   "messageParameters" : {
     "c" : "N"
   }
@@ -418,7 +418,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
   "messageParameters" : {
     "c" : "p"
   }
@@ -528,7 +528,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTER",
   "messageParameters" : {
     "c" : "B"
   }

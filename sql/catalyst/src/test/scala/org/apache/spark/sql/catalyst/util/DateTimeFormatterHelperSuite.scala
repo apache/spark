@@ -50,7 +50,7 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
         exception = intercept[SparkIllegalArgumentException] {
           convertIncompatiblePattern(s"yyyy-MM-dd $l G")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3258",
+        errorClass = "INVALID_CHARACTER_IN_DATETIME_PATTERN",
         parameters = Map("c" -> l.toString))
     }
     unsupportedLettersForParsing.foreach { l =>
@@ -58,7 +58,7 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
         exception = intercept[SparkIllegalArgumentException] {
           DateTimeFormatterHelper.convertIncompatiblePattern(s"$l", isParsing = true)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3258",
+        errorClass = "INVALID_CHARACTER_IN_DATETIME_PATTERN",
         parameters = Map("c" -> l.toString))
     }
     unsupportedPatternLengths.foreach { style =>

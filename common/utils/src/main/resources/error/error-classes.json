@@ -7855,10 +7855,11 @@
     ],
     "sqlState": "22007"
   },
-  "_LEGACY_ERROR_TEMP_3258" : {
+  "INVALID_CHARACTER_IN_DATETIME_PATTERN" : {
     "message" : [
-      "Illegal pattern character: <c>"
-    ]
+      "Illegal pattern character found in datetime patter: <c>. Please provide legal character."
+    ],
+    "sqlState": "22007"
   },
   "_LEGACY_ERROR_TEMP_3259" : {
     "message" : [

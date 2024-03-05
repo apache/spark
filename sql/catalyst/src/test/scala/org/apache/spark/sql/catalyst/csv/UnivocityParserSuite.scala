@@ -374,7 +374,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(false)))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3258",
+      errorClass = "INVALID_CHARACTER_IN_DATETIME_PATTERN",
       parameters = Map("c" -> "n"))
   }
 }

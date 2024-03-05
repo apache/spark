@@ -319,7 +319,7 @@ private object DateTimeFormatterHelper {
           for (c <- patternPart if unsupportedLetters.contains(c) ||
             (isParsing && unsupportedLettersForParsing.contains(c))) {
             throw new SparkIllegalArgumentException(
-              errorClass = "_LEGACY_ERROR_TEMP_3258",
+              errorClass = "INVALID_CHARACTER_IN_DATETIME_PATTERN",
               messageParameters = Map("c" -> c.toString))
           }
           for (style <- unsupportedPatternLengths if patternPart.contains(style)) {
