@@ -42,6 +42,7 @@ class ValueStateImpl[S](
     ttlMode: TTLMode = TTLMode.NoTTL(),
     ttl: Duration = Duration.Zero) extends ValueState[S] with Logging {
 
+  private val ttlColFamilyName = s"ttl_${stateName}"
   private val keySerializer = keyExprEnc.createSerializer()
 
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, stateName)
@@ -49,7 +50,7 @@ class ValueStateImpl[S](
   store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, numColsPrefixKey = 0,
     VALUE_ROW_SCHEMA)
 
-  store.createColFamilyIfAbsent("ttl", TTL_KEY_ROW_SCHEMA, numColsPrefixKey = 0,
+  store.createColFamilyIfAbsent(ttlColFamilyName, TTL_KEY_ROW_SCHEMA, numColsPrefixKey = 0,
     TTL_VALUE_ROW_SCHEMA)
 
   /** Function to check if state exists. Returns true if present and false otherwise */
@@ -102,7 +103,7 @@ class ValueStateImpl[S](
       case ProcessingTimeTTL =>
         val ttlExpiration = System.currentTimeMillis() + ttl.toMillis
         store.put(stateTypesEncoder.getTTLRowKey(ttlExpiration),
-          stateTypesEncoder.getTTLRowValue(), "ttl")
+          stateTypesEncoder.getTTLRowValue(), ttlColFamilyName)
     }
   }
 

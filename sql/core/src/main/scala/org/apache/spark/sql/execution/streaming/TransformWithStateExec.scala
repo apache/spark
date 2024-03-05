@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util.UUID
+import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import scala.util.control.NonFatal
@@ -86,7 +87,7 @@ case class TransformWithStateExec(
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
     .add("ttl", LongType)
 
-  private var ttlBackgroundThread: Thread = _
+  private var ttlBackgroundThread: ForkJoinPool = _
 
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(groupingAttributes,
@@ -94,26 +95,29 @@ case class TransformWithStateExec(
       Nil
   }
 
-  def startTTLThread(store: StateStore): Thread = {
+  def startTTLThread(store: StateStore): ForkJoinPool = {
+    // get state name from the statefulProcessor
+    val ttlColFamilies = store.listColumnFamilies().filter(_.startsWith("ttl_"))
+    val threadPool = new ForkJoinPool(ttlColFamilies.size)
     @volatile var exception: Option[Throwable] = None
-    val thread = new Thread("ttl-thread") {
-      override def run(): Unit = {
+    // start thread in fork join pool for each ttl column family
+    ttlColFamilies.foreach { ttlColFamily =>
+      threadPool.execute(() => {
         try {
-          ttlFunc(store)
+          ttlFunc(store, ttlColFamily)
         } catch {
           case NonFatal(e) =>
             exception = Some(e)
+            logError(s"Error in TTL thread for stateName=$ttlColFamily", e)
         }
-      }
+      })
     }
-    thread.setDaemon(true)
-    thread.start()
-    thread
+    threadPool
   }
 
-  def ttlFunc(store: StateStore): Unit = {
+  def ttlFunc(store: StateStore, ttlColFamily: String): Unit = {
     val expiredKeyStateNames =
-      store.iterator("ttl").flatMap { kv =>
+      store.iterator(ttlColFamily).flatMap { kv =>
         val ttl = kv.key.getLong(0)
         if (ttl <= System.currentTimeMillis()) {
           Some(kv.key)
@@ -122,7 +126,7 @@ case class TransformWithStateExec(
         }
       }
     expiredKeyStateNames.foreach { keyStateName =>
-      store.remove(keyStateName, "ttl")
+      store.remove(keyStateName, ttlColFamily)
       val stateName = SerializationUtils.deserialize(
         keyStateName.getBinary(1)).asInstanceOf[String]
       val groupingKey = keyStateName.getBinary(2)
@@ -130,7 +134,7 @@ case class TransformWithStateExec(
       val row = store.get(keyRow, stateName)
       if (row != null) {
         val ttl = row.getLong(1)
-        if (ttl <= System.currentTimeMillis()) {
+        if (ttl != -1 && ttl <= System.currentTimeMillis()) {
           store.remove(keyRow, stateName)
         }
       }
@@ -200,7 +204,8 @@ case class TransformWithStateExec(
       allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
       commitTimeMs += timeTakenMs {
         if (isStreaming) {
-          ttlBackgroundThread.join()
+          // join ttlBackgroundThread forkjoinpool
+          ttlBackgroundThread.shutdown()
           store.commit()
         } else {
           store.abort()
