@@ -7843,10 +7843,11 @@
     ],
     "sqlState" : "22006"
   },
-  "_LEGACY_ERROR_TEMP_3256" : {
+  "INVALID_DATETIME_PATTERN" : {
     "message" : [
-      "Unrecognized datetime pattern: <pattern>"
-    ]
+      "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern"
+    ],
+    "sqlState": "22007"
   },
   "_LEGACY_ERROR_TEMP_3257" : {
     "message" : [

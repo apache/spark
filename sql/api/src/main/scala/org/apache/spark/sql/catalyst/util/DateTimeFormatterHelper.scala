@@ -233,7 +233,7 @@ private object DateTimeFormatterHelper {
               }
               rest = suffix
             case _ => throw new SparkIllegalArgumentException(
-              errorClass = "_LEGACY_ERROR_TEMP_3256",
+              errorClass = "INVALID_DATETIME_PATTERN",
               messageParameters = Map("pattern" -> pattern))
           }
         }
