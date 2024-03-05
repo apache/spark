@@ -114,7 +114,7 @@ class TransformWithMapStateSuite extends StreamTest {
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputMapRow("k1", "getValue", ("v1", ""))),
-        CheckAnswer(("k1", "v1", "null"))
+        CheckAnswer(("k1", "v1", null))
       )
     }
   }

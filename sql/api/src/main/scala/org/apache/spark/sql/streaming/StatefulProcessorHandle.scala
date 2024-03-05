@@ -52,6 +52,12 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   /**
    * Creates new or returns existing map state associated with stateName.
    * The MapState persists Key-Value pairs of type [K, V].
+   *
+   * @param stateName  - name of the state variable
+   * @param userKeyEnc  - spark sql encoder for the map key
+   * @tparam K - type of key for map state variable
+   * @tparam V - type of value for map state variable
+   * @return - instance of MapState of type [K,V] that can be used to store state persistently
    */
   def getMapState[K, V](stateName: String, userKeyEnc: Encoder[K]): MapState[K, V]
 

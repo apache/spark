@@ -49,7 +49,7 @@ class MapStateImpl[K, V](
   /** Get the state value if it exists */
   override def getValue(key: K): V = {
     // TODO do we want to reuse this function,
-    // or create a new error for user key?
+    // or create a new error for null user key?
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     val unsafeRowValue = store.get(encodedCompositeKey, stateName)
