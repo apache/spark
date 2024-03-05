@@ -208,8 +208,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     private def hashJoinSupported
         (leftKeys: Seq[Expression], rightKeys: Seq[Expression]): Boolean = {
-      leftKeys.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType)) &&
-        rightKeys.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+      val result = leftKeys.concat(rightKeys).forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+      if (!result) {
+        val keysNotSupportingHashJoin = leftKeys.concat(rightKeys).filterNot(
+          e => UnsafeRowUtils.isBinaryStable(e.dataType))
+        logWarning("Hash based joins are not supported due to " +
+          "joining on keys that don't support binary equality. " +
+          "Keys not supporting hash joins: " + keysNotSupportingHashJoin
+          .map(e => e.toString + " due to DataType: " + e.dataType.typeName).mkString(", "))
+      }
+      result
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
