@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Collate, Collation, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -32,6 +32,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
@@ -593,4 +594,22 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
       )
       c.copy(tableDesc = newTable)
   }
+}
+
+object CollationCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case operator: LogicalPlan =>
+        operator.expressions.foreach(_.foreach(
+          e =>
+            if (isCollationExpression(e) && !SQLConf.get.collationEnabled) {
+              throw QueryCompilationErrors.collationNotEnabledError()
+            }
+          )
+        )
+    }
+  }
+
+  private def isCollationExpression(expression: Expression): Boolean =
+    expression.isInstanceOf[Collation] || expression.isInstanceOf[Collate]
 }

@@ -2861,6 +2861,26 @@ class AdaptiveQueryExecSuite
     val unionDF = aggDf1.union(aggDf2)
     checkAnswer(unionDF.select("id").distinct(), Seq(Row(null)))
   }
+
+  test("SPARK-47247: coalesce differently for BNLJ") {
+    Seq(true, false).foreach { expectCoalesce =>
+      val minPartitionSize = if (expectCoalesce) "64MB" else "1B"
+      withSQLConf(
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "64MB",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key -> minPartitionSize) {
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT /*+ broadcast(testData2) */ * " +
+            "FROM (SELECT value v, max(key) k from testData group by value) " +
+            "JOIN testData2 ON k + a > 0")
+        val bnlj = findTopLevelBroadcastNestedLoopJoin(adaptivePlan)
+        assert(bnlj.size == 1)
+        val coalescedReads = collect(adaptivePlan) {
+          case read: AQEShuffleReadExec if read.isCoalescedRead => read
+        }
+        assert(coalescedReads.nonEmpty == expectCoalesce)
+      }
+    }
+  }
 }
 
 /**

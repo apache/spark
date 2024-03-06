@@ -156,6 +156,7 @@ case class TransformWithStateExec(
       setStoreMetrics(store)
       setOperatorMetrics()
       statefulProcessor.close()
+      statefulProcessor.setHandle(null)
       processorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
     })
   }
@@ -228,7 +229,8 @@ case class TransformWithStateExec(
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, isStreaming)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
-    statefulProcessor.init(processorHandle, outputMode)
+    statefulProcessor.setHandle(processorHandle)
+    statefulProcessor.init(outputMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
     processDataWithPartition(singleIterator, store, processorHandle)
   }

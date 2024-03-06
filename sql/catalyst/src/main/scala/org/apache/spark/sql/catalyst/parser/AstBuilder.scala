@@ -2190,6 +2190,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     Collate(expression(ctx.primaryExpression), collationName)
   }
 
+  override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
+    if (!SQLConf.get.collationEnabled) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
+    string(visitStringLit(ctx.stringLit))
+  }
+
   /**
    * Create a [[Cast]] expression.
    */
