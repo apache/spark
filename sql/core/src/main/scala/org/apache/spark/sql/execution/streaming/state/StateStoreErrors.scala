@@ -47,14 +47,9 @@ object StateStoreErrors {
     new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
   }
 
-  def cannotRemoveDefaultColumnFamily(colFamilyName: String):
-    StateStoreCannotRemoveDefaultColumnFamily = {
-    new StateStoreCannotRemoveDefaultColumnFamily(colFamilyName)
-  }
-
-  def cannotCreateColumnFamilyWithInvalidName(colFamilyName: String):
-    StateStoreCannotCreateColumnFamilyWithInvalidName = {
-      new StateStoreCannotCreateColumnFamilyWithInvalidName(colFamilyName)
+  def cannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String):
+    StateStoreCannotUseColumnFamilyWithInvalidName = {
+      new StateStoreCannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
   }
 
   def unsupportedOperationException(operationName: String, entity: String):
@@ -85,15 +80,10 @@ class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: 
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_REMOVING_COLUMN_FAMILIES",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
 
-class StateStoreCannotRemoveDefaultColumnFamily(colFamilyName: String)
+class StateStoreCannotUseColumnFamilyWithInvalidName(operationName: String, colFamilyName: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY",
-    messageParameters = Map("colFamilyName" -> colFamilyName))
-
-class StateStoreCannotCreateColumnFamilyWithInvalidName(colFamilyName: String)
-  extends SparkUnsupportedOperationException(
-    errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME",
-    messageParameters = Map("colFamilyName" -> colFamilyName))
+    errorClass = "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME",
+    messageParameters = Map("operationName" -> operationName, "colFamilyName" -> colFamilyName))
 
 class StateStoreUnsupportedOperationException(operationType: String, entity: String)
   extends SparkUnsupportedOperationException(

@@ -3331,15 +3331,9 @@
     ],
     "sqlState" : "0A000"
   },
-  "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
+  "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
-      "Failed to create column family with invalid name=<colFamilyName>."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
-    "message" : [
-      "Failed to remove default column family with reserved name=<colFamilyName>."
+      "Failed to perform column family operation=<operationName> with invalid name=<colFamilyName>. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default"
     ],
     "sqlState" : "42802"
   },
