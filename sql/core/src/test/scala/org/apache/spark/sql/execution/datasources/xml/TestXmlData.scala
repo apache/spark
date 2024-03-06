@@ -514,11 +514,4 @@ private[xml] trait TestXmlData {
           <a><item/><item/></a>
         </ROW>""" ::
     Nil
-
-  // TODO tests
-  // 1. merge schema: primitiveFieldValueTypeConflict, jsonNullStruct, arrayElementTypeConflict, missingFields
-  // 2. top level array???
-  // additional corrupt records don't apply to XML
-  // timestampAsLong, floatingValueRecords, bigIntegerRecords
-  // merge schema: schema hints
 }

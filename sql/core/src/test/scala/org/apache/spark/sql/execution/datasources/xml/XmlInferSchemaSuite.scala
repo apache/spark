@@ -287,5 +287,3 @@ class XmlInferSchemaSuite extends QueryTest with SharedSparkSession with TestXml
   }
 
 }
-
-// Top level arrays don't apply to XML
