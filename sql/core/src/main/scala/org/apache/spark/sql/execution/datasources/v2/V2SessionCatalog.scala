@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
@@ -85,6 +85,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
     try {
       val table = catalog.getTableMetadata(ident.asTableIdentifier)
       if (table.provider.isDefined) {
+        val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+        // Check if the table is in the v1 table cache to skip the v2 table lookup.
+        if (catalog.getCachedTable(qualifiedTableName) != null) {
+          return V1Table(table)
+        }
         DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
           case Some(provider) =>
             // Get the table properties during creation and append the path option

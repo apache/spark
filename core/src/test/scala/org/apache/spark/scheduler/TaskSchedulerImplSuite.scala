@@ -2159,7 +2159,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
     val busyTask = new Runnable {
       val lock : Object = new Object
-      var running : AtomicBoolean = new AtomicBoolean(false)
+      val running: AtomicBoolean = new AtomicBoolean(false)
       override def run(): Unit = {
         lock.synchronized {
           running.set(true)

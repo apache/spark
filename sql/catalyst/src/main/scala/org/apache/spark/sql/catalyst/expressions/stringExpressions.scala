@@ -24,7 +24,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -497,9 +497,31 @@ case class Lower(child: Expression)
 abstract class StringPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
+  final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
+
   def compare(l: UTF8String, r: UTF8String): Boolean
 
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val checkResult = super.checkInputDataTypes()
+    if (checkResult.isFailure) {
+      return checkResult
+    }
+    // Additional check needed for collation compatibility
+    val rightCollationId: Int = right.dataType.asInstanceOf[StringType].collationId
+    if (collationId != rightCollationId) {
+      DataTypeMismatch(
+        errorSubClass = "COLLATION_MISMATCH",
+        messageParameters = Map(
+          "collationNameLeft" -> CollationFactory.fetchCollation(collationId).collationName,
+          "collationNameRight" -> CollationFactory.fetchCollation(rightCollationId).collationName
+        )
+      )
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
     compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
@@ -586,9 +608,38 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val checkResult = super.checkInputDataTypes()
+    if (checkResult.isFailure) {
+      return checkResult
+    }
+    // Additional check needed for collation support
+    if (!CollationFactory.fetchCollation(collationId).isBinaryCollation
+      && collationId != CollationFactory.LOWERCASE_COLLATION_ID) {
+      throw new SparkException(
+        errorClass = "UNSUPPORTED_COLLATION.FOR_FUNCTION",
+        messageParameters = Map(
+          "functionName" -> "contains",
+          "collationName" -> CollationFactory.fetchCollation(collationId).collationName),
+        cause = null
+      )
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+  override def compare(l: UTF8String, r: UTF8String): Boolean = {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      l.contains(r)
+    } else {
+      l.contains(r, collationId)
+    }
+  }
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.contains($c2, $collationId)")
+    }
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
@@ -623,9 +674,20 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
 }
 
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
+  override def compare(l: UTF8String, r: UTF8String): Boolean = {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      l.startsWith(r)
+    } else {
+      l.startsWith(r, collationId)
+    }
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.startsWith($c2, $collationId)")
+    }
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
@@ -660,9 +722,20 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
-  override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
+  override def compare(l: UTF8String, r: UTF8String): Boolean = {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      l.endsWith(r)
+    } else {
+      l.endsWith(r, collationId)
+    }
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2)")
+    } else {
+      defineCodeGen(ctx, ev, (c1, c2) => s"$c1.endsWith($c2, $collationId)")
+    }
   }
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)

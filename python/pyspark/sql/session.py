@@ -1325,6 +1325,9 @@ class SparkSession(SparkConversionMixin):
             if ``samplingRatio`` is ``None``.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
+            When the input is :class:`pandas.DataFrame` and
+            `spark.sql.execution.arrow.pyspark.enabled` is enabled, this option is not
+            effective. It follows Arrow type coercion.
 
             .. versionadded:: 2.1.0
 
@@ -1676,10 +1679,15 @@ class SparkSession(SparkConversionMixin):
         try:
             if isinstance(args, Dict):
                 litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
-            else:
+            elif args is None or isinstance(args, List):
                 assert self._jvm is not None
                 litArgs = self._jvm.PythonUtils.toArray(
                     [_to_java_column(lit(v)) for v in (args or [])]
+                )
+            else:
+                raise PySparkTypeError(
+                    error_class="INVALID_TYPE",
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
