@@ -21,19 +21,9 @@ import java.util
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.types.StructType
 
 class InMemoryPartitionTableCatalog extends InMemoryTableCatalog {
   import CatalogV2Implicits._
-
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    val columns = CatalogV2Util.structTypeToV2Columns(schema)
-    createTable(ident, columns, partitions, properties)
-  }
 
   override def createTable(
       ident: Identifier,

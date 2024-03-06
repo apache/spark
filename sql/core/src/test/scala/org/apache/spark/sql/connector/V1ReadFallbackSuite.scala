@@ -101,15 +101,6 @@ class V1ReadFallbackWithCatalogSuite extends V1ReadFallbackSuite {
 class V1ReadFallbackCatalog extends BasicInMemoryTableCatalog {
   override def createTable(
       ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: java.util.Map[String, String]): Table = {
-    val columns = CatalogV2Util.structTypeToV2Columns(schema)
-    createTable(ident, columns, partitions, properties)
-  }
-
-  override def createTable(
-      ident: Identifier,
       columns: Array[Column],
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {

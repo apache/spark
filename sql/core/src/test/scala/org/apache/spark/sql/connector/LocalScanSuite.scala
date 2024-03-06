@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CatalogV2Util, Column, Identifier, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Column, Identifier, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{LocalScan, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.LocalTableScanExec
@@ -55,15 +55,6 @@ class LocalScanSuite extends QueryTest with SharedSparkSession {
 }
 
 class TestLocalScanCatalog extends BasicInMemoryTableCatalog {
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: java.util.Map[String, String]): Table = {
-    val columns = CatalogV2Util.structTypeToV2Columns(schema)
-    createTable(ident, columns, partitions, properties)
-  }
-
   override def createTable(
       ident: Identifier,
       columns: Array[Column],
