@@ -72,6 +72,7 @@ select * from t1 where ucs_basic_lcase = 'aaa' collate 'ucs_basic_lcase'
 -- !query schema
 struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
 -- !query output
+AAA	AAA
 aaa	aaa
 
 
