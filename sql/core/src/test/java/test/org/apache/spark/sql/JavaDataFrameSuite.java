@@ -24,7 +24,6 @@ import java.util.*;
 import java.math.BigInteger;
 import java.math.BigDecimal;
 
-import org.apache.spark.sql.catalyst.plans.logical.Join;
 import scala.collection.Seq;
 import scala.jdk.javaapi.CollectionConverters;
 
@@ -32,11 +31,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.Ints;
 import org.junit.jupiter.api.*;
 
-import org.apache.spark.sql.catalyst.expressions.Alias;
-import org.apache.spark.sql.catalyst.expressions.AttributeReference;
-import org.apache.spark.sql.catalyst.expressions.AttributeSet;
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan;
-import org.apache.spark.sql.catalyst.plans.logical.Project;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Column;
