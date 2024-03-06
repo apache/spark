@@ -1150,10 +1150,18 @@ class Dataset[T] private[sql](
 
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
-    val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan,
-        JoinType(joinType), joinExprs.map(_.expr), JoinHint.NONE))
-      .queryExecution.analyzed.asInstanceOf[Join]
+
+    val plan = try {
+      withPlan(
+        Join(logicalPlan, right.logicalPlan,
+          JoinType(joinType), joinExprs.map(_.expr), JoinHint.NONE))
+        .queryExecution.analyzed.asInstanceOf[Join]
+    } catch {
+      case ae: AnalysisException if ae.message.contains("ambiguous") =>
+        // attempt to resolve ambiguity
+        tryAmbiguityResolution(right, joinExprs, joinType)
+    }
+
 
     // If auto self join alias is disabled, return the plan.
     if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
@@ -1172,6 +1180,34 @@ class Dataset[T] private[sql](
     // resolved and become AttributeReference.
 
     JoinWith.resolveSelfJoinCondition(sparkSession.sessionState.analyzer.resolver, plan)
+  }
+
+  private def tryAmbiguityResolution(
+      right: Dataset[_],
+      joinExprs: Option[Column],
+      joinType: String) = {
+    val planPart1 = withPlan(
+      Join(logicalPlan, right.logicalPlan,
+        JoinType(joinType), None, JoinHint.NONE))
+      .queryExecution.analyzed.asInstanceOf[Join]
+    val inputSet = planPart1.outputSet
+    val joinExprsRectified = joinExprs.map(_.expr transformUp {
+      case attr: AttributeReference if attr.metadata.contains(Dataset.DATASET_ID_KEY) =>
+        val attribTagId = attr.metadata.getLong(Dataset.DATASET_ID_KEY)
+        val leftTagIdMap = planPart1.left.getTagValue(LogicalPlan.DATASET_ID_TAG)
+        val rightTagIdMap = planPart1.right.getTagValue(LogicalPlan.DATASET_ID_TAG)
+        if (!inputSet.contains(attr) ||
+          (planPart1.left.outputSet.contains(attr) && !leftTagIdMap.contains(attribTagId)) ||
+          (planPart1.right.outputSet.contains(attr) && !rightTagIdMap.contains(attribTagId))) {
+          UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
+        } else {
+          attr
+        }
+    })
+    withPlan(
+      Join(planPart1.left, planPart1.right,
+        JoinType(joinType), joinExprsRectified, JoinHint.NONE))
+      .queryExecution.analyzed.asInstanceOf[Join]
   }
 
   /**
