@@ -42,7 +42,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   import StateStoreTestsHelper._
 
   test("Implicit key operations") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -86,7 +86,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("Value state operations for single instance") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -112,7 +112,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("Value state operations for multiple instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -192,17 +192,18 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   }
 
   import StateStoreTestsHelper._
+  
+  protected var schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  protected var schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
-  val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-  val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
-  protected def newStoreProviderWithValueState(useColumnFamilies: Boolean):
-  RocksDBStateStoreProvider = {
-    newStoreProviderWithValueState(StateStoreId(newDir(), Random.nextInt(), 0),
+  protected def newStoreProviderWithStateVariable(
+      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+    newStoreProviderWithStateVariable(StateStoreId(newDir(), Random.nextInt(), 0),
       numColsPrefixKey = 0,
       useColumnFamilies = useColumnFamilies)
   }
 
-  protected def newStoreProviderWithValueState(
+  protected def newStoreProviderWithStateVariable(
       storeId: StateStoreId,
       numColsPrefixKey: Int,
       sqlConf: SQLConf = SQLConf.get,

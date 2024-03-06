@@ -76,6 +76,10 @@ class TestMapStateProcessor
   override def close(): Unit = {}
 }
 
+/**
+ * Class that adds integration tests for MapState types used in arbitrary stateful
+ * operators such as transformWithState.
+ */
 class TransformWithMapStateSuite extends StreamTest {
   import testImplicits._
 
@@ -195,5 +199,19 @@ class TransformWithMapStateSuite extends StreamTest {
         CheckNewAnswer(("k2", "exists", "false"))
       )
     }
+  }
+
+  test("transformWithMapState - batch should succeed") {
+    val inputData = Seq(
+      InputMapRow("k1", "updateValue", ("v1", "10")),
+      InputMapRow("k1", "getValue", ("v1", "")))
+    val result = inputData.toDS()
+      .groupByKey(x => x.key)
+      .transformWithState(new TestMapStateProcessor(),
+        TimeoutMode.NoTimeouts(),
+        OutputMode.Append())
+
+    val df = result.toDF()
+    checkAnswer(df, Seq(("k1", "v1", "10")).toDF())
   }
 }

@@ -23,14 +23,20 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
 import org.apache.spark.sql.streaming.{ListState, MapState, ValueState}
+import org.apache.spark.sql.types.{BinaryType, StructType}
 
 /**
- * Class that adds tests for MapState types used in arbitrary stateful
+ * Class that adds unit tests for MapState types used in arbitrary stateful
  * operators such as transformWithState
  */
 class MapStateSuite extends StateVariableSuiteBase {
+  // Overwrite Key schema as MapState use composite key
+  schemaForKeyRow = new StructType()
+    .add("key", BinaryType)
+    .add("userKey", BinaryType)
+
   test("Map state operations for single instance") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -64,7 +70,7 @@ class MapStateSuite extends StateVariableSuiteBase {
   }
 
   test("Map state operations for multiple map instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -103,7 +109,7 @@ class MapStateSuite extends StateVariableSuiteBase {
   }
 
   test("Map state operations with list, value, another map instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
