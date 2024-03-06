@@ -3509,6 +3509,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val WRAP_EXISTS_IN_AGGREGATE_FUNCTION =
+    buildConf("spark.sql.optimizer.wrapExistsInAggregateFunction")
+      .internal()
+      .doc("When true, the optimizer will wrap newly introduced `exists` attributes in an" +
+      "aggregate function to ensure that Aggregate nodes preserve semantic invariant that each" +
+      "variable among agg expressions appears either in grouping expressions or belongs to" +
+      "and aggregate function.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ALWAYS_INLINE_ONE_ROW_RELATION_SUBQUERY =
     buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery.alwaysInline")
       .internal()
