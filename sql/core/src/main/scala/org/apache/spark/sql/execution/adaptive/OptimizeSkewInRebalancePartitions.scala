@@ -93,6 +93,8 @@ object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
     }
 
     plan transformUp {
+      case p @ ProjectExec(_, stage: ShuffleQueryStageExec) if isSupported(stage.shuffle) =>
+        p.copy(child = tryOptimizeSkewedPartitions(stage))
       case stage: ShuffleQueryStageExec if isSupported(stage.shuffle) =>
         tryOptimizeSkewedPartitions(stage)
     }
