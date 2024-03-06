@@ -130,17 +130,14 @@ class ResourceProfile:
                     from pyspark.sql import is_remote
 
                     if is_remote():
-                        from pyspark.sql.connect.resource.profile import _ResourceProfile
+                        from pyspark.sql.connect.resource.profile import ResourceProfile
 
-                        rp = _ResourceProfile(
+                        rp = ResourceProfile(
                             self._executor_resource_requests, self._task_resource_requests
                         )
                         self._id = rp.id
                     else:
-                        raise RuntimeError(
-                            "SparkContext must be created to get the id, get the id "
-                            "after adding the ResourceProfile to an RDD"
-                        )
+                        raise RuntimeError("SparkContext must be created to get the profile id.")
             return self._id
 
     @property
