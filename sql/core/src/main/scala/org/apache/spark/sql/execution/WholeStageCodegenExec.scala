@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.{broadcast, SparkContext, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -843,8 +843,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     }
     val enabled = conf.broadcastCleanedSourceThreshold >= 0
     if (enabled && exceedThreshold()) {
-      SparkContext.getActive.map(sc => scala.util.Left(sc.broadcast(code)))
-        .getOrElse(scala.util.Right(code))
+      scala.util.Left(sparkContext.broadcast(code))
     } else {
       scala.util.Right(code)
     }
