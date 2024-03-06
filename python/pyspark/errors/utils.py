@@ -19,7 +19,8 @@ import builtins
 import re
 import functools
 import inspect
-from typing import Dict, Match, Any, Callable, TypeVar, Type
+import threading
+from typing import Any, Callable, Dict, Match, TypeVar, Type
 
 from IPython import get_ipython
 
@@ -27,6 +28,7 @@ from pyspark.errors.error_classes import ERROR_CLASSES_MAP
 
 
 T = TypeVar("T")
+_call_site_storage = threading.local()
 
 
 class ErrorClassesReader:
@@ -141,10 +143,61 @@ def is_builtin_exception(e: BaseException) -> bool:
     return isinstance(e, tuple(builtin_exceptions))
 
 
+def is_ipython() -> bool:
+    """
+    Returns True if the current environment is running on IPython.
+    """
+    return get_ipython() is not None
+
+
+def _capture_call_site(func_name: str) -> None:
+    """
+    Capture the call site information including file name, line number, and function name.
+
+    This function updates the thread-local storage with the current call site information
+    when a PySpark API function is called.
+
+    Parameters
+    ----------
+    func_name : str
+        The name of the PySpark API function being captured.
+
+    Notes
+    -----
+    The call site information is used to enhance error messages with the exact location
+    in the user code that led to the error.
+    """
+    stack = inspect.stack()
+    # Stack location is different when Python running on IPython (e.g. Jupyter Notebook)
+    frame_info = stack[2] if is_ipython() else stack[-1]
+    filename = frame_info.filename
+    lineno = frame_info.lineno
+    function = func_name
+    _call_site_storage.call_site = {
+        "filename": filename,
+        "lineno": lineno,
+        "function": function,
+    }
+
+
+def with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    A decorator to capture and store the call site information when PySpark API functions are
+    invoked.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Update call site when the function is called
+        _capture_call_site(func.__name__)
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 def add_error_context(func: Callable[..., Any]) -> Callable[..., Any]:
     """
-    A decorator that captures PySpark exceptions occurring during the function execution,
-    and adds user code location information to the exception message.
+    A decorator that appends detailed call site information to PySpark exception messages.
     """
 
     @functools.wraps(func)
@@ -155,17 +208,14 @@ def add_error_context(func: Callable[..., Any]) -> Callable[..., Any]:
             from pyspark.errors import PySparkException
             from pyspark.errors.exceptions.captured import CapturedException
 
-            inspect_stack = inspect.stack()
-            # Stack location is different when Python running on IPython (e.g. Jupyter Notebook)
-            user_code_space = inspect_stack[-1] if get_ipython() is None else inspect_stack[1]
-
-            user_code_location = f"{user_code_space.filename}:{user_code_space.lineno}"
-            user_code_context = user_code_space.code_context
-
-            # Add user code location to the original exception message and re-raise the exception.
+            call_site = _call_site_storage.call_site
+            function = call_site.get("function")
+            filename = call_site.get("filename")
+            lineno = call_site.get("lineno")
+            detail_code_path = f"line:{lineno}" if is_ipython() else f"{filename}:{lineno}"
             error_location_details = (
-                f"\n== Error Location (PySpark Code) =="
-                f"\n{user_code_context} was called from {user_code_location}"
+                f"\n== PySpark user call site =="
+                f'\n"{function}" was called from {detail_code_path}'
             )
             if isinstance(e, CapturedException):
                 origin = e._origin
@@ -189,11 +239,21 @@ def add_error_context(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-def add_error_context_to_class(cls: Type[T]) -> Type[T]:
+def with_origin_to_class(cls: Type[T]) -> Type[T]:
     """
-    Class decorator that applies add_error_context decorator to all public methods of the class.
+    Decorate all methods of a class with `with_origin` to capture call site information.
     """
     for name, method in cls.__dict__.items():
-        if callable(method) and not name.startswith("_"):
+        if callable(method) and name != "__init__":
+            setattr(cls, name, with_origin(method))
+    return cls
+
+
+def add_error_context_to_class(cls: Type[T]) -> Type[T]:
+    """
+    Decorate all methods of a class with `add_error_context` to enhance error messages.
+    """
+    for name, method in cls.__dict__.items():
+        if callable(method) and name != "__init__":
             setattr(cls, name, add_error_context(method))
     return cls
