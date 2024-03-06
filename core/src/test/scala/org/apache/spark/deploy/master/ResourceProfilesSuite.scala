@@ -27,10 +27,6 @@ class ResourceProfilesSuite extends MasterSuiteBase {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = false)
   }
 
-  test("scheduling for app with multiple resource profiles with max cores") {
-    scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
-  }
-
   test("resource description with multiple resource profiles") {
     val appInfo = makeAppInfo(128, Some(4), None, Map(GPU -> 2))
     val rp1 = DeployTestUtils.createResourceProfile(None, Map(FPGA -> 2), None)
@@ -60,5 +56,11 @@ class ResourceProfilesSuite extends MasterSuiteBase {
     assert(resourceDesc.coresPerExecutor === Some(2))
     assert(resourceDesc.customResourcesPerExecutor ===
       Seq(ResourceRequirement(FPGA, 3), ResourceRequirement(GPU, 3)))
+  }
+}
+
+class ResourceProfilesMaxCoresSuite extends MasterSuiteBase {
+  test("scheduling for app with multiple resource profiles with max cores") {
+    scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
   }
 }
