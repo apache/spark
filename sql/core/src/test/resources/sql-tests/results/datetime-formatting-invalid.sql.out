@@ -41,6 +41,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INVALID_DATETIME_PATTERN_LENGTH",
+  "sqlState" : "22007",
   "messageParameters" : {
     "style" : "q"
   }
@@ -55,6 +56,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INVALID_DATETIME_PATTERN_LENGTH",
+  "sqlState" : "22007",
   "messageParameters" : {
     "style" : "Q"
   }
@@ -377,6 +379,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "sqlState" : "22007",
   "messageParameters" : {
     "c" : "A"
   }
@@ -391,6 +394,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "sqlState" : "22007",
   "messageParameters" : {
     "c" : "n"
   }
@@ -405,6 +409,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "sqlState" : "22007",
   "messageParameters" : {
     "c" : "N"
   }
@@ -419,6 +424,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "sqlState" : "22007",
   "messageParameters" : {
     "c" : "p"
   }
@@ -501,6 +507,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "c" : "e"
   }
@@ -515,6 +522,7 @@ struct<>
 org.apache.spark.SparkIllegalArgumentException
 {
   "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "c" : "c"
   }
@@ -528,7 +536,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTER",
+  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "sqlState" : "22007",
   "messageParameters" : {
     "c" : "B"
   }
