@@ -1082,6 +1082,12 @@ Invalid bucket file: `<path>`.
 
 The expected format is ByteString, but was `<unsupported>` (`<class>`).
 
+### INVALID_CHARACTER_IN_DATETIME_PATTERN
+
+[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Illegal pattern character found in datetime patter: `<c>`. Please provide legal character.
+
 ### INVALID_COLUMN_NAME_AS_PATH
 
 [SQLSTATE: 46121](sql-error-conditions-sqlstates.html#class-46-java-ddl-1)
@@ -1109,6 +1115,18 @@ For more details see [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-valu
 The cursor is invalid.
 
 For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
+### INVALID_DATETIME_PATTERN
+
+[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Unrecognized datetime pattern: `<pattern>`. Please provide correct datetime pattern
+
+### INVALID_DATETIME_PATTERN_LENGTH
+
+[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Too many pattern letters: `<style>`. Please reduce pattern length.
 
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
@@ -1222,6 +1240,12 @@ Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
 
+### INVALID_INTERVAL_FORMAT
+
+[SQLSTATE: 22006](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Error parsing '`<input>`' to interval, `<msg>`. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again.
+
 ### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
 [SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1229,6 +1253,12 @@ For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-
 Invalid inverse distribution function `<funcName>`.
 
 For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+### INVALID_JSON_DATA_TYPE
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the JSON string '`<other>`' to a data type. Please enter a valid data type.
 
 ### INVALID_JSON_ROOT_FIELD
 
@@ -1615,6 +1645,24 @@ It is not allowed to use an aggregate function in the argument of another aggreg
 SQLSTATE: 07501
 
 Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
+
+### NONEXISTENT_FIELD_NAME_INDEXING
+
+SQLSTATE: HV091
+
+Error while indexing filed. Field with name `<name>` does not exist. Available fields: `<fieldNames>`
+
+### NONEXISTENT_FIELD_NAME_IN_LIST
+
+SQLSTATE: HV091
+
+Field(s) `<nonExistFields>` do(es) not exist. Available fields: `<fieldNames>`
+
+### NONEXISTENT_FIELD_NAME_LOOKUP
+
+SQLSTATE: HV091
+
+Error while accessing field. Field with name `<name>` does not exist. Available fields: `<fieldNames>`
 
 ### NON_FOLDABLE_ARGUMENT
 

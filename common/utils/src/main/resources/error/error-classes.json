@@ -1530,9 +1530,10 @@
         ]
       },
       "DATETIME_WEEK_BASED_PATTERN" : {
-        "message": [
-          "Spark >= 3.0",
-          "All week-based patterns are unsupported since Spark 3.0, detected week-based character: <c>. Please use the SQL function EXTRACT instead."
+        "message" : [
+          "Spark >= 3.0:",
+          "All week-based patterns are unsupported since Spark 3.0, detected week-based character: <c>.",
+          "Please use the SQL function EXTRACT instead."
         ]
       },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
@@ -1780,7 +1781,7 @@
     "message" : [
       "Illegal pattern character found in datetime patter: <c>. Please provide legal character."
     ],
-    "sqlState": "22007"
+    "sqlState" : "22007"
   },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
@@ -1839,13 +1840,13 @@
     "message" : [
       "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern"
     ],
-    "sqlState": "22007"
+    "sqlState" : "22007"
   },
   "INVALID_DATETIME_PATTERN_LENGTH" : {
     "message" : [
       "Too many pattern letters: <style>. Please reduce pattern length."
     ],
-    "sqlState": "22007"
+    "sqlState" : "22007"
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
@@ -2845,7 +2846,7 @@
   },
   "NONEXISTENT_FIELD_NAME_INDEXING" : {
     "message" : [
-      "Field with name <name> does not exist. Available fields: <fieldNames>"
+      "Error while indexing filed. Field with name <name> does not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
   },
@@ -2857,7 +2858,7 @@
   },
   "NONEXISTENT_FIELD_NAME_LOOKUP" : {
     "message" : [
-      "Field with name <name> does not exist. Available fields: <fieldNames>"
+      "Error while accessing field. Field with name <name> does not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
   },
