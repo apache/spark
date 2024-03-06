@@ -353,26 +353,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().contains(substring.toLowerCase());
     }
-    return collatedStringSearch(substring, collationId);
+    return collatedContains(substring, collationId);
   }
 
-  private boolean collatedStringSearch(final UTF8String substring, int collationId) {
-    if (substring.numBytes == 0) {
-      return true;
-    } else if (this.numBytes == 0) {
-      return false;
-    }
-    String pattern = substring.toString();
-    CharacterIterator target = new StringCharacterIterator(this.toString());
-    Collator collator = CollationFactory.fetchCollation(collationId).collator;
-    StringSearch stringSearch = new StringSearch(pattern, target, (RuleBasedCollator) collator);
-    stringSearch.reset();
+  private boolean collatedContains(final UTF8String substring, int collationId) {
+    if (substring.numBytes == 0) return true;
+    if (this.numBytes == 0) return false;
+    StringSearch stringSearch = stringSearch(substring, collationId);
     while (stringSearch.next() != StringSearch.DONE) {
-      if (stringSearch.getMatchLength() == pattern.length()) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
         return true;
       }
     }
     return false;
+  }
+
+  private StringSearch stringSearch(final UTF8String substring, int collationId) {
+    String pattern = substring.toString();
+    CharacterIterator target = new StringCharacterIterator(this.toString());
+    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    return new StringSearch(pattern, target, (RuleBasedCollator) collator);
   }
 
   /**
