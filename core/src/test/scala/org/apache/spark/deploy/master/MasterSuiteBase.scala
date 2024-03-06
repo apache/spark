@@ -214,7 +214,7 @@ trait MasterSuiteBase extends SparkFunSuite
   protected def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
     val appInfo: ApplicationInfo = if (withMaxCores) {
       makeAppInfo(
-        64, maxCores = Some(6), initialExecutorLimit = Some(0))
+        64, maxCores = Some(2), initialExecutorLimit = Some(0))
     } else {
       makeAppInfo(
         64, maxCores = None, initialExecutorLimit = Some(0))
@@ -222,7 +222,7 @@ trait MasterSuiteBase extends SparkFunSuite
 
     val master = makeAliveMaster()
     val conf = new SparkConf()
-    val workers = (1 to 4).map { idx =>
+    val workers = (1 to 3).map { idx =>
       val worker = new MockWorker(master.self, conf)
       worker.rpcEnv.setupEndpoint(s"worker-$idx", worker)
       val workerReg = RegisterWorker(
@@ -263,19 +263,20 @@ trait MasterSuiteBase extends SparkFunSuite
     }
 
     if (withMaxCores) {
+      assert(appInfo.executors.size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
+      // Because of the max cores, it can't pick up executors than one.
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 1)
+    } else {
       assert(appInfo.executors.size === 3)
       assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
       assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
       assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
       assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 1)
       assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 1)
-    } else {
-      assert(appInfo.executors.size === 4)
-      assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 1)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 2)
     }
 
     // Verify executor information.
