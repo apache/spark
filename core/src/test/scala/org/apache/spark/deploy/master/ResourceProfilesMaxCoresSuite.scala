@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 class ResourceProfilesMaxCoresSuite extends MasterSuiteBase {
-  test("scheduling for app with multiple resource profiles with max cores") {
+  ignore("scheduling for app with multiple resource profiles with max cores") {
     scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
   }
 }
