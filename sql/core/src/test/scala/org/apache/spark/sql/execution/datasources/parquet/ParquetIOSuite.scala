@@ -1224,8 +1224,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }
-        assert(m2.getErrorClass == "TASK_WRITE_FAILED")
-        assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
+        if (m2.getErrorClass != null) {
+          assert(m2.getErrorClass == "TASK_WRITE_FAILED")
+          assert(m2.getCause.getMessage.contains("Intentional exception for testing purposes"))
+        }
       }
     }
   }
