@@ -821,7 +821,10 @@ abstract class TypeCoercionBase {
       explicitTypes.size match {
         case 1 => explicitTypes.head.asInstanceOf[StringType].collationId
         case size if size > 1 =>
-          throw QueryCompilationErrors.explicitCollationMismatchError(explicitTypes.map(t => t.toString))
+          throw QueryCompilationErrors
+            .explicitCollationMismatchError(
+              explicitTypes.map(t => t.asInstanceOf[StringType].typeName)
+            )
         case _ =>
           val dataTypes = exprs.map(_.dataType.asInstanceOf[StringType])
 

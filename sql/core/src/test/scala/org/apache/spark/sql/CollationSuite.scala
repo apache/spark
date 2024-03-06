@@ -200,8 +200,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       sqlState = "42P21",
       parameters = Map(
-        "left" -> s"string COLLATE '$leftCollationName'",
-        "right" -> s"string COLLATE '$rightCollationName'"
+        "explicitTypes" ->
+          s"`string COLLATE '$leftCollationName'`.`string COLLATE '$rightCollationName'`"
       )
     )
     // startsWith
@@ -214,8 +214,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       sqlState = "42P21",
       parameters = Map(
-        "left" -> s"string COLLATE '$leftCollationName'",
-        "right" -> s"string COLLATE '$rightCollationName'"
+        "explicitTypes" ->
+          s"`string COLLATE '$leftCollationName'`.`string COLLATE '$rightCollationName'`"
       )
     )
     // endsWith
@@ -228,8 +228,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       sqlState = "42P21",
       parameters = Map(
-        "left" -> s"string COLLATE '$leftCollationName'",
-        "right" -> s"string COLLATE '$rightCollationName'"
+        "explicitTypes" ->
+          s"`string COLLATE '$leftCollationName'`.`string COLLATE '$rightCollationName'`"
       )
     )
   }
@@ -572,8 +572,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "left" -> "string",
-          "right" -> "string COLLATE 'UNICODE'"
+          "explicitTypes" -> "`string`.`string COLLATE 'UNICODE'`"
         )
       )
 
@@ -585,8 +584,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "left" -> "string",
-          "right" -> "string COLLATE 'UNICODE'"
+          "explicitTypes" -> "`string`.`string COLLATE 'UNICODE'`"
         )
       )
       checkError(
@@ -596,8 +594,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "left" -> "string COLLATE 'UNICODE'",
-          "right" -> "string"
+          "explicitTypes" -> "`string COLLATE 'UNICODE'`.`string`"
         )
       )
 
@@ -617,8 +614,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "left" -> "string",
-          "right" -> "string COLLATE 'UNICODE'"
+          "explicitTypes" -> "`string`.`string COLLATE 'UNICODE'`"
         )
       )
     }
