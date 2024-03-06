@@ -432,11 +432,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
     def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         """
-        Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
-        There are two versions of the pivot function: one that requires the caller
-        to specify the list of distinct values to pivot on, and one that does not.
-        The latter is more concise but less efficient,
-        because Spark needs to first compute the list of distinct values internally.
+        Pivots a column of the current :class:`DataFrame` and performs the specified aggregation.
 
         .. versionadded:: 1.6.0
 
@@ -449,6 +445,10 @@ class GroupedData(PandasGroupedOpsMixin):
             Name of the column to pivot.
         values : list, optional
             List of values that will be translated to columns in the output DataFrame.
+
+            If ``values`` is not provided, Spark will eagerly compute the distinct values in
+            ``pivot_col`` so it can determine the resulting schema of the transformation. To avoid
+            any eager computations, provide an explicit list of values.
 
         Examples
         --------

@@ -105,6 +105,9 @@ public final class CollationFactory {
   private static final Collation[] collationTable = new Collation[4];
   private static final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
 
+  public static final int DEFAULT_COLLATION_ID = 0;
+  public static final int LOWERCASE_COLLATION_ID = 1;
+
   static {
     // Binary comparison. This is the default collation.
     // No custom comparators will be used for this collation.

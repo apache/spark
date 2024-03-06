@@ -535,6 +535,16 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-20897: cached self-join should not fail") {
+    // force to plan sort merge join
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val df = Seq(1 -> "a").toDF("i", "j")
+      val df1 = df.as("t1")
+      val df2 = df.as("t2")
+      assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
+    }
+  }
+
   test("SPARK_47217: deduplication of project causes ambiguity in resolution") {
     val df = Seq((1, 2)).toDF("a", "b")
     val df2 = df.select(df("a").as("aa"), df("b").as("bb"))
@@ -544,7 +554,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Row(1, 1) :: Nil)
   }
 
-  test("SPARK-47217. deduplication in nested joins focussing on projection") {
+  test("SPARK-47217. deduplication in nested joins") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((1, 2)).toDF("aa", "bb")
     val df1Joindf2 = df1.join(df2, df1("a") === df2("aa")).select(df1("a").as("aaa"),
