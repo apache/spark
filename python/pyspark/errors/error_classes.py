@@ -209,14 +209,14 @@ ERROR_CLASSES_JSON = '''
       "Return schema mismatch in the result from 'read' method. Expected: <expected> columns, Found: <actual> columns. Make sure the returned values match the required output schema."
     ]
   },
-  "DATA_SOURCE_TYPE_MISMATCH": {
-    "message": [
-      "Expected <expected>, but got <actual>."
-    ]
-  },
   "DATA_SOURCE_CREATE_ERROR": {
     "message": [
       "Failed to create python data source instance, error: <error>."
+    ]
+  },
+  "DATA_SOURCE_TYPE_MISMATCH": {
+    "message": [
+      "Expected <expected>, but got <actual>."
     ]
   },
   "DIFFERENT_PANDAS_DATAFRAME": {
