@@ -62,7 +62,8 @@ import org.apache.spark.tags.DockerTest
  * and with Oracle Express Edition versions 18.4.0 and 21.3.0
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
+class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession
+  with UpsertTests {
   import testImplicits._
 
   override val db = new OracleDatabaseOnDocker
@@ -152,6 +153,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       "INSERT INTO test_ltz (t) VALUES (TIMESTAMP '2018-11-17 13:33:33')")
       .executeUpdate()
     conn.commit()
+  }
+
+  // Oracle syntax for timestamps is special, need to patch UpsertTests test data
+  override def getUpsertTestTableInserts(tableName: String): Seq[String] = {
+    super.getUpsertTestTableInserts(tableName).map(sql =>
+      sql.replace(", '1996-", ", TIMESTAMP '1996-")
+    )
   }
 
   test("SPARK-16625 : Importing Oracle numeric types") {

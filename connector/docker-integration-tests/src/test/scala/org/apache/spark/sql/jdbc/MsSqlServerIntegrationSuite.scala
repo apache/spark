@@ -37,7 +37,7 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
+class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite with UpsertTests {
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
       "mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04")

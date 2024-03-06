@@ -2622,6 +2622,18 @@ You're using untyped Scala UDF, which does not have the input type information. 
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
 
+### UPSERT_KEY_COLUMNS_REQUIRED
+
+[SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Upsert requires key columns.
+
+### UPSERT_NOT_ALLOWED
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Upsert is not allowed for table `<table>`: `<reason>`.
+
 ### USER_RAISED_EXCEPTION
 
 SQLSTATE: P0001
