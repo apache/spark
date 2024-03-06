@@ -24,7 +24,7 @@ import org.apache.spark.sql.functions.rand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameShowSuiteextends extends QueryTest with SharedSparkSession {
+class DataFrameShowSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   ignore("show") {
