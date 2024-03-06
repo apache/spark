@@ -32,10 +32,10 @@ This error class has the following derived error classes:
 
 ## EXPLICIT
 
-Error occurred due to the mismatch between explicit collations "`<left>`" and "`<right>`"
+Error occurred due to the mismatch between explicit collations: `<explicitTypes>`
 
 ## IMPLICIT
 
-Error occurred due to the mismatch between multiple implicit collations. Use COLLATE function to set the collation explicitly.
+Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly.
 
 

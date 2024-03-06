@@ -796,7 +796,7 @@ abstract class TypeCoercionBase {
     }
 
     /**
-     *  Collates the input expression to a single collation.
+     *  Collates the input expressions to a single collation.
      */
     def collateToSingleType(exprs: Seq[Expression]): Seq[Expression] = {
       val collationId = getOutputCollation(exprs)
@@ -813,19 +813,19 @@ abstract class TypeCoercionBase {
 
     /**
      * Based on the data types of the input expressions this method determines
-     * a collation type which the output will be.
+     * a collation type which the output will have.
      */
     def getOutputCollation(exprs: Seq[Expression], failOnIndeterminate: Boolean = true): Int = {
       val explicitTypes = exprs.filter(hasExplicitCollation).map(_.dataType).distinct
 
       explicitTypes.size match {
         case 1 => explicitTypes.head.asInstanceOf[StringType].collationId
-        case size if size > 1 => throw QueryCompilationErrors.explicitCollationMismatchError(
-          explicitTypes.head.simpleString, explicitTypes.tail.head.simpleString)
+        case size if size > 1 =>
+          throw QueryCompilationErrors.explicitCollationMismatchError(explicitTypes.map(t => t.toString))
         case _ =>
           val dataTypes = exprs.map(_.dataType.asInstanceOf[StringType])
 
-          if (isIndeterminate(dataTypes)) {
+          if (hasIndeterminate(dataTypes)) {
             if (failOnIndeterminate) {
               throw QueryCompilationErrors.indeterminateCollationError()
             } else {
@@ -847,7 +847,7 @@ abstract class TypeCoercionBase {
       }
     }
 
-    private def isIndeterminate(dataTypes: Seq[StringType]): Boolean =
+    private def hasIndeterminate(dataTypes: Seq[StringType]): Boolean =
       dataTypes.exists(_.isIndeterminateCollation)
 
 
@@ -1062,8 +1062,7 @@ object TypeCoercion extends TypeCoercionBase {
 
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
     implicitCast(e.dataType, expectedType).map { dt =>
-      if (dt == e.dataType) { e }
-      else { Cast(e, dt) }
+      if (dt == e.dataType) e else Cast(e, dt)
     }
   }
 

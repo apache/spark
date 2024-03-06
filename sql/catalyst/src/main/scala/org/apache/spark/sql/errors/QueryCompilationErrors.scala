@@ -3612,12 +3612,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def explicitCollationMismatchError(left: String, right: String): Throwable = {
+  def explicitCollationMismatchError(explicitTypes: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       messageParameters = Map(
-        "left" -> left,
-        "right" -> right
+        "explicitTypes" -> toSQLId(explicitTypes)
       )
     )
   }
