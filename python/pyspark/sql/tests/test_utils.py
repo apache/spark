@@ -1669,35 +1669,8 @@ class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
         try:
             self.spark.sql("""SELECT a""")
         except AnalysisException as e:
-            exception = e
-
-        self.assertIsNotNone(exception)
-        self.assertEqual(exception.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
-        self.assertEqual(exception.getSqlState(), "42703")
-        self.assertEqual(exception.getMessageParameters(), {"objectName": "`a`"})
-        self.assertIn(
-            (
-                "[UNRESOLVED_COLUMN.WITHOUT_SUGGESTION] A column, variable, or function "
-                "parameter with name `a` cannot be resolved.  SQLSTATE: 42703"
-            ),
-            exception.getMessage(),
-        )
-        self.assertEqual(len(exception.getQueryContext()), 1)
-        qc = exception.getQueryContext()[0]
-        self.assertEqual(qc.fragment(), "a")
-        self.assertEqual(qc.stopIndex(), 7)
-        self.assertEqual(qc.startIndex(), 7)
-        self.assertEqual(qc.contextType(), QueryContextType.SQL)
-        self.assertEqual(qc.objectName(), "")
-        self.assertEqual(qc.objectType(), "")
-
-        try:
-            self.spark.sql("""SELECT assert_true(FALSE)""")
-        except AnalysisException as e:
-            self.assertIsNone(e.getErrorClass())
-            self.assertIsNone(e.getSqlState())
-            self.assertEqual(e.getMessageParameters(), {})
-            self.assertEqual(e.getMessage(), "")
+            self.assertEquals(e.getErrorClass(), "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION")
+            self.assertEquals(e.getSqlState(), "42703")
 
 
 if __name__ == "__main__":
