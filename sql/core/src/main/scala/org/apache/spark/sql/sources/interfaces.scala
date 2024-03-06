@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 /**
  * Data sources should implement this trait so that they can register an alias to their data source.
@@ -175,6 +175,32 @@ trait CreatableRelationProvider {
       mode: SaveMode,
       parameters: Map[String, String],
       data: DataFrame): BaseRelation
+
+  /**
+   * Check if the relation supports the given data type.
+   *
+   * @param dt Data type to check
+   * @return True if the data type is supported
+   */
+  def supportsDataType(
+      dt: DataType
+  ): Boolean = {
+    dt match {
+      case ArrayType(e, _) => supportsDataType(e)
+      case MapType(k, v, _) =>
+        supportsDataType(k) && supportsDataType(v)
+      case StructType(fields) => fields.forall(f => supportsDataType(f.dataType))
+      case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
+      case _: AnsiIntervalType | CalendarIntervalType | VariantType => false
+      case BinaryType | BooleanType | ByteType | CalendarIntervalType | CharType(_) | DateType |
+           DayTimeIntervalType(_, _) | _ : DecimalType |  DoubleType | FloatType |
+           IntegerType | LongType | NullType | ObjectType(_) | ShortType |
+           StringType | TimestampNTZType | TimestampType | VarcharType(_) |
+           YearMonthIntervalType(_, _) => true
+      case _ => false
+
+    }
+  }
 }
 
 /**

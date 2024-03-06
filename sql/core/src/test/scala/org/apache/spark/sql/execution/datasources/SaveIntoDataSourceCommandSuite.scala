@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -70,6 +70,39 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
     checkAnswer(loadData, Row(0) :: Row(1) :: Nil)
 
     FakeV1DataSource.data = null
+  }
+
+  test("Data type support") {
+
+    val dataSource = DataSource(
+      sparkSession = spark,
+      className = "jdbc",
+      partitionColumns = Nil,
+      options = Map())
+
+    val df = spark.range(1).selectExpr(
+        "cast('a' as binary) a", "true b", "cast(1 as byte) c", "1.23 d")
+    dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
+
+    withSQLConf("spark.databricks.variant.enabled" -> "true") {
+      // Variant and Interval types are disallowed by default.
+      val unsupportedTypes = Seq(
+          "parse_json('1') v",
+          "array(parse_json('1'))",
+          "struct(1, parse_json('1')) s",
+          "map(1, parse_json('1')) s",
+          "INTERVAL '1' MONTH i",
+          "make_ym_interval(1, 2) ym",
+          "make_dt_interval(1, 2, 3, 4) dt")
+
+      unsupportedTypes.foreach { expr =>
+        val df = spark.range(1).selectExpr(expr)
+        val e = intercept[AnalysisException] {
+          dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
+        }
+        assert(e.getMessage.contains("UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE"))
+      }
+    }
   }
 }
 
