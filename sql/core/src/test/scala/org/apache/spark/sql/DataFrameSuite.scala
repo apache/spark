@@ -21,7 +21,7 @@ import java.io.{ByteArrayOutputStream, File}
 import java.lang.{Long => JLong}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.util.{Locale, UUID}
+import java.util.Locale
 
 import scala.collection.immutable.ListMap
 import scala.util.Random
@@ -51,7 +51,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 @SlowSQLTest
 class DataFrameSuite extends QueryTest
@@ -2083,64 +2082,9 @@ class DataFrameSuite extends QueryTest
     assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
   }
 
-  test("SPARK-13774: Check error message for non existent path without globbed paths") {
-    val uuid = UUID.randomUUID().toString
-    val baseDir = Utils.createTempDir()
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.read.format("csv").load(
-          new File(baseDir, "file").getAbsolutePath,
-          new File(baseDir, "file2").getAbsolutePath,
-          new File(uuid, "file3").getAbsolutePath,
-          uuid).rdd
-      },
-      errorClass = "PATH_NOT_FOUND",
-      parameters = Map("path" -> "file:.*"),
-      matchPVals = true
-    )
-   }
-
-  test("SPARK-13774: Check error message for not existent globbed paths") {
-    // Non-existent initial path component:
-    val nonExistentBasePath = "/" + UUID.randomUUID().toString
-    assert(!new File(nonExistentBasePath).exists())
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.read.format("text").load(s"$nonExistentBasePath/*")
-      },
-      errorClass = "PATH_NOT_FOUND",
-      parameters = Map("path" -> s"file:$nonExistentBasePath/*")
-    )
-
-    // Existent initial path component, but no matching files:
-    val baseDir = Utils.createTempDir()
-    val childDir = Utils.createTempDir(baseDir.getAbsolutePath)
-    assert(childDir.exists())
-    try {
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.read.json(s"${baseDir.getAbsolutePath}/*/*-xyz.json").rdd
-        },
-        errorClass = "PATH_NOT_FOUND",
-        parameters = Map("path" -> s"file:${baseDir.getAbsolutePath}/*/*-xyz.json")
-      )
-    } finally {
-      Utils.deleteRecursively(baseDir)
-    }
-  }
-
   test("SPARK-15230: distinct() does not handle column name with dot properly") {
     val df = Seq(1, 1, 2).toDF("column.with.dot")
     checkAnswer(df.distinct(), Row(1) :: Row(2) :: Nil)
-  }
-
-  test("SPARK-16181: outer join with isNull filter") {
-    val left = Seq("x").toDF("col")
-    val right = Seq("y").toDF("col").withColumn("new", lit(true))
-    val joined = left.join(right, left("col") === right("col"), "left_outer")
-
-    checkAnswer(joined, Row("x", null, null))
-    checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
   }
 
   test("SPARK-16664: persist with more than 200 columns") {
@@ -2314,59 +2258,6 @@ class DataFrameSuite extends QueryTest
     val df = spark.range(1).select(expr1, expr2.otherwise(0))
     checkAnswer(df, Row(0, 10) :: Nil)
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
-  }
-
-  test("SPARK-24165: CaseWhen/If - nullability of nested types") {
-    val rows = new java.util.ArrayList[Row]()
-    rows.add(Row(true, ("x", 1), Seq("x", "y"), Map(0 -> "x")))
-    rows.add(Row(false, (null, 2), Seq(null, "z"), Map(0 -> null)))
-    val schema = StructType(Seq(
-      StructField("cond", BooleanType, true),
-      StructField("s", StructType(Seq(
-        StructField("val1", StringType, true),
-        StructField("val2", IntegerType, false)
-      )), false),
-      StructField("a", ArrayType(StringType, true)),
-      StructField("m", MapType(IntegerType, StringType, true))
-    ))
-
-    val sourceDF = spark.createDataFrame(rows, schema)
-
-    def structWhenDF: DataFrame = sourceDF
-      .select(when($"cond",
-        struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise($"s") as "res")
-      .select($"res".getField("val1"))
-    def arrayWhenDF: DataFrame = sourceDF
-      .select(when($"cond", array(lit("a"), lit("b"))).otherwise($"a") as "res")
-      .select($"res".getItem(0))
-    def mapWhenDF: DataFrame = sourceDF
-      .select(when($"cond", map(lit(0), lit("a"))).otherwise($"m") as "res")
-      .select($"res".getItem(0))
-
-    def structIfDF: DataFrame = sourceDF
-      .select(expr("if(cond, struct('a' as val1, 10 as val2), s)") as "res")
-      .select($"res".getField("val1"))
-    def arrayIfDF: DataFrame = sourceDF
-      .select(expr("if(cond, array('a', 'b'), a)") as "res")
-      .select($"res".getItem(0))
-    def mapIfDF: DataFrame = sourceDF
-      .select(expr("if(cond, map(0, 'a'), m)") as "res")
-      .select($"res".getItem(0))
-
-    def checkResult(): Unit = {
-      checkAnswer(structWhenDF, Seq(Row("a"), Row(null)))
-      checkAnswer(arrayWhenDF, Seq(Row("a"), Row(null)))
-      checkAnswer(mapWhenDF, Seq(Row("a"), Row(null)))
-      checkAnswer(structIfDF, Seq(Row("a"), Row(null)))
-      checkAnswer(arrayIfDF, Seq(Row("a"), Row(null)))
-      checkAnswer(mapIfDF, Seq(Row("a"), Row(null)))
-    }
-
-    // Test with local relation, the Project will be evaluated without codegen
-    checkResult()
-    // Test with cached relation, the Project will be evaluated with codegen
-    sourceDF.cache()
-    checkResult()
   }
 
   test("Uuid expressions should produce same results at retries in the same DataFrame") {

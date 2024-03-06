@@ -612,4 +612,13 @@ class DataFrameJoinSuite extends QueryTest
       .filter($"x1".isNotNull || !$"y".isin("a!"))
       .count()
   }
+
+  test("SPARK-16181: outer join with isNull filter") {
+    val left = Seq("x").toDF("col")
+    val right = Seq("y").toDF("col").withColumn("new", lit(true))
+    val joined = left.join(right, left("col") === right("col"), "left_outer")
+
+    checkAnswer(joined, Row("x", null, null))
+    checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
+  }
 }

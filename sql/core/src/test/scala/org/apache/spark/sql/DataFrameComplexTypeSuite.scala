@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, Decimal, DoubleType, IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, Decimal, DoubleType, IntegerType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -262,6 +262,59 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
     checkAnswer(Seq(nestedIntArray).toDF(), Row(nestedIntArray.map(wrapIntArray)))
     val nestedDecArray = Array(decSpark)
     checkAnswer(Seq(nestedDecArray).toDF(), Row(Array(wrapRefArray(decJava))))
+  }
+
+  test("SPARK-24165: CaseWhen/If - nullability of nested types") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(true, ("x", 1), Seq("x", "y"), Map(0 -> "x")))
+    rows.add(Row(false, (null, 2), Seq(null, "z"), Map(0 -> null)))
+    val schema = StructType(Seq(
+      StructField("cond", BooleanType, true),
+      StructField("s", StructType(Seq(
+        StructField("val1", StringType, true),
+        StructField("val2", IntegerType, false)
+      )), false),
+      StructField("a", ArrayType(StringType, true)),
+      StructField("m", MapType(IntegerType, StringType, true))
+    ))
+
+    val sourceDF = spark.createDataFrame(rows, schema)
+
+    def structWhenDF: DataFrame = sourceDF
+      .select(when($"cond",
+        struct(lit("a").as("val1"), lit(10).as("val2"))).otherwise($"s") as "res")
+      .select($"res".getField("val1"))
+    def arrayWhenDF: DataFrame = sourceDF
+      .select(when($"cond", array(lit("a"), lit("b"))).otherwise($"a") as "res")
+      .select($"res".getItem(0))
+    def mapWhenDF: DataFrame = sourceDF
+      .select(when($"cond", map(lit(0), lit("a"))).otherwise($"m") as "res")
+      .select($"res".getItem(0))
+
+    def structIfDF: DataFrame = sourceDF
+      .select(expr("if(cond, struct('a' as val1, 10 as val2), s)") as "res")
+      .select($"res".getField("val1"))
+    def arrayIfDF: DataFrame = sourceDF
+      .select(expr("if(cond, array('a', 'b'), a)") as "res")
+      .select($"res".getItem(0))
+    def mapIfDF: DataFrame = sourceDF
+      .select(expr("if(cond, map(0, 'a'), m)") as "res")
+      .select($"res".getItem(0))
+
+    def checkResult(): Unit = {
+      checkAnswer(structWhenDF, Seq(Row("a"), Row(null)))
+      checkAnswer(arrayWhenDF, Seq(Row("a"), Row(null)))
+      checkAnswer(mapWhenDF, Seq(Row("a"), Row(null)))
+      checkAnswer(structIfDF, Seq(Row("a"), Row(null)))
+      checkAnswer(arrayIfDF, Seq(Row("a"), Row(null)))
+      checkAnswer(mapIfDF, Seq(Row("a"), Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    checkResult()
+    // Test with cached relation, the Project will be evaluated with codegen
+    sourceDF.cache()
+    checkResult()
   }
 }
 
