@@ -213,6 +213,19 @@ abstract class QueryTest extends PlanTest {
         planWithCaching)
   }
 
+  def assertNotCached(query: Dataset[_]): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val cachedData = planWithCaching collect {
+      case cached: InMemoryRelation => cached
+    }
+
+    assert(
+      cachedData.isEmpty,
+      s"Expected query doesn't contain cached tables, " +
+        s"but it actually had ${cachedData.size}\n" +
+        planWithCaching)
+  }
+
   /**
    * Asserts that a given [[Dataset]] will be executed using the cache with the given name and
    * storage level.

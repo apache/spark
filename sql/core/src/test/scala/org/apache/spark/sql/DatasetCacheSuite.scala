@@ -134,6 +134,29 @@ class DatasetCacheSuite extends QueryTest
     assert(df.storageLevel == StorageLevel.NONE)
   }
 
+  test("SPARK-46992 collect before persisting") {
+    val childDs = (1 to 4).toDF("id").sort("id").sample(0.4, 123)
+    // this check will call ds.collect() first
+    assert(Array(Row(1), Row(4)).sameElements(childDs.collect()))
+    // and then cache it
+    childDs.cache()
+    // Make sure, the Dataset is indeed cached.
+    assertCached(childDs)
+    // Make sure the result of count() is consistent with collect()
+    assert(childDs.count() == childDs.collect().length,
+      "The result of ds.count() is inconsistent with ds.collect()")
+
+    val parentDs = childDs.limit(1)
+    assertCached(parentDs)
+    // The child ds is un-persisted so the same is parent ds
+    childDs.unpersist()
+    assertNotCached(childDs)
+    assertNotCached(parentDs)
+    // The child ds is persisted so the same is parent ds
+    childDs.cache()
+    assertCached(parentDs)
+  }
+
   test("cache UDF result correctly") {
     val expensiveUDF = udf({x: Int => Thread.sleep(2000); x})
     val df = spark.range(0, 2).toDF("a").repartition(1).withColumn("b", expensiveUDF($"a"))
