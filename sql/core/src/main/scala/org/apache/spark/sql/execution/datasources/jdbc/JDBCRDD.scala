@@ -130,12 +130,12 @@ object JDBCRDD extends Logging {
     }
     new JDBCRDD(
       sc,
+      dialect,
       dialect.createConnectionFactory(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
       predicates,
       parts,
-      url,
       options,
       groupByColumns,
       sample,
@@ -153,12 +153,12 @@ object JDBCRDD extends Logging {
  */
 class JDBCRDD(
     sc: SparkContext,
+    dialect: JdbcDialect,
     getConnection: Int => Connection,
     schema: StructType,
     columns: Array[String],
     predicates: Array[Predicate],
     partitions: Array[Partition],
-    url: String,
     options: JDBCOptions,
     groupByColumns: Option[Array[String]],
     sample: Option[TableSampleInfo],
@@ -173,8 +173,6 @@ class JDBCRDD(
   val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
     sparkContext,
     name = "JDBC query execution time")
-
-  private lazy val dialect = JdbcDialects.get(url)
 
   def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
     // H2's JDBC driver does not support the setSchema() method.  We pass a
