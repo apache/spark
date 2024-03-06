@@ -42,7 +42,8 @@ case class LogicalRelation(
 
   override def computeStats(): Statistics = {
     catalogTable
-      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))
+      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled,
+        conf.fileCompressionFactor)))
       .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 

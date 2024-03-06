@@ -860,4 +860,23 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(stats.rowCount.isDefined && stats.rowCount.get == 6)
     }
   }
+
+  test("SPARK-47222: fileCompressionFactor should be applied to the size of the table") {
+    withTempDir { tempDir =>
+      spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+      val size = getDataSize(tempDir)
+      assert(size === 964)
+      val factor = 2
+      withSQLConf(SQLConf.FILE_COMPRESSION_FACTOR.key -> factor.toString) {
+        withTable("t") {
+          sql(s"CREATE TABLE t(id long) USING PARQUET LOCATION '${tempDir.getCanonicalPath}'")
+          assert(getCatalogTable("t").stats.isEmpty)
+          checkOptimizedPlanStats(sql("SELECT id FROM t"), size * factor, None, Seq.empty)
+          sql("ANALYZE TABLE t COMPUTE STATISTICS noscan")
+          assert(getCatalogTable("t").stats.get.sizeInBytes === size)
+          checkOptimizedPlanStats(sql("SELECT id FROM t"), size * factor, None, Seq.empty)
+        }
+      }
+    }
+  }
 }
