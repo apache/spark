@@ -214,10 +214,10 @@ trait MasterSuiteBase extends SparkFunSuite
   protected def scheduleExecutorsForAppWithMultiRPs(withMaxCores: Boolean): Unit = {
     val appInfo: ApplicationInfo = if (withMaxCores) {
       makeAppInfo(
-        64, maxCores = Some(2), initialExecutorLimit = Some(0))
+        128, maxCores = Some(4), initialExecutorLimit = Some(0))
     } else {
       makeAppInfo(
-        64, maxCores = None, initialExecutorLimit = Some(0))
+        128, maxCores = None, initialExecutorLimit = Some(0))
     }
 
     val master = makeAliveMaster()
@@ -231,7 +231,7 @@ trait MasterSuiteBase extends SparkFunSuite
         worker.self.address.port,
         worker.self,
         2,
-        256,
+        512,
         "http://localhost:8080",
         RpcAddress("localhost", 10000))
       master.self.send(workerReg)
@@ -244,12 +244,12 @@ trait MasterSuiteBase extends SparkFunSuite
     assert(appInfo.executors.isEmpty)
 
     // Request executors with multiple resource profile.
-    // rp1 with 3 cores per executor, rp2 with 512MB memory per executor, no worker can
+    // rp1 with 15 cores per executor, rp2 with 8192MB memory per executor, no worker can
     // fulfill the resource requirement.
-    val rp1 = DeployTestUtils.createResourceProfile(Some(128), Map.empty, Some(3))
-    val rp2 = DeployTestUtils.createResourceProfile(Some(512), Map.empty, Some(1))
-    val rp3 = DeployTestUtils.createResourceProfile(Some(128), Map.empty, Some(1))
-    val rp4 = DeployTestUtils.createResourceProfile(Some(128), Map.empty, Some(2))
+    val rp1 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(3))
+    val rp2 = DeployTestUtils.createResourceProfile(Some(1024), Map.empty, Some(1))
+    val rp3 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(1))
+    val rp4 = DeployTestUtils.createResourceProfile(Some(256), Map.empty, Some(1))
     val requests = Map(
       appInfo.desc.defaultProfile -> 1,
       rp1 -> 1,
@@ -263,26 +263,25 @@ trait MasterSuiteBase extends SparkFunSuite
     }
 
     if (withMaxCores) {
-      assert(appInfo.executors.size === 1)
-      assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
-      // Because of the max cores, it can't pick up executors than one.
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 0)
-      assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 1)
-    } else {
       assert(appInfo.executors.size === 3)
       assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
       assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
       assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
       assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 1)
       assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 1)
+    } else {
+      assert(appInfo.executors.size === 4)
+      assert(appInfo.getOrUpdateExecutorsForRPId(DEFAULT_RESOURCE_PROFILE_ID).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp1.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp2.id).size === 0)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp3.id).size === 1)
+      assert(appInfo.getOrUpdateExecutorsForRPId(rp4.id).size === 2)
     }
 
     // Verify executor information.
     val executorForRp3 = appInfo.executors(appInfo.getOrUpdateExecutorsForRPId(rp3.id).head)
     assert(executorForRp3.cores === 1)
-    assert(executorForRp3.memory === 128)
+    assert(executorForRp3.memory === 256)
     assert(executorForRp3.rpId === rp3.id)
 
     // Verify LaunchExecutor message.
@@ -291,7 +290,7 @@ trait MasterSuiteBase extends SparkFunSuite
       .map(_.launchedExecutors(appInfo.id + "/" + executorForRp3.id))
       .get
     assert(launchExecutorMsg.cores === 1)
-    assert(launchExecutorMsg.memory === 128)
+    assert(launchExecutorMsg.memory === 256)
     assert(launchExecutorMsg.rpId === rp3.id)
   }
 
