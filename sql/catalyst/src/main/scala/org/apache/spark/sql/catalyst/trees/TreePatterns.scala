@@ -106,6 +106,7 @@ object TreePattern extends Enumeration  {
   val AGGREGATE: Value = Value
   val AS_OF_JOIN: Value = Value
   val COMMAND: Value = Value
+  val COMMAND_RESULT: Value = Value
   val CTE: Value = Value
   val DF_DROP_COLUMNS: Value = Value
   val DISTINCT_LIKE: Value = Value

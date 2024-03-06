@@ -66,7 +66,9 @@ class SparkOptimizer(
       CleanupDynamicPruningFilters,
       // cleanup the unnecessary TrueLiteral predicates
       BooleanSimplification,
-      PruneFilters)) ++
+      PruneFilters) :+
+    Batch("Convert CommandResult to LocalRelation", fixedPoint,
+      ConvertCommandResultToLocalRelation)) ++
     postHocOptimizationBatches :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,

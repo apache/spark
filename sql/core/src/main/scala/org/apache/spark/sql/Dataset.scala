@@ -271,13 +271,7 @@ class Dataset[T] private[sql](
   private[sql] def getRows(
       numRows: Int,
       truncate: Int): Seq[Seq[String]] = {
-    val newDf = logicalPlan match {
-      case c: CommandResult =>
-        // Convert to `LocalRelation` and let `ConvertToLocalRelation` do the casting locally to
-        // avoid triggering a job
-        Dataset.ofRows(sparkSession, LocalRelation(c.output, c.rows))
-      case _ => toDF()
-    }
+    val newDf = toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
       Column(ToPrettyString(col))
     }

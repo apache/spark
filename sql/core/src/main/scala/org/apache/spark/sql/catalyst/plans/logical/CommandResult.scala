@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND_RESULT, TreePattern}
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -40,4 +41,6 @@ case class CommandResult(
 
   override def computeStats(): Statistics =
     Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * rows.length)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(COMMAND_RESULT)
 }
