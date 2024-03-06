@@ -354,8 +354,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
           case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
         }
 
-        val res = s.withNewPlan(a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput))))
-        res
+        s.withNewPlan(a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput))))
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
