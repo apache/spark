@@ -485,26 +485,15 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
       resolveOnDatasetId = (datasetid: Long, name: String) => {
         def findUnaryNodeMatchingTagId(lp: LogicalPlan): Option[LogicalPlan] = {
-          var currentLp = lp
-          while(currentLp.children.size < 2) {
-            if (currentLp.getTagValue(LogicalPlan.DATASET_ID_TAG).exists(_.contains(datasetid))) {
-              return Option(currentLp)
-            } else {
-              if (currentLp.children.size == 1) {
-                currentLp = currentLp.children.head
-              } else {
-                // leaf node
-                return None
-              }
-            }
+          if (lp.getTagValue(LogicalPlan.DATASET_ID_TAG).exists(_.contains(datasetid))) {
+             Option(lp)
+          } else {
+            None
           }
-          None
         }
-
         val binaryNodeOpt = q.collectFirst {
           case bn: BinaryNode => bn
         }
-
         val resolveOnAttribs = binaryNodeOpt match {
           case Some(bn) =>
             val leftDefOpt = findUnaryNodeMatchingTagId(bn.left)

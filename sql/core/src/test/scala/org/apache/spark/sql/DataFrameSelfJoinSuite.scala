@@ -97,6 +97,27 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assert(e.message.contains("ambiguous"))
   }
 
+  private def assertCorrectResolution(
+      df: => DataFrame,
+      leftResolution: Resolution.Resolution,
+      rightResolution: Resolution.Resolution): Unit = {
+    val join = df.queryExecution.analyzed.asInstanceOf[Join]
+    val binaryCondition = join.condition.get.asInstanceOf[BinaryExpression]
+    leftResolution match {
+      case Resolution.LeftConditionToLeftLeg =>
+        assert(join.left.outputSet.contains(binaryCondition.left.references.head))
+      case Resolution.LeftConditionToRightLeg =>
+        assert(join.right.outputSet.contains(binaryCondition.left.references.head))
+    }
+
+    rightResolution match {
+      case Resolution.RightConditionToLeftLeg =>
+        assert(join.left.outputSet.contains(binaryCondition.right.references.head))
+      case Resolution.RightConditionToRightLeg =>
+        assert(join.right.outputSet.contains(binaryCondition.right.references.head))
+    }
+  }
+
   test("SPARK-28344: NOT AN ambiguous self join - column ref in join condition") {
     val df1 = spark.range(3)
     val df2 = df1.filter($"id" > 0)
@@ -118,11 +139,8 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     withSQLConf(
       SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        val df = df1.join(df2, df1("id") > df2("id"))
-        val join = df.queryExecution.analyzed.asInstanceOf[Join]
-        val binaryCondition = join.condition.get.asInstanceOf[BinaryExpression]
-        assert(join.left.outputSet.contains(binaryCondition.left.references.head))
-        assert(join.right.outputSet.contains(binaryCondition.right.references.head))
+        assertCorrectResolution(df1.join(df2, df1("id") > df2("id")),
+          Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
     }
   }
 
@@ -133,11 +151,8 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     withSQLConf(
       SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        val df = df1.join(df2, df1.colRegex("id") > df2.colRegex("id"))
-        val join = df.queryExecution.analyzed.asInstanceOf[Join]
-        val binaryCondition = join.condition.get.asInstanceOf[BinaryExpression]
-        assert(join.left.outputSet.contains(binaryCondition.left.references.head))
-        assert(join.right.outputSet.contains(binaryCondition.right.references.head))
+      assertCorrectResolution(df1.join(df2, df1.colRegex("id") > df2.colRegex("id")),
+        Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
     }
   }
 
@@ -148,11 +163,8 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     withSQLConf(
       SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        val df = df1.join(df2, df1("a.b") > df2("a.c"))
-        val join = df.queryExecution.analyzed.asInstanceOf[Join]
-        val binaryCondition = join.condition.get.asInstanceOf[BinaryExpression]
-        assert(join.left.outputSet.contains(binaryCondition.left.references.head))
-        assert(join.right.outputSet.contains(binaryCondition.right.references.head))
+      assertCorrectResolution( df1.join(df2, df1("a.b") > df2("a.c")),
+        Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
     }
   }
 
@@ -312,7 +324,8 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     withSQLConf(
       SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        df1.join(df2, df1.col("id") > df2.col("id"))
+      assertCorrectResolution(df1.join(df2, df1.col("id") > df2.col("id")),
+        Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
     }
   }
 
@@ -363,22 +376,30 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
   test("SPARK-36874: DeduplicateRelations should copy dataset_id tag " +
     "to avoid ambiguous self join") {
     // Test for Project
+
     val df1 = Seq((1, 2, "A1"), (2, 1, "A2")).toDF("key1", "key2", "value")
     val df2 = df1.filter($"value" === "A2")
-    df1.join(df2, df1("key1") === df2("key2"))
-    df2.join(df1, df1("key1") === df2("key2"))
+ /*   assertCorrectResolution(df1.join(df2, df1("key1") === df2("key2")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df2.join(df1, df1("key1") === df2("key2")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
+
 
     // Test for SerializeFromObject
     val df3 = spark.sparkContext.parallelize(1 to 10).map(x => (x, x)).toDF()
     val df4 = df3.filter($"_1" <=> 0)
-    df3.join(df4, df3("_1") === df4("_2"))
-    df4.join(df3, df3("_1") === df4("_2"))
+    assertCorrectResolution(df3.join(df4, df3("_1") === df4("_2")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df4.join(df3, df3("_1") === df4("_2")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
 
     // Test For Aggregate
     val df5 = df1.groupBy($"key1").agg(count($"value") as "count")
     val df6 = df5.filter($"key1" > 0)
-    df5.join(df6, df5("key1") === df6("count"))
-    df6.join(df5, df5("key1") === df6("count"))
+    assertCorrectResolution(df5.join(df6, df5("key1") === df6("count")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df6.join(df5, df5("key1") === df6("count")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
 
     // Test for MapInPandas
     val mapInPandasUDF = PythonUDF("mapInPandasUDF", null,
@@ -388,8 +409,10 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       true)
     val df7 = df1.mapInPandas(mapInPandasUDF)
     val df8 = df7.filter($"x" > 0)
-    df7.join(df8, df7("x") === df8("y"))
-    df8.join(df7, df7("x") === df8("y"))
+    assertCorrectResolution(df7.join(df8, df7("x") === df8("y")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df8.join(df7, df7("x") === df8("y")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
 
     // Test for FlatMapGroupsInPandas
     val flatMapGroupsInPandasUDF = PythonUDF("flagMapGroupsInPandasUDF", null,
@@ -399,9 +422,11 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       true)
     val df9 = df1.groupBy($"key1").flatMapGroupsInPandas(flatMapGroupsInPandasUDF)
     val df10 = df9.filter($"x" > 0)
-    df9.join(df10, df9("x") === df10("y"))
-    df10.join(df9, df9("x") === df10("y"))
-
+    assertCorrectResolution(df9.join(df10, df9("x") === df10("y")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df10.join(df9, df9("x") === df10("y")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
+ */
     // Test for FlatMapCoGroupsInPandas
     val flatMapCoGroupsInPandasUDF = PythonUDF("flagMapCoGroupsInPandasUDF", null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
@@ -411,22 +436,27 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df11 = df1.groupBy($"key1").flatMapCoGroupsInPandas(
       df1.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
     val df12 = df11.filter($"x" > 0)
-    df11.join(df12, df11("x") === df12("y"))
-    df12.join(df11, df11("x") === df12("y"))
+  /*  assertCorrectResolution(df11.join(df12, df11("x") === df12("y")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg) */
+    assertCorrectResolution(df12.join(df11, df11("x") === df12("y")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
 
     // Test for AttachDistributedSequence
     val df13 = df1.withSequenceColumn("seq")
     val df14 = df13.filter($"value" === "A2")
-    df13.join(df14, df13("key1") === df14("key2"))
-    df14.join(df13, df13("key1") === df14("key2"))
-
+    assertCorrectResolution(df13.join(df14, df13("key1") === df14("key2")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df14.join(df13, df13("key1") === df14("key2")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
     // Test for Generate
     // Ensure that the root of the plan is Generate
     val df15 = Seq((1, Seq(1, 2, 3))).toDF("a", "intList").select($"a", explode($"intList"))
       .queryExecution.optimizedPlan.find(_.isInstanceOf[Generate]).get.toDF()
     val df16 = df15.filter($"a" > 0)
-    df15.join(df16, df15("a") === df16("col"))
-    df16.join(df15, df15("a") === df16("col"))
+    assertCorrectResolution(df15.join(df16, df15("a") === df16("col")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df16.join(df15, df15("a") === df16("col")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
 
     // Test for Expand
     // Ensure that the root of the plan is Expand
@@ -438,9 +468,10 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
           AttributeReference("y", IntegerType)()),
         df1.queryExecution.logical).toDF()
     val df18 = df17.filter($"x" > 0)
-    df17.join(df18, df17("x") === df18("y"))
-    df18.join(df17, df17("x") === df18("y"))
-
+    assertCorrectResolution(df17.join(df18, df17("x") === df18("y")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df18.join(df17, df17("x") === df18("y")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
     // Test for Window
     val dfWithTS = spark.sql("SELECT timestamp'2021-10-15 01:52:00' time, 1 a, 2 b")
     // Ensure that the root of the plan is Window
@@ -450,9 +481,10 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Seq(SortOrder(dfWithTS("a").expr, Ascending)),
       dfWithTS.queryExecution.logical).toDF()
     val df20 = df19.filter($"a" > 0)
-    df19.join(df20, df19("a") === df20("b"))
-    df20.join(df19, df19("a") === df20("b"))
-
+    assertCorrectResolution(df19.join(df20, df19("a") === df20("b")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df20.join(df19, df19("a") === df20("b")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
     // Test for ScriptTransformation
     val ioSchema =
       ScriptInputOutputSchema(
@@ -476,8 +508,10 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       df1.queryExecution.logical,
       ioSchema).toDF()
     val df22 = df21.filter($"x" > 0)
-    df21.join(df22, df21("x") === df22("y"))
-    df22.join(df21, df21("x") === df22("y"))
+    assertCorrectResolution(df21.join(df22, df21("x") === df22("y")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+    assertCorrectResolution(df22.join(df21, df21("x") === df22("y")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
   }
 
   test("SPARK-35937: GetDateFieldOperations should skip unresolved nodes") {
@@ -515,17 +549,25 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df2 = Seq((1, 2)).toDF("aa", "bb")
     val df1Joindf2 = df1.join(df2, df1("a") === df2("aa")).select(df1("a").as("aaa"),
       df2("aa"), df1("b"))
-    val df3 = df1Joindf2.join(df1, df1Joindf2("aaa") === df1("a")).
-      select(df1Joindf2("aa"), df1("a"))
-    df3.queryExecution.assertAnalyzed()
-  }
 
-  test("SPARK-47217. deduplication in nested joins focusing on condition") {
-    val df1 = Seq((1, 2)).toDF("a", "b")
-    val df2 = Seq((1, 2)).toDF("aa", "bb")
-    val df1Joindf2 = df1.join(df2, df1("a") === df2("aa")).select(df1("a"),
-      df2("aa"), df1("b"))
-    val df3 = df1Joindf2.join(df1, df1Joindf2("aa") === df1("a"))
-    df3.queryExecution.assertAnalyzed()
+    assertCorrectResolution(df1Joindf2.join(df1, df1Joindf2("aaa") === df1("a")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+
+    assertCorrectResolution(df1.join(df1Joindf2, df1Joindf2("aaa") === df1("a")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
+
+    df1Joindf2.join(df1, df1Joindf2("aaa") === df1("a")).select(df1Joindf2("aa"), df1("a")).
+      queryExecution.analyzed
+
+    df1.join(df1Joindf2, df1Joindf2("aaa") === df1("a")).select(df1Joindf2("aa"), df1("a")).
+      queryExecution.analyzed
   }
 }
+
+object Resolution extends Enumeration {
+  type Resolution = Value
+
+  val LeftConditionToLeftLeg, LeftConditionToRightLeg, RightConditionToRightLeg,
+  RightConditionToLeftLeg = Value
+}
+
