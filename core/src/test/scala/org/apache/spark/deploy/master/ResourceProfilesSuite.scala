@@ -58,3 +58,10 @@ class ResourceProfilesSuite extends MasterSuiteBase {
       Seq(ResourceRequirement(FPGA, 3), ResourceRequirement(GPU, 3)))
   }
 }
+
+
+class ResourceProfilesMaxCoresSuite extends MasterSuiteBase {
+  test("scheduling for app with multiple resource profiles with max cores") {
+    scheduleExecutorsForAppWithMultiRPs(withMaxCores = true)
+  }
+}
