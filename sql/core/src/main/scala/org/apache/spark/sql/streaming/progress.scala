@@ -243,7 +243,7 @@ class SourceProgress protected[spark](
   }
 }
 
-test_utils.py/**
+/**
  * Information about progress made for a sink in the execution of a [[StreamingQuery]]
  * during a trigger. See [[StreamingQueryProgress]] for more information.
  *
