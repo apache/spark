@@ -2689,13 +2689,13 @@ case class Base64(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(bytes: Any): Any = {
-    UTF8String.fromBytes(JBase64.getMimeEncoder.encode(bytes.asInstanceOf[Array[Byte]]))
+    UTF8String.fromBytes(JBase64.getEncoder.encode(bytes.asInstanceOf[Array[Byte]]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
       s"""${ev.value} = UTF8String.fromBytes(
-            ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
+            ${classOf[JBase64].getName}.getEncoder().encode($child));
        """})
   }
 
