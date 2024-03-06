@@ -142,7 +142,6 @@ class DatasetCacheSuite extends QueryTest
     childDs.cache()
     // Make sure, the Dataset is indeed cached.
     assertCached(childDs)
-    // Make sure the result of count() is consistent with collect()
     assert(childDs.count() == childDs.collect().length,
       "The result of ds.count() is inconsistent with ds.collect()")
 
