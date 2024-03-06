@@ -2928,7 +2928,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("Check HasPartitionSize from InMemoryPartitionTable") {
+  test("Check HasPartitionStatistics from InMemoryPartitionTable") {
     val t = "testpart.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id string) USING foo PARTITIONED BY (key int)")
@@ -2937,27 +2937,55 @@ class DataSourceV2SQLSuiteV1Filter
         .asInstanceOf[InMemoryPartitionTable]
 
       var partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
+      var partRowCounts = table.data.map(_.partitionNumRows().getAsLong)
+      var partFiles = table.data.map(_.partitionFilesCount().getAsLong)
       assert(partSizes.length == 0)
+      assert(partRowCounts.length == 0)
+      assert(partFiles.length == 0)
 
       sql(s"INSERT INTO $t VALUES ('a', 1), ('b', 2), ('c', 3)")
       partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
       assert(partSizes.length == 3)
       assert(partSizes.toSet == Set(100, 100, 100))
+      partRowCounts = table.data.map(_.partitionNumRows().getAsLong)
+      assert(partRowCounts.length == 3)
+      assert(partRowCounts.toSet == Set(1, 1, 1))
+      partFiles = table.data.map(_.partitionFilesCount().getAsLong)
+      assert(partFiles.length == 3)
+      assert(partFiles.toSet == Set(100, 100, 100))
 
       sql(s"ALTER TABLE $t DROP PARTITION (key=3)")
       partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
       assert(partSizes.length == 2)
       assert(partSizes.toSet == Set(100, 100))
+      partRowCounts = table.data.map(_.partitionNumRows().getAsLong)
+      assert(partRowCounts.length == 2)
+      assert(partRowCounts.toSet == Set(1, 1))
+      partFiles = table.data.map(_.partitionFilesCount().getAsLong)
+      assert(partFiles.length == 2)
+      assert(partFiles.toSet == Set(100, 100))
 
       sql(s"ALTER TABLE $t ADD PARTITION (key=4)")
       partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
       assert(partSizes.length == 3)
       assert(partSizes.toSet == Set(100, 100, 100))
+      partRowCounts = table.data.map(_.partitionNumRows().getAsLong)
+      assert(partRowCounts.length == 3)
+      assert(partRowCounts.toSet == Set(1, 1, 0))
+      partFiles = table.data.map(_.partitionFilesCount().getAsLong)
+      assert(partFiles.length == 3)
+      assert(partFiles.toSet == Set(100, 100, 100))
 
       sql(s"INSERT INTO $t VALUES ('c', 3), ('e', 5)")
       partSizes = table.data.map(_.partitionSizeInBytes().getAsLong)
       assert(partSizes.length == 5)
       assert(partSizes.toSet == Set(100, 100, 100, 100, 100))
+      partRowCounts = table.data.map(_.partitionNumRows().getAsLong)
+      assert(partRowCounts.length == 5)
+      assert(partRowCounts.toSet == Set(1, 1, 0, 1, 1))
+      partFiles = table.data.map(_.partitionFilesCount().getAsLong)
+      assert(partFiles.length == 5)
+      assert(partFiles.toSet == Set(100, 100, 100, 100, 100))
     }
   }
 

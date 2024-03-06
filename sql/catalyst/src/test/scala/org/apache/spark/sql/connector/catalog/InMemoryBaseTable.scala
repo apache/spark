@@ -605,7 +605,7 @@ object InMemoryBaseTable {
 }
 
 class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
-    with InputPartition with HasPartitionKey with HasPartitionSize with Serializable {
+    with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
   val deletes = new mutable.ArrayBuffer[Int]()
 
@@ -618,6 +618,9 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
 
   override def partitionKey(): InternalRow = PartitionInternalRow(key.toArray)
   override def partitionSizeInBytes(): OptionalLong = OptionalLong.of(100L)
+  override def partitionNumRows(): OptionalLong = OptionalLong.of(rows.size)
+  override def partitionFilesCount(): OptionalLong = OptionalLong.of(100L)
+
   def clear(): Unit = rows.clear()
 }
 

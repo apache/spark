@@ -28,9 +28,11 @@ import java.util.OptionalLong;
  * @see org.apache.spark.sql.connector.read.SupportsReportPartitioning
  * @since 4.0.0
  */
-public interface HasPartitionSize extends InputPartition {
+public interface HasPartitionStatistics extends InputPartition {
   /**
-   * Returns the value of the partition size associated to this partition.
+   * Returns the value of the partition statistics associated to this partition.
    */
   OptionalLong partitionSizeInBytes();
+  OptionalLong partitionNumRows();
+  OptionalLong partitionFilesCount();
 }
