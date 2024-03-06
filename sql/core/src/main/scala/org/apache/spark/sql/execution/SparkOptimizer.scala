@@ -68,7 +68,8 @@ class SparkOptimizer(
       BooleanSimplification,
       PruneFilters) :+
     Batch("Convert CommandResult to LocalRelation", fixedPoint,
-      ConvertCommandResultToLocalRelation)) ++
+      ConvertCommandResultToLocalRelation,
+      ConvertToLocalRelation)) ++
     postHocOptimizationBatches :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
