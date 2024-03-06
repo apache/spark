@@ -271,7 +271,7 @@ class Dataset[T] private[sql](
   private[sql] def getRows(
       numRows: Int,
       truncate: Int): Seq[Seq[String]] = {
-    val newDf = withCommandResultOptimized.toDF()
+    val newDf = commandResultOptimized.toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
       Column(ToPrettyString(col))
     }
@@ -650,7 +650,7 @@ class Dataset[T] private[sql](
    * @since 2.4.0
    */
   def isEmpty: Boolean = withAction("isEmpty",
-    withCommandResultOptimized.select().limit(1).queryExecution) { plan =>
+      commandResultOptimized.select().limit(1).queryExecution) { plan =>
     plan.executeTake(1).isEmpty
   }
 
@@ -4479,7 +4479,7 @@ class Dataset[T] private[sql](
   }
 
   /** Returns a optimized plan for CommandResult, convert to `LocalRelation`. */
-  private def withCommandResultOptimized: Dataset[T] = {
+  private def commandResultOptimized: Dataset[T] = {
     logicalPlan match {
       case c: CommandResult =>
         // Convert to `LocalRelation` and let `ConvertToLocalRelation` do the casting locally to
