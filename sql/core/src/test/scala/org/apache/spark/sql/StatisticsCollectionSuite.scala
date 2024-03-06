@@ -939,48 +939,48 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(newStats === newExpectedStats)
     }
   }
+}
 
-  /**
-   * This class is used for unit-testing. It's a logical plan whose output and stats are passed in.
-   */
-  case class OutputListAwareStatsTestPlan(
-      outputList: Seq[Attribute],
-      rowCount: BigInt,
-      size: Option[BigInt] = None) extends LeafNode with MultiInstanceRelation {
-    override def output: Seq[Attribute] = outputList
-    override def computeStats(): Statistics = {
-      val columnInfo = outputList.map { attr =>
-        attr.dataType match {
-          case BooleanType =>
-            attr -> ColumnStat(
-              distinctCount = Some(2),
-              min = Some(false),
-              max = Some(true),
-              nullCount = Some(0),
-              avgLen = Some(1),
-              maxLen = Some(1))
+/**
+ * This class is used for unit-testing. It's a logical plan whose output and stats are passed in.
+ */
+case class OutputListAwareStatsTestPlan(
+    outputList: Seq[Attribute],
+    rowCount: BigInt,
+    size: Option[BigInt] = None) extends LeafNode with MultiInstanceRelation {
+  override def output: Seq[Attribute] = outputList
+  override def computeStats(): Statistics = {
+    val columnInfo = outputList.map { attr =>
+      attr.dataType match {
+        case BooleanType =>
+          attr -> ColumnStat(
+            distinctCount = Some(2),
+            min = Some(false),
+            max = Some(true),
+            nullCount = Some(0),
+            avgLen = Some(1),
+            maxLen = Some(1))
 
-          case ByteType =>
-            attr -> ColumnStat(
-              distinctCount = Some(2),
-              min = Some(1),
-              max = Some(2),
-              nullCount = Some(0),
-              avgLen = Some(1),
-              maxLen = Some(1))
+        case ByteType =>
+          attr -> ColumnStat(
+            distinctCount = Some(2),
+            min = Some(1),
+            max = Some(2),
+            nullCount = Some(0),
+            avgLen = Some(1),
+            maxLen = Some(1))
 
-          case _ =>
-            attr -> ColumnStat()
-        }
+        case _ =>
+          attr -> ColumnStat()
       }
-      val attrStats = AttributeMap(columnInfo)
-
-      Statistics(
-        // If sizeInBytes is useless in testing, we just use a fake value
-        sizeInBytes = size.getOrElse(Int.MaxValue),
-        rowCount = Some(rowCount),
-        attributeStats = attrStats)
     }
-    override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
+    val attrStats = AttributeMap(columnInfo)
+
+    Statistics(
+      // If sizeInBytes is useless in testing, we just use a fake value
+      sizeInBytes = size.getOrElse(Int.MaxValue),
+      rowCount = Some(rowCount),
+      attributeStats = attrStats)
   }
+  override def newInstance(): LogicalPlan = copy(outputList = outputList.map(_.newInstance()))
 }
