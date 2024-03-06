@@ -67,7 +67,7 @@ object Base64Benchmark extends SqlBasedBenchmark {
     Seq(1, 3, 5, 7).map { len =>
       val benchmark = new Benchmark(s"decode for $len", N, output = output)
       benchmark.addCase("java", 3) { _ =>
-        doDecode(len, x => java.util.Base64.getMimeDecoder.decode(x))
+        doDecode(len, x => java.util.Base64.getDecoder.decode(x))
       }
       benchmark.addCase(s"apache", 3) { _ =>
         doDecode(len, org.apache.commons.codec.binary.Base64.decodeBase64)
