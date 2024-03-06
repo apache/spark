@@ -23,7 +23,7 @@ import pyspark.sql.connect.proto as pb2
 
 
 class ResourceProfile:
-    """The internal _ResourceProfile is used to create the Spark ResourceProfile
+    """The internal ResourceProfile is used to create the Spark ResourceProfile
     on the server side and store the generated profile id."""
 
     def __init__(
