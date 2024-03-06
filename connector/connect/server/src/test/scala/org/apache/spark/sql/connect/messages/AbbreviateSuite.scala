@@ -210,4 +210,12 @@ class AbbreviateSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("skip map fields") {
+    val message = proto.Read.NamedTable.newBuilder()
+      .putAllOptions(Map("k1" -> "v1" * 4096, "k2" -> "v2" * 4096).asJava)
+      .build()
+
+    val truncated = ProtoUtils.abbreviate(message)
+  }
 }
