@@ -567,7 +567,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     testTwoGenerators(needImplicitCast = false)
   }
 
-  test("SPARK-47241: generator function after SELECT *") {
+  test("SPARK-47241: generator function after wildcard in SELECT") {
     val df = sql(
       s"""
          |SELECT *, explode(array('a', 'b')) as c1
