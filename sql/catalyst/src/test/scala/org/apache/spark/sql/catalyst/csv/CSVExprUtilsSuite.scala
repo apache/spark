@@ -56,7 +56,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("""\""")
       },
-      errorClass = "SINGLE_BACKSLASH_PROHIBITED",
+      errorClass = "INVALID_DELIMITER_VALUE.SINGLE_BACKSLASH",
       parameters = Map.empty)
   }
 
