@@ -86,11 +86,3 @@ Spark Connect Only
     SparkSession.removeTag
     SparkSession.getTags
     SparkSession.clearTags
-
-Runtime Profiling
------------------
-
-The ``profile`` property of ``SparkSession`` returns a profiling object that enables users to use below methods:
-
-.. autoclass:: pyspark.sql.profiler.Profile
-   :members: show, dump
