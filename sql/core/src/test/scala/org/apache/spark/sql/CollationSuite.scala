@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -439,7 +440,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         }.nonEmpty)
       }
     }
-
   }
 
   test("create table with collation") {
@@ -596,5 +596,36 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           assert(partitionData.contains(s.toUpperCase()))
         })
     })
+  }
+
+  test("hash based joins not allowed for non-binary collated strings") {
+    val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(e => Row.apply(e, e))
+
+    val schema = StructType(StructField(
+      "col_non_binary",
+      StringType(CollationFactory.collationNameToId("UCS_BASIC_LCASE"))) ::
+      StructField("col_binary", StringType) :: Nil)
+    val df1 = spark.createDataFrame(sparkContext.parallelize(in), schema)
+
+    // Binary collations are allowed to use hash join.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_binary") === df1("col_binary"))
+        .queryExecution.executedPlan) {
+      case _: BroadcastHashJoinExec => ()
+    }.nonEmpty)
+
+    // Even with hint broadcast, hash join is not used for non-binary collated strings.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
+        .queryExecution.executedPlan) {
+      case _: BroadcastHashJoinExec => ()
+    }.isEmpty)
+
+    // Instead they will default to sort merge join.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
+        .queryExecution.executedPlan) {
+      case _: SortMergeJoinExec => ()
+    }.nonEmpty)
   }
 }

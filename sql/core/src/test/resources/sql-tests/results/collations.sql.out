@@ -72,6 +72,7 @@ select * from t1 where ucs_basic_lcase = 'aaa' collate 'ucs_basic_lcase'
 -- !query schema
 struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
 -- !query output
+AAA	AAA
 aaa	aaa
 
 
@@ -92,6 +93,61 @@ struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
 -- !query output
 AAA	AAA
 aaa	aaa
+
+
+-- !query
+select l.ucs_basic, r.ucs_basic_lcase from t1 l join t1 r on l.ucs_basic_lcase = r.ucs_basic_lcase
+-- !query schema
+struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
+-- !query output
+AAA	AAA
+AAA	aaa
+BBB	BBB
+BBB	bbb
+aaa	AAA
+aaa	aaa
+bbb	BBB
+bbb	bbb
+
+
+-- !query
+create table t2(ucs_basic string collate 'ucs_basic', ucs_basic_lcase string collate 'ucs_basic_lcase') using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t2 values('aaa', 'aaa')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into t2 values('bbb', 'bbb')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from t1 anti join t2 on t1.ucs_basic_lcase = t2.ucs_basic_lcase
+-- !query schema
+struct<ucs_basic:string,ucs_basic_lcase:string COLLATE 'UCS_BASIC_LCASE'>
+-- !query output
+
+
+
+-- !query
+drop table t2
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

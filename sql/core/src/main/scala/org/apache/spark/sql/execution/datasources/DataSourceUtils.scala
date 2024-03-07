@@ -28,7 +28,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, PredicateHelper}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.Utils
 
 
@@ -278,5 +278,22 @@ object DataSourceUtils extends PredicateHelper {
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
     (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
+  }
+
+  /**
+   * Determines whether a filter should be pushed down to the data source or not.
+   *
+   * @param expression The filter expression to be evaluated.
+   * @return A boolean indicating whether the filter should be pushed down or not.
+   */
+  def shouldPushFilter(expression: Expression): Boolean = {
+    expression.deterministic && !expression.exists {
+      case childExpression @ (_: Attribute | _: GetStructField) =>
+        // don't push down filters for types with non-default collation
+        // as it could lead to incorrect results
+        SchemaUtils.hasNonDefaultCollatedString(childExpression.dataType)
+
+      case _ => false
+    }
   }
 }

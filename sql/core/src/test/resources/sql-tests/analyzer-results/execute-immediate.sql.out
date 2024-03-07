@@ -750,6 +750,39 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+DECLARE p = 10
+-- !query analysis
+CreateVariable defaultvalueexpression(10, 10), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.p
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
+-- !query analysis
+Project [id#x]
++- Filter (id#x = variablereference(system.session.p=10))
+   +- SubqueryAlias tbl_view
+      +- View (`tbl_view`, [id#x, name#x, data#x])
+         +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+            +- Project [id#x, name#x, data#x]
+               +- SubqueryAlias tbl_view
+                  +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p, 'p'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"p\""
+  }
+}
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id
 -- !query analysis
 org.apache.spark.sql.AnalysisException

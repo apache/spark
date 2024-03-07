@@ -964,6 +964,37 @@ class QueryCompilationErrorsSuite
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
   }
 
+  test("SPARK-47102: the collation feature is off without collate builder call") {
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "CREATE TABLE t(col STRING COLLATE 'UNICODE_CI') USING parquet",
+        "CREATE TABLE t(col STRING COLLATE 'UNKNOWN_COLLATION_STRING') USING parquet",
+        "SELECT 'aaa' COLLATE 'UNICODE_CI'",
+        "select collation('aaa')"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          errorClass = "UNSUPPORTED_FEATURE.COLLATION")
+      }
+    }
+  }
+
+  test("SPARK-47102: the collation feature is off with collate builder call") {
+    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "SELECT collate('aaa', 'UNICODE_CI')",
+        "SELECT collate('aaa', 'UNKNOWN_COLLATION_STRING')"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          errorClass = "UNSUPPORTED_FEATURE.COLLATION",
+          parameters = Map.empty,
+          context = ExpectedContext(
+            fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1))
+      }
+    }
+  }
+
   test("INTERNAL_ERROR: Convert unsupported data type from Spark to Parquet") {
     val converter = new SparkToParquetSchemaConverter
     val dummyDataType = new DataType {
