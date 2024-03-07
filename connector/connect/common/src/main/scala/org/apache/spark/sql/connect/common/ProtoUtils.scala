@@ -38,16 +38,17 @@ private[connect] object ProtoUtils {
 
     message.getAllFields.asScala.iterator.foreach {
       case (field: FieldDescriptor, string: String)
-          if field.getJavaType == FieldDescriptor.JavaType.STRING && string != null =>
+          if field.getJavaType == FieldDescriptor.JavaType.STRING && !field.isRepeated
+            && string != null && !string.isEmpty =>
         val size = string.length
         val threshold = thresholds.getOrElse(STRING, MAX_STRING_SIZE)
         if (size > threshold) {
           builder.setField(field, truncateString(string, threshold))
         }
 
-      case (field: FieldDescriptor, strings: java.lang.Iterable[_])
+      case (field: FieldDescriptor, strings: java.util.List[_])
           if field.getJavaType == FieldDescriptor.JavaType.STRING && field.isRepeated
-            && strings != null =>
+            && strings != null && !strings.isEmpty =>
         val threshold = thresholds.getOrElse(STRING, MAX_STRING_SIZE)
         strings.iterator().asScala.zipWithIndex.foreach {
           case (string: String, i) if string != null && string.length > threshold =>
@@ -56,7 +57,8 @@ private[connect] object ProtoUtils {
         }
 
       case (field: FieldDescriptor, byteString: ByteString)
-          if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteString != null =>
+          if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && !field.isRepeated
+            && byteString != null && !byteString.isEmpty =>
         val size = byteString.size
         val threshold = thresholds.getOrElse(BYTES, MAX_BYTES_SIZE)
         if (size > threshold) {
@@ -68,7 +70,8 @@ private[connect] object ProtoUtils {
         }
 
       case (field: FieldDescriptor, byteArray: Array[Byte])
-          if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteArray != null =>
+          if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && !field.isRepeated
+            && byteArray != null && !byteArray.isEmpty =>
         val size = byteArray.length
         val threshold = thresholds.getOrElse(BYTES, MAX_BYTES_SIZE)
         if (size > threshold) {
@@ -84,9 +87,9 @@ private[connect] object ProtoUtils {
             && msg != null =>
         builder.setField(field, abbreviate(msg, thresholds))
 
-      case (field: FieldDescriptor, msgs: java.lang.Iterable[_])
+      case (field: FieldDescriptor, msgs: java.util.List[_])
           if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && field.isRepeated
-            && msgs != null =>
+            && msgs != null && !msgs.isEmpty =>
         msgs.iterator().asScala.zipWithIndex.foreach {
           case (msg: Message, i) if msg != null =>
             builder.setRepeatedField(field, i, abbreviate(msg, thresholds))
