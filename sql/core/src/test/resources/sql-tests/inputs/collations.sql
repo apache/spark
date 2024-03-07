@@ -25,6 +25,18 @@ select * from t1 where ucs_basic < 'bbb';
 -- filter less then ucs_basic_lcase
 select * from t1 where ucs_basic_lcase < 'bbb' collate 'ucs_basic_lcase';
 
+-- inner join
+select l.ucs_basic, r.ucs_basic_lcase from t1 l join t1 r on l.ucs_basic_lcase = r.ucs_basic_lcase;
+
+-- create second table for anti-join
+create table t2(ucs_basic string collate 'ucs_basic', ucs_basic_lcase string collate 'ucs_basic_lcase') using parquet;
+insert into t2 values('aaa', 'aaa');
+insert into t2 values('bbb', 'bbb');
+
+-- anti-join on lcase
+select * from t1 anti join t2 on t1.ucs_basic_lcase = t2.ucs_basic_lcase;
+
+drop table t2;
 drop table t1;
 
 -- create table with struct field

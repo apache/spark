@@ -157,6 +157,19 @@ SELECT /*+ REBALANCE(3, c) */ * FROM t;
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
 
+## Leveraging Statistics
+Apache Spark's ability to choose the best execution plan among many possible options is determined in part by its estimates of how many rows will be output by every node in the execution plan (read, filter, join, etc.). Those estimates in turn are based on statistics that are made available to Spark in one of several ways:
+
+- **Data source**: Statistics that Spark reads directly from the underlying data source, like the counts and min/max values in the metadata of Parquet files. These statistics are maintained by the underlying data source.
+- **Catalog**: Statistics that Spark reads from the catalog, like the Hive Metastore. These statistics are collected or updated whenever you run [`ANALYZE TABLE`](sql-ref-syntax-aux-analyze-table.html).
+- **Runtime**: Statistics that Spark computes itself as a query is running. This is part of the [adaptive query execution framework](#adaptive-query-execution).
+
+Missing or inaccurate statistics will hinder Spark's ability to select an optimal plan, and may lead to poor query performance. It's helpful then to inspect the statistics available to Spark and the estimates it makes during query planning and execution.
+
+- **Data object statistics**: You can inspect the statistics on a table or column with [`DESCRIBE EXTENDED`](sql-ref-syntax-aux-describe-table.html).
+- **Query plan estimates**: You can inspect Spark's cost estimates in the optimized query plan via [`EXPLAIN COST`](sql-ref-syntax-qry-explain.html) or `DataFrame.explain(mode="cost")`.
+- **Runtime statistics**: You can inspect these statistics in the [SQL UI](web-ui.html#sql-tab) under the "Details" section as a query is running. Look for `Statistics(..., isRuntime=true)` in the plan.
+
 ## Optimizing the Join Strategy
 
 ### Automatically Broadcasting Joins
@@ -168,9 +181,7 @@ For more details please refer to the documentation of [Partitioning Hints](sql-r
     <td>10485760 (10 MB)</td>
     <td>
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
-      performing a join. By setting this value to -1, broadcasting can be disabled. Note that currently
-      statistics are only supported for Hive Metastore tables where the command
-      <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.
+      performing a join. By setting this value to -1, broadcasting can be disabled.
     </td>
     <td>1.1.0</td>
   </tr>
