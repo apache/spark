@@ -32,7 +32,7 @@ This error class has the following derived error classes:
 
 ## EXPLICIT
 
-Error occurred due to the mismatch between explicit collations: `<explicitTypes>`
+Error occurred due to the mismatch between explicit collations: `<explicitTypes>`. Decide on a single explicit collation and remove others.
 
 ## IMPLICIT
 
