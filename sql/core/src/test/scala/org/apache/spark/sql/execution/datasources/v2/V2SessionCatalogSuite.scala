@@ -470,20 +470,24 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
   test("alterTable: update column nullability") {
     val catalog = newCatalog()
 
-    val originalSchema = new StructType()
-        .add("id", IntegerType, nullable = false)
-        .add("data", StringType)
-    catalog.createTable(testIdent, originalSchema, emptyTrans, emptyProps)
+    val originalColumns: Array[Column] = Array(
+      Column.create("id", IntegerType, false),
+      Column.create("data", StringType))
+    catalog.createTable(testIdent, originalColumns, emptyTrans, emptyProps)
     val table = catalog.loadTable(testIdent)
 
-    assert(table.schema == originalSchema)
+    assert(table.columns === originalColumns)
 
     catalog.alterTable(testIdent,
       TableChange.updateColumnNullability(Array("id"), true))
     val updated = catalog.loadTable(testIdent)
 
     val expectedSchema = new StructType().add("id", IntegerType).add("data", StringType)
-    assert(updated.schema == expectedSchema)
+    val expectedColumns: Array[Column] = Array(
+      Column.create("id", IntegerType),
+      Column.create("data", StringType)
+    )
+    assert(updated.columns === expectedColumns)
   }
 
   test("alterTable: update missing column fails") {
