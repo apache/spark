@@ -3516,7 +3516,7 @@ object SQLConf {
       "aggregate function to ensure that Aggregate nodes preserve semantic invariant that each" +
       "variable among agg expressions appears either in grouping expressions or belongs to" +
       "and aggregate function.")
-      .version("3.5.2")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 
