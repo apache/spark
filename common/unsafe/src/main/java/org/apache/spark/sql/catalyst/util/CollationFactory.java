@@ -16,10 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import java.text.CharacterIterator;
+import java.text.StringCharacterIterator;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.ToLongFunction;
 
+import com.ibm.icu.text.RuleBasedCollator;
+import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
 import com.ibm.icu.text.Collator;
 
@@ -143,6 +147,20 @@ public final class CollationFactory {
     for (int i = 0; i < collationTable.length; i++) {
       collationNameToIdMap.put(collationTable[i].collationName, i);
     }
+  }
+
+  /**
+   * Auxiliary methods for collation aware string operations.
+   */
+
+  public static StringSearch getStringSearch(
+      final UTF8String left,
+      final UTF8String right,
+      final int collationId) {
+    String pattern = right.toString();
+    CharacterIterator target = new StringCharacterIterator(left.toString());
+    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    return new StringSearch(pattern, target, (RuleBasedCollator) collator);
   }
 
   /**

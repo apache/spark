@@ -24,7 +24,7 @@ import java.util.{HashMap, Locale, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -608,25 +608,6 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
 }
 
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val checkResult = super.checkInputDataTypes()
-    if (checkResult.isFailure) {
-      return checkResult
-    }
-    // Additional check needed for collation support
-    if (!CollationFactory.fetchCollation(collationId).isBinaryCollation
-      && collationId != CollationFactory.LOWERCASE_COLLATION_ID) {
-      throw new SparkException(
-        errorClass = "UNSUPPORTED_COLLATION.FOR_FUNCTION",
-        messageParameters = Map(
-          "functionName" -> "contains",
-          "collationName" -> CollationFactory.fetchCollation(collationId).collationName),
-        cause = null
-      )
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
   override def compare(l: UTF8String, r: UTF8String): Boolean = {
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       l.contains(r)
