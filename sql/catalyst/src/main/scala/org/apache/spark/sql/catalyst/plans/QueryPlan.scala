@@ -600,16 +600,21 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   protected def doCanonicalize(): PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
 
+    val replaced = transformExpressions {
+      case r: RuntimeReplaceable => r.replacement
+    }
+
     val ceIdsRaw = mutable.ArrayBuffer[Long]()
-    transformExpressions {
+    replaced.transformExpressions {
       case c: CommonExpressionDef =>
         ceIdsRaw += c.id
         c
     }
+
     val ceIds = ceIdsRaw.zipWithIndex.map(x => (x._1, x._2.toLong)).toMap
 
     val planCandidate = if (ceIds.size > 0) {
-      val res = transformExpressions {
+      val res = replaced.transformExpressions {
         case d: CommonExpressionDef if ceIds.contains(d.id) =>
           d.copy(id = ceIds(d.id))
         case r: CommonExpressionRef if ceIds.contains(r.id) =>
