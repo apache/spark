@@ -40,9 +40,8 @@ private[connect] object ProtoUtils {
       case (field: FieldDescriptor, string: String)
           if field.getJavaType == FieldDescriptor.JavaType.STRING && !field.isRepeated
             && string != null && !string.isEmpty =>
-        val size = string.length
         val threshold = thresholds.getOrElse(STRING, MAX_STRING_SIZE)
-        if (size > threshold) {
+        if (string.length > threshold) {
           builder.setField(field, truncateString(string, threshold))
         }
 
