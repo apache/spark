@@ -1770,4 +1770,22 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withSQLConf(SQLConf.DEFAULT_CACHE_STORAGE_LEVEL.key -> "DISK") {}
     }
   }
+
+  test("cache_common_expression") {
+    withTempView("data", "the_query") {
+      spark.range(10)
+        .selectExpr("id", "id * 10").toDF("id", "val")
+        .createOrReplaceTempView("data")
+      sql("""create or replace temp view the_query as
+          |select *
+          |from data
+          |where id between 2 and 4""".stripMargin)
+      sql("cache table the_query")
+      val df = sql("SELECT * FROM the_query")
+      checkAnswer(df,
+        Row(2, 20) :: Row(3, 30) :: Row(4, 40) :: Nil)
+      df.explain()
+      assert(getNumInMemoryRelations(df) == 1)
+    }
+  }
 }

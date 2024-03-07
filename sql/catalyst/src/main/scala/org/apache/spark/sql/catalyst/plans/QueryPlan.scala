@@ -600,7 +600,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   protected def doCanonicalize(): PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
     var id = -1
-    mapExpressions {
+
+    val planCandidate = mapExpressions {
       case a: Alias =>
         id += 1
         // As the root of the expression, Alias will always take an arbitrary exprId, we need to
@@ -617,6 +618,26 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
       case other => QueryPlan.normalizeExpressions(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
+
+    // transform down simply to collect common expression ids
+    val ceIdsRaw = mutable.ArrayBuffer[Long]()
+    planCandidate.transformExpressions {
+      case c: CommonExpressionDef =>
+        ceIdsRaw += c.id
+        c
+    }
+    val ceIds = ceIdsRaw.zipWithIndex.map(x => (x._1, x._2.toLong)).toMap
+
+    if (ceIds.size > 0) {
+      planCandidate.transformExpressions {
+        case d: CommonExpressionDef if ceIds.contains(d.id) =>
+          d.copy(id = ceIds(d.id))
+        case r: CommonExpressionRef if ceIds.contains(r.id) =>
+          r.copy(id = ceIds(r.id))
+      }
+    } else {
+      planCandidate
+    }
   }
 
   /**
