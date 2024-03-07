@@ -126,7 +126,6 @@ private[kafka010] class InternalKafkaConsumer(
     val tps = new ju.ArrayList[TopicPartition]()
     tps.add(topicPartition)
     c.assign(tps)
-    logWarning(s"========== Assigning consumer for ${topicPartition.topic()} - ${topicPartition.partition()}")
     c
   }
 

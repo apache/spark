@@ -21,12 +21,12 @@ import java.{util => ju}
 
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
-import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.SparkEnv
 
 
 /**
