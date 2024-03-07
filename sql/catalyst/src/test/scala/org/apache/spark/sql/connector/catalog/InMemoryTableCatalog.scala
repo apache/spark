@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -91,8 +92,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val columns = CatalogV2Util.structTypeToV2Columns(schema)
-    createTable(ident, columns, partitions, properties)
+    throw QueryCompilationErrors.createTableDeprecatedError()
   }
 
   override def createTable(

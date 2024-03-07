@@ -146,8 +146,7 @@ class JDBCTableCatalog extends TableCatalog
       schema: StructType,
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
-    val columns = CatalogV2Util.structTypeToV2Columns(schema)
-    createTable(ident, columns, partitions, properties)
+    throw QueryCompilationErrors.createTableDeprecatedError()
   }
 
   override def createTable(

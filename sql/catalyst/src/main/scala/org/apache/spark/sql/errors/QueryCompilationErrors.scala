@@ -3996,4 +3996,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = e.origin
     )
   }
+
+  private def callDeprecatedMethodError(oldMethod: String, newMethod: String): Throwable = {
+    SparkException.internalError(s"The method `$oldMethod` is deprecated, " +
+      s"please use `$newMethod` instead.")
+  }
+
+  def createTableDeprecatedError(): Throwable = {
+    callDeprecatedMethodError("createTable(..., StructType, ...)",
+      "createTable(..., Array[Column], ...)")
+  }
 }

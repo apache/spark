@@ -248,8 +248,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val columns = CatalogV2Util.structTypeToV2Columns(schema)
-    createTable(ident, columns, partitions, properties)
+    throw QueryCompilationErrors.createTableDeprecatedError()
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
