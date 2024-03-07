@@ -306,11 +306,8 @@ regular Python process unless you are running your driver program in another mac
           276    0.000    0.000    0.002    0.000 <frozen importlib._bootstrap>:147(__enter__)
     ...
 
-Executor Side
-~~~~~~~~~~~~~
-
 Python/Pandas UDF
-^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~
 
 PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
 Python/Pandas UDFs. UDFs with iterators as inputs/outputs are not supported.
