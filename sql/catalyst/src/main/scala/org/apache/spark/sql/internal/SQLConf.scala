@@ -3512,9 +3512,9 @@ object SQLConf {
   val WRAP_EXISTS_IN_AGGREGATE_FUNCTION =
     buildConf("spark.sql.optimizer.wrapExistsInAggregateFunction")
       .internal()
-      .doc("When true, the optimizer will wrap newly introduced `exists` attributes in an" +
-      "aggregate function to ensure that Aggregate nodes preserve semantic invariant that each" +
-      "variable among agg expressions appears either in grouping expressions or belongs to" +
+      .doc("When true, the optimizer will wrap newly introduced `exists` attributes in an " +
+      "aggregate function to ensure that Aggregate nodes preserve semantic invariant that each " +
+      "variable among agg expressions appears either in grouping expressions or belongs to " +
       "and aggregate function.")
       .version("4.0.0")
       .booleanConf
