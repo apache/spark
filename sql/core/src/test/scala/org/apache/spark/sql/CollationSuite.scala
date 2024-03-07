@@ -441,6 +441,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("text writing to parquet with collation enclosed with backticks") {
+    withTempPath{ path =>
+      sql(s"select 'a' COLLATE `UNICODE`").write.parquet(path.getAbsolutePath)
+
+      checkAnswer(
+        spark.read.parquet(path.getAbsolutePath),
+        Row("a"))
+    }
+  }
+
   test("create table with collation") {
     val tableName = "parquet_dummy_tbl"
     val collationName = "UCS_BASIC_LCASE"
