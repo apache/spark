@@ -620,6 +620,30 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("cast of default collated string in IN expression") {
+    val tableName = "t1"
+    withTable(tableName) {
+      spark.sql(
+        s"""
+           | CREATE TABLE $tableName(ucs_basic STRING COLLATE 'UCS_BASIC',
+           | ucs_basic_lcase STRING COLLATE 'UCS_BASIC_LCASE')
+           | USING PARQUET
+           |""".stripMargin)
+      sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
+      sql(s"INSERT INTO $tableName VALUES ('bbb', 'bbb')")
+      sql(s"INSERT INTO $tableName VALUES ('BBB', 'BBB')")
+
+      checkAnswer(sql(s"SELECT * FROM $tableName " +
+        s"WHERE ucs_basic_lcase IN " +
+        s"('aaa' COLLATE 'UCS_BASIC_LCASE', 'bbb' collate 'UCS_BASIC_LCASE')"),
+        Seq(Row("aaa", "aaa"), Row("AAA", "AAA"), Row("bbb", "bbb"), Row("BBB", "BBB")))
+      checkAnswer(sql(s"SELECT * FROM $tableName " +
+        s"WHERE ucs_basic_lcase IN ('aaa' COLLATE 'UCS_BASIC_LCASE', 'bbb')"),
+        Seq(Row("aaa", "aaa"), Row("AAA", "AAA"), Row("bbb", "bbb"), Row("BBB", "BBB")))
+    }
+  }
+
   test("create v2 table with collation column") {
     val tableName = "testcat.table_name"
     val collationName = "UCS_BASIC_LCASE"
