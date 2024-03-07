@@ -1182,7 +1182,7 @@ class SQL(LogicalPlan):
             elif not isinstance(args, List):
                 raise PySparkTypeError(
                     error_class="INVALID_TYPE",
-                    message_parameters={"arg_name": "args", "arg_type": str(type(args))},
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
 
         self._query = query
