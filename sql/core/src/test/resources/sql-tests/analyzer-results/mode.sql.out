@@ -124,7 +124,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`mode`",
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {

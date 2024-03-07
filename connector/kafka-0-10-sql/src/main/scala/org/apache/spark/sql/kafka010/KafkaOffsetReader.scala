@@ -65,7 +65,7 @@ private[kafka010] trait KafkaOffsetReader {
    */
   def fetchSpecificOffsets(
       partitionOffsets: Map[TopicPartition, Long],
-      reportDataLoss: String => Unit): KafkaSourceOffset
+      reportDataLoss: (String, () => Throwable) => Unit): KafkaSourceOffset
 
   /**
    * Resolves the specific offsets based on timestamp per topic-partition.
@@ -150,7 +150,7 @@ private[kafka010] trait KafkaOffsetReader {
   def getOffsetRangesFromResolvedOffsets(
       fromPartitionOffsets: PartitionOffsetMap,
       untilPartitionOffsets: PartitionOffsetMap,
-      reportDataLoss: String => Unit): Seq[KafkaOffsetRange]
+      reportDataLoss: (String, () => Throwable) => Unit): Seq[KafkaOffsetRange]
 
   protected def getSortedExecutorList: Array[ExecutorDescription] = {
     def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {

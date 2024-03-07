@@ -145,7 +145,7 @@ object SparkConnectServerUtils {
       consoleOut.flush()
       consoleOut.close()
       if (!sparkConnect.waitFor(2, TimeUnit.SECONDS)) {
-        sparkConnect.destroyForcibly()
+        sparkConnect.destroyForcibly().waitFor(2, TimeUnit.SECONDS)
       }
       val code = sparkConnect.exitValue()
       debug(s"Spark Connect Server is stopped with exit code: $code")

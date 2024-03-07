@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT, YearMonthIntervalType => YM}
@@ -131,7 +132,12 @@ trait SparkIntervalUtils {
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
     def throwIAE(msg: String, e: Exception = null) = {
-      throw new IllegalArgumentException(s"Error parsing '$input' to interval, $msg", e)
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3255",
+        messageParameters = Map(
+          "input" -> Option(input).map(_.toString).getOrElse("null"),
+          "msg" -> msg),
+        cause = e)
     }
 
     if (input == null) {

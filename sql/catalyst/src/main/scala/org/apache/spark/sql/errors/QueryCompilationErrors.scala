@@ -266,11 +266,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expression" -> toSQLExpr(trimmedNestedGenerator)))
   }
 
-  def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
+  def moreThanOneGeneratorError(generators: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
       messageParameters = Map(
-        "clause" -> clause,
         "num" -> generators.size.toString,
         "generators" -> generators.map(toSQLExpr).mkString(", ")))
   }
@@ -295,6 +294,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionName" -> toSQLId(functionName),
         "argument" -> toSQLId(argumentName))
     )
+  }
+
+  def collationNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.COLLATION",
+      messageParameters = Map.empty)
   }
 
   def unresolvedUsingColForJoinError(
@@ -1740,10 +1745,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("outputPath" -> outputPath.toString))
   }
 
-  def cannotUseDataTypeForPartitionColumnError(field: StructField): Throwable = {
+  def invalidPartitionColumnDataTypeError(field: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1153",
-      messageParameters = Map("field" -> field.dataType.toString))
+      errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+      messageParameters = Map("type" -> toSQLType(field.dataType)))
   }
 
   def cannotUseAllColumnsForPartitionColumnsError(): Throwable = {
@@ -1908,8 +1913,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1175",
-      messageParameters = Map("dataType" -> field.dataType.catalogString))
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" ->
+        s"Cannot convert Spark data type ${toSQLType(field.dataType)} to any Parquet type."))
   }
 
   def incompatibleViewSchemaChangeError(
@@ -1965,7 +1971,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNEXPECTED_INPUT_TYPE",
       messageParameters = Map(
-        "paramIndex" -> paramIndex.toString,
+        "paramIndex" -> ordinalNumber(paramIndex - 1),
         "functionName" -> toSQLId(functionName),
         "requiredType" -> toSQLType(dataType),
         "inputSql" -> toSQLExpr(expression),
@@ -2637,7 +2643,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def alterTableChangeColumnNotSupportedForColumnTypeError(
       tableName: String,
       originColumn: StructField,
-      newColumn: StructField): Throwable = {
+      newColumn: StructField,
+      origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
       messageParameters = Map(
@@ -2645,7 +2652,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "originName" -> toSQLId(originColumn.name),
         "originType" -> toSQLType(originColumn.dataType),
         "newName" -> toSQLId(newColumn.name),
-        "newType"-> toSQLType(newColumn.dataType)))
+        "newType"-> toSQLType(newColumn.dataType)),
+      origin = origin
+    )
   }
 
   def cannotAlterPartitionColumn(

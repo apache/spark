@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.io.Serializable
 
 import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.sql.errors.ExecutionErrors
 
 /**
  * Represents the arbitrary stateful logic that needs to be provided by the user to perform
@@ -30,16 +31,17 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
 
   /**
+   * Handle to the stateful processor that provides access to the state store and other
+   * stateful processing related APIs.
+   */
+  private var statefulProcessorHandle: StatefulProcessorHandle = null
+
+  /**
    * Function that will be invoked as the first method that allows for users to
    * initialize all their state variables and perform other init actions before handling data.
-   * @param handle - reference to the statefulProcessorHandle that the user can use to perform
-   *               actions like creating state variables, accessing queryInfo etc. Please refer to
-   *               [[StatefulProcessorHandle]] for more details.
    * @param outputMode - output mode for the stateful processor
    */
-  def init(
-      handle: StatefulProcessorHandle,
-      outputMode: OutputMode): Unit
+  def init(outputMode: OutputMode): Unit
 
   /**
    * Function that will allow users to interact with input data rows along with the grouping key
@@ -59,5 +61,27 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
    * Function called as the last method that allows for users to perform
    * any cleanup or teardown operations.
    */
-  def close (): Unit
+  def close (): Unit = {}
+
+  /**
+   * Function to set the stateful processor handle that will be used to interact with the state
+   * store and other stateful processor related operations.
+   *
+   * @param handle - instance of StatefulProcessorHandle
+   */
+  final def setHandle(handle: StatefulProcessorHandle): Unit = {
+    statefulProcessorHandle = handle
+  }
+
+  /**
+   * Function to get the stateful processor handle that will be used to interact with the state
+   *
+   * @return handle - instance of StatefulProcessorHandle
+   */
+  final def getHandle: StatefulProcessorHandle = {
+    if (statefulProcessorHandle == null) {
+      throw ExecutionErrors.stateStoreHandleNotInitialized()
+    }
+    statefulProcessorHandle
+  }
 }

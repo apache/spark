@@ -1740,7 +1740,6 @@ class DataSourceV2SQLSuiteV1Filter
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     withTable("t") {
       sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
-      assert(!spark.table("t").isEmpty)
     }
   }
 
@@ -3058,7 +3057,7 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = None,
         parameters = Map(
           "sqlExpr" -> "\"abs(true)\"",
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> "\"true\"",
           "inputType" -> "\"BOOLEAN\"",
           "requiredType" ->

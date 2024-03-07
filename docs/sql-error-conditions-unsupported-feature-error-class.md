@@ -58,6 +58,10 @@ The ANALYZE TABLE command does not support views.
 
 Catalog `<catalogName>` does not support `<operation>`.
 
+## COLLATION
+
+Collation is not yet supported.
+
 ## COMBINATION_QUERY_RESULT_CLAUSES
 
 Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY.

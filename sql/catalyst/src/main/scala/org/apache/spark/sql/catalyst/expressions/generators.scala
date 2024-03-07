@@ -172,7 +172,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(IntegerType),
           "inputSql" -> toSQLExpr(children.head),
           "inputType" -> toSQLType(children.head.dataType))
@@ -342,7 +342,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(TypeCollection(ArrayType, MapType)),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType))
@@ -557,7 +557,7 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType("ARRAY<STRUCT>"),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType))

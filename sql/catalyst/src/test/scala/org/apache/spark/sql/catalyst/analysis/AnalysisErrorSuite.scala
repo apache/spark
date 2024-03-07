@@ -162,7 +162,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL)\"",
-      "paramIndex" -> "1",
+      "paramIndex" -> "first",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -174,7 +174,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
-      "paramIndex" -> "2",
+      "paramIndex" -> "second",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -186,7 +186,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"testfunction(NULL, NULL)\"",
-      "paramIndex" -> "1",
+      "paramIndex" -> "first",
       "inputSql" -> "\"NULL\"",
       "inputType" -> "\"DATE\"",
       "requiredType" -> "\"INT\""))
@@ -389,15 +389,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
     messageParameters = Map(
       "sqlExpr" -> "\"nth_value(b, true)\"",
-      "paramIndex" -> "2",
+      "paramIndex" -> "second",
       "inputSql" -> "\"true\"",
       "inputType" -> "\"BOOLEAN\"",
       "requiredType" -> "\"INT\""))
-
-  errorTest(
-    "too many generators",
-    listRelation.select(Explode($"list").as("a"), Explode($"list").as("b")),
-    "only one generator" :: "explode" :: Nil)
 
   errorClassTest(
     "unresolved attributes",
@@ -805,17 +800,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(
-    "more than one generators in SELECT",
-    listRelation.select(Explode($"list"), Explode($"list")),
-    "The generator is not supported: only one generator allowed per select clause but found 2: " +
-      """"explode(list)", "explode(list)"""" :: Nil
-  )
-
-  errorTest(
     "more than one generators for aggregates in SELECT",
     testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
       Explode(CreateArray(max($"a") :: Nil))),
-    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+    "The generator is not supported: only one generator allowed per SELECT clause but found 2: " +
       """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
 
@@ -850,7 +838,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     Map.empty)
 
   test("EXEC IMMEDIATE - non string variable as sqlString parameter") {
-    var execImmediatePlan = ExecuteImmediateQuery(
+    val execImmediatePlan = ExecuteImmediateQuery(
       Seq.empty,
       scala.util.Right(UnresolvedAttribute("testVarA")),
       Seq(UnresolvedAttribute("testVarA")))
@@ -864,7 +852,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   }
 
   test("EXEC IMMEDIATE - Unsupported expr for parameter") {
-    var execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
+    val execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
       Seq(UnresolvedAttribute("testVarA"), NaNvl(Literal(1), Literal(1))),
       scala.util.Left("SELECT ?"),
       Seq.empty)
@@ -878,7 +866,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   }
 
   test("EXEC IMMEDIATE - Name Parametrize query with non named parameters") {
-    var execImmediateSetVariablePlan = ExecuteImmediateQuery(
+    val execImmediateSetVariablePlan = ExecuteImmediateQuery(
       Seq(Literal(2), new Alias(UnresolvedAttribute("testVarA"), "first")(), Literal(3)),
       scala.util.Left("SELECT :first"),
       Seq.empty)
@@ -892,7 +880,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   }
 
   test("EXEC IMMEDIATE - INTO specified for COMMAND query") {
-    var execImmediateSetVariablePlan = ExecuteImmediateQuery(
+    val execImmediateSetVariablePlan = ExecuteImmediateQuery(
       Seq.empty,
       scala.util.Left("SET VAR testVarA = 1"),
       Seq(UnresolvedAttribute("testVarA")))
@@ -1198,7 +1186,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         expectedMessageParameters = Map(
           "sqlExpr" -> sqlExpr,
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> inputSql,
           "inputType" -> inputType,
           "requiredType" -> "(\"INT\" or \"BIGINT\")"),

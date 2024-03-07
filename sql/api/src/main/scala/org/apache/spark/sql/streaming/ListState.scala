@@ -14,22 +14,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.streaming
 
-package org.apache.spark.sql.connect.plugin
+import org.apache.spark.annotation.{Evolving, Experimental}
 
-import com.google.protobuf
-
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-
+@Experimental
+@Evolving
 /**
- * Behavior trait for supporting extension mechanisms for the Spark Connect planner.
- *
- * Classes implementing the trait must be trivially constructable and should not rely on internal
- * state. Every registered extension will be passed the Any instance. If the plugin supports
- * handling this type it is responsible of constructing the logical expression from this object
- * and if necessary traverse it's children.
+ * Interface used for arbitrary stateful operations with the v2 API to capture
+ * list value state.
  */
-trait ExpressionPlugin {
-  def transform(relation: protobuf.Any, planner: SparkConnectPlanner): Option[Expression]
+private[sql] trait ListState[S] extends Serializable {
+
+  /** Whether state exists or not. */
+  def exists(): Boolean
+
+  /** Get the state value. An empty iterator is returned if no value exists. */
+  def get(): Iterator[S]
+
+  /** Update the value of the list. */
+  def put(newState: Array[S]): Unit
+
+  /** Append an entry to the list */
+  def appendValue(newState: S): Unit
+
+  /** Append an entire list to the existing value */
+  def appendList(newState: Array[S]): Unit
+
+  /** Removes this state for the given grouping key. */
+  def clear(): Unit
 }

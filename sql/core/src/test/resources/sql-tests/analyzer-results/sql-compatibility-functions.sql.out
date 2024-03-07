@@ -116,3 +116,10 @@ Aggregate [nvl(st#x.col1, value)], [nvl(st#x.col1, value) AS nvl(st.col1, value)
       +- Project [cast(id#x as int) AS id#x, cast(st#x as struct<col1:string,col2:string>) AS st#x]
          +- SubqueryAlias T
             +- LocalRelation [id#x, st#x]
+
+
+-- !query
+SELECT nullif(SUM(id), 0) from range(5)
+-- !query analysis
+Aggregate [nullif(sum(id#xL), 0) AS nullif(sum(id), 0)#xL]
++- Range (0, 5, step=1, splits=None)
