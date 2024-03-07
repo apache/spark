@@ -473,6 +473,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+      logWarning("Converting to micro batch stream")
       val caseInsensitiveOptions = CaseInsensitiveMap(options.asScala.toMap)
       validateStreamOptions(caseInsensitiveOptions)
       // Each running query should use its own group id. Otherwise, the query may be only assigned
@@ -504,6 +505,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+      logWarning("Converting to continuous stream")
       val caseInsensitiveOptions = CaseInsensitiveMap(options.asScala.toMap)
       validateStreamOptions(caseInsensitiveOptions)
       // Each running query should use its own group id. Otherwise, the query may be only assigned

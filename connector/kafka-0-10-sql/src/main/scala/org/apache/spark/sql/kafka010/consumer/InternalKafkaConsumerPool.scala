@@ -76,6 +76,7 @@ private[consumer] class InternalKafkaConsumerPool(
    */
   def borrowObject(key: CacheKey, kafkaParams: ju.Map[String, Object]): InternalKafkaConsumer = {
     updateKafkaParamForKey(key, kafkaParams)
+    logWarning(s"Borrowing kafka consumer for key:  ${key.groupId} ${key.topicPartition.topic()}, ${key.topicPartition.partition()}")
 
     if (size >= poolConfig.softMaxSize) {
       logWarning("Pool exceeds its soft max size, cleaning up idle objects...")

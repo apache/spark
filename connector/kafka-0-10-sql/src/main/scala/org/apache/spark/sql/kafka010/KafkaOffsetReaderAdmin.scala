@@ -109,16 +109,15 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
     partitionLocationAssigner.getLocationPreferences(partitionDescrs, executors)
       .map {
-        case (descr, executors) => (descr.toTopicPartition -> executors.map(_.id))
+        case (descr, executors) => (descr.toTopicPartition -> executors.map(_.host))
       }
   }
 
   /**
    * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
    */
-  private def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean = {
+  private def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean = 
     minPartitions.map(_ > numTopicPartitions).getOrElse(false)
-  }
 
   override def toString(): String = consumerStrategy.toString
 
@@ -436,7 +435,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       val execs = getSortedExecutorList
       rangeCalculator.getLocatedRanges(
         offsetRangesBase,
-        execs.map(_.id),
+        execs.map(_.host),
         userSpecifiedLocationPreferences(execs))
     }
   }
@@ -490,7 +489,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
       KafkaOffsetRange(tp, fromOffset, untilOffset, preferredLoc = None)
     }
     val execs = getSortedExecutorList
-    rangeCalculator.getRanges(ranges, execs.map(_.id), userSpecifiedLocationPreferences(execs))
+    rangeCalculator.getRanges(ranges, execs.map(_.host), userSpecifiedLocationPreferences(execs))
   }
 
   private def partitionsAssignedToAdmin(

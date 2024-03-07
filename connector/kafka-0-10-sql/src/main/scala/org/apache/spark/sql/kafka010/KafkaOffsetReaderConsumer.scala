@@ -118,7 +118,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
     partitionLocationAssigner.getLocationPreferences(partitionDescrs, executors)
       .map {
-        case (descr, executors) => (descr.toTopicPartition -> executors.map(_.id))
+        case (descr, executors) => (descr.toTopicPartition -> executors.map(_.host))
       }
   }
 
@@ -493,7 +493,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
       val execs = getSortedExecutorList
       rangeCalculator.getLocatedRanges(
         offsetRangesBase,
-        execs.map(_.id),
+        execs.map(_.host),
         userSpecifiedLocationPreferences(execs))
     }
   }

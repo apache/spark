@@ -328,7 +328,7 @@ private[kafka010] class KafkaSource(
         .map(converter.toInternalRowWithoutHeaders)
     }
 
-    logInfo("GetBatch generating RDD of offset range: " +
+    logWarning("GetBatch generating RDD of offset range: " +
       offsetRanges.sortBy(_.topicPartition.toString).mkString(", "))
 
     sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema, isStreaming = true)
