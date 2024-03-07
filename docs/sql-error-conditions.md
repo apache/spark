@@ -1254,7 +1254,7 @@ For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-condition
 
 [SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Failed to convert the JSON string '`<other>`' to a data type. Please enter a valid data type.
+Failed to convert the JSON string '`<invalidType>`' to a data type. Please enter a valid data type.
 
 ### INVALID_JSON_ROOT_FIELD
 

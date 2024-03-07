@@ -2117,7 +2117,7 @@
   },
   "INVALID_JSON_DATA_TYPE" : {
     "message" : [
-      "Failed to convert the JSON string '<other>' to a data type. Please enter a valid data type."
+      "Failed to convert the JSON string '<invalidType>' to a data type. Please enter a valid data type."
     ],
     "sqlState" : "2203G"
   },

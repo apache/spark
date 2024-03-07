@@ -196,7 +196,7 @@ object DataType {
         other,
         throw new SparkIllegalArgumentException(
           errorClass = "INVALID_JSON_DATA_TYPE",
-          messageParameters = Map("other" -> name)))
+          messageParameters = Map("invalidType" -> name)))
     }
   }
 
@@ -248,7 +248,7 @@ object DataType {
 
     case other => throw new SparkIllegalArgumentException(
       errorClass = "INVALID_JSON_DATA_TYPE",
-      messageParameters = Map("other" -> compact(render(other))))
+      messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
   private def parseStructField(json: JValue): StructField = json match {
