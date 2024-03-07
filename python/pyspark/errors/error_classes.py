@@ -199,6 +199,11 @@ ERROR_CLASSES_JSON = '''
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_CREATE_ERROR": {
+    "message": [
+      "Failed to create python data source instance, error: <error>."
+    ]
+  },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
     "message": [
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
@@ -207,11 +212,6 @@ ERROR_CLASSES_JSON = '''
   "DATA_SOURCE_RETURN_SCHEMA_MISMATCH": {
     "message": [
       "Return schema mismatch in the result from 'read' method. Expected: <expected> columns, Found: <actual> columns. Make sure the returned values match the required output schema."
-    ]
-  },
-  "DATA_SOURCE_CREATE_ERROR": {
-    "message": [
-      "Failed to create python data source instance, error: <error>."
     ]
   },
   "DATA_SOURCE_TYPE_MISMATCH": {
