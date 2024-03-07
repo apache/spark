@@ -178,6 +178,7 @@ def _bin_op(
         return Column(njc)
 
     _.__doc__ = doc
+    _.__name__ = name
     return _
 
 
