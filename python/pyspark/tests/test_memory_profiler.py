@@ -608,7 +608,7 @@ class MemoryProfiler2TestsMixin:
             _do_computation(self.spark)
 
         self.assertEqual(3, len(self.profile_results), str(list(self.profile_results)))
-        some_id = next(iter(self.profile_results[0]))
+        some_id = next(iter(self.profile_results))
 
         # clear a specific memory profile
         self.spark.profile.clear(some_id, type="memory")

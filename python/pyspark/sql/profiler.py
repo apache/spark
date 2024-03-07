@@ -239,19 +239,15 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    perf, mem, *rest = self._profile_results[id]
-                    self._profile_results[id] = (None, mem, *rest)
+                    perf, mem, *_ = self._profile_results[id]  # type: ignore
+                    self._profile_results[id] = (None, mem, *_)
                     if mem is None:
                         self._profile_results.pop(id, None)
             else:
-                ids_to_remove = []
-                for id, (perf, mem, *rest) in list(self._profile_results.items()):
-                    self._profile_results[id] = (None, mem, *rest)
+                for id, (perf, mem, *_) in list(self._profile_results.items()):
+                    self._profile_results[id] = (None, mem, *_)
                     if mem is None:
-                        ids_to_remove.append(id)
-
-                for id in ids_to_remove:
-                    self._profile_results.pop(id, None)
+                        self._profile_results.pop(id, None)
 
     def clear_memory_profiles(self, id: Optional[int] = None) -> None:
         """
@@ -268,19 +264,15 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    perf, mem, *rest = self._profile_results[id]
-                    self._profile_results[id] = (perf, None, *rest)
+                    perf, mem, *_ = self._profile_results[id]  # type: ignore
+                    self._profile_results[id] = (perf, None, *_)
                     if perf is None:
                         self._profile_results.pop(id, None)
             else:
-                ids_to_remove = []
-                for id, (perf, mem, *rest) in list(self._profile_results.items()):
-                    self._profile_results[id] = (perf, None, *rest)
+                for id, (perf, mem, *_) in list(self._profile_results.items()):
+                    self._profile_results[id] = (perf, None, *_)
                     if perf is None:
-                        ids_to_remove.append(id)
-
-                for id in ids_to_remove:
-                    self._profile_results.pop(id, None)
+                        self._profile_results.pop(id, None)
 
 
 class AccumulatorProfilerCollector(ProfilerCollector):
