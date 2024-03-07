@@ -189,7 +189,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     withSQLConf(
       SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      assertAmbiguousSelfJoin(df1.join(df2).select(df2("id")))
+      val proj1 = df1.join(df2).select(df2("id")).queryExecution.analyzed.asInstanceOf[Project]
+      val join1 = proj1.child.asInstanceOf[Join]
+      assert(proj1.projectList(0).references.subsetOf(join1.right.outputSet))
     }
   }
 
@@ -229,7 +231,11 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       assertAmbiguousSelfJoin(df1.join(df2).join(df3, df2("id") < df3("id")))
-      assertAmbiguousSelfJoin(df1.join(df4).join(df2).select(df2("id")))
+
+      val proj1 = df1.join(df4).join(df2).select(df2("id")).queryExecution.analyzed.
+        asInstanceOf[Project]
+      val join1 = proj1.child.asInstanceOf[Join]
+      assert(proj1.projectList(0).references.subsetOf(join1.right.outputSet))
     }
   }
 
@@ -261,8 +267,17 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       TestData(2, "personnel"),
       TestData(3, "develop")).toDS()
     val emp3 = emp1.join(emp2, emp1("key") === emp2("key")).select(emp1("*"))
-    assertAmbiguousSelfJoin(emp1.join(emp3, emp1.col("key") === emp3.col("key"),
-      "left_outer").select(emp1.col("*"), emp3.col("key").as("e2")))
+
+    assertCorrectResolution(emp1.join(emp3, emp1.col("key") === emp3.col("key")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+
+    val proj1 = emp1.join(emp3, emp1.col("key") === emp3.col("key"),
+      "left_outer").select(emp1.col("*"), emp3.col("key").as("e2")).
+      queryExecution.analyzed.asInstanceOf[Project]
+    val join1 = proj1.child.asInstanceOf[Join]
+    assert(proj1.projectList(0).references.subsetOf(join1.left.outputSet))
+    assert(proj1.projectList(1).references.subsetOf(join1.left.outputSet))
+    assert(proj1.projectList(2).references.subsetOf(join1.right.outputSet))
   }
 
   test("df.show() should also not change dataset_id of LogicalPlan") {
@@ -554,7 +569,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Row(1, 1) :: Nil)
   }
 
-  test("SPARK-47217. deduplication in nested joins") {
+  test("SPARK-47217. deduplication in nested joins with join attribute aliased") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((1, 2)).toDF("aa", "bb")
     val df1Joindf2 = df1.join(df2, df1("a") === df2("aa")).select(df1("a").as("aaa"),
@@ -573,6 +588,30 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assert(proj1.projectList(1).references.subsetOf(join1.right.outputSet))
 
     val proj2 = df1.join(df1Joindf2, df1Joindf2("aaa") === df1("a")).select(df1Joindf2("aa"),
+      df1("a")).queryExecution.analyzed.asInstanceOf[Project]
+    val join2 = proj2.child.asInstanceOf[Join]
+    assert(proj2.projectList(0).references.subsetOf(join2.right.outputSet))
+    assert(proj2.projectList(1).references.subsetOf(join2.left.outputSet))
+  }
+
+  test("SPARK-47217. deduplication in nested joins without join attribute aliased") {
+    val df1 = Seq((1, 2)).toDF("a", "b")
+    val df2 = Seq((1, 2)).toDF("aa", "bb")
+    val df1Joindf2 = df1.join(df2, df1("a") === df2("aa")).select(df1("a"), df2("aa"), df1("b"))
+
+    assertCorrectResolution(df1Joindf2.join(df1, df1Joindf2("a") === df1("a")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
+
+    assertCorrectResolution(df1.join(df1Joindf2, df1Joindf2("a") === df1("a")),
+      Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
+
+    val proj1 = df1Joindf2.join(df1, df1Joindf2("a") === df1("a")).select(df1Joindf2("a"),
+      df1("a")).queryExecution.analyzed.asInstanceOf[Project]
+    val join1 = proj1.child.asInstanceOf[Join]
+    assert(proj1.projectList(0).references.subsetOf(join1.left.outputSet))
+    assert(proj1.projectList(1).references.subsetOf(join1.right.outputSet))
+
+    val proj2 = df1.join(df1Joindf2, df1Joindf2("a") === df1("a")).select(df1Joindf2("a"),
       df1("a")).queryExecution.analyzed.asInstanceOf[Project]
     val join2 = proj2.child.asInstanceOf[Join]
     assert(proj2.projectList(0).references.subsetOf(join2.right.outputSet))

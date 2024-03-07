@@ -38,6 +38,7 @@ import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.sql.Dataset.DATASET_ID_KEY
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -1151,17 +1152,9 @@ class Dataset[T] private[sql](
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
 
-    val plan = try {
-      withPlan(
-        Join(logicalPlan, right.logicalPlan,
-          JoinType(joinType), joinExprs.map(_.expr), JoinHint.NONE))
-        .queryExecution.analyzed.asInstanceOf[Join]
-    } catch {
-      case ae: AnalysisException if ae.message.contains("ambiguous") =>
-        // attempt to resolve ambiguity
-        tryAmbiguityResolution(right, joinExprs, joinType)
-    }
-
+    val plan = withPlan(
+      tryAmbiguityResolution(right, joinExprs, joinType)
+    ).queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
     if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
@@ -1199,15 +1192,13 @@ class Dataset[T] private[sql](
         if (!inputSet.contains(attr) ||
           (planPart1.left.outputSet.contains(attr) && !leftTagIdMap.contains(attribTagId)) ||
           (planPart1.right.outputSet.contains(attr) && !rightTagIdMap.contains(attribTagId))) {
-          UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
+          UnresolvedAttributeWithTag(attr, attribTagId)
         } else {
           attr
         }
     })
-    withPlan(
-      Join(planPart1.left, planPart1.right,
-        JoinType(joinType), joinExprsRectified, JoinHint.NONE))
-      .queryExecution.analyzed.asInstanceOf[Join]
+
+    Join(planPart1.left, planPart1.right, JoinType(joinType), joinExprsRectified, JoinHint.NONE)
   }
 
   /**
@@ -1624,11 +1615,25 @@ class Dataset[T] private[sql](
     val inputSet = logicalPlan.outputSet
     val rectifiedNamedExprs = namedExprs.map(ne => ne match {
 
-      case al: Alias if !al.references.subsetOf(inputSet) &&
+      case al: Alias if (!al.references.subsetOf(inputSet) || al.references.exists(attr =>
+        attr.metadata.contains(DATASET_ID_KEY) && attr.metadata.getLong(DATASET_ID_KEY) !=
+          inputSet.find(_.canonicalized == attr.canonicalized).map(x =>
+            if (x.metadata.contains(DATASET_ID_KEY)) {
+              x.metadata.getLong(DATASET_ID_KEY)
+            } else {
+              -1
+          }).get)) &&
         al.nonInheritableMetadataKeys.contains(Dataset.DATASET_ID_KEY) =>
         val unresolvedExpr = al.child.transformUp {
-          case attr: AttributeReference if !inputSet.contains(attr) &&
-            attr.metadata.contains(Dataset.DATASET_ID_KEY) =>
+          case attr: AttributeReference if attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
+            (!inputSet.contains(attr) || attr.metadata.getLong(DATASET_ID_KEY) !=
+              inputSet.find(_.canonicalized == attr.canonicalized).map(x =>
+                if (x.metadata.contains(DATASET_ID_KEY)) {
+                  x.metadata.getLong(DATASET_ID_KEY)
+                } else {
+                  -1
+                }).get)
+             =>
             UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
         }
         val newAl = al.copy(child = unresolvedExpr, name = al.name)(exprId = al.exprId,
@@ -1637,8 +1642,15 @@ class Dataset[T] private[sql](
         newAl.copyTagsFrom(al)
         newAl
 
-      case attr: Attribute if !inputSet.contains(attr) &&
-        attr.metadata.contains(Dataset.DATASET_ID_KEY) =>
+      case attr: Attribute if attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
+        (!inputSet.contains(attr) || attr.metadata.getLong(DATASET_ID_KEY) !=
+          inputSet.find(_.canonicalized == attr.canonicalized).map(x =>
+            if (x.metadata.contains(DATASET_ID_KEY)) {
+              x.metadata.getLong(DATASET_ID_KEY)
+            } else {
+              -1
+            }).get)
+         =>
         UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
 
       case _ => ne
