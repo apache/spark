@@ -51,9 +51,10 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
   private val valueProjection = UnsafeProjection.create(valueSchema)
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    runPutBenchmark()
-    runDeleteBenchmark()
-    runEvictBenchmark()
+  //  runPutBenchmark()
+    runMergeBenchmark()
+ //   runDeleteBenchmark()
+ //   runEvictBenchmark()
   }
 
   final def skip(benchmarkName: String)(func: => Any): Unit = {
@@ -127,6 +128,79 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
         }
 
         inMemoryProvider.close()
+        rocksDBProvider.close()
+        rocksDBWithNoTrackProvider.close()
+      }
+    }
+  }
+
+  private def runMergeBenchmark(): Unit = {
+    def registerMergeBenchmarkCase(
+        benchmark: Benchmark,
+        testName: String,
+        provider: StateStoreProvider,
+        version: Long,
+        rows: Seq[(UnsafeRow, Seq[UnsafeRow])]): Unit = {
+      benchmark.addTimerCase(testName) { timer =>
+        val store = provider.getStore(version)
+
+        timer.startTiming()
+        mergeRows(store, rows)
+        timer.stopTiming()
+
+        store.abort()
+      }
+    }
+
+    runBenchmark("merge rows") {
+      val numOfRows = Seq(1000)
+      val numValuesPerKey = 10
+      val overwriteRates = Seq(100, 50, 10, 0)
+
+      numOfRows.foreach { numOfRow =>
+        val testData = constructRandomizedTestDataWithMultipleValues(numOfRow,
+          (1 to numOfRow).map(_ * 1000L).toList, numValuesPerKey, 0)
+
+        val rocksDBProvider = newRocksDBStateProvider(useColumnFamilies = true,
+          multipleValuesPerKey = true,
+          trackTotalNumberOfRows = true)
+        val rocksDBWithNoTrackProvider = newRocksDBStateProvider(useColumnFamilies = true,
+          multipleValuesPerKey = true,
+          trackTotalNumberOfRows = false)
+
+        val committedRocksDBVersion = loadInitialDataWithMultipleValues(rocksDBProvider, testData)
+        val committedRocksDBWithNoTrackVersion = loadInitialDataWithMultipleValues(
+          rocksDBWithNoTrackProvider, testData)
+
+        overwriteRates.foreach { overwriteRate =>
+          val numOfRowsToOverwrite = numOfRow * overwriteRate / 100
+
+          val numOfNewRows = numOfRow - numOfRowsToOverwrite
+          val newRows = if (numOfNewRows > 0) {
+            constructRandomizedTestDataWithMultipleValues(numOfNewRows,
+              (1 to numOfNewRows).map(_ * 1000L).toList, numValuesPerKey, 0)
+          } else {
+            Seq.empty[(UnsafeRow, Seq[UnsafeRow])]
+          }
+          val existingRows = if (numOfRowsToOverwrite > 0) {
+            Random.shuffle(testData).take(numOfRowsToOverwrite)
+          } else {
+            Seq.empty[(UnsafeRow, Seq[UnsafeRow])]
+          }
+          val rowsToPut = Random.shuffle(newRows ++ existingRows)
+
+          val benchmark = new Benchmark(s"merging $numOfRow rows " +
+            s"($numOfRowsToOverwrite rows to overwrite - rate $overwriteRate)",
+            numOfRow, minNumIters = 1000, output = output)
+
+          registerMergeBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: true)",
+            rocksDBProvider, committedRocksDBVersion, rowsToPut)
+          registerMergeBenchmarkCase(benchmark, "RocksDB (trackTotalNumberOfRows: false)",
+            rocksDBWithNoTrackProvider, committedRocksDBWithNoTrackVersion, rowsToPut)
+
+          benchmark.run()
+        }
+
         rocksDBProvider.close()
         rocksDBWithNoTrackProvider.close()
       }
@@ -288,11 +362,33 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     store.commit()
   }
 
+  private def loadInitialDataWithMultipleValues(
+      provider: StateStoreProvider,
+      data: Seq[(UnsafeRow, Seq[UnsafeRow])]): Long = {
+    val store = provider.getStore(0)
+    mergeRows(store, data)
+    store.commit()
+  }
+
   private def updateRows(
       store: StateStore,
       rows: Seq[(UnsafeRow, UnsafeRow)]): Unit = {
     rows.foreach { case (key, value) =>
       store.put(key, value)
+    }
+  }
+
+  private def mergeRows(
+      store: StateStore,
+      rows: Seq[(UnsafeRow, Seq[UnsafeRow])]): Unit = {
+    rows.foreach { case (key, values) =>
+      values.zipWithIndex.foreach { case (value, index) =>
+        if (index == 0) {
+          store.put(key, value)
+        } else {
+          store.merge(key, value)
+        }
+      }
     }
   }
 
@@ -341,6 +437,32 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def constructRandomizedTestDataWithMultipleValues(
+      numRows: Int,
+      timestamps: List[Long],
+      numValues: Int,
+      minIdx: Int = 0): Seq[(UnsafeRow, Seq[UnsafeRow])] = {
+    assert(numRows >= timestamps.length)
+    assert(numRows % timestamps.length == 0)
+
+    (1 to numRows).map { idx =>
+      val keyRow = new GenericInternalRow(2)
+      keyRow.setInt(0, Random.nextInt(Int.MaxValue))
+      keyRow.setLong(1, timestamps((minIdx + idx) % timestamps.length)) // microseconds
+
+      val valRows: Seq[UnsafeRow] = (1 to numValues).map { valueIdx =>
+        val valueRow = new GenericInternalRow(1)
+        valueRow.setInt(0, valueIdx + Random.nextInt(Int.MaxValue))
+        val valueUnsafeRow = valueProjection(valueRow).copy()
+        valueUnsafeRow
+      }.toSeq
+
+      val keyUnsafeRow = keyProjection(keyRow).copy()
+
+      (keyUnsafeRow, valRows)
+    }
+  }
+
   private def newHDFSBackedStateStoreProvider(): StateStoreProvider = {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new HDFSBackedStateStoreProvider()
@@ -363,6 +485,23 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     provider.init(
       storeId, keySchema, valueSchema, 0, useColumnFamilies = false,
       storeConf, new Configuration)
+    provider
+  }
+
+  private def newRocksDBStateProvider(
+      useColumnFamilies: Boolean,
+      multipleValuesPerKey: Boolean,
+      trackTotalNumberOfRows: Boolean): StateStoreProvider = {
+    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+    val provider = new RocksDBStateStoreProvider()
+    val sqlConf = new SQLConf()
+    sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows",
+      trackTotalNumberOfRows.toString)
+    val storeConf = new StateStoreConf(sqlConf)
+
+    provider.init(
+      storeId, keySchema, valueSchema, 0, useColumnFamilies,
+      storeConf, new Configuration, useMultipleValuesPerKey = multipleValuesPerKey)
     provider
   }
 
