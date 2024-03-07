@@ -35,7 +35,8 @@ private case object DatabricksDialect extends JdbcDialect {
       sqlType: Int,
       typeName: String,
       size: Int,
-      md: MetadataBuilder): Option[DataType] = {
+      md: MetadataBuilder,
+      isTimestampNTZ: Boolean): Option[DataType] = {
     sqlType match {
       case java.sql.Types.TINYINT => Some(ByteType)
       case java.sql.Types.SMALLINT => Some(ShortType)

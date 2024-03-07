@@ -60,7 +60,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
     override def getCatalystType(
-        sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder,
+        isTimestampNTZ: Boolean): Option[DataType] =
       Some(StringType)
   }
 
@@ -70,7 +74,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         sqlType: Int,
         typeName: String,
         size: Int,
-        md: MetadataBuilder): Option[DataType] = {
+        md: MetadataBuilder,
+        isTimestampNTZ: Boolean = false): Option[DataType] = {
       sqlType match {
         case java.sql.Types.TINYINT => Some(ByteType)
         case _ => None
@@ -846,7 +851,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val agg = new AggregatedDialect(List(new JdbcDialect {
       override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
       override def getCatalystType(
-          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder,
+          isTimestampNTZ: Boolean): Option[DataType] =
         if (sqlType % 2 == 0) {
           Some(LongType)
         } else {
@@ -880,7 +886,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         sqlType: Int,
         typeName: String,
         size: Int,
-        md: MetadataBuilder): Option[DataType] = None
+        md: MetadataBuilder, isTimestampNTZ: Boolean): Option[DataType] = None
       override def isCascadingTruncateTable(): Option[Boolean] = cascadingTruncateTable
     }
 
