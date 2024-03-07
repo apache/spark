@@ -30,7 +30,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 import org.apache.spark.util.{UninterruptibleThread, UninterruptibleThreadRunner}
-import ArrayImplicits._
 
 /**
  * This class uses Kafka's own [[org.apache.kafka.clients.consumer.KafkaConsumer]] API to

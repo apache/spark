@@ -41,7 +41,6 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import ArrayImplicits._
 
 /**
  * The provider class for all Kafka readers and writers. It is designed such that it throws

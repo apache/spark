@@ -32,7 +32,6 @@ import org.apache.kafka.common.requests.OffsetFetchResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
-import ArrayImplicits._
 
 /**
  * This class uses Kafka's own [[Admin]] API to read data offsets from Kafka.
