@@ -86,20 +86,25 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
 
     // Variant and Interval types are disallowed by default.
     val unsupportedTypes = Seq(
-        "parse_json('1') v",
-        "array(parse_json('1'))",
-        "struct(1, parse_json('1')) s",
-        "map(1, parse_json('1')) s",
-        "INTERVAL '1' MONTH i",
-        "make_ym_interval(1, 2) ym",
-        "make_dt_interval(1, 2, 3, 4) dt")
+        ("parse_json('1') col", "VARIANT"),
+        ("array(parse_json('1')) col", "ARRAY<VARIANT>"),
+        ("struct(1, parse_json('1')) col", "STRUCT<col1: INT NOT NULL, col2: VARIANT NOT NULL>"),
+        ("map(1, parse_json('1')) col", "MAP<INT, VARIANT>"),
+        ("INTERVAL '1' MONTH col", "INTERVAL MONTH"),
+        ("make_ym_interval(1, 2) col", "INTERVAL YEAR TO MONTH"),
+        ("make_dt_interval(1, 2, 3, 4) col", "INTERVAL DAY TO SECOND"))
 
-    unsupportedTypes.foreach { expr =>
-      val df = spark.range(1).selectExpr(expr)
-      val e = intercept[AnalysisException] {
-        dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
-      }
-      assert(e.getMessage.contains("UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE"))
+    unsupportedTypes.foreach { testCase =>
+      val df = spark.range(1).selectExpr(testCase._1)
+      checkError(
+        exception = intercept[AnalysisException] {
+          dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
+        },
+        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map("columnName" -> "`col`", "columnType" -> s"\"${testCase._2}\"",
+          "format" -> ".*JdbcRelationProvider.*"),
+        matchPVals = true
+      )
     }
   }
 }

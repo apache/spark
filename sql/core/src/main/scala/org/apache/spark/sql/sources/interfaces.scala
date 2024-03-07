@@ -182,23 +182,16 @@ trait CreatableRelationProvider {
    * @param dt Data type to check
    * @return True if the data type is supported
    */
-  def supportsDataType(
-      dt: DataType
-  ): Boolean = {
+  def supportsDataType(dt: DataType): Boolean = {
     dt match {
       case ArrayType(e, _) => supportsDataType(e)
-      case MapType(k, v, _) =>
-        supportsDataType(k) && supportsDataType(v)
+      case MapType(k, v, _) => supportsDataType(k) && supportsDataType(v)
       case StructType(fields) => fields.forall(f => supportsDataType(f.dataType))
       case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
-      case _: AnsiIntervalType | CalendarIntervalType | VariantType => false
-      case BinaryType | BooleanType | ByteType | CalendarIntervalType | CharType(_) | DateType |
-           DayTimeIntervalType(_, _) | _ : DecimalType |  DoubleType | FloatType |
-           IntegerType | LongType | NullType | ObjectType(_) | ShortType |
-           StringType | TimestampNTZType | TimestampType | VarcharType(_) |
-           YearMonthIntervalType(_, _) => true
+      case BinaryType | BooleanType | ByteType | CharType(_) | DateType | _ : DecimalType |
+           DoubleType | FloatType | IntegerType | LongType | NullType | ObjectType(_) | ShortType |
+           StringType | TimestampNTZType | TimestampType | VarcharType(_) => true
       case _ => false
-
     }
   }
 }
