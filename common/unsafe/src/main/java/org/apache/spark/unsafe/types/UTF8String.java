@@ -396,7 +396,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
-    return matchAt(prefix, 0, collationId);
+    if (prefix.numBytes == 0 || this.numBytes == 0) return prefix.numBytes==0;
+
+    return CollationFactory.getStringSearch(this, prefix, collationId).first() == 0;
   }
 
   public boolean endsWith(final UTF8String suffix) {
@@ -410,7 +412,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
-    return matchAt(suffix, numBytes - suffix.numBytes, collationId);
+    if (suffix.numBytes == 0 || this.numBytes == 0) return suffix.numBytes==0;
+
+    return CollationFactory.getStringSearch(this, suffix, collationId).last()==this.numChars()-suffix.numChars();
   }
 
   /**
