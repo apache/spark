@@ -65,6 +65,7 @@ public final class CollationFactory {
      * byte for byte equal. All accent or case-insensitive collations are considered non-binary.
      */
     public final boolean isBinaryCollation;
+    public final boolean isLowercaseCollation;
 
     public Collation(
         String collationName,
@@ -79,6 +80,7 @@ public final class CollationFactory {
       this.version = version;
       this.hashFunction = hashFunction;
       this.isBinaryCollation = isBinaryCollation;
+      this.isLowercaseCollation = collationName.equals("UCS_BASIC_LCASE");
 
       if (isBinaryCollation) {
         this.equalsFunction = UTF8String::equals;
