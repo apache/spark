@@ -21,9 +21,7 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.text.StringCharacterIterator;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -32,9 +30,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import com.ibm.icu.text.RuleBasedCollator;
 import com.ibm.icu.text.StringSearch;
-import org.apache.spark.SparkException;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -346,19 +342,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
-  public boolean contains(final UTF8String substring, int collationId) throws SparkException {
+  public boolean contains(final UTF8String substring, int collationId) {
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.contains(substring);
     }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().contains(substring.toLowerCase());
     }
-    // TODO: enable ICU collation support for "contains" (SPARK-47248)
-    Map<String, String> params = new HashMap<>();
-    params.put("functionName", "contains");
-    params.put("collationName", CollationFactory.fetchCollation(collationId).collationName);
-    throw new SparkException("UNSUPPORTED_COLLATION.FOR_FUNCTION",
-            SparkException.constructMessageParams(params), null);
+    return collatedContains(substring, collationId);
+  }
+
+  private boolean collatedContains(final UTF8String substring, int collationId) {
+    if (substring.numBytes == 0) return true;
+    if (this.numBytes == 0) return false;
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
+    while (stringSearch.next() != StringSearch.DONE) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -387,23 +390,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean startsWith(final UTF8String prefix, int collationId) {
-    if (collationId == CollationFactory.DEFAULT_COLLATION_ID) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.startsWith(prefix);
     }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
-    if (prefix.numBytes == 0 || this.numBytes == 0) return prefix.numBytes==0;
-
-    String prefixString = StandardCharsets.UTF_8.decode(prefix.getByteBuffer()).toString(),
-            patternString = StandardCharsets.UTF_8.decode(this.getByteBuffer()).toString();
-
-    StringSearch search = new StringSearch(prefixString,
-            new StringCharacterIterator(patternString),
-            (RuleBasedCollator) CollationFactory.fetchCollation(collationId).collator
-    );
-
-    return search.first()==0;
+    return matchAt(prefix, 0, collationId);
   }
 
   public boolean endsWith(final UTF8String suffix) {
@@ -411,23 +404,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public boolean endsWith(final UTF8String suffix, int collationId) {
-    if (collationId == CollationFactory.DEFAULT_COLLATION_ID) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.endsWith(suffix);
     }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
-    if (suffix.numBytes == 0 || this.numBytes == 0) return suffix.numBytes==0;
-
-    String suffixString = StandardCharsets.UTF_8.decode(suffix.getByteBuffer()).toString(),
-            patternString = StandardCharsets.UTF_8.decode(this.getByteBuffer()).toString();
-
-    StringSearch search = new StringSearch(suffixString,
-            new StringCharacterIterator(patternString),
-            (RuleBasedCollator) CollationFactory.fetchCollation(collationId).collator
-    );
-
-    return search.last()==patternString.length()-suffixString.length();
+    return matchAt(suffix, numBytes - suffix.numBytes, collationId);
   }
 
   /**
