@@ -871,8 +871,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
-    assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
-    assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+    assert(agg.getCatalystType(0, "", 1, null, isTimestampNTZ = false) === Some(LongType))
+    assert(agg.getCatalystType(1, "", 1, null, isTimestampNTZ = false) === Some(StringType))
     assert(agg.isCascadingTruncateTable() === Some(true))
     assert(agg.quoteIdentifier ("Dummy") === "My Dummy quoteIdentifier")
     assert(agg.getTableExistsQuery ("Dummy") === "My Dummy Table")
@@ -911,24 +911,32 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(db2Dialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get == "SMALLINT")
     assert(db2Dialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
     // test db2 dialect mappings on read
-    assert(db2Dialect.getCatalystType(java.sql.Types.REAL, "REAL", 1, null) == Option(FloatType))
-    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "DECFLOAT", 1, null) ==
+    assert(db2Dialect.getCatalystType(
+      java.sql.Types.REAL, "REAL", 1, null, isTimestampNTZ = false) === Option(FloatType))
+    assert(db2Dialect.getCatalystType(
+      java.sql.Types.OTHER, "DECFLOAT", 1, null, isTimestampNTZ = false) ===
       Option(DecimalType(38, 18)))
-    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "XML", 1, null) == Option(StringType))
-    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, null) ==
+    assert(db2Dialect.getCatalystType(
+      java.sql.Types.OTHER, "XML", 1, null, isTimestampNTZ = false) === Option(StringType))
+    assert(db2Dialect.getCatalystType(
+      java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, null, isTimestampNTZ = false) ==
       Option(TimestampType))
   }
 
   test("MySQLDialect catalyst type mapping") {
     val mySqlDialect = JdbcDialects.get("jdbc:mysql")
     val metadata = new MetadataBuilder()
-    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ==
+    assert(mySqlDialect.getCatalystType(
+      java.sql.Types.VARBINARY, "BIT", 2, metadata, isTimestampNTZ = false) ===
       Some(LongType))
     assert(metadata.build().contains("binarylong"))
-    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 1, metadata) == None)
-    assert(mySqlDialect.getCatalystType(java.sql.Types.BIT, "TINYINT", 1, metadata) ==
+    assert(mySqlDialect.getCatalystType(
+      java.sql.Types.VARBINARY, "BIT", 1, metadata, isTimestampNTZ = false) === None)
+    assert(mySqlDialect.getCatalystType(
+      java.sql.Types.BIT, "TINYINT", 1, metadata, isTimestampNTZ = false) ===
       Some(BooleanType))
-    assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ==
+    assert(mySqlDialect.getCatalystType(
+      java.sql.Types.TINYINT, "TINYINT", 1, metadata, isTimestampNTZ = false) ===
       Some(ByteType))
   }
 
@@ -940,12 +948,22 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val md = new MetadataBuilder().putLong("scale", 0)
-    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
-    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
-    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
+    assert(Postgres.getCatalystType(
+      java.sql.Types.OTHER, "json", 1, null, isTimestampNTZ = false) === Some(StringType))
+    assert(Postgres.getCatalystType(
+      java.sql.Types.OTHER, "jsonb", 1, null, isTimestampNTZ = false) === Some(StringType))
+    assert(Postgres.getCatalystType(
+      java.sql.Types.ARRAY, "_numeric", 0, md, isTimestampNTZ = false) ===
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
-    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
+    assert(Postgres.getCatalystType(
+      java.sql.Types.ARRAY, "_bpchar", 64, md, isTimestampNTZ = false) ===
       Some(ArrayType(CharType(64))))
+    assert(Postgres.getCatalystType(
+      java.sql.Types.ARRAY, "_timestamp", 64, md, isTimestampNTZ = false) ===
+      Some(ArrayType(TimestampType)))
+    assert(Postgres.getCatalystType(
+      java.sql.Types.ARRAY, "_timestamp", 64, md, isTimestampNTZ = true) ===
+      Some(ArrayType(TimestampNTZType)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -962,23 +980,29 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     val derbyDialect = JdbcDialects.get("jdbc:derby:db")
     val metadata = new MetadataBuilder().putString("name", "test_column")
     assert(derbyDialect.getCatalystType(java.sql.Types.REAL, "real",
-      0, metadata) == Some(FloatType))
+      0, metadata, isTimestampNTZ = false) === Some(FloatType))
   }
 
   test("OracleDialect jdbc type mapping") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
+    assert(oracleDialect.getCatalystType(
+      java.sql.Types.NUMERIC, "float", 1, metadata, isTimestampNTZ = false) ===
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
+    assert(oracleDialect.getCatalystType(
+      java.sql.Types.NUMERIC, "numeric", 0, null, isTimestampNTZ = false) ===
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
-    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
+    assert(oracleDialect.getCatalystType(
+      OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null, isTimestampNTZ = false) ===
       Some(FloatType))
-    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
+    assert(oracleDialect.getCatalystType(
+      OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null, isTimestampNTZ = false) ===
       Some(DoubleType))
-    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_TZ, "TIMESTAMP", 0, null) ==
+    assert(oracleDialect.getCatalystType(
+      OracleDialect.TIMESTAMP_TZ, "TIMESTAMP", 0, null, isTimestampNTZ = false) ===
       Some(TimestampType))
-    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null) ==
+    assert(oracleDialect.getCatalystType(
+      OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null, isTimestampNTZ = false) ===
       Some(TimestampType))
   }
 
@@ -1025,14 +1049,14 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
         if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
           assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
-            metadata).isEmpty)
+            metadata, isTimestampNTZ = false).isEmpty)
           assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
-            metadata).isEmpty)
+            metadata, isTimestampNTZ = false).isEmpty)
         } else {
           assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
-            metadata).get == ShortType)
+            metadata, isTimestampNTZ = false).get == ShortType)
           assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
-            metadata).get == FloatType)
+            metadata, isTimestampNTZ = false).get == FloatType)
         }
       }
     }
@@ -1444,23 +1468,27 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     // When Number(*)/Number is specified, default DecimalType should be returned
     val flexiblePrecision = 40
     assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
-      flexiblePrecision, metadata) == Some(DecimalType.SYSTEM_DEFAULT))
+      flexiblePrecision, metadata, isTimestampNTZ = false) === Some(DecimalType.SYSTEM_DEFAULT))
     val specifiedScale = 10
     val specifiedPrecision = 10
     metadata.putLong("scale", specifiedScale)
     // Both precision and scale is set explicitly
     assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
-      specifiedPrecision, metadata) == Some(DecimalType(specifiedPrecision, specifiedScale)))
+      specifiedPrecision, metadata, isTimestampNTZ = false) ===
+      Some(DecimalType(specifiedPrecision, specifiedScale)))
     // When precision is not specified, MAX_PRECISION should be used
     assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
-      flexiblePrecision, metadata) == Some(DecimalType(DecimalType.MAX_PRECISION, specifiedScale)))
+      flexiblePrecision, metadata, isTimestampNTZ = false) ===
+      Some(DecimalType(DecimalType.MAX_PRECISION, specifiedScale)))
     // When precision and scale is set explicitly and scale is 0
     metadata.putLong("scale", 0)
     assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
-      specifiedPrecision, metadata) == Some(DecimalType(specifiedPrecision, 0)))
+      specifiedPrecision, metadata, isTimestampNTZ = false) ===
+      Some(DecimalType(specifiedPrecision, 0)))
     // When MetadataBuilder is null, default DecimalType should be returned
     assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
-      specifiedPrecision, null) == Some(DecimalType.SYSTEM_DEFAULT))
+      specifiedPrecision, null, isTimestampNTZ = false) ===
+      Some(DecimalType.SYSTEM_DEFAULT))
   }
 
     test("Checking metrics correctness with JDBC") {
@@ -1985,7 +2013,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     when(mockRs.getMetaData).thenReturn(mockRsmd)
 
     val mockDialect = mock(classOf[JdbcDialect])
-    when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
+    when(mockDialect.getCatalystType(
+      anyInt(), anyString(), anyInt(), any[MetadataBuilder], anyBoolean()))
       .thenReturn(None)
 
     val schema = JdbcUtils.getSchema(mockRs, mockDialect)
@@ -2088,11 +2117,14 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK-45139: DatabricksDialect catalyst type mapping") {
     val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
     assert(databricksDialect
-      .getCatalystType(java.sql.Types.TINYINT, "", 1, null) == Some(ByteType))
+      .getCatalystType(java.sql.Types.TINYINT, "", 1, null, isTimestampNTZ = false) ===
+      Some(ByteType))
     assert(databricksDialect
-      .getCatalystType(java.sql.Types.SMALLINT, "", 1, null) == Some(ShortType))
+      .getCatalystType(java.sql.Types.SMALLINT, "", 1, null, isTimestampNTZ = false) ===
+      Some(ShortType))
     assert(databricksDialect
-      .getCatalystType(java.sql.Types.REAL, "", 1, null) == Some(FloatType))
+      .getCatalystType(java.sql.Types.REAL, "", 1, null, isTimestampNTZ = false) ===
+      Some(FloatType))
   }
 
   test("SPARK-45139: DatabricksDialect JDBC type mapping") {
@@ -2115,10 +2147,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
         if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
           assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
-            metadata).isEmpty)
+            metadata, isTimestampNTZ = false).isEmpty)
         } else {
           assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
-            metadata).get == ShortType)
+            metadata, isTimestampNTZ = false).get == ShortType)
         }
       }
     }
