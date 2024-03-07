@@ -379,7 +379,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
 
     val df1 = Seq((1, 2, "A1"), (2, 1, "A2")).toDF("key1", "key2", "value")
     val df2 = df1.filter($"value" === "A2")
- /*   assertCorrectResolution(df1.join(df2, df1("key1") === df2("key2")),
+    assertCorrectResolution(df1.join(df2, df1("key1") === df2("key2")),
       Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
     assertCorrectResolution(df2.join(df1, df1("key1") === df2("key2")),
       Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
@@ -426,7 +426,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
     assertCorrectResolution(df10.join(df9, df9("x") === df10("y")),
       Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
- */
+
     // Test for FlatMapCoGroupsInPandas
     val flatMapCoGroupsInPandasUDF = PythonUDF("flagMapCoGroupsInPandasUDF", null,
       StructType(Seq(StructField("x", LongType), StructField("y", LongType))),
@@ -436,8 +436,8 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     val df11 = df1.groupBy($"key1").flatMapCoGroupsInPandas(
       df1.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
     val df12 = df11.filter($"x" > 0)
-  /*  assertCorrectResolution(df11.join(df12, df11("x") === df12("y")),
-      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg) */
+    assertCorrectResolution(df11.join(df12, df11("x") === df12("y")),
+      Resolution.LeftConditionToLeftLeg, Resolution.RightConditionToRightLeg)
     assertCorrectResolution(df12.join(df11, df11("x") === df12("y")),
       Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
 
@@ -584,6 +584,6 @@ object Resolution extends Enumeration {
   type Resolution = Value
 
   val LeftConditionToLeftLeg, LeftConditionToRightLeg, RightConditionToRightLeg,
-  RightConditionToLeftLeg = Value
+    RightConditionToLeftLeg = Value
 }
 

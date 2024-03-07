@@ -484,23 +484,48 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       },
 
       resolveOnDatasetId = (datasetid: Long, name: String) => {
-        def findUnaryNodeMatchingTagId(lp: LogicalPlan): Option[LogicalPlan] = {
-          if (lp.getTagValue(LogicalPlan.DATASET_ID_TAG).exists(_.contains(datasetid))) {
-             Option(lp)
-          } else {
-            None
+        def findUnaryNodeMatchingTagId(lp: LogicalPlan): Option[(LogicalPlan, Int)] = {
+          var currentLp = lp
+          var depth = 0
+          while(true) {
+            if (currentLp.getTagValue(LogicalPlan.DATASET_ID_TAG).exists(_.contains(datasetid))) {
+              return Option(currentLp, depth)
+            } else {
+              if (currentLp.children.size == 1) {
+                currentLp = currentLp.children.head
+              } else {
+                // leaf node or node is a binary node
+                return None
+              }
+            }
+            depth += 1
           }
+          None
         }
+
         val binaryNodeOpt = q.collectFirst {
           case bn: BinaryNode => bn
         }
+
         val resolveOnAttribs = binaryNodeOpt match {
           case Some(bn) =>
             val leftDefOpt = findUnaryNodeMatchingTagId(bn.left)
             val rightDefOpt = findUnaryNodeMatchingTagId(bn.right)
             (leftDefOpt, rightDefOpt) match {
-              case (None, Some(lp)) => lp.output
-              case (Some(lp), None) => lp.output
+
+              case (None, Some((lp, _))) => lp.output
+
+              case (Some((lp, _)), None) => lp.output
+
+              case  (Some((lp1, depth1)), Some((lp2, depth2))) =>
+                if (depth1 == depth2) {
+                  q.children.head.output
+                } else if (depth1 < depth2) {
+                  lp1.output
+                } else {
+                  lp2.output
+                }
+
               case _ => q.children.head.output
             }
 
