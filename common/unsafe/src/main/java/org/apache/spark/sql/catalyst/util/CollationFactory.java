@@ -153,8 +153,10 @@ public final class CollationFactory {
    * Auxiliary methods for collation aware string operations.
    */
 
-  public static StringSearch getStringSearch(final UTF8String left, final UTF8String right,
-                                          final int collationId) {
+  public static StringSearch getStringSearch(
+      final UTF8String left,
+      final UTF8String right,
+      final int collationId) {
     String pattern = right.toString();
     CharacterIterator target = new StringCharacterIterator(left.toString());
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
