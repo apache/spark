@@ -2305,7 +2305,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         }
 
         // batch 5 will trigger list operation though the batch 4 should have 1 unseen file:
-        // 1 is smaller than the threshold (refer FileStreamOptions.discardCachedFilesRatio),
+        // 1 is smaller than the threshold (refer FileStreamOptions.discardCachedInputRatio),
         // hence unseen files for batch 4 will be discarded.
         val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
           .asInstanceOf[FileStreamSourceOffset]
@@ -2361,7 +2361,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withCountListingLocalFileSystemAsLocalFileSystem {
       withThreeTempDirs { case (src, meta, tmp) =>
         val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "10",
-          "maxCachedFiles" -> "12", "discardCachedFilesRatio" -> "0.1")
+          "maxCachedFiles" -> "12", "discardCachedInputRatio" -> "0.1")
         val scheme = CountListingLocalFileSystem.scheme
         val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
           StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
@@ -2406,7 +2406,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         // batch 0 processes 10 (12 cached)
         // batch 1 processes 10 from cache (2 cached)
         // batch 2 processes 2 from cache (0 cached) since
-        //  discardCachedFilesRatio is less than threshold
+        //  discardCachedInputRatio is less than threshold
         val offsetBatch0 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
           .asInstanceOf[FileStreamSourceOffset]
         verifyBatch(offsetBatch0, expectedBatchId = 0, inputFiles,
@@ -2424,7 +2424,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         // batch 3 processes 10 (12 cached)
         // batch 4 processes 10 from cache (2 cached)
         // batch 5 processes 2 from cache (0 cached) since
-        //  discardCachedFilesRatio is less than threshold
+        //  discardCachedInputRatio is less than threshold
         val offsetBatch3 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
             .asInstanceOf[FileStreamSourceOffset]
         verifyBatch(offsetBatch3, expectedBatchId = 3, inputFiles,
