@@ -1096,7 +1096,7 @@ colPosition
     ;
 
 collateClause
-    : COLLATE collationName=multipartIdentifier
+    : COLLATE collationName=identifier
     ;
 
 type

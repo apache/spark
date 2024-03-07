@@ -2194,8 +2194,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     if (!SQLConf.get.collationEnabled) {
       throw QueryCompilationErrors.collationNotEnabledError()
     }
-
-    ctx.multipartIdentifier.getText
+    ctx.identifier.getText
   }
 
   /**
