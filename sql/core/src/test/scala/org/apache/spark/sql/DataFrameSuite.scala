@@ -368,20 +368,6 @@ class DataFrameSuite extends QueryTest
       Row("a", Seq("a"), 1) :: Nil)
   }
 
-  test("more than one generator in SELECT clause") {
-    val df = Seq((Array("a"), 1)).toDF("a", "b")
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.select(explode($"a").as("a"), explode($"a").as("b"))
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(a)\", \"explode(a)\""))
-  }
-
   test("sort after generate with join=true") {
     val df = Seq((Array("a"), 1)).toDF("a", "b")
 

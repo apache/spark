@@ -161,28 +161,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
 
-  test("multiple generators in projection") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-  }
-
   createQueryTest("! operator",
     """
       |SELECT a FROM (
