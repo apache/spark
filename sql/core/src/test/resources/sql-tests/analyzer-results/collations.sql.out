@@ -90,6 +90,59 @@ Project [ucs_basic#x, ucs_basic_lcase#x]
 
 
 -- !query
+select l.ucs_basic, r.ucs_basic_lcase from t1 l join t1 r on l.ucs_basic_lcase = r.ucs_basic_lcase
+-- !query analysis
+Project [ucs_basic#x, ucs_basic_lcase#x]
++- Join Inner, (ucs_basic_lcase#x = ucs_basic_lcase#x)
+   :- SubqueryAlias l
+   :  +- SubqueryAlias spark_catalog.default.t1
+   :     +- Relation spark_catalog.default.t1[ucs_basic#x,ucs_basic_lcase#x] parquet
+   +- SubqueryAlias r
+      +- SubqueryAlias spark_catalog.default.t1
+         +- Relation spark_catalog.default.t1[ucs_basic#x,ucs_basic_lcase#x] parquet
+
+
+-- !query
+create table t2(ucs_basic string collate 'ucs_basic', ucs_basic_lcase string collate 'ucs_basic_lcase') using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
+
+
+-- !query
+insert into t2 values('aaa', 'aaa')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [ucs_basic, ucs_basic_lcase]
++- Project [cast(col1#x as string) AS ucs_basic#x, cast(col2#x as string COLLATE 'UCS_BASIC_LCASE') AS ucs_basic_lcase#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+insert into t2 values('bbb', 'bbb')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t2, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t2], Append, `spark_catalog`.`default`.`t2`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t2), [ucs_basic, ucs_basic_lcase]
++- Project [cast(col1#x as string) AS ucs_basic#x, cast(col2#x as string COLLATE 'UCS_BASIC_LCASE') AS ucs_basic_lcase#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select * from t1 anti join t2 on t1.ucs_basic_lcase = t2.ucs_basic_lcase
+-- !query analysis
+Project [ucs_basic#x, ucs_basic_lcase#x]
++- Join LeftAnti, (ucs_basic_lcase#x = ucs_basic_lcase#x)
+   :- SubqueryAlias spark_catalog.default.t1
+   :  +- Relation spark_catalog.default.t1[ucs_basic#x,ucs_basic_lcase#x] parquet
+   +- SubqueryAlias spark_catalog.default.t2
+      +- Relation spark_catalog.default.t2[ucs_basic#x,ucs_basic_lcase#x] parquet
+
+
+-- !query
+drop table t2
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
+
+
+-- !query
 drop table t1
 -- !query analysis
 DropTable false, false

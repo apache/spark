@@ -33,7 +33,8 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION}
+import org.apache.spark.sql.internal.SQLConf.{DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION, OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION,
+  WRAP_EXISTS_IN_AGGREGATE_FUNCTION}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -257,7 +258,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         newExpr.get
       }).withNewChildren(Seq(newChild))
       updatedNode match {
-        case a: Aggregate =>
+        case a: Aggregate if conf.getConf(WRAP_EXISTS_IN_AGGREGATE_FUNCTION) =>
           // If we have introduced new `exists`-attributes that are referenced by
           // aggregateExpressions within a non-aggregateFunction expression, we wrap them in
           // first() aggregate function. first() is Spark's executable version of any_value()
