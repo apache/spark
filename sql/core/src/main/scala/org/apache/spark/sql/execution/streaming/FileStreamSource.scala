@@ -117,7 +117,7 @@ class FileStreamSource(
 
   private val maxCachedFiles = sourceOptions.maxCachedFiles
 
-  private val discardCachedFilesRatio = sourceOptions.discardCachedFilesRatio
+  private val discardCachedInputRatio = sourceOptions.discardCachedInputRatio
 
   /** A mapping from a file that we have processed to some timestamp it was last modified. */
   // Visible for testing and debugging in production.
@@ -189,7 +189,7 @@ class FileStreamSource(
       case files: ReadMaxFiles if !sourceOptions.latestFirst =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
-        if (usFiles.size < files.maxFiles() * discardCachedFilesRatio) {
+        if (usFiles.size < files.maxFiles() * discardCachedInputRatio) {
           // Discard unselected files if the number of files are smaller than threshold.
           // This is to avoid the case when the next batch would have too few files to read
           // whereas there're new files available.
@@ -207,7 +207,7 @@ class FileStreamSource(
         // we can cache and reuse remaining fetched list of files in further batches
         val (FilesSplit(bFiles, _), FilesSplit(usFiles, rSize)) =
           takeFilesUntilMax(newFiles, files.maxBytes())
-        if (rSize.toDouble < (files.maxBytes() * DISCARD_UNSEEN_INPUT_RATIO)) {
+        if (rSize.toDouble < (files.maxBytes() * discardCachedInputRatio)) {
           // Discard unselected files if the total size of files is smaller than threshold.
           // This is to avoid the case when the next batch would have too small of a size of
           // files to read whereas there're new files available.

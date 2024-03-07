@@ -137,13 +137,13 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
   }.getOrElse(10000)
 
   /**
-   * ratio of cached files to max files to allow for listing from input source when
-   * there are fewer cached files than could be available to be read
+   * ratio of cached input to max files/bytes to allow for listing from input source when
+   * there are fewer cached files/bytes than could be available to be read
    */
-  val discardCachedFilesRatio: Float = parameters.get("discardCachedFilesRatio").map { str =>
+  val discardCachedInputRatio: Float = parameters.get("discardCachedInputRatio").map { str =>
     Try(str.toFloat).filter(x => 0 <= x && x <= 1).getOrElse {
       throw new IllegalArgumentException(
-        s"Invalid value '$str' for option 'discardCachedFilesRatio', must be a positive float " +
+        s"Invalid value '$str' for option 'discardCachedInputRatio', must be a positive float " +
           "between 0 and 1"
       )
     }
