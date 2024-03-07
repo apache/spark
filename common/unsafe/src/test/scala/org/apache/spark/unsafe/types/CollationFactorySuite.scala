@@ -123,7 +123,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "abcde", "abcde", 5),
       CollationTestCase("UNICODE_CI", "abcde", "ABCDE", 5),
       CollationTestCase("UNICODE_CI", "abcde", "fgh", 0),
-      CollationTestCase("UNICODE_CI", "abcde", "FGH", 0),
+      CollationTestCase("UNICODE_CI", "abcde", "FGH", 0)
     )
 
     checks.foreach(testCase => {
