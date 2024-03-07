@@ -1779,7 +1779,7 @@
   },
   "INVALID_CHARACTER_IN_DATETIME_PATTERN" : {
     "message" : [
-      "Illegal pattern character found in datetime patter: <c>. Please provide legal character."
+      "Illegal pattern character found in datetime pattern: <c>. Please provide legal character."
     ],
     "sqlState" : "22007"
   },
@@ -1838,13 +1838,13 @@
   },
   "INVALID_DATETIME_PATTERN" : {
     "message" : [
-      "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern"
+      "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern."
     ],
     "sqlState" : "22007"
   },
   "INVALID_DATETIME_PATTERN_LENGTH" : {
     "message" : [
-      "Too many pattern letters: <style>. Please reduce pattern length."
+      "Too many letters in datetime pattern: <style>. Please reduce pattern length."
     ],
     "sqlState" : "22007"
   },
@@ -2846,7 +2846,7 @@
   },
   "NONEXISTENT_FIELD_NAME_INDEXING" : {
     "message" : [
-      "Error while indexing filed. Field with name <name> does not exist. Available fields: <fieldNames>"
+      "Error while indexing field. Field with name <name> does not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
   },
