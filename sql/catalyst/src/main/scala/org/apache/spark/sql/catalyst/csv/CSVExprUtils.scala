@@ -68,8 +68,8 @@ object CSVExprUtils {
   @throws[SparkIllegalArgumentException]
   def toChar(str: String): Char = {
     (str: Seq[Char]) match {
-      case Seq() => throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3247")
-      case Seq('\\') => throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3248")
+      case Seq() => throw new SparkIllegalArgumentException("INVALID_DELIMITER_VALUE.EMPTY_STRING")
+      case Seq('\\') => throw new SparkIllegalArgumentException("SINGLE_BACKSLASH_PROHIBITED")
       case Seq(c) => c
       case Seq('\\', 't') => '\t'
       case Seq('\\', 'r') => '\r'

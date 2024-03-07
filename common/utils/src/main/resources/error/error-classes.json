@@ -7822,20 +7822,34 @@
       "Failed to parse a value for data type <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3247" : {
+  "INVALID_DELIMITER_VALUE" : {
     "message" : [
-      "Delimiter cannot be empty string"
-    ]
+      "Invalid value for delimiter"
+    ],
+    "subClass" : {
+      "EMPTY_STRING": {
+        "message": [
+          "Delimiter cannot be empty string"
+        ]
+      }
+    }
   },
-  "_LEGACY_ERROR_TEMP_3248" : {
+  "SINGLE_BACKSLASH_PROHIBITED" : {
     "message" : [
       "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3249" : {
+  "JSON_CONVERSION_ERROR" : {
     "message" : [
-      "Failed to convert value <value> (class of <valueClass>}) with the type of <dataType> to JSON."
-    ]
+      "Invalid JSON conversion."
+    ],
+    "subClass" : {
+      "UNSUPPORTED_VALUE_TYPE" : {
+        "message" : [
+          "Failed to convert value <value> (class of <valueClass>}) with the type of <dataType> to JSON."
+        ]
+      }
+    }
   },
   "_LEGACY_ERROR_TEMP_3250" : {
     "message" : [

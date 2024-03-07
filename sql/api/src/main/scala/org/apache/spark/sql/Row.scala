@@ -611,7 +611,7 @@ trait Row extends Serializable {
       case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
         toJson(UDTUtils.toRow(v, udt), udt.sqlType)
       case _ => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3249",
+        errorClass = "JSON_CONVERSION_ERROR.UNSUPPORTED_VALUE_TYPE",
         messageParameters = Map(
           "value" -> value.toString,
           "valueClass" -> value.getClass.toString,

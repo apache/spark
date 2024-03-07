@@ -56,7 +56,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("""\""")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3248",
+      errorClass = "SINGLE_BACKSLASH_PROHIBITED",
       parameters = Map.empty)
   }
 
@@ -65,7 +65,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException]{
         CSVExprUtils.toChar("")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3247",
+      errorClass = "INVALID_DELIMITER_VALUE.EMPTY_STRING",
       parameters = Map.empty)
   }
 
