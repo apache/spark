@@ -2720,8 +2720,9 @@ class DatasetSuite extends QueryTest
 
   test("SPARK-47270: isEmpty does not trigger job execution on CommandResults") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
-      withTable("t1") {
-        sql("create table t1(c int) using parquet")
+      withTable("t1", "t2") {
+        sql("create table t1(c1 int) using parquet")
+        sql("create table t2(c2 int) using parquet")
 
         @volatile var jobCounter = 0
         val listener = new SparkListener {

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
+import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -69,7 +70,11 @@ class SparkOptimizer(
       PruneFilters) :+
     Batch("Convert CommandResult to LocalRelation", fixedPoint,
       ConvertCommandResultToLocalRelation,
-      ConvertToLocalRelation)) ++
+      ConvertToLocalRelation,
+      PropagateEmptyRelation,
+      // PropagateEmptyRelation can change the nullability of an attribute from nullable to
+      // non-nullable when an empty relation child of a Union is removed
+      UpdateAttributeNullability)) ++
     postHocOptimizationBatches :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
