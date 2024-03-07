@@ -239,7 +239,7 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    perf, mem, *_ = self._profile_results[id]  # type: ignore
+                    perf, mem, *_ = self._profile_results[id]
                     self._profile_results[id] = (None, mem, *_)
                     if mem is None:
                         self._profile_results.pop(id, None)
@@ -264,7 +264,7 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    perf, mem, *_ = self._profile_results[id]  # type: ignore
+                    perf, mem, *_ = self._profile_results[id]
                     self._profile_results[id] = (perf, None, *_)
                     if perf is None:
                         self._profile_results.pop(id, None)
