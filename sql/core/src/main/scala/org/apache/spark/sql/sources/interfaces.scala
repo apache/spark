@@ -181,6 +181,8 @@ trait CreatableRelationProvider {
    *
    * @param dt Data type to check
    * @return True if the data type is supported
+   *
+   * @since 4.0.0
    */
   def supportsDataType(dt: DataType): Boolean = {
     dt match {
