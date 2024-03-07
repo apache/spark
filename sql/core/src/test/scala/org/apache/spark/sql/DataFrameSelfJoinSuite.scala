@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, BinaryExpression, PythonUDF, SortOrder}
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, Join, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, Join, Project, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{count, explode, sum, year}
 import org.apache.spark.sql.internal.SQLConf
@@ -566,11 +566,17 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assertCorrectResolution(df1.join(df1Joindf2, df1Joindf2("aaa") === df1("a")),
       Resolution.LeftConditionToRightLeg, Resolution.RightConditionToLeftLeg)
 
-    df1Joindf2.join(df1, df1Joindf2("aaa") === df1("a")).select(df1Joindf2("aa"), df1("a")).
-      queryExecution.analyzed
+    val proj1 = df1Joindf2.join(df1, df1Joindf2("aaa") === df1("a")).select(df1Joindf2("aa"),
+      df1("a")).queryExecution.analyzed.asInstanceOf[Project]
+    val join1 = proj1.child.asInstanceOf[Join]
+    assert(proj1.projectList(0).references.subsetOf(join1.left.outputSet))
+    assert(proj1.projectList(1).references.subsetOf(join1.right.outputSet))
 
-    df1.join(df1Joindf2, df1Joindf2("aaa") === df1("a")).select(df1Joindf2("aa"), df1("a")).
-      queryExecution.analyzed
+    val proj2 = df1.join(df1Joindf2, df1Joindf2("aaa") === df1("a")).select(df1Joindf2("aa"),
+      df1("a")).queryExecution.analyzed.asInstanceOf[Project]
+    val join2 = proj2.child.asInstanceOf[Join]
+    assert(proj2.projectList(0).references.subsetOf(join2.right.outputSet))
+    assert(proj2.projectList(1).references.subsetOf(join2.left.outputSet))
   }
 }
 
