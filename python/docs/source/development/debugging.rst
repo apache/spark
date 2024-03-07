@@ -263,6 +263,12 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
 
+We can clear the result memory profile as shown below.
+
+.. code-block:: python
+
+    spark.profile.clear(id=2, type="memory")
+
 Identifying Hot Loops (Python Profilers)
 ----------------------------------------
 
@@ -354,6 +360,12 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     *(2) Project [pythonUDF0#11L AS add1(id)#3L]
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
+
+We can clear the result performance profile as shown below.
+
+.. code-block:: python
+
+    >>> spark.profile.clear(id=2, type="perf")
 
 Common Exceptions / Errors
 --------------------------
