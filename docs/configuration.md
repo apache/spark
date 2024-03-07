@@ -1665,8 +1665,6 @@ Apart from these, the following properties are also available, and may be useful
     Please note that this configuration also replaces original log urls in event log,
     which will be also effective when accessing the application on history server. The new log urls must be
     permanent, otherwise you might have dead link for executor log urls.
-    <p/>
-    For now, only YARN mode supports this configuration
   </td>
   <td>3.0.0</td>
 </tr>
