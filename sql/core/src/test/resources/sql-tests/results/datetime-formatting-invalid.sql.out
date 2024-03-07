@@ -40,10 +40,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_DATETIME_PATTERN_LENGTH",
+  "errorClass" : "INVALID_DATETIME_PATTERN.LENGTH",
   "sqlState" : "22007",
   "messageParameters" : {
-    "style" : "q"
+    "pattern" : "qqqqq"
   }
 }
 
@@ -55,10 +55,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_DATETIME_PATTERN_LENGTH",
+  "errorClass" : "INVALID_DATETIME_PATTERN.LENGTH",
   "sqlState" : "22007",
   "messageParameters" : {
-    "style" : "Q"
+    "pattern" : "QQQQQ"
   }
 }
 

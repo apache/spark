@@ -1840,12 +1840,13 @@
     "message" : [
       "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern."
     ],
-    "sqlState" : "22007"
-  },
-  "INVALID_DATETIME_PATTERN_LENGTH" : {
-    "message" : [
-      "Too many letters in datetime pattern: <style>. Please reduce pattern length."
-    ],
+    "subClass" : {
+      "LENGTH" : {
+        "message" : [
+          "Too many letters in datetime pattern: <pattern>. Please reduce pattern length."
+        ]
+      }
+    },
     "sqlState" : "22007"
   },
   "INVALID_DEFAULT_VALUE" : {

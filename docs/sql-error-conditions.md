@@ -1116,17 +1116,13 @@ The cursor is invalid.
 
 For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
-### INVALID_DATETIME_PATTERN
+### [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
 
 [SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Unrecognized datetime pattern: `<pattern>`. Please provide correct datetime pattern.
 
-### INVALID_DATETIME_PATTERN_LENGTH
-
-[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-Too many letters in datetime pattern: `<style>`. Please reduce pattern length.
+For more details see [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
 
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 

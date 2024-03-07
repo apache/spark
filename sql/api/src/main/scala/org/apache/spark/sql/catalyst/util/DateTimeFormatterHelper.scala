@@ -324,8 +324,8 @@ private object DateTimeFormatterHelper {
           }
           for (style <- unsupportedPatternLengths if patternPart.contains(style)) {
             throw new SparkIllegalArgumentException(
-              errorClass = "INVALID_DATETIME_PATTERN_LENGTH",
-              messageParameters = Map("style" -> style.head.toString))
+              errorClass = "INVALID_DATETIME_PATTERN.LENGTH",
+              messageParameters = Map("pattern" -> style))
           }
           // In DateTimeFormatter, 'u' supports negative years. We substitute 'y' to 'u' here for
           // keeping the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.
