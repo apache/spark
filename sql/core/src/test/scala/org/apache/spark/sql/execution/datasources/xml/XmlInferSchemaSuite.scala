@@ -58,28 +58,35 @@ class XmlInferSchemaSuite extends QueryTest with SharedSparkSession with TestXml
   }
 
   test("Type conflict in complex field values") {
-    val xmlDF = readData(complexFieldValueTypeConflict, Map("nullValue" -> ""))
-
+    val xmlDF = readData(
+      complexFieldValueTypeConflict,
+      Map("nullValue" -> "", "ignoreSurroundingSpaces" -> "true")
+    )
+    // XML will merge an array and a singleton into an array
     val expectedSchema = StructType(
       StructField("array", ArrayType(LongType, true), true) ::
       StructField("num_struct", StringType, true) ::
-      StructField("str_array", StringType, true) ::
+      StructField("str_array", ArrayType(StringType), true) ::
       StructField("struct", StructType(StructField("field", StringType, true) :: Nil), true) ::
-      StructField("struct_array", StringType, true) :: Nil
+      StructField("struct_array", ArrayType(StringType), true) :: Nil
     )
 
     assert(expectedSchema === xmlDF.schema)
     checkAnswer(
       xmlDF,
-      Row(Seq(), "11", "[1,2,3]", Row(null), "[]") ::
-      Row(null, """{"field":false}""", null, null, "{}") ::
-      Row(Seq(4, 5, 6), null, "str", Row(null), "[7,8,9]") ::
-      Row(Seq(7), "{}", """["str1","str2",33]""", Row("str"), """{"field":true}""") :: Nil
+      Row(Seq(null), "11", Seq("1", "2", "3"), Row(null), Seq(null)) ::
+      Row(Seq(null), """<field>false</field>""", Seq(null), Row(null), Seq(null)) ::
+      Row(Seq(4, 5, 6), null, Seq("str"), Row(null), Seq("7", "8", "9")) ::
+      Row(Seq(7), null, Seq("str1", "str2", "33"), Row("str"), Seq("""<field>true</field>""")) ::
+      Nil
     )
   }
 
   test("Type conflict in array elements") {
-    val xmlDF = readData(arrayElementTypeConflict, Map("ignoreSurroundingSpaces" -> "true"))
+    val xmlDF =
+      readData(
+        arrayElementTypeConflict,
+        Map("ignoreSurroundingSpaces" -> "true", "nullValue" -> ""))
 
     val expectedSchema = StructType(
       StructField(

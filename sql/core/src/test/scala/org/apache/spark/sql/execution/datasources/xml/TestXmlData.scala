@@ -135,11 +135,9 @@ private[xml] trait TestXmlData {
   def complexFieldValueTypeConflict: Seq[String] =
     """<ROW>
       <num_struct>11</num_struct>
-      <str_array>
-        <item>1</item>
-        <item>2</item>
-        <item>3</item>
-      </str_array>
+      <str_array>1</str_array>
+      <str_array>2</str_array>
+      <str_array>3</str_array>
       <array></array>
       <struct_array></struct_array>
       <struct></struct>
@@ -159,22 +157,18 @@ private[xml] trait TestXmlData {
       <array>4</array>
       <array>5</array>
       <array>6</array>
-      <struct_array>
-        <item>7</item>
-        <item>8</item>
-        <item>9</item>
-      </struct_array>
+      <struct_array>7</struct_array>
+      <struct_array>8</struct_array>
+      <struct_array>9</struct_array>
       <struct>
         <field/>
       </struct>
     </ROW>""" ::
     """<ROW>
       <num_struct></num_struct>
-      <str_array>
-        <item>str1</item>
-        <item>str2</item>
-        <item>33</item>
-      </str_array>
+      <str_array>str1</str_array>
+      <str_array>str2</str_array>
+      <str_array>33</str_array>
       <array>7</array>
       <struct_array>
         <field>true</field>
