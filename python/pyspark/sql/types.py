@@ -443,21 +443,21 @@ class FloatType(FractionalType, metaclass=DataTypeSingleton):
 
 
 class ByteType(IntegralType):
-    """Byte data type, i.e. a signed integer in a single byte."""
+    """Byte data type, representing signed 8-bit integers."""
 
     def simpleString(self) -> str:
         return "tinyint"
 
 
 class IntegerType(IntegralType):
-    """Int data type, i.e. a signed 32-bit integer."""
+    """Int data type, representing signed 32-bit integers."""
 
     def simpleString(self) -> str:
         return "int"
 
 
 class LongType(IntegralType):
-    """Long data type, i.e. a signed 64-bit integer.
+    """Long data type, representing signed 64-bit integers.
 
     If the values are beyond the range of [-9223372036854775808, 9223372036854775807],
     please use :class:`DecimalType`.
@@ -468,7 +468,7 @@ class LongType(IntegralType):
 
 
 class ShortType(IntegralType):
-    """Short data type, i.e. a signed 16-bit integer."""
+    """Short data type, representing signed 16-bit integers."""
 
     def simpleString(self) -> str:
         return "smallint"
