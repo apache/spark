@@ -84,24 +84,22 @@ class SaveIntoDataSourceCommandSuite extends QueryTest with SharedSparkSession {
         "cast('a' as binary) a", "true b", "cast(1 as byte) c", "1.23 d")
     dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
 
-    withSQLConf("spark.databricks.variant.enabled" -> "true") {
-      // Variant and Interval types are disallowed by default.
-      val unsupportedTypes = Seq(
-          "parse_json('1') v",
-          "array(parse_json('1'))",
-          "struct(1, parse_json('1')) s",
-          "map(1, parse_json('1')) s",
-          "INTERVAL '1' MONTH i",
-          "make_ym_interval(1, 2) ym",
-          "make_dt_interval(1, 2, 3, 4) dt")
+    // Variant and Interval types are disallowed by default.
+    val unsupportedTypes = Seq(
+        "parse_json('1') v",
+        "array(parse_json('1'))",
+        "struct(1, parse_json('1')) s",
+        "map(1, parse_json('1')) s",
+        "INTERVAL '1' MONTH i",
+        "make_ym_interval(1, 2) ym",
+        "make_dt_interval(1, 2, 3, 4) dt")
 
-      unsupportedTypes.foreach { expr =>
-        val df = spark.range(1).selectExpr(expr)
-        val e = intercept[AnalysisException] {
-          dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
-        }
-        assert(e.getMessage.contains("UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE"))
+    unsupportedTypes.foreach { expr =>
+      val df = spark.range(1).selectExpr(expr)
+      val e = intercept[AnalysisException] {
+        dataSource.planForWriting(SaveMode.ErrorIfExists, df.logicalPlan)
       }
+      assert(e.getMessage.contains("UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE"))
     }
   }
 }
