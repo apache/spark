@@ -2733,7 +2733,7 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
         UTF8String.fromString("BASE64"),
         "try_to_binary")
     }
-    JBase64.getDecoder.decode(string.asInstanceOf[UTF8String].toString)
+    JBase64.getMimeDecoder.decode(string.asInstanceOf[UTF8String].toString)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -2755,7 +2755,7 @@ case class UnBase64(child: Expression, failOnError: Boolean = false)
       }
       s"""
          $maybeValidateInputCode
-         ${ev.value} = ${classOf[JBase64].getName}.getDecoder().decode($child.toString());
+         ${ev.value} = ${classOf[JBase64].getName}.getMimeDecoder().decode($child.toString());
        """})
   }
 
