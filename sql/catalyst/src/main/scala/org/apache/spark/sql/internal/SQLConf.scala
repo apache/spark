@@ -1796,6 +1796,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD =
+    buildConf("spark.sql.codegen.broadcastCleanedSourceThreshold")
+      .internal()
+      .doc("A threshold (in string length) to determine if we should make the generated code a" +
+        "broadcast variable in whole stage codegen. To disable this, set the threshold to < 0; " +
+        "otherwise if the size is above the threshold, it'll use broadcast variable. Note that " +
+        "maximum string length allowed in Java is Integer.MAX_VALUE, so anything above it would " +
+        "be meaningless. The default value is set to -1 (disabled by default).")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(-1)
+
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files. " +
       "This configuration is effective only when using file-based sources such as Parquet, JSON " +
@@ -5066,6 +5078,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def wholeStageSplitConsumeFuncByOperator: Boolean =
     getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
+
+  def broadcastCleanedSourceThreshold: Int =
+    getConf(SQLConf.WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
