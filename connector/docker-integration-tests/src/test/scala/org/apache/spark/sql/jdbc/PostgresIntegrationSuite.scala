@@ -422,7 +422,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     checkAnswer(df_actual, df_expected)
   }
 
-  test("SPARK-43040: timestamp_ntz_array roundtrip test") {
+  test("SPARK-47316: timestamp_ntz_array roundtrip test") {
     val prop = new Properties
     prop.setProperty("preferTimestampNTZ", "true")
     val df_expected = sql("select array(timestamp_ntz'2020-12-10 11:22:33') as col0")
