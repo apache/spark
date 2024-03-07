@@ -1086,7 +1086,7 @@ The expected format is ByteString, but was `<unsupported>` (`<class>`).
 
 [SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Illegal pattern character found in datetime patter: `<c>`. Please provide legal character.
+Illegal pattern character found in datetime pattern: `<c>`. Please provide legal character.
 
 ### INVALID_COLUMN_NAME_AS_PATH
 
@@ -1120,13 +1120,13 @@ For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-
 
 [SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Unrecognized datetime pattern: `<pattern>`. Please provide correct datetime pattern
+Unrecognized datetime pattern: `<pattern>`. Please provide correct datetime pattern.
 
 ### INVALID_DATETIME_PATTERN_LENGTH
 
 [SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Too many pattern letters: `<style>`. Please reduce pattern length.
+Too many letters in datetime pattern: `<style>`. Please reduce pattern length.
 
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
@@ -1650,7 +1650,7 @@ Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL qu
 
 SQLSTATE: HV091
 
-Error while indexing filed. Field with name `<name>` does not exist. Available fields: `<fieldNames>`
+Error while indexing field. Field with name `<name>` does not exist. Available fields: `<fieldNames>`
 
 ### NONEXISTENT_FIELD_NAME_IN_LIST
 
