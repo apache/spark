@@ -194,9 +194,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
 
   private def inferField(parser: XMLEventReader): DataType = {
     parser.peek match {
-      case _: EndElement =>
-        parser.nextEvent()
-        NullType
+      case _: EndElement => NullType
       case _: StartElement => inferObject(parser)
       case _: Characters =>
         val structType = inferObject(parser).asInstanceOf[StructType]
@@ -449,7 +447,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     oldTypeOpt match {
       // If the field name already exists,
       // merge the type and infer the combined field as an array type if necessary
-      case Some(oldType) if !oldType.isInstanceOf[ArrayType] =>
+      case Some(oldType) if !oldType.isInstanceOf[ArrayType] && !newType.isInstanceOf[NullType] =>
         ArrayType(compatibleType(caseSensitive, options.valueTag)(oldType, newType))
       case Some(oldType) =>
         compatibleType(caseSensitive, options.valueTag)(oldType, newType)
