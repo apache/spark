@@ -69,9 +69,10 @@ class ResourceProfileTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             Exception,
-            "ResourceProfiles are only supported on YARN and Kubernetes and Standalone with dynamic allocation enabled.",
+            "ResourceProfiles are only supported on YARN and Kubernetes and "
+            "Standalone with dynamic allocation enabled.",
         ):
-            df.mapInArrow(lambda x: x, df.schema, False, rp).collect()
+            rp.id
 
         spark.stop()
 
