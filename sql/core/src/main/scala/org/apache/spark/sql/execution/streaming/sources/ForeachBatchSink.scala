@@ -20,21 +20,39 @@ package org.apache.spark.sql.execution.streaming.sources
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LogicalPlan, TransformWithState}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
 
 class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: ExpressionEncoder[T])
-  extends Sink {
+  extends Sink with Logging {
+
+  private def isQueryStateful(logicalPlan: LogicalPlan): Boolean = {
+    logicalPlan.collect {
+      case node @ (_: Aggregate | _: Distinct | _: FlatMapGroupsWithState
+                   | _: FlatMapGroupsInPandasWithState | _: TransformWithState | _: Deduplicate
+                   | _: DeduplicateWithinWatermark | _: GlobalLimit) if node.isStreaming => node
+      case node @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => node
+    }.nonEmpty
+  }
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     val node = LogicalRDD.fromDataset(rdd = data.queryExecution.toRdd, originDataset = data,
       isStreaming = false)
     implicit val enc = encoder
     val ds = Dataset.ofRows(data.sparkSession, node).as[T]
-    callBatchWriter(ds, batchId)
+    val isStateful = isQueryStateful(data.logicalPlan)
+    if (isStateful) {
+      ds.persist()
+      callBatchWriter(ds, batchId)
+      ds.unpersist()
+    } else {
+      callBatchWriter(ds, batchId)
+    }
   }
 
   override def toString(): String = "ForeachBatchSink"
