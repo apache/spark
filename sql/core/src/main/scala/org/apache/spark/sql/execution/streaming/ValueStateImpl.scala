@@ -30,6 +30,7 @@ import org.apache.spark.sql.streaming.ValueState
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
  * @param keyEnc - Spark SQL encoder for key
+ * @param valEncoder - Spark SQL encoder for value
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImpl[S](

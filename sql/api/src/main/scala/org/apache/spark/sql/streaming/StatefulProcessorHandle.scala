@@ -34,6 +34,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
    * @param stateName - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
    * @tparam T - type of state variable
    * @return - instance of ValueState of type T that can be used to store state persistently
    */
@@ -44,6 +45,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * The ListState persists values of type T.
    *
    * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
    * @tparam T - type of state variable
    * @return - instance of ListState of type T that can be used to store state persistently
    */
