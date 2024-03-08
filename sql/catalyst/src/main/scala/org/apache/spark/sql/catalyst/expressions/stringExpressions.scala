@@ -2682,7 +2682,7 @@ case class Chr(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Base64(child: Expression, chunkBase64: Boolean)
+case class Base64(child: Expression, chunkBase64: Boolean = SQLConf.get.base64Chunking)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   lazy val encoder: JBase64.Encoder = if (chunkBase64) {
@@ -2691,7 +2691,6 @@ case class Base64(child: Expression, chunkBase64: Boolean)
     JBase64.getMimeEncoder(-1, Array())
   }
 
-  def this(child: Expression) = this(child, SQLConf.get.base64Chunking)
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
