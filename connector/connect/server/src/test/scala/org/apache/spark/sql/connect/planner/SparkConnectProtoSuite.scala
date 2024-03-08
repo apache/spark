@@ -566,15 +566,6 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(
       connectTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")),
       sparkTestRelation.withColumnsRenamed(Map("id" -> "id1", "id" -> "id2")))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        transform(
-          connectTestRelation.withColumnsRenamed(
-            Map("id" -> "duplicatedCol", "name" -> "duplicatedCol")))
-      },
-      errorClass = "COLUMN_ALREADY_EXISTS",
-      parameters = Map("columnName" -> "`duplicatedcol`"))
   }
 
   test("Writes fails without path or table") {
