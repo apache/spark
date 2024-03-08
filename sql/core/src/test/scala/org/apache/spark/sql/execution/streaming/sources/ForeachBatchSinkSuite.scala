@@ -111,7 +111,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
     val writer: (Dataset[Int], Long) => Unit = { case (df, batchId) =>
       // verify that the input dataframe is cached for stateful query
-      spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isDefined
+      assert(spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isDefined)
 
       val newDF = df
         .map(_ + 1)
@@ -146,7 +146,7 @@ class ForeachBatchSinkSuite extends StreamTest {
 
     val writer: (Dataset[Int], Long) => Unit = { case (df, batchId) =>
       // verify that the input dataframe is cached for stateful query
-      spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isDefined
+      assert(spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isDefined)
 
       val newDF = df
         .map(_ + 1)
@@ -175,7 +175,7 @@ class ForeachBatchSinkSuite extends StreamTest {
     val tester = new ForeachBatchTester[Int](mem)
     val writer: (Dataset[Int], Long) => Unit = { case (df, batchId) =>
       // verify that the input dataframe is not cached for stateless query
-      spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isEmpty
+      assert(spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isEmpty)
       df.persist()
 
       val newDF = df
