@@ -2088,8 +2088,70 @@
   },
   "INVALID_INTERVAL_FORMAT" : {
     "message" : [
-      "Error parsing '<input>' to interval, <msg>. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format. If the issue persists, please double check that the input value is not null or empty and try again."
+      "Error parsing '<input>' to interval. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format."
     ],
+    "subClass" : {
+      "ARITHMETIC_EXCEPTION" : {
+        "message" : [
+          "Uncaught arithmetic exception: <e>."
+        ]
+      },
+      "INPUT_IS_EMPTY" : {
+        "message" : [
+          "Interval string cannot be empty."
+        ]
+      },
+      "INPUT_IS_NULL" : {
+        "message" : [
+          "Interval string cannot be null."
+        ]
+      },
+      "INVALID_FRACTION" : {
+        "message" : [
+          "<unit> cannot have fractional part."
+        ]
+      },
+      "INVALID_PRECISION" : {
+        "message" : [
+          "Interval can only support nanosecond precision, <value> is out of range."
+        ]
+      },
+      "INVALID_PREFIX" : {
+        "message" : [
+          "Invalid interval prefix <prefix>."
+        ]
+      },
+      "INVALID_UNIT" : {
+        "message" : [
+          "Invalid unit <unit>."
+        ]
+      },
+      "INVALID_VALUE" : {
+        "message" : [
+          "Invalid value <value>."
+        ]
+      },
+      "MISSING_NUMBER" : {
+        "message" : [
+          "Expect a number after <word> but hit EOL."
+        ]
+      },
+      "MISSING_UNIT" : {
+        "message" : [
+          "Expect a unit name after <word> but hit EOL."
+        ]
+      },
+      "UNKNOWN_PARSING_ERROR" : {
+        "message" : [
+          "Unknown error when parsing <word>."
+        ]
+      },
+      "UNRECOGNIZED_NUMBER" : {
+        "message" : [
+          "Unrecognized number <number>."
+        ]
+      }
+    },
     "sqlState" : "22006"
   },
   "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {

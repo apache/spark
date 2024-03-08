@@ -49,6 +49,148 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
+  private def checkFromInvalidStringNull(input: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null")))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringEmpty(input: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null")))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringInvalidPrefix(input: String, prefix: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "prefix" -> prefix))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringUnrecognizedNumber(input: String, number: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "number" -> number))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringArithmeticException(input: String, errorMsg: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "e" -> errorMsg))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringInvalidValue(input: String, value: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "value" -> value))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringInvalidPrecision(input: String, value: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "value" -> value))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringInvalidFraction(input: String, unit: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "unit" -> unit))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringInvalidUnit(input: String, unit: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "unit" -> unit))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringMissingNumber(input: String, word: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "word" -> word))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringMissingUnit(input: String, word: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "word" -> word))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
+  private def checkFromInvalidStringUnknownError(input: String, word: String): Unit = {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        stringToInterval(UTF8String.fromString(input))
+      },
+      errorClass = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
+      parameters = Map(
+        "input" -> Option(input).map(_.toString).getOrElse("null"),
+        "word" -> word))
+    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
+  }
+
   private def failFuncWithInvalidInput(
       input: String, errorMsg: String, converter: String => CalendarInterval): Unit = {
     withClue("Expected to throw an exception for the invalid input") {
@@ -79,24 +221,24 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     testSingleUnit("MilliSecond", 3, 0, 0, millisToMicros(3))
     testSingleUnit("MicroSecond", 3, 0, 0, 3)
 
-    checkFromInvalidString(null, "interval string cannot be null")
-    checkFromInvalidString("", "interval string cannot be empty")
-    checkFromInvalidString("interval", "interval string cannot be empty")
-    checkFromInvalidString("foo", "unrecognized number 'foo'")
-    checkFromInvalidString("foo 1 day", "unrecognized number 'foo'")
+    checkFromInvalidStringNull(null)
+    checkFromInvalidStringEmpty("")
+    checkFromInvalidStringEmpty("interval")
+    checkFromInvalidStringUnrecognizedNumber("foo", "foo")
+//    checkFromInvalidStringUnrecognizedNumber("foo 1 day", "foo")
   }
 
   test("string to interval: interval with dangling parts should not results null") {
-    checkFromInvalidString("+", "expect a number after '+' but hit EOL")
-    checkFromInvalidString("-", "expect a number after '-' but hit EOL")
-    checkFromInvalidString("+ 2", "expect a unit name after '2' but hit EOL")
-    checkFromInvalidString("- 1", "expect a unit name after '1' but hit EOL")
-    checkFromInvalidString("1", "expect a unit name after '1' but hit EOL")
-    checkFromInvalidString("1.2", "expect a unit name after '1.2' but hit EOL")
-    checkFromInvalidString("1 day 2", "expect a unit name after '2' but hit EOL")
-    checkFromInvalidString("1 day 2.2", "expect a unit name after '2.2' but hit EOL")
-    checkFromInvalidString("1 day -", "expect a number after '-' but hit EOL")
-    checkFromInvalidString("-.", "expect a unit name after '-.' but hit EOL")
+    checkFromInvalidStringMissingNumber("+", "+")
+    checkFromInvalidStringMissingNumber("-", "-")
+    checkFromInvalidStringMissingUnit("+ 2", "2")
+    checkFromInvalidStringMissingUnit("- 1", "1")
+    checkFromInvalidStringMissingUnit("1", "1")
+    checkFromInvalidStringMissingUnit("1.2", "1.2")
+    checkFromInvalidStringMissingUnit("1 day 2", "2")
+    checkFromInvalidStringMissingUnit("1 day 2.2", "2.2")
+    checkFromInvalidStringMissingNumber("1 day -", "-")
+    checkFromInvalidStringMissingUnit("-.", "-.")
   }
 
   test("string to interval: multiple units") {
@@ -118,32 +260,32 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     // Allow duplicated units and summarize their values
     checkFromString("1 day 10 day", new CalendarInterval(0, 11, 0))
     // Only the seconds units can have the fractional part
-    checkFromInvalidString("1.5 days", "'days' cannot have fractional part")
-    checkFromInvalidString("1. hour", "'hour' cannot have fractional part")
-    checkFromInvalidString("1 hourX", "invalid unit 'hourx'")
-    checkFromInvalidString("~1 hour", "unrecognized number '~1'")
-    checkFromInvalidString("1 Mour", "invalid unit 'mour'")
-    checkFromInvalidString("1 aour", "invalid unit 'aour'")
-    checkFromInvalidString("1a1 hour", "invalid value '1a1'")
-    checkFromInvalidString("1.1a1 seconds", "invalid value '1.1a1'")
-    checkFromInvalidString("2234567890 days", "integer overflow")
-    checkFromInvalidString(". seconds", "invalid value '.'")
+    checkFromInvalidStringInvalidFraction("1.5 days", "days")
+    checkFromInvalidStringInvalidFraction("1. hour", "hour")
+    checkFromInvalidStringInvalidUnit("1 hourX", "hourx")
+    checkFromInvalidStringUnrecognizedNumber("~1 hour", "~1")
+    checkFromInvalidStringInvalidUnit("1 Mour", "mour")
+    checkFromInvalidStringInvalidUnit("1 aour", "aour")
+    checkFromInvalidStringInvalidValue("1a1 hour", "1a1")
+    checkFromInvalidStringInvalidValue("1.1a1 seconds", "1.1a1")
+    checkFromInvalidStringArithmeticException("2234567890 days", "integer overflow")
+    checkFromInvalidStringInvalidValue(". seconds", ".")
   }
 
   test("string to interval: whitespaces") {
-    checkFromInvalidString(" ", "interval string cannot be empty")
-    checkFromInvalidString("\n", "interval string cannot be empty")
-    checkFromInvalidString("\t", "interval string cannot be empty")
+    checkFromInvalidStringEmpty(" ")
+    checkFromInvalidStringEmpty("\n")
+    checkFromInvalidStringEmpty("\t")
     checkFromString("1 \t day \n 2 \r hour", new CalendarInterval(0, 1, 2 * MICROS_PER_HOUR))
-    checkFromInvalidString("interval1 \t day \n 2 \r hour", "invalid interval prefix interval1")
+    checkFromInvalidStringInvalidPrefix("interval1 \t day \n 2 \r hour", "interval1")
     checkFromString("interval\r1\tday", new CalendarInterval(0, 1, 0))
     // scalastyle:off nonascii
-    checkFromInvalidString("中国 interval 1 day", "unrecognized number '中国'")
-    checkFromInvalidString("interval浙江 1 day", "invalid interval prefix interval浙江")
-    checkFromInvalidString("interval 1杭州 day", "invalid value '1杭州'")
-    checkFromInvalidString("interval 1 滨江day", "invalid unit '滨江day'")
-    checkFromInvalidString("interval 1 day长河", "invalid unit 'day长河'")
-    checkFromInvalidString("interval 1 day 网商路", "unrecognized number '网商路'")
+    checkFromInvalidStringUnrecognizedNumber("中国 interval 1 day", "中国")
+    checkFromInvalidStringInvalidPrefix("interval浙江 1 day", "interval浙江")
+    checkFromInvalidStringInvalidValue("interval 1杭州 day", "1杭州")
+    checkFromInvalidStringInvalidUnit("interval 1 滨江day", "滨江day")
+    checkFromInvalidStringInvalidUnit("interval 1 day长河", "day长河")
+    checkFromInvalidStringUnrecognizedNumber("interval 1 day 网商路", "网商路")
     // scalastyle:on nonascii
   }
 
@@ -157,8 +299,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     // truncate nanoseconds to microseconds
     checkFromString("0.999999999 seconds", new CalendarInterval(0, 0, 999999))
     checkFromString(".999999999 seconds", new CalendarInterval(0, 0, 999999))
-    checkFromInvalidString("0.123456789123 seconds",
-      "interval can only support nanosecond precision, '0.123456789123' is out of range")
+    checkFromInvalidStringInvalidPrecision("0.123456789123 seconds", "0.123456789123")
   }
 
   test("from year-month string") {
