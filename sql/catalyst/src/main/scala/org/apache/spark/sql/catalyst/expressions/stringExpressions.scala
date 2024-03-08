@@ -2701,7 +2701,15 @@ case class Base64(child: Expression, chunkBase64: Boolean)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
-      s"${ev.value} = UTF8String.fromBytes($encoder}.encode($child));"
+      s"""
+        if ($chunkBase64) {
+           ${ev.value} = UTF8String.fromBytes(
+              ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
+        } else {
+          ${ev.value} = UTF8String.fromBytes(
+              ${classOf[JBase64].getName}.getMimeEncoder(-1, new byte[0]).encode($child));
+        }
+      """
     })
   }
 
