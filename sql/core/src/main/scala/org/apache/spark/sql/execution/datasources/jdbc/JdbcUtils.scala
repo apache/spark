@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.math.{BigDecimal => JBigDecimal}
+import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 import java.util.concurrent.TimeUnit
@@ -414,7 +415,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case DecimalType.Fixed(p, s) =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val decimal =
-          nullSafeConvert[java.math.BigDecimal](rs.getBigDecimal(pos + 1), d => Decimal(d, p, s))
+          nullSafeConvert[JBigDecimal](rs.getBigDecimal(pos + 1), d => Decimal(d, p, s))
         row.update(pos, decimal)
 
     case DoubleType =>
@@ -508,37 +509,22 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case ArrayType(et, _) =>
       val elementConversion = et match {
-        case TimestampType =>
-          (array: Object) =>
-            array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
-              nullSafeConvert(timestamp, fromJavaTimestamp)
-            }
+        case TimestampType => arrayConverter[Timestamp] {
+          (t: Timestamp) => fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t))
+        }
 
         case TimestampNTZType =>
-          (array: Object) =>
-            array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
-              nullSafeConvert(timestamp, (t: java.sql.Timestamp) =>
-                localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t)))
-            }
+          arrayConverter[Timestamp] {
+            (t: Timestamp) => localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t))
+          }
 
         case StringType =>
-          (array: Object) =>
-            // some underling types are not String such as uuid, inet, cidr, etc.
-            array.asInstanceOf[Array[java.lang.Object]]
-              .map(obj => if (obj == null) null else UTF8String.fromString(obj.toString))
+          arrayConverter[Object]((obj: Object) => UTF8String.fromString(obj.toString))
 
-        case DateType =>
-          (array: Object) =>
-            array.asInstanceOf[Array[java.sql.Date]].map { date =>
-              nullSafeConvert(date, fromJavaDate)
-            }
+        case DateType => arrayConverter[Date](fromJavaDate)
 
         case dt: DecimalType =>
-          (array: Object) =>
-            array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
-              nullSafeConvert[java.math.BigDecimal](
-                decimal, d => Decimal(d, dt.precision, dt.scale))
-            }
+            arrayConverter[java.math.BigDecimal](d => Decimal(d, dt.precision, dt.scale))
 
         case LongType if metadata.contains("binarylong") =>
           throw QueryExecutionErrors.unsupportedArrayElementTypeBasedOnBinaryError(dt)
@@ -552,7 +538,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val array = nullSafeConvert[java.sql.Array](
           input = rs.getArray(pos + 1),
-          array => new GenericArrayData(elementConversion.apply(array.getArray)))
+          array => new GenericArrayData(elementConversion(array.getArray)))
         row.update(pos, array)
 
     case _ => throw QueryExecutionErrors.unsupportedJdbcTypeError(dt.catalogString)
@@ -564,6 +550,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
     } else {
       f(input)
     }
+  }
+
+  private def arrayConverter[T](elementConvert: T => Any): Any => Any = (array: Any) => {
+    array.asInstanceOf[Array[T]].map(e => nullSafeConvert(e, elementConvert))
   }
 
   // A `JDBCValueSetter` is responsible for setting a value from `Row` into a field for
