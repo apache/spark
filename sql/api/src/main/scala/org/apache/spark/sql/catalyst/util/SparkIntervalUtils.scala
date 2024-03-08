@@ -131,15 +131,6 @@ trait SparkIntervalUtils {
    */
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
-    def throwIAE(msg: String, e: Exception = null) = {
-      throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_INTERVAL_FORMAT",
-        messageParameters = Map(
-          "input" -> Option(input).map(_.toString).getOrElse("null"),
-          "msg" -> msg),
-        cause = e)
-    }
-
     if (input == null) {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
