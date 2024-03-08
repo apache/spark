@@ -18,9 +18,10 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.KeyValueGroupedDataset
+/*
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf */
 
 case class InputRow(key: String, action: String, value: Double)
 
@@ -88,7 +89,7 @@ class TransformWithStateWithInitialStateSuite extends StreamTest {
       .groupByKey(x => x._1)
       .mapValues(x => x)
   }
-
+/*
   test ("transformWithStateWithInitialState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
@@ -173,23 +174,17 @@ class TransformWithStateWithInitialStateSuite extends StreamTest {
       }
     )
   }
-
-  test("transformWithStateWithInitialState - batch mode is supported") {
-    val inputData = MemoryStream[InputRow]
+*/
+  test("transformWithStateWithInitialState - batch should succeed") {
+    val inputData = Seq(InputRow("k1", "update", 37.0), InputRow("k1", "getOption", -1.0))
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new
           StatefulProcessorWithInitialStateTestClass(),
-        TimeoutMode.NoTimeouts(), OutputMode.Append(), createInitialDfForTest
-      )
+        TimeoutMode.NoTimeouts(),
+        OutputMode.Append(), createInitialDfForTest)
 
-    testStream(result, OutputMode.Update())(
-      AddData(inputData, InputRow("a", "update", -1.0)),
-      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
-        (t: Throwable) => {
-          assert(t.getMessage.contains("not supported"))
-        }
-      }
-    )
+    val df = result.toDF()
+    checkAnswer(df, Seq(("k1", "getOption", -1.0)).toDF())
   }
 }

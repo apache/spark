@@ -84,8 +84,10 @@ class StatefulProcessorHandleImpl(
 
     val taskCtxOpt = Option(TaskContext.get())
     val (queryId, batchId) = if (!isStreaming) {
+      println("isStreaming here: " + isStreaming)
       (BATCH_QUERY_ID, 0L)
     } else if (taskCtxOpt.isDefined) {
+      println("isStreaming here true: " + isStreaming)
       (taskCtxOpt.get.getLocalProperty(StreamExecution.QUERY_ID_KEY),
         taskCtxOpt.get.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY).toLong)
     } else {

@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
+
+import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
@@ -252,20 +254,36 @@ case class TransformWithStateExec(
           // The state store aware zip partitions will provide us with two iterators,
           // child data iterator and the initial state iterator per partition.
           case (partitionId, childDataIterator, initStateIterator) =>
-            processDataWithInitialState(partitionId, childDataIterator, initStateIterator,
-              storeConf, hadoopConfBroadcast)
+            val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
+              stateInfo.get.operatorId, partitionId)
+            val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
+            val store = StateStore.get(
+              storeProviderId,
+              schemaForKeyRow,
+              schemaForValueRow,
+              0,
+              stateInfo.get.storeVersion,
+              useColumnFamilies = true,
+              storeConf, hadoopConfBroadcast.value.value
+            )
+
+            processDataWithInitialState(store, childDataIterator, initStateIterator)
         }
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
-        val broadcastedHadoopConf =
-        new SerializableConfiguration(session.sessionState.newHadoopConf())
-        child.execute().mapPartitionsWithIndex[InternalRow](
-          (i, iter) => {
+        val hadoopConfBroadcast = sparkContext.broadcast(
+          new SerializableConfiguration(session.sessionState.newHadoopConf())
+        )
+        child.execute().zipPartitionsWithIndex(
+          initialState.execute()
+        ) {
+          case (partitionId, childDataIterator, initStateIterator) =>
             val providerId = {
               val tempDirPath = Utils.createTempDir().getAbsolutePath
               new StateStoreProviderId(
-                StateStoreId(tempDirPath, 0, i), getStateInfo.queryRunId)
+                // TODO how to get partitionId
+                StateStoreId(tempDirPath, 0, partitionId), getStateInfo.queryRunId)
             }
 
             val sqlConf = new SQLConf()
@@ -281,16 +299,11 @@ case class TransformWithStateExec(
               numColsPrefixKey = 0,
               useColumnFamilies = true,
               storeConf = storeConf,
-              hadoopConf = broadcastedHadoopConf.value)
-
+              hadoopConf = hadoopConfBroadcast.value.value)
             val store = stateStoreProvider.getStore(0)
-            val outputIterator = processData(store, iter)
-            CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
-              stateStoreProvider.close()
-              statefulProcessor.close()
-            })
-          }
-        )
+
+            processDataWithInitialState(store, childDataIterator, initStateIterator)
+        }
       }
     } else {
       if (isStreaming) {
@@ -363,26 +376,12 @@ case class TransformWithStateExec(
   }
 
   private def processDataWithInitialState(
-      partitionId: Int,
+      store: StateStore,
       childDataIterator: Iterator[InternalRow],
-      initStateIterator: Iterator[InternalRow],
-      storeConf: StateStoreConf,
-      hadoopConfBroadcast: Broadcast[SerializableConfiguration]):
+      initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     // If the user provided initial state we need to have the initial state and the
     // data in the same partition so that we can still have just one commit at the end.
-    val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
-      stateInfo.get.operatorId, partitionId)
-    val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
-    val store = StateStore.get(
-      storeProviderId,
-      schemaForKeyRow,
-      schemaForValueRow,
-      0,
-      stateInfo.get.storeVersion,
-      useColumnFamilies = true,
-      storeConf, hadoopConfBroadcast.value.value
-    )
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
       keyEncoder)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
@@ -405,6 +404,33 @@ case class TransformWithStateExec(
     val result = processDataWithPartition(childDataIterator, store,
       processorHandle, Option(initStateIterator))
     result
+  }
+
+  class ZipPartitionsWithIndexRDD[A: ClassTag, B: ClassTag, V: ClassTag](
+      sc: SparkContext,
+      var f: (Int, Iterator[A], Iterator[B]) => Iterator[V],
+      var rdd1: RDD[A],
+      var rdd2: RDD[B])
+    extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2)) {
+    override def compute(split: Partition, context: TaskContext): Iterator[V] = {
+      val partitions = split.asInstanceOf[ZippedPartitionsPartition].partitions
+      if (partitions(0).index != partitions(1).index) {
+        throw new IllegalStateException(s"Partition ID should be same in both side: " +
+          s"left ${partitions(0).index} , right ${partitions(1).index}")
+      }
+
+      val partitionId = partitions(0).index
+      f(partitionId, rdd1.iterator(partitions(0), context), rdd2.iterator(partitions(1), context))
+    }
+  }
+
+  implicit class ZipPartitionsWithIndexHelper[T: ClassTag](dataRDD: RDD[T]) {
+    def zipPartitionsWithIndex[U: ClassTag, V: ClassTag](dataRDD2: RDD[U])
+        (f: (Int, Iterator[T], Iterator[U]) => Iterator[V]): RDD[V] = {
+      new ZipPartitionsWithIndexRDD(
+        dataRDD.sparkContext, f, dataRDD, dataRDD2
+      )
+    }
   }
 }
 
