@@ -417,7 +417,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (suffix.numBytes == 0 || this.numBytes == 0) {
       return suffix.numBytes==0;
     }
-    return CollationFactory.getStringSearch(this, suffix, collationId).last()==this.numChars()-suffix.numChars();
+    return CollationFactory.getStringSearch(this,
+            suffix, collationId).last()==this.numChars()-suffix.numChars();
   }
 
   /**
