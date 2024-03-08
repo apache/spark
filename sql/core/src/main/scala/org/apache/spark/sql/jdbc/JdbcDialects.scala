@@ -87,26 +87,20 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def canHandle(url : String): Boolean
 
-  @deprecated("Implement getCatalystType with isTimestampNTZ instead", "4.0.0")
-  def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
-
   /**
    * Get the custom datatype mapping for the given jdbc meta information.
    * @param sqlType The sql type (see java.sql.Types)
    * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
    * @param size The size of the type.
    * @param md Result metadata associated with this type.
-   * @param isTimestampNTZ Use TIMESTAMP_NTZ type or not.
    * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
    *         or null if the default type mapping should be used.
    */
   def getCatalystType(
       sqlType: Int,
       typeName: String,
-      size: Int,
-      md: MetadataBuilder,
-      isTimestampNTZ: Boolean): Option[DataType] = getCatalystType(sqlType, typeName, size, md)
+      size: Int, md: MetadataBuilder,
+      isTimestampNTZ: Boolean = false): Option[DataType] = None
 
   /**
    * Retrieve the jdbc / sql type for a given datatype.
