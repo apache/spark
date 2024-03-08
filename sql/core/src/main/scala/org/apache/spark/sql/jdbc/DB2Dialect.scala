@@ -85,8 +85,7 @@ private object DB2Dialect extends JdbcDialect {
       sqlType: Int,
       typeName: String,
       size: Int,
-      md: MetadataBuilder,
-      isTimestampNTZ: Boolean): Option[DataType] = sqlType match {
+      md: MetadataBuilder): Option[DataType] = sqlType match {
     case Types.REAL => Option(FloatType)
     case Types.OTHER =>
       typeName match {

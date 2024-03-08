@@ -48,10 +48,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     supportedFunctions.contains(funcName)
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      size: Int,
-      md: MetadataBuilder, isTimestampNTZ: Boolean): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) {
       Some(FloatType)
     } else if (sqlType == Types.SMALLINT) {
@@ -68,6 +65,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       Some(StringType) // sqlType is  Types.VARCHAR
     } else if (sqlType == Types.ARRAY) {
       val scale = md.build().getLong("scale").toInt
+      val isTimestampNTZ = md.build().getBoolean("isTimestampNTZ")
       // postgres array type names start with underscore
       toCatalystType(typeName.drop(1), size, scale, isTimestampNTZ).map(ArrayType(_))
     } else None

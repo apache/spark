@@ -39,11 +39,7 @@ private object DerbyDialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      size: Int,
-      md: MetadataBuilder,
-      isTimestampNTZ: Boolean): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) Option(FloatType) else None
   }
 

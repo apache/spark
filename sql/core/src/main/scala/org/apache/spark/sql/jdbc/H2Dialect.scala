@@ -59,10 +59,7 @@ private[sql] object H2Dialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String, size: Int,
-      md: MetadataBuilder,
-      isTimestampNTZ: Boolean = false): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case Types.NUMERIC if size > 38 =>
         // H2 supports very large decimal precision like 100000. The max precision in Spark is only

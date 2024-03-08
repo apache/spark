@@ -302,9 +302,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
           metadata.putBoolean("rowid", true)
         case _ =>
       }
-
+      metadata.putBoolean("isTimestampNTZ", isTimestampNTZ)
       val columnType =
-        dialect.getCatalystType(dataType, typeName, fieldSize, metadata, isTimestampNTZ).getOrElse(
+        dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
