@@ -125,6 +125,12 @@
     ],
     "sqlState" : "428FR"
   },
+  "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK" : {
+    "message" : [
+      "Watermark needs to be defined to reassign event time column. Could not find watermark definition in the streaming query."
+    ],
+    "sqlState" : "42611"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."

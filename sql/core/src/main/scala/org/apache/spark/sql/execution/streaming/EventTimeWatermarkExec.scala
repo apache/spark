@@ -129,3 +129,37 @@ case class EventTimeWatermarkExec(
   override protected def withNewChildInternal(newChild: SparkPlan): EventTimeWatermarkExec =
     copy(child = newChild)
 }
+
+case class UpdateEventTimeColumnExec(
+    eventTime: Attribute,
+    delay: CalendarInterval,
+    child: SparkPlan) extends UnaryExecNode {
+
+  val delayMs = EventTimeWatermark.getDelayMs(delay)
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute()
+  }
+
+  // Update the metadata on the eventTime column to include the desired delay.
+  override val output: Seq[Attribute] = child.output.map { a =>
+    if (a semanticEquals eventTime) {
+      val updatedMetadata = new MetadataBuilder()
+        .withMetadata(a.metadata)
+        .putLong(EventTimeWatermark.delayKey, delayMs)
+        .build()
+      a.withMetadata(updatedMetadata)
+    } else if (a.metadata.contains(EventTimeWatermark.delayKey)) {
+      // Remove existing watermark
+      val updatedMetadata = new MetadataBuilder()
+        .withMetadata(a.metadata)
+        .remove(EventTimeWatermark.delayKey)
+        .build()
+      a.withMetadata(updatedMetadata)
+    } else {
+      a
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): UpdateEventTimeColumnExec =
+    copy(child = newChild)
+}

@@ -3996,6 +3996,8 @@ object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(EVENT_TIME_WATERMARK)) {
     case EventTimeWatermark(_, _, child) if child.resolved && !child.isStreaming => child
+    case UpdateEventTimeWatermarkColumn(_, _, child) if child.resolved && !child.isStreaming =>
+      child
   }
 }
 

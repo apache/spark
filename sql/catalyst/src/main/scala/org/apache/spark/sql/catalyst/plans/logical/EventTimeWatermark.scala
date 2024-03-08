@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EVENT_TIME_WATERMARK, TreePattern}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
@@ -40,7 +41,8 @@ object EventTimeWatermark {
 case class EventTimeWatermark(
     eventTime: Attribute,
     delay: CalendarInterval,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode
+    with Logging {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(EVENT_TIME_WATERMARK)
 
@@ -70,5 +72,34 @@ case class EventTimeWatermark(
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): EventTimeWatermark =
+    copy(child = newChild)
+}
+
+case class UpdateEventTimeWatermarkColumn(
+    eventTime: Attribute,
+    delay: CalendarInterval,
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output.map { a =>
+    if (a semanticEquals eventTime) {
+      val delayMs = EventTimeWatermark.getDelayMs(delay)
+      val updatedMetadata = new MetadataBuilder()
+        .withMetadata(a.metadata)
+        .putLong(EventTimeWatermark.delayKey, delayMs)
+        .build()
+      a.withMetadata(updatedMetadata)
+    } else if (a.metadata.contains(EventTimeWatermark.delayKey)) {
+      // Remove existing watermark
+      val updatedMetadata = new MetadataBuilder()
+        .withMetadata(a.metadata)
+        .remove(EventTimeWatermark.delayKey)
+        .build()
+      a.withMetadata(updatedMetadata)
+    } else {
+      a
+    }
+  }
+
+  override protected def withNewChildInternal(
+      newChild: LogicalPlan): UpdateEventTimeWatermarkColumn =
     copy(child = newChild)
 }

@@ -144,6 +144,12 @@ The method `<methodName>` can not be called on streaming Dataset/DataFrame.
 
 ALTER TABLE (ALTER|CHANGE) COLUMN is not supported for partition columns, but found the partition column `<columnName>` in the table `<tableName>`.
 
+### CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK
+
+[SQLSTATE: 42611](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Watermark needs to be defined to reassign event time column. Could not find watermark definition in the streaming query.
+
 ### CANNOT_CAST_DATATYPE
 
 [SQLSTATE: 42846](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

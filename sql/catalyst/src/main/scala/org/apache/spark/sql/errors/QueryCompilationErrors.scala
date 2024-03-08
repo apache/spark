@@ -3995,4 +3995,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = e.origin
     )
   }
+
+  def cannotAssignEventTimeColumn(): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_ASSIGN_EVENT_TIME_COLUMN_WITHOUT_WATERMARK",
+      messageParameters = Map()
+    )
+  }
 }
