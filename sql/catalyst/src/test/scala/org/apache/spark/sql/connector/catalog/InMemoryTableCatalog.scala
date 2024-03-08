@@ -85,8 +85,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     invalidatedTables.add(ident)
   }
 
-  // TODO: remove it when the deprecated method `createTable(..., StructType, ...)`
-  //  in the parent interface `TableCatalog` is removed
   override def createTable(
       ident: Identifier,
       schema: StructType,

@@ -241,8 +241,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
     null // Return null to save the `loadTable` call for CREATE TABLE without AS SELECT.
   }
 
-  // TODO: remove it when the deprecated method `createTable(..., StructType, ...)`
-  //  in the parent interface `TableCatalog` is removed
   override def createTable(
       ident: Identifier,
       schema: StructType,
