@@ -77,6 +77,10 @@ set +o posix
 CMD=()
 DELIM=$'\n'
 CMD_START_FLAG="false"
+
+temp_file=$(mktemp)
+build_command "$@" > "$temp_file"
+
 while IFS= read -d "$DELIM" -r _ARG; do
   ARG=${_ARG//$'\r'}
   if [ "$CMD_START_FLAG" == "true" ]; then
@@ -90,7 +94,9 @@ while IFS= read -d "$DELIM" -r _ARG; do
       echo "$ARG"
     fi
   fi
-done < <(build_command "$@")
+done < "$temp_file"
+
+rm -f "$temp_file"
 
 COUNT=${#CMD[@]}
 LAST=$((COUNT - 1))
