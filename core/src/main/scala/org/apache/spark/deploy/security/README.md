@@ -182,7 +182,7 @@ tokens at every renewal interval instead, and distribute those tokens to executo
 
 This also has another advantage on top of supporting services like HBase: it removes the dependency
 on an external renewal service (like YARN). That way, Spark's renewal feature can be used with
-resource managers that are not DT-aware, such as Mesos or Kubernetes, as long as the application
+resource managers that are not DT-aware, such as Kubernetes, as long as the application
 has access to a keytab.
 
 

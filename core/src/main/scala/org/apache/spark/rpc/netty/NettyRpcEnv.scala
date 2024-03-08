@@ -56,7 +56,9 @@ private[netty] class NettyRpcEnv(
     conf.clone.set(RPC_IO_NUM_CONNECTIONS_PER_PEER, 1),
     "rpc",
     conf.get(RPC_IO_THREADS).getOrElse(numUsableCores),
-    role)
+    role,
+    sslOptions = Some(securityManager.getRpcSSLOptions())
+  )
 
   private val dispatcher: Dispatcher = new Dispatcher(this, numUsableCores)
 
@@ -391,7 +393,11 @@ private[netty] class NettyRpcEnv(
         }
 
         val ioThreads = clone.getInt("spark.files.io.threads", 1)
-        val downloadConf = SparkTransportConf.fromSparkConf(clone, module, ioThreads)
+        val downloadConf = SparkTransportConf.fromSparkConf(
+          clone,
+          module,
+          ioThreads,
+          sslOptions = Some(securityManager.getRpcSSLOptions()))
         val downloadContext = new TransportContext(downloadConf, new NoOpRpcHandler(), true)
         fileDownloadFactory = downloadContext.createClientFactory(createClientBootstraps())
       }
@@ -451,7 +457,6 @@ private[netty] class NettyRpcEnv(
     }
 
     override def onFailure(streamId: String, cause: Throwable): Unit = {
-      logDebug(s"Error downloading stream $streamId.", cause)
       source.setError(cause)
       sink.close()
     }

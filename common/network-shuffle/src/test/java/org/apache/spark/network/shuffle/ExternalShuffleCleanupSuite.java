@@ -24,9 +24,9 @@ import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.junit.Test;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -124,13 +124,13 @@ public class ExternalShuffleCleanupSuite {
 
   private static void assertStillThere(TestShuffleDataContext dataContext) {
     for (String localDir : dataContext.localDirs) {
-      assertTrue(localDir + " was cleaned up prematurely", new File(localDir).exists());
+      assertTrue(new File(localDir).exists(), localDir + " was cleaned up prematurely");
     }
   }
 
   private static void assertCleanedUp(TestShuffleDataContext dataContext) {
     for (String localDir : dataContext.localDirs) {
-      assertFalse(localDir + " wasn't cleaned up", new File(localDir).exists());
+      assertFalse(new File(localDir).exists(), localDir + " wasn't cleaned up");
     }
   }
 

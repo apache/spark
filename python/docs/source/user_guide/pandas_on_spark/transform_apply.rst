@@ -20,8 +20,6 @@
 Transform and apply a function
 ==============================
 
-.. NOTE: the images are stored at https://github.com/koalas/issues/1443. Feel free to edit and/or add.
-
 .. currentmodule:: pyspark.pandas
 
 There are many APIs that allow users to apply a function against pandas-on-Spark DataFrame such as
@@ -52,14 +50,14 @@ to return the same length of the input and the latter does not require this. See
    ...
    >>> psdf.apply(pandas_plus)
 
-In this case, each function takes a pandas Series, and pandas API on Spark computes the functions in a distributed manner as below.
+In this case, each function takes a pandas Series, and the pandas API on Spark computes the functions in a distributed manner as below.
 
 .. image:: ../../../../../docs/img/pyspark-pandas_on_spark-transform_apply1.png
   :alt: transform and apply
   :align: center
   :width: 550
 
-In case of 'column' axis, the function takes each row as a pandas Series.
+In the case of 'column' axis, the function takes each row as a pandas Series.
 
 .. code-block:: python
 
@@ -76,8 +74,8 @@ The example above calculates the summation of each row as a pandas Series. See b
   :align: center
   :width: 600
 
-In the examples above, the type hints were not used for simplicity but it is encouraged to use to avoid performance penalty.
-Please refer the API documentations.
+In the examples above, the type hints were not used for simplicity but it is encouraged to use them to avoid performance penalty.
+Please refer to the API documentations.
 
 
 ``pandas_on_spark.transform_batch`` and ``pandas_on_spark.apply_batch``
@@ -85,7 +83,7 @@ Please refer the API documentations.
 
 In :func:`DataFrame.pandas_on_spark.transform_batch`, :func:`DataFrame.pandas_on_spark.apply_batch`, :func:`Series.pandas_on_spark.transform_batch`, etc., the ``batch``
 postfix means each chunk in pandas-on-Spark DataFrame or Series. The APIs slice the pandas-on-Spark DataFrame or Series, and
-then applies the given function with pandas DataFrame or Series as input and output. See the examples below:
+then apply the given function with pandas DataFrame or Series as input and output. See the examples below:
 
 .. code-block:: python
 
@@ -107,10 +105,10 @@ The functions in both examples take a pandas DataFrame as a chunk of pandas-on-S
 Pandas API on Spark combines the pandas DataFrames as a pandas-on-Spark DataFrame.
 
 Note that :func:`DataFrame.pandas_on_spark.transform_batch` has the length restriction - the length of input and output should be
-the same whereas :func:`DataFrame.pandas_on_spark.apply_batch` does not.  However, it is important to know that
+the same - whereas :func:`DataFrame.pandas_on_spark.apply_batch` does not.  However, it is important to know that
 the output belongs to the same DataFrame when :func:`DataFrame.pandas_on_spark.transform_batch` returns a Series, and
 you can avoid a shuffle by the operations between different DataFrames. In case of :func:`DataFrame.pandas_on_spark.apply_batch`, its output is always
-treated that it belongs to a new different DataFrame. See also
+treated as though it belongs to a new different DataFrame. See also
 `Operations on different DataFrames <options.rst#operations-on-different-dataframes>`_ for more details.
 
 .. image:: ../../../../../docs/img/pyspark-pandas_on_spark-transform_apply3.png
@@ -136,4 +134,4 @@ Under the hood, each batch of pandas-on-Spark Series is split to multiple pandas
   :width: 350
   :align: center
 
-There are more details such as the type inference and preventing its performance penalty. Please refer the API documentations.
+There are more details such as the type inference and preventing its performance penalty. Please refer to the API documentations.

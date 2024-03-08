@@ -19,8 +19,8 @@ package org.apache.spark.resource;
 
 import java.util.Map;
 
-import static org.junit.Assert.*;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 
 // Test the ResourceProfile and Request api's from Java
 public class JavaResourceProfileSuite {
@@ -43,13 +43,13 @@ public class JavaResourceProfileSuite {
 
     assertEquals(rprof.executorResources().size(), 2);
     Map<String, ExecutorResourceRequest> eresources = rprof.executorResourcesJMap();
-    assert(eresources.containsKey(GpuResource));
+    assertTrue(eresources.containsKey(GpuResource));
     ExecutorResourceRequest gpuReq = eresources.get(GpuResource);
     assertEquals(gpuReq.amount(), 2);
     assertEquals(gpuReq.discoveryScript(), "myscript");
     assertEquals(gpuReq.vendor(), "");
 
-    assert(eresources.containsKey(FPGAResource));
+    assertTrue(eresources.containsKey(FPGAResource));
     ExecutorResourceRequest fpgaReq = eresources.get(FPGAResource);
     assertEquals(fpgaReq.amount(), 3);
     assertEquals(fpgaReq.discoveryScript(), "myfpgascript");
@@ -57,7 +57,7 @@ public class JavaResourceProfileSuite {
 
     assertEquals(rprof.taskResources().size(), 1);
     Map<String, TaskResourceRequest> tresources = rprof.taskResourcesJMap();
-    assert(tresources.containsKey(GpuResource));
+    assertTrue(tresources.containsKey(GpuResource));
     TaskResourceRequest taskReq = tresources.get(GpuResource);
     assertEquals(taskReq.amount(), 1.0, 0);
     assertEquals(taskReq.resourceName(), GpuResource);

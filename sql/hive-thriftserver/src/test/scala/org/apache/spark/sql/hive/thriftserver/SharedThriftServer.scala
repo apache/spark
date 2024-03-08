@@ -18,11 +18,11 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.sql.{DriverManager, Statement}
+import java.sql.{DriverManager, ResultSet, Statement}
 import java.util
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -30,12 +30,13 @@ import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.jdbc.HttpBasicAuthInterceptor
 import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.thrift.{ThriftCLIService, ThriftCLIServiceClient}
+import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftCLIService, ThriftCLIServiceClient}
 import org.apache.hive.service.rpc.thrift.TCLIService.Client
 import org.apache.http.impl.client.HttpClientBuilder
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.{THttpClient, TSocket}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -85,11 +86,13 @@ trait SharedThriftServer extends SharedSparkSession {
 
   protected def user: String = System.getProperty("user.name")
 
-  protected def withJdbcStatement(fs: (Statement => Unit)*): Unit = {
+  protected def withJdbcStatement(
+      resultSetType: Int = ResultSet.TYPE_FORWARD_ONLY)(
+      fs: (Statement => Unit)*): Unit = {
     require(serverPort != 0, "Failed to bind an actual port for HiveThriftServer2")
     val connections =
       fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
-    val statements = connections.map(_.createStatement())
+    val statements = connections.map(_.createStatement(resultSetType, ResultSet.CONCUR_READ_ONLY))
 
     try {
       statements.zip(fs).foreach { case (s, f) => f(s) }
@@ -136,10 +139,18 @@ trait SharedThriftServer extends SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_START_CLEANUP_SCRATCHDIR.varname, "true")
 
     try {
-      hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
+      // Set exitOnError to false to avoid exiting the JVM process and tearing down the SparkContext
+      // instance in case of any exceptions here. Otherwise, the following retries are doomed to
+      // fail on a stopped context.
+      hiveServer2 = HiveThriftServer2.startWithContext(sqlContext, exitOnError = false)
       hiveServer2.getServices.asScala.foreach {
         case t: ThriftCLIService =>
           serverPort = t.getPortNumber
+          if (t.isInstanceOf[ThriftBinaryCLIService] && mode == ServerMode.http) {
+            logError("A previous Hive's SessionState is leaked, aborting this retry")
+            throw SparkException.internalError("HiveThriftServer2 started in binary mode " +
+              "while the test case is expecting HTTP mode")
+          }
           logInfo(s"Started HiveThriftServer2: mode=$mode, port=$serverPort, attempt=$attempt")
         case _ =>
       }
@@ -151,7 +162,7 @@ trait SharedThriftServer extends SharedSparkSession {
       // Wait for thrift server to be ready to serve the query, via executing simple query
       // till the query succeeds. See SPARK-30345 for more details.
       eventually(timeout(30.seconds), interval(1.seconds)) {
-        withJdbcStatement { _.execute("SELECT 1") }
+        withJdbcStatement() { _.execute("SELECT 1") }
       }
     } catch {
       case e: Exception =>

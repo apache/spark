@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 
@@ -64,9 +64,11 @@ object ExecutorLifecycleTestUtils {
 
   def pendingExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
+      .editOrNewMetadata()
+        .withCreationTimestamp(Instant.now.toString)
+        .endMetadata()
       .editOrNewStatus()
         .withPhase("pending")
-        .withStartTime(Instant.now.toString)
         .endStatus()
       .build()
   }
@@ -226,7 +228,7 @@ object ExecutorLifecycleTestUtils {
       .withNewSpec()
         .withStorageClassName(storageClass)
         .withAccessModes("ReadWriteOnce")
-        .withResources(new ResourceRequirementsBuilder()
+        .withResources(new VolumeResourceRequirementsBuilder()
           .withRequests(Map("storage" -> new Quantity(size)).asJava).build())
         .endSpec()
       .build()

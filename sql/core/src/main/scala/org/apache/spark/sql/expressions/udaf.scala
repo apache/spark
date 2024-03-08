@@ -19,7 +19,6 @@ package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Row}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.types._
 
@@ -131,11 +130,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
-    val aggregateExpression =
-      AggregateExpression(
-        ScalaUDAF(exprs.map(_.expr), this),
-        Complete,
-        isDistinct = false)
+    val aggregateExpression = ScalaUDAF(exprs.map(_.expr), this).toAggregateExpression()
     Column(aggregateExpression)
   }
 
@@ -148,10 +143,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   @scala.annotation.varargs
   def distinct(exprs: Column*): Column = {
     val aggregateExpression =
-      AggregateExpression(
-        ScalaUDAF(exprs.map(_.expr), this),
-        Complete,
-        isDistinct = true)
+      ScalaUDAF(exprs.map(_.expr), this).toAggregateExpression(isDistinct = true)
     Column(aggregateExpression)
   }
 }

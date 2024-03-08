@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.types.StructType
 
 /**
  * A physical operator that executes run() and saves the result to prevent multiple executions.
@@ -48,7 +48,7 @@ abstract class V2CommandExec extends SparkPlan {
    */
   override def executeCollect(): Array[InternalRow] = result.toArray
 
-  override def executeToIterator(): Iterator[InternalRow] = result.toIterator
+  override def executeToIterator(): Iterator[InternalRow] = result.iterator
 
   override def executeTake(limit: Int): Array[InternalRow] = result.take(limit).toArray
 
@@ -65,7 +65,7 @@ abstract class V2CommandExec extends SparkPlan {
   }
 
   private lazy val rowSerializer = {
-    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
+    ExpressionEncoder(DataTypeUtils.fromAttributes(output)).resolveAndBind().createSerializer()
   }
 }
 

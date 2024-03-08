@@ -21,12 +21,14 @@ import java.io.CharArrayWriter
 
 import com.univocity.parsers.csv.CsvParser
 
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.csv._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -91,15 +93,21 @@ case class CsvToStructs(
       assert(!rows.hasNext)
       result
     } else {
-      throw QueryExecutionErrors.rowFromCSVParserNotExpectedError
+      throw SparkException.internalError("Expected one row from CSV parser.")
     }
   }
 
   val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
   @transient lazy val parser = {
+    // 'lineSep' is a plan-wise option so we set a noncharacter, according to
+    // the unicode specification, which should not appear in Java's strings.
+    // See also SPARK-38955 and https://www.unicode.org/charts/PDF/UFFF0.pdf.
+    // scalastyle:off nonascii
+    val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
+    // scalastyle:on nonascii
     val parsedOptions = new CSVOptions(
-      options,
+      exprOptions,
       columnPruning = true,
       defaultTimeZoneId = timeZoneId.get,
       defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
@@ -153,14 +161,14 @@ case class CsvToStructs(
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
-       STRUCT<`_c0`: INT, `_c1`: STRING>
+       STRUCT<_c0: INT, _c1: STRING>
   """,
   since = "3.0.0",
   group = "csv_funcs")
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback {
+  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -178,15 +186,28 @@ case class SchemaOfCsv(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.foldable && csv != null) {
       super.checkInputDataTypes()
+    } else if (!child.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("csv"),
+          "inputType" -> toSQLType(child.dataType),
+          "inputExpr" -> toSQLExpr(child)))
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        "The input csv should be a foldable string expression and not null; " +
-        s"however, got ${child.sql}.")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "csv"))
     }
   }
 
   override def eval(v: InternalRow): Any = {
-    val parsedOptions = new CSVOptions(options, true, "UTC")
+    // 'lineSep' is a plan-wise option so we set a noncharacter, according to
+    // the unicode specification, which should not appear in Java's strings.
+    // See also SPARK-38955 and https://www.unicode.org/charts/PDF/UFFF0.pdf.
+    // scalastyle:off nonascii
+    val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
+    // scalastyle:on nonascii
+    val parsedOptions = new CSVOptions(exprOptions, true, "UTC")
     val parser = new CsvParser(parsedOptions.asParserSettings)
     val row = parser.parseLine(csv.toString)
     assert(row != null, "Parsed CSV record should not be null.")
@@ -225,8 +246,7 @@ case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
      timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes
-    with NullIntolerant {
+  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
@@ -246,8 +266,9 @@ case class StructsToCsv(
   @transient
   lazy val inputSchema: StructType = child.dataType match {
     case st: StructType => st
-    case other =>
-      throw QueryExecutionErrors.inputTypeUnsupportedError(other)
+    case other => throw new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3234",
+      messageParameters = Map("other" -> other.catalogString))
   }
 
   @transient
@@ -273,4 +294,10 @@ case class StructsToCsv(
 
   override protected def withNewChildInternal(newChild: Expression): StructsToCsv =
     copy(child = newChild)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val structsToCsv = ctx.addReferenceObj("structsToCsv", this)
+    nullSafeCodeGen(ctx, ev,
+      eval => s"${ev.value} = (UTF8String) $structsToCsv.converter().apply($eval);")
+  }
 }

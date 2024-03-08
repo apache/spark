@@ -56,6 +56,11 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(copiedModel.hasSummary)
   }
 
+  test("BisectingKMeans validate input dataset") {
+    testInvalidWeights(new BisectingKMeans().setWeightCol("weight").fit(_))
+    testInvalidVectors(new BisectingKMeans().fit(_))
+  }
+
   test("SPARK-16473: Verify Bisecting K-Means does not fail in edge case where" +
     "one cluster is empty after split") {
     val bkm = new BisectingKMeans()
@@ -186,7 +191,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(predictionsMap(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap(Vectors.dense(-100.0, 90.0)))
 
-    model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+    assert(model.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
   }
 
   test("Comparing with and without weightCol with cosine distance") {
@@ -217,7 +222,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(predictionsMap1(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap1(Vectors.dense(-100.0, 90.0)))
 
-    model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+    assert(model1.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
 
     val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(1.0, 1.0), 2.0), (Vectors.dense(10.0, 10.0), 2.0),
@@ -244,7 +249,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(predictionsMap2(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap2(Vectors.dense(-100.0, 90.0)))
 
-    model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+    assert(model2.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
     assert(model1.clusterCenters === model2.clusterCenters)
   }
 
@@ -284,8 +289,6 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     assert(predictionsMap1(Vectors.dense(10.0, 10.0)) ==
       predictionsMap1(Vectors.dense(10.0, 4.4)))
 
-    model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
-
     val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(1.0, 1.0), 1.0), (Vectors.dense(10.0, 10.0), 2.0),
       (Vectors.dense(1.0, 0.5), 2.0), (Vectors.dense(10.0, 4.4), 3.0),
@@ -309,8 +312,6 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
       predictionsMap2(Vectors.dense(-1.0, 1.0)))
     assert(predictionsMap2(Vectors.dense(10.0, 10.0)) ==
       predictionsMap2(Vectors.dense(10.0, 4.4)))
-
-    model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
     assert(model1.clusterCenters(0) === model2.clusterCenters(0))
     assert(model1.clusterCenters(1) === model2.clusterCenters(1))

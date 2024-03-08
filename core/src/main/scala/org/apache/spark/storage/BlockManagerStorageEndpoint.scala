@@ -17,11 +17,11 @@
 
 package org.apache.spark.storage
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 
 import org.apache.spark.{MapOutputTracker, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEnv}
+import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -34,11 +34,12 @@ class BlockManagerStorageEndpoint(
     override val rpcEnv: RpcEnv,
     blockManager: BlockManager,
     mapOutputTracker: MapOutputTracker)
-  extends IsolatedRpcEndpoint with Logging {
+  extends IsolatedThreadSafeRpcEndpoint with Logging {
 
   private val asyncThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-storage-async-thread-pool", 100)
-  private implicit val asyncExecutionContext = ExecutionContext.fromExecutorService(asyncThreadPool)
+  private implicit val asyncExecutionContext: ExecutionContextExecutorService =
+    ExecutionContext.fromExecutorService(asyncThreadPool)
 
   // Operations that involve removing blocks may be slow and should be done asynchronously
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -78,9 +79,21 @@ class BlockManagerStorageEndpoint(
     case TriggerThreadDump =>
       context.reply(Utils.getThreadDump())
 
+    case TriggerHeapHistogram =>
+      context.reply(Utils.getHeapHistogram())
+
     case ReplicateBlock(blockId, replicas, maxReplicas) =>
       context.reply(blockManager.replicateBlock(blockId, replicas.toSet, maxReplicas))
 
+    case MarkRDDBlockAsVisible(blockId) =>
+      // The message is sent from driver to ask the block manager to mark the rdd block with
+      // `blockId` to be visible now. This happens in 2 scenarios:
+      // 1. A task computing/caching the rdd block finished successfully and the rdd block can be
+      //    turned to be visible. Driver will ask all block managers hosting the rdd block to mark
+      //    the block as visible.
+      // 2. Once a replica of a visible block is cached and reported, driver will also ask the
+      //    the block manager to mark the block as visible immediately.
+      context.reply(blockManager.blockInfoManager.tryMarkBlockAsVisible(blockId))
   }
 
   private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T): Unit = {

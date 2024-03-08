@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.broadcast
+import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -47,7 +47,8 @@ trait CodegenSupport extends SparkPlan {
 
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
-    case _: HashAggregateExec => "agg"
+    case _: HashAggregateExec => "hashAgg"
+    case _: SortAggregateExec => "sortAgg"
     case _: BroadcastHashJoinExec => "bhj"
     case _: ShuffledHashJoinExec => "shj"
     case _: SortMergeJoinExec => "smj"
@@ -163,7 +164,7 @@ trait CodegenSupport extends SparkPlan {
       }
 
     val inputVars = inputVarsCandidate match {
-      case stream: Stream[ExprCode] => stream.force
+      case stream: LazyList[ExprCode] => stream.force
       case other => other
     }
 
@@ -338,7 +339,7 @@ trait CodegenSupport extends SparkPlan {
    *       different inputs(join build side, aggregate buffer, etc.), or other special cases.
    */
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -355,7 +356,9 @@ trait CodegenSupport extends SparkPlan {
     } else if (children.length == 1) {
       children.head.asInstanceOf[CodegenSupport].needCopyResult
     } else {
-      throw new UnsupportedOperationException
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3163",
+        messageParameters = Map("num" -> children.length.toString))
     }
   }
 
@@ -401,7 +404,7 @@ trait CodegenSupport extends SparkPlan {
       val errMsg = "Only leaf nodes and blocking nodes need to call 'limitNotReachedCond' " +
         "in its data producing loop."
       if (Utils.isTesting) {
-        throw new IllegalStateException(errMsg)
+        throw SparkException.internalError(errMsg)
       } else {
         logWarning(s"[BUG] $errMsg Please open a JIRA ticket to report it.")
       }
@@ -533,7 +536,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -749,48 +752,41 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     // but the output must be rows.
     val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
+    val cleanedSourceOpt = tryBroadcastCleanedSource(cleanedSource)
+    val evaluatorFactory = new WholeStageCodegenEvaluatorFactory(
+      cleanedSourceOpt, durationMs, references)
     if (rdds.length == 1) {
-      rdds.head.mapPartitionsWithIndex { (index, iter) =>
-        val (clazz, _) = CodeGenerator.compile(cleanedSource)
-        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(iter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
-          }
-          override def next: InternalRow = buffer.next()
+      if (conf.usePartitionEvaluator) {
+        rdds.head.mapPartitionsWithEvaluator(evaluatorFactory)
+      } else {
+        rdds.head.mapPartitionsWithIndex { (index, iter) =>
+          val evaluator = evaluatorFactory.createEvaluator()
+          evaluator.eval(index, iter)
         }
       }
     } else {
       // Right now, we support up to two input RDDs.
-      rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
-        Iterator((leftIter, rightIter))
-        // a small hack to obtain the correct partition index
-      }.mapPartitionsWithIndex { (index, zippedIter) =>
-        val (leftIter, rightIter) = zippedIter.next()
-        val (clazz, _) = CodeGenerator.compile(cleanedSource)
-        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(leftIter, rightIter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
-          }
-          override def next: InternalRow = buffer.next()
+      if (conf.usePartitionEvaluator) {
+        rdds.head.zipPartitionsWithEvaluator(rdds(1), evaluatorFactory)
+      } else {
+        rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
+          Iterator((leftIter, rightIter))
+          // a small hack to obtain the correct partition index
+        }.mapPartitionsWithIndex { (index, zippedIter) =>
+          val (leftIter, rightIter) = zippedIter.next()
+          val evaluator = evaluatorFactory.createEvaluator()
+          evaluator.eval(index, leftIter, rightIter)
         }
       }
     }
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def doProduce(ctx: CodegenContext): String = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
@@ -807,7 +803,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -835,6 +831,23 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override protected def withNewChildInternal(newChild: SparkPlan): WholeStageCodegenExec =
     copy(child = newChild)(codegenStageId)
+
+  // Use broadcast if the conf is enabled and the code + comment size exceeds the threshold,
+  // otherwise, fallback to use cleanedSource directly. The method returns either a
+  // broadcast variable or the original form of cleanedSource.
+  private[spark] def tryBroadcastCleanedSource(code: CodeAndComment):
+      Either[broadcast.Broadcast[CodeAndComment], CodeAndComment] = {
+    def exceedThreshold(): Boolean = {
+      code.body.length + code.comment.iterator.map(
+        e => e._1.length + e._2.length).sum > conf.broadcastCleanedSourceThreshold
+    }
+    val enabled = conf.broadcastCleanedSourceThreshold >= 0
+    if (enabled && exceedThreshold()) {
+      scala.util.Left(sparkContext.broadcast(code))
+    } else {
+      scala.util.Right(code)
+    }
+  }
 }
 
 
@@ -891,7 +904,7 @@ case class CollapseCodegenStages(
 
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
-      val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
+      val willFallback = plan.expressions.exists(_.exists(e => !supportCodegen(e)))
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
         WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
@@ -949,7 +962,8 @@ case class CollapseCodegenStages(
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (conf.wholeStageEnabled) {
+    if (conf.wholeStageEnabled && CodegenObjectFactoryMode.withName(conf.codegenFactoryMode)
+      != CodegenObjectFactoryMode.NO_CODEGEN) {
       insertWholeStageCodegen(plan)
     } else {
       plan

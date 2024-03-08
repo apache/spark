@@ -23,16 +23,17 @@ examples/src/main/python/ml/kmeans_example.py.
 This example requires NumPy (http://www.numpy.org/).
 """
 import sys
+from typing import List
 
 import numpy as np
 from pyspark.sql import SparkSession
 
 
-def parseVector(line):
+def parseVector(line: str) -> np.ndarray:
     return np.array([float(x) for x in line.split(' ')])
 
 
-def closestPoint(p, centers):
+def closestPoint(p: np.ndarray, centers: List[np.ndarray]) -> int:
     bestIndex = 0
     closest = float("+inf")
     for i in range(len(centers)):

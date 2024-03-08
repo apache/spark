@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<root>
+	<item>
+		<b>
+			<!-- nested comments -->
+			<es>
+				<e>1</e>
+			</es>
+		</b>
+	</item>
+	<item>
+        <!-- Issue 117 - This is where an empty Row would be produced instead of null -->
+		<b>
+
+			<!-- nested comments -->
+
+			<es></es>
+		</b>
+	</item>
+</root>

@@ -28,6 +28,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 
 class MyDoubleAvgAggBase extends Aggregator[jlDouble, (Double, Long), jlDouble] {
   def zero: (Double, Long) = (0.0, 0L)
@@ -115,21 +116,21 @@ object ArrayDataAgg extends Aggregator[Array[Double], Array[Double], Array[Doubl
   def zero: Array[Double] = Array(0.0, 0.0, 0.0)
   def reduce(s: Array[Double], array: Array[Double]): Array[Double] = {
     require(s.length == array.length)
-    for ( j <- 0 until s.length ) {
+    for ( j <- s.indices) {
       s(j) += array(j)
     }
     s
   }
   def merge(s1: Array[Double], s2: Array[Double]): Array[Double] = {
     require(s1.length == s2.length)
-    for ( j <- 0 until s1.length ) {
+    for ( j <- s1.indices) {
       s1(j) += s2(j)
     }
     s1
   }
   def finish(s: Array[Double]): Array[Double] = s
-  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
-  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
+  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]()
+  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]()
 }
 
 abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -224,16 +225,21 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 
   test("non-deterministic children expressions of aggregator") {
-    val e = intercept[AnalysisException] {
-      spark.sql(
-        """
-          |SELECT mydoublesum(value + 1.5 * key + rand())
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin)
-    }.getMessage
-    assert(Seq("nondeterministic expression",
-      "should not appear in the arguments of an aggregate function").forall(e.contains))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |SELECT mydoublesum(value + 1.5 * key + rand())
+            |FROM agg1
+            |GROUP BY key
+          """.stripMargin)
+      },
+      errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+      parameters = Map("sqlExpr" -> "\"mydoublesum(((value + (1.5 * key)) + rand()))\""),
+      context = ExpectedContext(
+        fragment = "value + 1.5 * key + rand()",
+        start = 20,
+        stop = 45))
   }
 
   test("interpreted aggregate function") {
@@ -383,8 +389,10 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
   }
 }
 
+@SlowHiveTest
 class HashUDAQuerySuite extends UDAQuerySuite
 
+@SlowHiveTest
 class HashUDAQueryWithControlledFallbackSuite extends UDAQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {

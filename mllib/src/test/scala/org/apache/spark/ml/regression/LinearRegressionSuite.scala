@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.dmg.pmml.{OpType, PMML}
@@ -131,21 +131,21 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
    */
   ignore("export test data into CSV format") {
     datasetWithDenseFeature.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithDenseFeature")
 
     datasetWithDenseFeatureWithoutIntercept.rdd.map {
       case Row(label: Double, features: Vector) =>
-        label + "," + features.toArray.mkString(",")
+        s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/LinearRegressionSuite/datasetWithDenseFeatureWithoutIntercept")
 
     datasetWithSparseFeature.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithSparseFeature")
 
     datasetWithOutlier.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithOutlier")
   }
 
@@ -188,6 +188,12 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     assert(model.numFeatures === numFeatures)
   }
 
+  test("LinearRegression validate input dataset") {
+    testInvalidRegressionLabels(new LinearRegression().fit(_))
+    testInvalidWeights(new LinearRegression().setWeightCol("weight").fit(_))
+    testInvalidVectors(new LinearRegression().fit(_))
+  }
+
   test("linear regression: can transform data with LinearRegressionModel") {
     withClue("training related params like loss are only validated during fitting phase") {
       val original = new LinearRegression().fit(datasetWithDenseFeature)
@@ -196,7 +202,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
         coefficients = original.coefficients,
         intercept = original.intercept)
       val output = deserialized.transform(datasetWithDenseFeature)
-      assert(output.collect().size > 0) // simple assertion to ensure no exception thrown
+      assert(output.collect().length > 0) // simple assertion to ensure no exception thrown
     }
   }
 

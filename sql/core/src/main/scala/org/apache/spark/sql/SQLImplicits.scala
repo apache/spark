@@ -82,7 +82,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 3.0.0 */
   implicit def newLocalDateEncoder: Encoder[java.time.LocalDate] = Encoders.LOCALDATE
 
-  /** @since 3.3.0 */
+  /** @since 3.4.0 */
   implicit def newLocalDateTimeEncoder: Encoder[java.time.LocalDateTime] = Encoders.LOCALDATETIME
 
   /** @since 2.2.0 */

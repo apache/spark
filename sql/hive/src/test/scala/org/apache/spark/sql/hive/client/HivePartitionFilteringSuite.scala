@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.sql.Date
+import java.sql.{Date, Timestamp}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
@@ -33,25 +33,31 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // SPARK-40619: explicitly call gc to avoid OutOfMemoryError as far as possible.
+    System.gc()
+  }
+
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
   private val fallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key
-
-  // Support default partition in metastoredirectsql since HIVE-11898(Hive 2.0.0).
-  private val defaultPartition = if (version >= "2.0") Some(DEFAULT_PARTITION_NAME) else None
+  private val pruningFastFallback = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key
 
   private val dsValue = 20170101 to 20170103
   private val hValue = 0 to 4
   private val chunkValue = Seq("aa", "ab", "ba", "bb")
-  private val dateValue = Seq("2019-01-01", "2019-01-02", "2019-01-03") ++ defaultPartition
-  private val dateStrValue = Seq("2020-01-01", "2020-01-02", "2020-01-03")
+  private val dateValue = Seq("2019-01-01", "2019-01-02", "2019-01-03", DEFAULT_PARTITION_NAME)
+  private val dateStrValue = Seq("2020-01-01", "2020-01-02", "2020-01-03", "20200104", "20200105")
+  private val timestampStrValue = Seq("2021-01-01 00:00:00", "2021-01-02 00:00:00")
   private val testPartitionCount =
-    dsValue.size * hValue.size * chunkValue.size * dateValue.size * dateStrValue.size
+    dsValue.size * hValue.size * chunkValue.size * dateValue.size * dateStrValue.size *
+    timestampStrValue.size
 
   private val storageFormat = CatalogStorageFormat(
     locationUri = None,
@@ -62,19 +68,28 @@ class HivePartitionFilteringSuite(version: String)
     properties = Map.empty
   )
 
+  // Avoid repeatedly constructing multiple hive instances that do not use direct sql
+  private var clientWithoutDirectSql: HiveClient = _
+
   private def init(tryDirectSql: Boolean): HiveClient = {
     val hadoopConf = new Configuration()
     hadoopConf.setBoolean(tryDirectSqlKey, tryDirectSql)
     hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().toURI().toString())
     val client = buildClient(hadoopConf)
     val tableSchema =
-      new StructType().add("value", "int").add("ds", "int").add("h", "int").add("chunk", "string")
-        .add("d", "date").add("datestr", "string")
+      new StructType()
+        .add("value", "int")
+        .add("ds", "int")
+        .add("h", "int")
+        .add("chunk", "string")
+        .add("d", "date")
+        .add("datestr", "string")
+        .add("timestampstr", "string")
     val table = CatalogTable(
       identifier = TableIdentifier("test", Some("default")),
       tableType = CatalogTableType.MANAGED,
       schema = tableSchema,
-      partitionColumnNames = Seq("ds", "h", "chunk", "d", "datestr"),
+      partitionColumnNames = Seq("ds", "h", "chunk", "d", "datestr", "timestampstr"),
       storage = storageFormat)
     client.createTable(table, ignoreIfExists = false)
 
@@ -85,12 +100,14 @@ class HivePartitionFilteringSuite(version: String)
         chunk <- chunkValue
         date <- dateValue
         dateStr <- dateStrValue
+        timestampStr <- timestampStrValue
       } yield CatalogTablePartition(Map(
         "ds" -> ds.toString,
         "h" -> h.toString,
         "chunk" -> chunk,
         "d" -> date,
-        "datestr" -> dateStr
+        "datestr" -> dateStr,
+        "timestampstr" -> timestampStr
       ), storageFormat)
     assert(partitions.size == testPartitionCount)
 
@@ -111,12 +128,13 @@ class HivePartitionFilteringSuite(version: String)
   override def beforeAll(): Unit = {
     super.beforeAll()
     client = init(true)
+    clientWithoutDirectSql = init(false)
   }
 
   test(s"getPartitionsByFilter returns all partitions when $fallbackKey=true") {
     withSQLConf(fallbackKey -> "true") {
-      val client = init(false)
-      val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+      val filteredPartitions = clientWithoutDirectSql.getPartitionsByFilter(
+        clientWithoutDirectSql.getRawHiveTable("default", "test"),
         Seq(attr("ds") === 20170101))
 
       assert(filteredPartitions.size == testPartitionCount)
@@ -125,9 +143,9 @@ class HivePartitionFilteringSuite(version: String)
 
   test(s"getPartitionsByFilter should fail when $fallbackKey=false") {
     withSQLConf(fallbackKey -> "false") {
-      val client = init(false)
       val e = intercept[RuntimeException](
-        client.getPartitionsByFilter(client.getTable("default", "test"),
+        clientWithoutDirectSql.getPartitionsByFilter(
+          clientWithoutDirectSql.getRawHiveTable("default", "test"),
           Seq(attr("ds") === 20170101)))
       assert(e.getMessage.contains("Caught Hive MetaException"))
     }
@@ -141,7 +159,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: ds=20170101") {
@@ -151,7 +170,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: ds=(20170101 + 1) and h=0") {
@@ -163,7 +183,8 @@ class HivePartitionFilteringSuite(version: String)
       0 to 0,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: chunk='aa'") {
@@ -173,7 +194,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       "aa" :: Nil,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: cast(chunk as int)=1 (not a valid partition predicate)") {
@@ -183,7 +205,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: cast(chunk as boolean)=true (not a valid partition predicate)") {
@@ -193,7 +216,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: 20170101=ds") {
@@ -203,7 +227,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: ds=20170101 and h=2") {
@@ -213,7 +238,8 @@ class HivePartitionFilteringSuite(version: String)
       2 to 2,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: cast(ds as long)=20170101L and h=2") {
@@ -223,7 +249,8 @@ class HivePartitionFilteringSuite(version: String)
       2 to 2,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: ds=20170101 or ds=20170102") {
@@ -233,7 +260,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: ds in (20170102, 20170103) (using IN expression)") {
@@ -243,7 +271,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: cast(ds as long) in (20170102L, 20170103L) (using IN expression)") {
@@ -253,7 +282,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: ds in (20170102, 20170103) (using INSET expression)") {
@@ -263,7 +293,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue, {
+      dateStrValue,
+      timestampStrValue, {
         case expr @ In(v, list) if expr.inSetConvertible =>
           InSet(v, list.map(_.eval(EmptyRow)).toSet)
       })
@@ -277,7 +308,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue, {
+      dateStrValue,
+      timestampStrValue, {
         case expr @ In(v, list) if expr.inSetConvertible =>
           InSet(v, list.map(_.eval(EmptyRow)).toSet)
       })
@@ -290,7 +322,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       "ab" :: "ba" :: Nil,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: chunk in ('ab', 'ba') (using INSET expression)") {
@@ -300,31 +333,38 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       "ab" :: "ba" :: Nil,
       dateValue,
-      dateStrValue, {
+      dateStrValue,
+      timestampStrValue, {
         case expr @ In(v, list) if expr.inSetConvertible =>
           InSet(v, list.map(_.eval(EmptyRow)).toSet)
       })
   }
 
   test("getPartitionsByFilter: (ds=20170101 and h>=2) or (ds=20170102 and h<2)") {
-    val day1 = (20170101 to 20170101, 2 to 4, chunkValue, dateValue, dateStrValue)
-    val day2 = (20170102 to 20170102, 0 to 1, chunkValue, dateValue, dateStrValue)
+    val day1 = (20170101 to 20170101, 2 to 4,
+      chunkValue, dateValue, dateStrValue, timestampStrValue)
+    val day2 = (20170102 to 20170102, 0 to 1,
+      chunkValue, dateValue, dateStrValue, timestampStrValue)
     testMetastorePartitionFiltering((attr("ds") === 20170101 && attr("h") >= 2) ||
         (attr("ds") === 20170102 && attr("h") < 2), day1 :: day2 :: Nil)
   }
 
   test("getPartitionsByFilter: (ds=20170101 and h>=2) or (ds=20170102 and h<(1+1))") {
-    val day1 = (20170101 to 20170101, 2 to 4, chunkValue, dateValue, dateStrValue)
+    val day1 = (20170101 to 20170101, 2 to 4,
+      chunkValue, dateValue, dateStrValue, timestampStrValue)
     // Day 2 should include all hours because we can't build a filter for h<(7+1)
-    val day2 = (20170102 to 20170102, 0 to 4, chunkValue, dateValue, dateStrValue)
+    val day2 = (20170102 to 20170102, 0 to 4,
+      chunkValue, dateValue, dateStrValue, timestampStrValue)
     testMetastorePartitionFiltering((attr("ds") === 20170101 && attr("h") >= 2) ||
         (attr("ds") === 20170102 && attr("h") < (Literal(1) + 1)), day1 :: day2 :: Nil)
   }
 
   test("getPartitionsByFilter: " +
       "chunk in ('ab', 'ba') and ((ds=20170101 and h>=2) or (ds=20170102 and h<2))") {
-    val day1 = (20170101 to 20170101, 2 to 4, Seq("ab", "ba"), dateValue, dateStrValue)
-    val day2 = (20170102 to 20170102, 0 to 1, Seq("ab", "ba"), dateValue, dateStrValue)
+    val day1 = (20170101 to 20170101, 2 to 4, Seq("ab", "ba"),
+      dateValue, dateStrValue, timestampStrValue)
+    val day2 = (20170102 to 20170102, 0 to 1, Seq("ab", "ba"),
+      dateValue, dateStrValue, timestampStrValue)
     testMetastorePartitionFiltering(attr("chunk").in("ab", "ba") &&
         ((attr("ds") === 20170101 && attr("h") >= 2) || (attr("ds") === 20170102 && attr("h") < 2)),
       day1 :: day2 :: Nil)
@@ -337,7 +377,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       Seq("bb"),
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: chunk startsWith b") {
@@ -347,7 +388,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       Seq("ba", "bb"),
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: chunk endsWith b") {
@@ -357,7 +399,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       Seq("ab", "bb"),
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: chunk in ('ab', 'ba') and ((cast(ds as string)>'20170102')") {
@@ -367,7 +410,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       Seq("ab", "ba"),
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: ds<>20170101") {
@@ -377,7 +421,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: h<>0 and chunk<>ab and d<>2019-01-01") {
@@ -387,7 +432,8 @@ class HivePartitionFilteringSuite(version: String)
       1 to 4,
       Seq("aa", "ba", "bb"),
       Seq("2019-01-02", "2019-01-03"),
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: d=2019-01-01") {
@@ -397,7 +443,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       Seq("2019-01-01"),
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: d>2019-01-02") {
@@ -407,7 +454,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       Seq("2019-01-03"),
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: In(d, 2019-01-01, 2019-01-02)") {
@@ -418,7 +466,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       Seq("2019-01-01", "2019-01-02"),
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: InSet(d, 2019-01-01, 2019-01-02)") {
@@ -429,7 +478,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       Seq("2019-01-01", "2019-01-02"),
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: not in/inset string type") {
@@ -440,7 +490,8 @@ class HivePartitionFilteringSuite(version: String)
         hValue,
         result,
         dateValue,
-        dateStrValue
+        dateStrValue,
+        timestampStrValue
       )
     }
 
@@ -471,7 +522,8 @@ class HivePartitionFilteringSuite(version: String)
         hValue,
         chunkValue,
         result,
-        dateStrValue
+        dateStrValue,
+        timestampStrValue
       )
     }
 
@@ -509,7 +561,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: IS NULL / IS NOT NULL") {
@@ -521,7 +574,8 @@ class HivePartitionFilteringSuite(version: String)
         hValue,
         chunkValue,
         dateValue,
-        dateStrValue)
+        dateStrValue,
+        timestampStrValue)
     }
   }
 
@@ -533,7 +587,8 @@ class HivePartitionFilteringSuite(version: String)
         hValue,
         chunkValue,
         Seq("2019-01-01"),
-        dateStrValue)
+        dateStrValue,
+        timestampStrValue)
     }
   }
 
@@ -544,7 +599,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       Seq("2019-01-02", "2019-01-03"),
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: d =!= 2019-01-01 || IS NULL") {
@@ -554,7 +610,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: d <=> 2019-01-01") {
@@ -564,7 +621,8 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
   }
 
   test("getPartitionsByFilter: d <=> null") {
@@ -574,7 +632,98 @@ class HivePartitionFilteringSuite(version: String)
       hValue,
       chunkValue,
       dateValue,
-      dateStrValue)
+      dateStrValue,
+      timestampStrValue)
+  }
+
+  test("SPARK-35437: getPartitionsByFilter: substr(chunk,0,1)=a") {
+    Seq("true" -> Seq("aa", "ab"), "false" -> chunkValue).foreach { t =>
+      withSQLConf(pruningFastFallback -> t._1) {
+        testMetastorePartitionFiltering(
+          Substring(attr("chunk"), Literal(0), Literal(1)) === "a",
+          dsValue,
+          hValue,
+          t._2,
+          dateValue,
+          dateStrValue,
+          timestampStrValue)
+      }
+    }
+  }
+
+  test("SPARK-35437: getPartitionsByFilter: year(d)=2019") {
+    Seq("true" -> Seq("2019-01-01", "2019-01-02", "2019-01-03"),
+      "false" -> dateValue).foreach { t =>
+      withSQLConf(pruningFastFallback -> t._1) {
+        testMetastorePartitionFiltering(
+          Year(attr("d")) === 2019,
+          dsValue,
+          hValue,
+          chunkValue,
+          t._2,
+          dateStrValue,
+          timestampStrValue)
+      }
+    }
+  }
+
+  test("SPARK-35437: getPartitionsByFilter: datestr=concat(2020-,01-,01)") {
+    Seq("true" -> Seq("2020-01-01"), "false" -> dateStrValue).foreach { t =>
+      withSQLConf(pruningFastFallback -> t._1) {
+        testMetastorePartitionFiltering(
+          attr("datestr") === Concat(Seq("2020-", "01-", "01")),
+          dsValue,
+          hValue,
+          chunkValue,
+          dateValue,
+          t._2,
+          timestampStrValue)
+      }
+    }
+  }
+
+  test(s"SPARK-35437: getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
+    withSQLConf(fallbackKey -> "true", pruningFastFallback -> "true") {
+      val filteredPartitions = clientWithoutDirectSql.getPartitionsByFilter(
+        clientWithoutDirectSql.getRawHiveTable("default", "test"),
+        Seq(attr("ds") === 20170101))
+
+      assert(filteredPartitions.size == 1 * hValue.size * chunkValue.size *
+        dateValue.size * dateStrValue.size * timestampStrValue.size)
+    }
+  }
+
+  test("SPARK-35437: getPartitionsByFilter: relax cast if does not need timezone") {
+    if (!SQLConf.get.ansiEnabled) {
+      // does not need time zone
+      Seq(("true", "20200104" :: Nil), ("false", dateStrValue)).foreach {
+        case (pruningFastFallbackEnabled, prunedPartition) =>
+          withSQLConf(pruningFastFallback -> pruningFastFallbackEnabled) {
+            testMetastorePartitionFiltering(
+              attr("datestr").cast(IntegerType) === 20200104,
+              dsValue,
+              hValue,
+              chunkValue,
+              dateValue,
+              prunedPartition,
+              timestampStrValue)
+          }
+      }
+
+      // need time zone
+      Seq("true", "false").foreach { pruningFastFallbackEnabled =>
+        withSQLConf(pruningFastFallback -> pruningFastFallbackEnabled) {
+          testMetastorePartitionFiltering(
+            attr("timestampstr").cast(TimestampType) === Timestamp.valueOf("2021-01-01 00:00:00"),
+            dsValue,
+            hValue,
+            chunkValue,
+            dateValue,
+            dateStrValue,
+            timestampStrValue)
+        }
+      }
+    }
   }
 
   private def testMetastorePartitionFiltering(
@@ -583,10 +732,12 @@ class HivePartitionFilteringSuite(version: String)
       expectedH: Seq[Int],
       expectedChunks: Seq[String],
       expectedD: Seq[String],
-      expectedDatestr: Seq[String]): Unit = {
+      expectedDatestr: Seq[String],
+      expectedTimestampstr: Seq[String]): Unit = {
     testMetastorePartitionFiltering(
       filterExpr,
-      (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr) :: Nil,
+      (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr,
+       expectedTimestampstr) :: Nil,
       identity)
   }
 
@@ -597,49 +748,56 @@ class HivePartitionFilteringSuite(version: String)
       expectedChunks: Seq[String],
       expectedD: Seq[String],
       expectedDatestr: Seq[String],
+      expectedTimestampStr: Seq[String],
       transform: Expression => Expression): Unit = {
     testMetastorePartitionFiltering(
       filterExpr,
-      (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr) :: Nil,
+      (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr,
+       expectedTimestampStr) :: Nil,
       transform)
   }
 
   private def testMetastorePartitionFiltering(
       filterExpr: Expression,
       expectedPartitionCubes:
-        Seq[(Seq[Int], Seq[Int], Seq[String], Seq[String], Seq[String])]): Unit = {
+        Seq[(Seq[Int], Seq[Int], Seq[String], Seq[String], Seq[String], Seq[String])]): Unit = {
     testMetastorePartitionFiltering(filterExpr, expectedPartitionCubes, identity)
   }
 
   private def testMetastorePartitionFiltering(
       filterExpr: Expression,
-      expectedPartitionCubes: Seq[(Seq[Int], Seq[Int], Seq[String], Seq[String], Seq[String])],
+      expectedPartitionCubes: Seq[
+        (Seq[Int], Seq[Int], Seq[String], Seq[String], Seq[String], Seq[String])],
       transform: Expression => Expression): Unit = {
-    val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+    val filteredPartitions = client.getPartitionsByFilter(client.getRawHiveTable("default", "test"),
       Seq(
         transform(filterExpr)
       ))
 
     val expectedPartitionCount = expectedPartitionCubes.map {
-      case (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr) =>
+      case (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr,
+            expectedTimestampStr) =>
         expectedDs.size * expectedH.size * expectedChunks.size *
-          expectedD.size * expectedDatestr.size
+          expectedD.size * expectedDatestr.size * expectedTimestampStr.size
     }.sum
 
     val expectedPartitions = expectedPartitionCubes.map {
-      case (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr) =>
+      case (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr,
+            expectedTimestampStr) =>
         for {
           ds <- expectedDs
           h <- expectedH
           chunk <- expectedChunks
           d <- expectedD
           datestr <- expectedDatestr
+          timestampstr <- expectedTimestampStr
         } yield Set(
           "ds" -> ds.toString,
           "h" -> h.toString,
           "chunk" -> chunk,
           "d" -> d,
-          "datestr" -> datestr
+          "datestr" -> datestr,
+          "timestampstr" -> timestampstr
         )
     }.reduce(_ ++ _)
 

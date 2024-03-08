@@ -23,13 +23,13 @@ import java.util.function.Supplier
 
 import scala.concurrent.duration._
 
-import org.json4s.{DefaultFormats, Extraction}
+import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.BeforeAndAfter
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -40,14 +40,16 @@ import org.apache.spark.deploy.{Command, ExecutorState, ExternalShuffleService}
 import org.apache.spark.deploy.DeployMessages.{DriverStateChanged, ExecutorStateChanged, WorkDirCleanup}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.SHUFFLE_SERVICE_DB_BACKEND
 import org.apache.spark.internal.config.Worker._
+import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.resource.{ResourceAllocation, ResourceInformation}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs.{WORKER_FPGA_ID, WORKER_GPU_ID}
 import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.util.Utils
 
-class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
+class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter with PrivateMethodTester {
 
   import org.apache.spark.deploy.DeployTestUtils._
 
@@ -58,7 +60,9 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   }
   def conf(opts: (String, String)*): SparkConf = new SparkConf(loadDefaults = false).setAll(opts)
 
-  implicit val formats = DefaultFormats
+  implicit val formats: Formats = DefaultFormats
+
+  private val _generateWorkerId = PrivateMethod[String](Symbol("generateWorkerId"))
 
   private var _worker: Worker = _
 
@@ -70,8 +74,9 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create("test", "localhost", 12345, conf, securityMgr)
     val resourcesFile = conf.get(SPARK_WORKER_RESOURCE_FILE)
+    val workDir = Utils.createTempDir(namePrefix = this.getClass.getSimpleName).toString
     val localWorker = new Worker(rpcEnv, 50000, 20, 1234 * 5,
-      Array.fill(1)(RpcAddress("1.2.3.4", 1234)), "Worker", "/tmp",
+      Array.fill(1)(RpcAddress("1.2.3.4", 1234)), "Worker", workDir,
       conf, securityMgr, resourcesFile, shuffleServiceSupplier)
     if (local) {
       localWorker
@@ -338,8 +343,14 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   }
 
   test("WorkDirCleanup cleans app dirs and shuffle metadata when " +
-    "spark.shuffle.service.db.enabled=true") {
-    testWorkDirCleanupAndRemoveMetadataWithConfig(true)
+    "spark.shuffle.service.db.enabled=true, spark.shuffle.service.db.backend=RocksDB") {
+    testWorkDirCleanupAndRemoveMetadataWithConfig(true, DBBackend.ROCKSDB)
+  }
+
+  test("WorkDirCleanup cleans app dirs and shuffle metadata when " +
+    "spark.shuffle.service.db.enabled=true, spark.shuffle.service.db.backend=LevelDB") {
+    assume(!Utils.isMacOnAppleSilicon)
+    testWorkDirCleanupAndRemoveMetadataWithConfig(true, DBBackend.LEVELDB)
   }
 
   test("WorkDirCleanup cleans only app dirs when" +
@@ -347,8 +358,13 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     testWorkDirCleanupAndRemoveMetadataWithConfig(false)
   }
 
-  private def testWorkDirCleanupAndRemoveMetadataWithConfig(dbCleanupEnabled: Boolean): Unit = {
+  private def testWorkDirCleanupAndRemoveMetadataWithConfig(
+      dbCleanupEnabled: Boolean, shuffleDBBackend: DBBackend = null): Unit = {
     val conf = new SparkConf().set("spark.shuffle.service.db.enabled", dbCleanupEnabled.toString)
+    if (dbCleanupEnabled) {
+      assert(shuffleDBBackend != null)
+      conf.set(SHUFFLE_SERVICE_DB_BACKEND.key, shuffleDBBackend.name())
+    }
     conf.set("spark.worker.cleanup.appDataTtl", "60")
     conf.set("spark.shuffle.service.enabled", "true")
 
@@ -376,5 +392,17 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
       assert(!executorDir.exists())
       assert(cleanupCalled.get() == dbCleanupEnabled)
     }
+  }
+
+  test("SPARK-45867: Support worker id pattern") {
+    val worker = makeWorker(new SparkConf().set(WORKER_ID_PATTERN, "my-worker-%2$s"))
+    assert(worker.invokePrivate(_generateWorkerId()) === "my-worker-localhost")
+  }
+
+  test("SPARK-45867: Prevent invalid worker id patterns") {
+    val m = intercept[IllegalArgumentException] {
+      makeWorker(new SparkConf().set(WORKER_ID_PATTERN, "my worker"))
+    }.getMessage
+    assert(m.contains("Whitespace is not allowed"))
   }
 }

@@ -32,11 +32,11 @@ test_that("spark.fpGrowth", {
 
   model <- spark.fpGrowth(data, minSupport = 0.3, minConfidence = 0.8, numPartitions = 1)
 
-  itemsets <- collect(spark.freqItemsets(model))
+  itemsets <- collect(orderBy(spark.freqItemsets(model), "items"))
 
   expected_itemsets <- data.frame(
-    items = I(list(list("3"), list("3", "1"), list("2"), list("2", "1"), list("1"))),
-    freq = c(2, 2, 3, 3, 4)
+    items = I(list(list("1"), list("2"), list("2", "1"), list("3"), list("3", "1"))),
+    freq = c(4, 3, 3, 2, 2)
   )
 
   expect_equivalent(expected_itemsets, itemsets)
@@ -71,7 +71,7 @@ test_that("spark.fpGrowth", {
 
     expect_equivalent(
       itemsets,
-      collect(spark.freqItemsets(loaded_model)))
+      collect(orderBy(spark.freqItemsets(loaded_model), "items")))
 
     unlink(modelPath)
   }

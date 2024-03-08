@@ -34,14 +34,12 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   test("SPARK-33918: UnresolvedView should retain sql text position") {
-    verifyViewPosition("DROP VIEW unknown", "unknown")
     verifyViewPosition("ALTER VIEW unknown SET TBLPROPERTIES ('k'='v')", "unknown")
     verifyViewPosition("ALTER VIEW unknown UNSET TBLPROPERTIES ('k')", "unknown")
     verifyViewPosition("ALTER VIEW unknown AS SELECT 1", "unknown")
   }
 
   test("SPARK-34057: UnresolvedTableOrView should retain sql text position") {
-    verifyTableOrViewPosition("DROP TABLE unknown", "unknown")
     verifyTableOrViewPosition("DESCRIBE TABLE unknown", "unknown")
     verifyTableOrPermanentViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS", "unknown")
     verifyTableOrViewPosition("ANALYZE TABLE unknown COMPUTE STATISTICS FOR COLUMNS col", "unknown")
@@ -50,9 +48,12 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTableOrViewPosition("REFRESH TABLE unknown", "unknown")
     verifyTableOrViewPosition("SHOW COLUMNS FROM unknown", "unknown")
     // Special case where namespace is prepended to the table name.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       parsePlan("SHOW COLUMNS FROM unknown IN db"),
-      Seq(s"Table or view not found: db.unknown; line 1 pos 18"))
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> "`db`.`unknown`"),
+      Array(ExpectedContext("unknown", 18, 24))
+    )
     verifyTableOrViewPosition("ALTER TABLE unknown RENAME TO t", "unknown")
     verifyTableOrViewPosition("ALTER VIEW unknown RENAME TO v", "unknown")
   }
@@ -75,26 +76,29 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
   }
 
   private def verifyTablePosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, "Table")
+    verifyPosition(sql, table)
   }
 
   private def verifyViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, "View")
+    verifyPosition(sql, table)
   }
 
   private def verifyTableOrViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, "Table or view")
+    verifyPosition(sql, table)
   }
 
   private def verifyTableOrPermanentViewPosition(sql: String, table: String): Unit = {
-    verifyPosition(sql, table, "Table or permanent view")
+    verifyPosition(sql, table)
   }
 
-  private def verifyPosition(sql: String, table: String, msgPrefix: String): Unit = {
-    val expectedPos = sql.indexOf(table)
-    assert(expectedPos != -1)
-    assertAnalysisError(
+  private def verifyPosition(sql: String, table: String): Unit = {
+    val startPos = sql.indexOf(table)
+    assert(startPos != -1)
+    assertAnalysisErrorClass(
       parsePlan(sql),
-      Seq(s"$msgPrefix not found: $table; line 1 pos $expectedPos"))
+      "TABLE_OR_VIEW_NOT_FOUND",
+      Map("relationName" -> s"`$table`"),
+      Array(ExpectedContext(table, startPos, startPos + table.length - 1))
+    )
   }
 }

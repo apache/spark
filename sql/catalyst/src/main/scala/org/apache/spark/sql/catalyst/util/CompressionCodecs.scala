@@ -21,19 +21,14 @@ import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress._
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
 object CompressionCodecs {
-  private val shortCompressionCodecNames = Map(
-    "none" -> null,
-    "uncompressed" -> null,
-    "bzip2" -> classOf[BZip2Codec].getName,
-    "deflate" -> classOf[DeflateCodec].getName,
-    "gzip" -> classOf[GzipCodec].getName,
-    "lz4" -> classOf[Lz4Codec].getName,
-    "snappy" -> classOf[SnappyCodec].getName)
+  private val shortCompressionCodecNames = HadoopCompressionCodec.values().map { codec =>
+    codec.lowerCaseName() -> Option(codec.getCompressionCodec).map(_.getClass.getName).orNull
+  }.toMap
 
   /**
    * Return the full version of the given codec class.
@@ -48,9 +43,9 @@ object CompressionCodecs {
       }
       codecName
     } catch {
-      case e: ClassNotFoundException =>
-        throw new IllegalArgumentException(s"Codec [$codecName] " +
-          s"is not available. Known codecs are ${shortCompressionCodecNames.keys.mkString(", ")}.")
+      case _: ClassNotFoundException =>
+        throw QueryExecutionErrors.codecNotAvailableError(
+          codecName, shortCompressionCodecNames.keys.mkString(", "))
     }
   }
 

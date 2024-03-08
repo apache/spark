@@ -21,7 +21,6 @@ import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
-import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 import scala.concurrent.{Await, Future}
@@ -30,6 +29,7 @@ import scala.io.Source
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
+import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkApplication
@@ -118,6 +118,93 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
         response = post(url)
         response match {
           case k: KillSubmissionResponse =>
+            if (!Utils.responseFromBackup(k.message)) {
+              handleRestResponse(k)
+              handled = true
+            }
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e: SubmitRestConnectionException =>
+          if (handleConnectionException(m)) {
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
+          }
+      }
+    }
+    response
+  }
+
+  /** Request that the server kill all submissions. */
+  def killAllSubmissions(): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to kill all submissions in $master.")
+    var handled: Boolean = false
+    var response: SubmitRestProtocolResponse = null
+    for (m <- masters if !handled) {
+      validateMaster(m)
+      val url = getKillAllUrl(m)
+      try {
+        response = post(url)
+        response match {
+          case k: KillAllSubmissionResponse =>
+            if (!Utils.responseFromBackup(k.message)) {
+              handleRestResponse(k)
+              handled = true
+            }
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e: SubmitRestConnectionException =>
+          if (handleConnectionException(m)) {
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
+          }
+      }
+    }
+    response
+  }
+
+  /** Request that the server clears all submissions and applications. */
+  def clear(): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to clear $master.")
+    var handled: Boolean = false
+    var response: SubmitRestProtocolResponse = null
+    for (m <- masters if !handled) {
+      validateMaster(m)
+      val url = getClearUrl(m)
+      try {
+        response = post(url)
+        response match {
+          case k: ClearResponse =>
+            if (!Utils.responseFromBackup(k.message)) {
+              handleRestResponse(k)
+              handled = true
+            }
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e: SubmitRestConnectionException =>
+          if (handleConnectionException(m)) {
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
+          }
+      }
+    }
+    response
+  }
+
+  /** Check the readiness of Master. */
+  def readyz(): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to check the status of $master.")
+    var handled: Boolean = false
+    var response: SubmitRestProtocolResponse = new ErrorResponse
+    for (m <- masters if !handled) {
+      validateMaster(m)
+      val url = getReadyzUrl(m)
+      try {
+        response = get(url)
+        response match {
+          case k: ReadyzResponse =>
             if (!Utils.responseFromBackup(k.message)) {
               handleRestResponse(k)
               handled = true
@@ -229,7 +316,9 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
    * Exposed for testing.
    */
   private[rest] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
+    // scalastyle:off executioncontextglobal
     import scala.concurrent.ExecutionContext.Implicits.global
+    // scalastyle:on executioncontextglobal
     val responseFuture = Future {
       val responseCode = connection.getResponseCode
 
@@ -296,6 +385,24 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   private def getKillUrl(master: String, submissionId: String): URL = {
     val baseUrl = getBaseUrl(master)
     new URL(s"$baseUrl/kill/$submissionId")
+  }
+
+  /** Return the REST URL for killing all submissions. */
+  private def getKillAllUrl(master: String): URL = {
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/killall")
+  }
+
+  /** Return the REST URL for clear all existing submissions and applications. */
+  private def getClearUrl(master: String): URL = {
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/clear")
+  }
+
+  /** Return the REST URL for requesting the readyz API. */
+  private def getReadyzUrl(master: String): URL = {
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/readyz")
   }
 
   /** Return the REST URL for requesting the status of an existing submission. */
@@ -407,7 +514,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
 private[spark] object RestSubmissionClient {
 
-  val supportedMasterPrefixes = Seq("spark://", "mesos://")
+  val supportedMasterPrefixes = Seq("spark://")
 
   // SPARK_HOME and SPARK_CONF_DIR are filtered out because they are usually wrong
   // on the remote machine (SPARK-12345) (SPARK-25934)
@@ -420,9 +527,9 @@ private[spark] object RestSubmissionClient {
    * Filter non-spark environment variables from any environment.
    */
   private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
-    env.filterKeys { k =>
-      (k.startsWith("SPARK_") && !EXCLUDED_SPARK_ENV_VARS.contains(k)) || k.startsWith("MESOS_")
-    }.toMap
+    env.filter { case (k, _) =>
+      k.startsWith("SPARK_") && !EXCLUDED_SPARK_ENV_VARS.contains(k)
+    }
   }
 
   private[spark] def supportsRestClient(master: String): Boolean = {

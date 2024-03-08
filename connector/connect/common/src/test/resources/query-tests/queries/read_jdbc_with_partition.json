@@ -1,0 +1,18 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "read": {
+    "dataSource": {
+      "format": "jdbc",
+      "options": {
+        "url": "jdbc:h2:mem:testdb0;user\u003dtestUser;password\u003dtestPass",
+        "upperbound": "4",
+        "lowerbound": "0",
+        "numpartitions": "3",
+        "dbtable": "TEST.EMP",
+        "partitioncolumn": "THEID"
+      }
+    }
+  }
+}

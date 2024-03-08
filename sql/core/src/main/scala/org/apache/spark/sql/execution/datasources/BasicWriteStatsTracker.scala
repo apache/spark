@@ -159,9 +159,6 @@ class BasicWriteTaskStatsTracker(
   }
 
   override def getFinalStats(taskCommitTime: Long): WriteTaskStats = {
-    submittedFiles.foreach(updateFileStats)
-    submittedFiles.clear()
-
     // Reports bytesWritten and recordsWritten to the Spark output metrics.
     Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
       outputMetrics.setBytesWritten(numBytes)
@@ -203,7 +200,7 @@ class BasicWriteJobStatsTracker(
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit = {
     val sparkContext = SparkContext.getActive.get
-    var partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
+    val partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
     var numFiles: Long = 0L
     var totalNumBytes: Long = 0L
     var totalNumOutput: Long = 0L

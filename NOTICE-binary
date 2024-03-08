@@ -673,9 +673,6 @@ Copyright 2002-2012 The Apache Software Foundation
 Google Guice - Core Library
 Copyright 2006-2011 Google, Inc.
 
-mesos
-Copyright 2017 The Apache Software Foundation
-
 Apache Parquet Hadoop Bundle (Incubating)
 Copyright 2015 The Apache Software Foundation
 
@@ -916,6 +913,9 @@ See http://junit.sourceforge.net/cpl-v10.html
 This product includes code (JaspellTernarySearchTrie) from Java Spelling Checkin
 g Package (jaspell): http://jaspell.sourceforge.net/
 License: The BSD License (http://www.opensource.org/licenses/bsd-license.php)
+
+This product includes software developed by the JDOM Project (http://www.jdom.org/)
+License: https://raw.githubusercontent.com/hunterhacker/jdom/master/LICENSE.txt
 
 The snowball stemmers in
   analysis/common/src/java/net/sf/snowball

@@ -24,7 +24,6 @@ from pyspark.testing.streamingutils import PySparkStreamingTestCase
 
 
 class StreamingContextTests(PySparkStreamingTestCase):
-
     duration = 0.1
     setupCalled = False
 
@@ -57,7 +56,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
         dstream2 = self.ssc.textFileStream(d).map(int)
         result = self._collect(dstream2, 2, block=False)
         self.ssc.start()
-        for name in ('a', 'b'):
+        for name in ("a", "b"):
             time.sleep(1)
             with open(os.path.join(d, name), "w") as f:
                 f.writelines(["%d\n" % i for i in range(10)])
@@ -67,11 +66,10 @@ class StreamingContextTests(PySparkStreamingTestCase):
     def test_binary_records_stream(self):
         d = tempfile.mkdtemp()
         self.ssc = StreamingContext(self.sc, self.duration)
-        dstream = self.ssc.binaryRecordsStream(d, 10).map(
-            lambda v: struct.unpack("10b", bytes(v)))
+        dstream = self.ssc.binaryRecordsStream(d, 10).map(lambda v: struct.unpack("10b", bytes(v)))
         result = self._collect(dstream, 2, block=False)
         self.ssc.start()
-        for name in ('a', 'b'):
+        for name in ("a", "b"):
             time.sleep(1)
             with open(os.path.join(d, name), "wb") as f:
                 f.write(bytearray(range(10)))
@@ -102,8 +100,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
 
     def test_transform_pairrdd(self):
         # This regression test case is for SPARK-17756.
-        dstream = self.ssc.queueStream(
-            [[1], [2], [3]]).transform(lambda rdd: rdd.cartesian(rdd))
+        dstream = self.ssc.queueStream([[1], [2], [3]]).transform(lambda rdd: rdd.cartesian(rdd))
         self.assertEqual([(1, 1), (2, 2), (3, 3)], self._take(dstream, 3))
 
     def test_get_active(self):
@@ -178,8 +175,9 @@ if __name__ == "__main__":
     from pyspark.streaming.tests.test_context import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+        import xmlrunner
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

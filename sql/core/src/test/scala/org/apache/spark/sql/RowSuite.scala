@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecificInternalRow}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -104,5 +104,23 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       s"Map(1 -> a, 2 -> b),$tsString,$dtString,1234567890.1234567890,-1]")
     val empty = Row()
     assert(empty.toString == "[]")
+  }
+
+  test("SPARK-37654: row contains a null at the requested index should return null") {
+    assert(Row(Seq("value")).getSeq(0) === List("value"))
+    assert(Row(Seq()).getSeq(0) === List())
+    assert(Row(null).getSeq(0) === null)
+  }
+
+  test("access fieldIndex on Row without schema") {
+    val rowWithoutSchema = Row(1, "foo", 3.14)
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        rowWithoutSchema.fieldIndex("foo")
+      },
+      errorClass = "UNSUPPORTED_CALL.FIELD_INDEX",
+      parameters = Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "`foo`")
+    )
   }
 }

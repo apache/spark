@@ -19,12 +19,12 @@ package org.apache.spark.ui
 
 import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.xml.{Node, Unparsed}
 
 import com.google.common.base.Splitter
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.util.Utils
 
@@ -43,7 +43,7 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
   /**
    * Slice a range of data.
    */
-  protected def sliceData(from: Int, to: Int): Seq[T]
+  protected def sliceData(from: Int, to: Int): collection.Seq[T]
 
   /**
    * Slice the data for this page
@@ -76,7 +76,7 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
  * The data returned by `PagedDataSource.pageData`, including the page number, the number of total
  * pages and the data in this page.
  */
-private[ui] case class PageData[T](totalPage: Int, data: Seq[T])
+private[ui] case class PageData[T](totalPage: Int, data: collection.Seq[T])
 
 /**
  * A paged table that will generate a HTML table for a specified page and also the page navigation.
@@ -207,9 +207,9 @@ private[spark] trait PagedTable[T] {
           .withKeyValueSeparator("=")
           .split(search)
           .asScala
-          .filterKeys(_ != pageSizeFormField)
-          .filterKeys(_ != pageNumberFormField)
-          .mapValues(URLDecoder.decode(_, UTF_8.name()))
+          .filter { case (k, _) => k != pageSizeFormField}
+          .filter { case (k, _) => k != pageNumberFormField}
+          .map { case (k, v) => (k, URLDecoder.decode(v, UTF_8.name())) }
           .map { case (k, v) =>
             <input type="hidden" name={k} value={v} />
           }

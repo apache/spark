@@ -22,6 +22,7 @@ import scala.collection.immutable.{HashMap, TreeMap}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 
@@ -149,7 +150,7 @@ case class PivotFirst(
       AttributeReference(Option(kv._1).getOrElse("null").toString, valueDataType)()
     }
 
-  override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override val aggBufferSchema: StructType = DataTypeUtils.fromAttributes(aggBufferAttributes)
 
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())

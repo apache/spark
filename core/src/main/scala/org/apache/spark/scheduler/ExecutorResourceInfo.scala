@@ -25,16 +25,27 @@ import org.apache.spark.resource.{ResourceAllocator, ResourceInformation}
  * information.
  * @param name Resource name
  * @param addresses Resource addresses provided by the executor
- * @param numParts Number of ways each resource is subdivided when scheduling tasks
  */
 private[spark] class ExecutorResourceInfo(
     name: String,
-    addresses: Seq[String],
-    numParts: Int)
+    addresses: Seq[String])
   extends ResourceInformation(name, addresses.toArray) with ResourceAllocator {
 
   override protected def resourceName = this.name
   override protected def resourceAddresses = this.addresses
-  override protected def slotsPerAddress: Int = numParts
-  def totalAddressAmount: Int = resourceAddresses.length * slotsPerAddress
+
+  /**
+   * Calculate how many parts the executor can offer according to the task resource amount
+   * @param taskAmount how many resource amount the task required
+   * @return the total parts
+   */
+  def totalParts(taskAmount: Double): Int = {
+    assert(taskAmount > 0.0)
+    if (taskAmount >= 1.0) {
+      addresses.length / taskAmount.ceil.toInt
+    } else {
+      addresses.length * Math.floor(1.0 / taskAmount).toInt
+    }
+  }
+
 }

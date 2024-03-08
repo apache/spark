@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
-import java.util.{Properties, Timer, TimerTask}
+import java.util.{Properties, TimerTask}
+import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success => ScalaSuccess, Try}
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -55,31 +56,28 @@ class BarrierTaskContext private[spark] (
   // with the driver side epoch.
   private var barrierEpoch = 0
 
-  // Number of tasks of the current barrier stage, a barrier() call must collect enough requests
-  // from different tasks within the same barrier stage attempt to succeed.
-  private lazy val numTasks = getTaskInfos().size
-
   private def runBarrier(message: String, requestMethod: RequestMethod.Value): Array[String] = {
-    logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) has entered " +
-      s"the global sync, current barrier epoch is $barrierEpoch.")
+    logInfo(s"Task ${taskAttemptId()} from Stage ${stageId()}(Attempt ${stageAttemptNumber()}) " +
+      s"has entered the global sync, current barrier epoch is $barrierEpoch.")
     logTrace("Current callSite: " + Utils.getCallSite())
 
     val startTime = System.currentTimeMillis()
     val timerTask = new TimerTask {
       override def run(): Unit = {
-        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) waiting " +
+        logInfo(s"Task ${taskAttemptId()} from Stage ${stageId()}(Attempt " +
+          s"${stageAttemptNumber()}) waiting " +
           s"under the global sync since $startTime, has been waiting for " +
           s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
           s"current barrier epoch is $barrierEpoch.")
       }
     }
-    // Log the update of global sync every 60 seconds.
-    timer.schedule(timerTask, 60000, 60000)
+    // Log the update of global sync every 1 minute.
+    timer.scheduleAtFixedRate(timerTask, 1, 1, TimeUnit.MINUTES)
 
     try {
       val abortableRpcFuture = barrierCoordinator.askAbortable[Array[String]](
-        message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
-          barrierEpoch, partitionId, message, requestMethod),
+        message = RequestToSync(numPartitions(), stageId(), stageAttemptNumber(), taskAttemptId(),
+          barrierEpoch, partitionId(), message, requestMethod),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
         timeout = new RpcTimeout(365.days, "barrierTimeout"))
@@ -106,15 +104,15 @@ class BarrierTaskContext private[spark] (
       val messages = abortableRpcFuture.future.value.get.get
 
       barrierEpoch += 1
-      logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
-        "global sync successfully, waited for " +
+      logInfo(s"Task ${taskAttemptId()} from Stage ${stageId()}(Attempt ${stageAttemptNumber()}) " +
+        s"finished global sync successfully, waited for " +
         s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
         s"current barrier epoch is $barrierEpoch.")
       messages
     } catch {
       case e: SparkException =>
-        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) failed " +
-          "to perform global sync, waited for " +
+        logInfo(s"Task ${taskAttemptId()} from Stage ${stageId()}(Attempt " +
+          s"${stageAttemptNumber()}) failed to perform global sync, waited for " +
           s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
           s"current barrier epoch is $barrierEpoch.")
         throw e
@@ -197,6 +195,8 @@ class BarrierTaskContext private[spark] (
 
   override def isCompleted(): Boolean = taskContext.isCompleted()
 
+  override def isFailed(): Boolean = taskContext.isFailed()
+
   override def isInterrupted(): Boolean = taskContext.isInterrupted()
 
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
@@ -214,6 +214,8 @@ class BarrierTaskContext private[spark] (
   override def stageAttemptNumber(): Int = taskContext.stageAttemptNumber()
 
   override def partitionId(): Int = taskContext.partitionId()
+
+  override def numPartitions(): Int = taskContext.numPartitions()
 
   override def attemptNumber(): Int = taskContext.attemptNumber()
 
@@ -282,6 +284,11 @@ object BarrierTaskContext {
   @Since("2.4.0")
   def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
 
-  private val timer = new Timer("Barrier task timer for barrier() calls.")
+  private val timer = {
+    val executor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "Barrier task timer for barrier() calls.")
+    assert(executor.isInstanceOf[ScheduledThreadPoolExecutor])
+    executor.asInstanceOf[ScheduledThreadPoolExecutor]
+  }
 
 }

@@ -1,0 +1,2 @@
+Project [xpath_float(s#0, a/b) AS xpath_float(s, a/b)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

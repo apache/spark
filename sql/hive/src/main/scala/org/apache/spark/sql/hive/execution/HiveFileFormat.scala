@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
+import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorUtils, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{JobConf, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -36,7 +38,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
-import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableJobConf
@@ -104,6 +105,21 @@ class HiveFileFormat(fileSinkConf: FileSinkDesc)
           context: TaskAttemptContext): OutputWriter = {
         new HiveOutputWriter(path, fileSinkConfSer, jobConf.value, dataSchema)
       }
+    }
+  }
+
+  override def supportFieldName(name: String): Boolean = {
+    fileSinkConf.getTableInfo.getOutputFileFormatClassName match {
+      case "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat" =>
+        !name.matches(".*[ ,;{}()\n\t=].*")
+      case "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat" =>
+        try {
+          TypeInfoUtils.getTypeInfoFromTypeString(s"struct<$name:int>")
+          true
+        } catch {
+          case _: IllegalArgumentException => false
+        }
+      case _ => true
     }
   }
 }

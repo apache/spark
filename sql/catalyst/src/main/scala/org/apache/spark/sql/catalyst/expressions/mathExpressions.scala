@@ -20,12 +20,16 @@ package org.apache.spark.sql.catalyst.expressions
 import java.{lang => jl}
 import java.util.Locale
 
+import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter, TypeUtils}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -238,17 +242,6 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   override protected def withNewChildInternal(newChild: Expression): Cbrt = copy(child = newChild)
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the smallest integer not smaller than `expr`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(-0.1);
-       0
-      > SELECT _FUNC_(5);
-       5
-  """,
-  since = "1.4.0",
-  group = "math_funcs")
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -279,6 +272,65 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
 
+trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
+  protected def buildWithOneParam(param: Expression): Expression
+  protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      buildWithOneParam(expressions.head)
+    } else if (numArgs == 2) {
+      val scale = expressions(1)
+      if (!(scale.foldable && scale.dataType == IntegerType)) {
+        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "scale", IntegerType)
+      }
+      if (scale.eval() == null) {
+        throw QueryCompilationErrors.nonFoldableArgumentError(funcName, "scale", IntegerType)
+      }
+      buildWithTwoParams(expressions(0), scale)
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(-0.1);
+       0
+      > SELECT _FUNC_(5);
+       5
+      > SELECT _FUNC_(3.1411, 3);
+       3.142
+      > SELECT _FUNC_(3.1411, -3);
+       1000
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+object CeilExpressionBuilder extends CeilFloorExpressionBuilderBase {
+  override protected def buildWithOneParam(param: Expression): Expression = Ceil(param)
+
+  override protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression =
+    RoundCeil(param1, param2)
+}
+
+case class RoundCeil(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING") {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
+
+  override def nodeName: String = "ceil"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RoundCeil =
+    copy(child = newLeft, scale = newRight)
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(expr) - Returns the cosine of `expr`, as if computed by
@@ -297,6 +349,29 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   group = "math_funcs")
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS") {
   override protected def withNewChildInternal(newChild: Expression): Cos = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the secant of `expr`, as if computed by `1/java.lang.Math.cos`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       1.0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class Sec(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.cos(x), "SEC") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.cos($c);")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Sec = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -359,8 +434,18 @@ case class Acosh(child: Expression)
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+case class Conv(
+    numExpr: Expression,
+    fromBaseExpr: Expression,
+    toBaseExpr: Expression,
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends TernaryExpression
+    with ImplicitCastInputTypes
+    with NullIntolerant
+    with SupportQueryContext {
+
+  def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
+    this(numExpr, fromBaseExpr, toBaseExpr, ansiEnabled = SQLConf.get.ansiEnabled)
 
   override def first: Expression = numExpr
   override def second: Expression = fromBaseExpr
@@ -373,14 +458,17 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
     NumberConverter.convert(
       num.asInstanceOf[UTF8String].trim().getBytes,
       fromBase.asInstanceOf[Int],
-      toBase.asInstanceOf[Int])
+      toBase.asInstanceOf[Int],
+      ansiEnabled,
+      getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
+    val context = getContextOrNullCode(ctx, ansiEnabled)
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
-       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to);
+       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to, $ansiEnabled, $context);
        if (${ev.value} == null) {
          ${ev.isNull} = true;
        }
@@ -391,6 +479,12 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     copy(numExpr = newFirst, fromBaseExpr = newSecond, toBaseExpr = newThird)
+
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
+    Some(origin.context)
+  } else {
+    None
+  }
 }
 
 @ExpressionDescription(
@@ -425,17 +519,6 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   override protected def withNewChildInternal(newChild: Expression): Expm1 = copy(child = newChild)
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(-0.1);
-       -1
-      > SELECT _FUNC_(5);
-       5
-  """,
-  since = "1.4.0",
-  group = "math_funcs")
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -461,9 +544,45 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
-  }
+ }
+ override protected def withNewChildInternal(newChild: Expression): Floor =
+  copy(child = newChild)
+}
 
-  override protected def withNewChildInternal(newChild: Expression): Floor = copy(child = newChild)
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(-0.1);
+       -1
+      > SELECT _FUNC_(5);
+       5
+      > SELECT _FUNC_(3.1411, 3);
+       3.141
+      > SELECT _FUNC_(3.1411, -3);
+       0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+// scalastyle:on line.size.limit
+object FloorExpressionBuilder extends CeilFloorExpressionBuilderBase {
+  override protected def buildWithOneParam(param: Expression): Expression = Floor(param)
+
+  override protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression =
+    RoundFloor(param1, param2)
+}
+
+case class RoundFloor(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR") {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
+
+  override def nodeName: String = "floor"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RoundFloor =
+    copy(child = newLeft, scale = newRight)
 }
 
 object Factorial {
@@ -631,10 +750,17 @@ case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND
     Examples:
       > SELECT _FUNC_(40);
        1.0
+      > SELECT _FUNC_(INTERVAL -'100' YEAR);
+       -1.0
   """,
   since = "1.4.0",
   group = "math_funcs")
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM") {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType))
+  protected override def nullSafeEval(input: Any): Any = {
+    f(input.asInstanceOf[Number].doubleValue())
+  }
   override protected def withNewChildInternal(newChild: Expression): Signum = copy(child = newChild)
 }
 
@@ -653,6 +779,29 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
   group = "math_funcs")
 case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN") {
   override protected def withNewChildInternal(newChild: Expression): Sin = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns the cosecant of `expr`, as if computed by `1/java.lang.Math.sin`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - angle in radians
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1);
+       1.1883951057781212
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class Csc(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.sin(x), "CSC") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.sin($c);")
+  }
+  override protected def withNewChildInternal(newChild: Expression): Csc = copy(child = newChild)
 }
 
 @ExpressionDescription(
@@ -908,6 +1057,7 @@ object Hex {
   def unhex(bytes: Array[Byte]): Array[Byte] = {
     val out = new Array[Byte]((bytes.length + 1) >> 1)
     var i = 0
+    var oddShift = 0
     if ((bytes.length & 0x01) != 0) {
       // padding with '0'
       if (bytes(0) < 0) {
@@ -919,6 +1069,7 @@ object Hex {
       }
       out(0) = v
       i += 1
+      oddShift = 1
     }
     // two characters form the hex value.
     while (i < bytes.length) {
@@ -930,7 +1081,7 @@ object Hex {
       if (first == -1 || second == -1) {
         return null
       }
-      out(i / 2) = (((first << 4) | second) & 0xFF).toByte
+      out(i / 2 + oddShift) = (((first << 4) | second) & 0xFF).toByte
       i += 2
     }
     out
@@ -993,28 +1144,57 @@ case class Hex(child: Expression)
   """,
   since = "1.5.0",
   group = "math_funcs")
-case class Unhex(child: Expression)
+case class Unhex(child: Expression, failOnError: Boolean = false)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(expr: Expression) = this(expr, false)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
 
-  protected override def nullSafeEval(num: Any): Any =
-    Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+  protected override def nullSafeEval(num: Any): Any = {
+    val result = Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
+    if (failOnError && result == null) {
+      // The failOnError is set only from `ToBinary` function - hence we might safely set `hint`
+      // parameter to `try_to_binary`.
+      throw QueryExecutionErrors.invalidInputInConversionError(
+        BinaryType,
+        num.asInstanceOf[UTF8String],
+        UTF8String.fromString("HEX"),
+        "try_to_binary")
+    }
+    result
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (c) => {
+    nullSafeCodeGen(ctx, ev, c => {
       val hex = Hex.getClass.getName.stripSuffix("$")
+      val maybeFailOnErrorCode = if (failOnError) {
+        val binaryType = ctx.addReferenceObj("to", BinaryType, BinaryType.getClass.getName)
+        s"""
+           |if (${ev.value} == null) {
+           |  throw QueryExecutionErrors.invalidInputInConversionError(
+           |    $binaryType,
+           |    $c,
+           |    UTF8String.fromString("HEX"),
+           |    "try_to_binary");
+           |}
+           |""".stripMargin
+      } else {
+        s"${ev.isNull} = ${ev.value} == null;"
+      }
+
       s"""
         ${ev.value} = $hex.unhex($c.getBytes());
-        ${ev.isNull} = ${ev.value} == null;
+        $maybeFailOnErrorCode
        """
     })
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Unhex = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Unhex =
+    copy(child = newChild, failOnError)
 }
 
 
@@ -1091,7 +1271,7 @@ case class Pow(left: Expression, right: Expression)
        4
   """,
   since = "1.5.0",
-  group = "math_funcs")
+  group = "bitwise_funcs")
 case class ShiftLeft(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -1287,10 +1467,12 @@ case class Logarithm(left: Expression, right: Expression)
  */
 abstract class RoundBase(child: Expression, scale: Expression,
     mode: BigDecimal.RoundingMode.Value, modeStr: String)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes with SupportQueryContext {
 
   override def left: Expression = child
   override def right: Expression = scale
+
+  protected def ansiEnabled: Boolean = false
 
   // round of Decimal would eval to null if it fails to `changePrecision`
   override def nullable: Boolean = true
@@ -1298,9 +1480,21 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
-    // if the new scale is bigger which means we are scaling up,
-    // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case DecimalType.Fixed(p, s) =>
+      // After rounding we may need one more digit in the integral part,
+      // e.g. `ceil(9.9, 0)` -> `10`, `ceil(99, -1)` -> `100`.
+      val integralLeastNumDigits = p - s + 1
+      if (_scale < 0) {
+        // negative scale means we need to adjust `-scale` number of digits before the decimal
+        // point, which means we need at lease `-scale + 1` digits (after rounding).
+        val newPrecision = math.max(integralLeastNumDigits, -_scale + 1)
+        // We have to accept the risk of overflow as we can't exceed the max precision.
+        DecimalType(math.min(newPrecision, DecimalType.MAX_PRECISION), 0)
+      } else {
+        val newScale = math.min(s, _scale)
+        // We have to accept the risk of overflow as we can't exceed the max precision.
+        DecimalType(math.min(integralLeastNumDigits + newScale, 38), newScale)
+      }
     case t => t
   }
 
@@ -1312,7 +1506,12 @@ abstract class RoundBase(child: Expression, scale: Expression,
         if (scale.foldable) {
           TypeCheckSuccess
         } else {
-          TypeCheckFailure("Only foldable Expression is allowed for scale arguments")
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId("scale"),
+              "inputType" -> toSQLType(scale.dataType),
+              "inputExpr" -> toSQLExpr(scale)))
         }
       case f => f
     }
@@ -1322,7 +1521,15 @@ abstract class RoundBase(child: Expression, scale: Expression,
   // avoid unnecessary `child` evaluation in both codegen and non-codegen eval
   // by checking if scaleV == null as well.
   private lazy val scaleV: Any = scale.eval(EmptyRow)
-  private lazy val _scale: Int = scaleV.asInstanceOf[Int]
+  protected lazy val _scale: Int = scaleV.asInstanceOf[Int]
+
+  override def initQueryContext(): Option[QueryContext] = {
+    if (ansiEnabled) {
+      Some(origin.context)
+    } else {
+      None
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     if (scaleV == null) { // if scale is null, no need to eval its child at all
@@ -1340,16 +1547,36 @@ abstract class RoundBase(child: Expression, scale: Expression,
   // not overriding since _scale is a constant int at runtime
   def nullSafeEval(input1: Any): Any = {
     dataType match {
-      case DecimalType.Fixed(_, s) =>
+      case DecimalType.Fixed(p, s) =>
         val decimal = input1.asInstanceOf[Decimal]
-        // Overflow cannot happen, so no need to control nullOnOverflow
-        decimal.toPrecision(decimal.precision, s, mode)
+        if (_scale >= 0) {
+          // Overflow cannot happen, so no need to control nullOnOverflow
+          decimal.toPrecision(decimal.precision, s, mode)
+        } else {
+          Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
+        }
+      case ByteType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByteExact,
+          context = getContextOrNull())
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
+      case ShortType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShortExact,
+          context = getContextOrNull())
       case ShortType =>
         BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
+      case IntegerType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toIntExact,
+          context = getContextOrNull())
       case IntegerType =>
         BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
+      case LongType if ansiEnabled =>
+        MathUtils.withOverflow(
+          f = BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLongExact,
+          context = getContextOrNull())
       case LongType =>
         BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
       case FloatType =>
@@ -1372,45 +1599,47 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
 
+    def codegenForIntegralType(dt: String): String = {
+      if (_scale < 0) {
+        if (ansiEnabled) {
+          val errorContext = getContextOrNullCode(ctx)
+          val evalCode = s"""
+            |${ev.value} = new java.math.BigDecimal(${ce.value}).
+            |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}ValueExact();
+            |""".stripMargin
+          MathUtils.withOverflowCode(evalCode, errorContext)
+        } else {
+          s"""
+             |${ev.value} = new java.math.BigDecimal(${ce.value}).
+             |setScale(${_scale}, java.math.BigDecimal.${modeStr}).${dt}Value();
+             |""".stripMargin
+        }
+      } else {
+        s"${ev.value} = ${ce.value};"
+      }
+    }
+
     val evaluationCode = dataType match {
-      case DecimalType.Fixed(_, s) =>
-        s"""
-           |${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-           |  Decimal.$modeStr(), true);
-           |${ev.isNull} = ${ev.value} == null;
-         """.stripMargin
+      case DecimalType.Fixed(p, s) =>
+        if (_scale >= 0) {
+          s"""
+            ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
+            Decimal.$modeStr(), true, null);
+            ${ev.isNull} = ${ev.value} == null;"""
+       } else {
+          s"""
+            ${ev.value} = new Decimal().set(${ce.value}.toBigDecimal()
+            .setScale(${_scale}, Decimal.$modeStr()), $p, $s);
+            ${ev.isNull} = ${ev.value} == null;"""
+        }
       case ByteType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).byteValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("byte")
       case ShortType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).shortValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("short")
       case IntegerType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("int")
       case LongType =>
-        if (_scale < 0) {
-          s"""
-          ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.${modeStr}).longValue();"""
-        } else {
-          s"${ev.value} = ${ce.value};"
-        }
+        codegenForIntegralType("long")
       case FloatType => // if child eval to NaN or Infinity, just return it.
         s"""
           if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
@@ -1461,10 +1690,17 @@ abstract class RoundBase(child: Expression, scale: Expression,
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Round(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
-    with Serializable with ImplicitCastInputTypes {
-  def this(child: Expression) = this(child, Literal(0))
+case class Round(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP") {
+  def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
+
+  def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
+
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
+
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): Round =
     copy(child = newLeft, scale = newRight)
 }
@@ -1481,27 +1717,49 @@ case class Round(child: Expression, scale: Expression)
     Examples:
       > SELECT _FUNC_(2.5, 0);
        2
+      > SELECT _FUNC_(25, -1);
+       20
   """,
   since = "2.0.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class BRound(child: Expression, scale: Expression)
-  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
-    with Serializable with ImplicitCastInputTypes {
-  def this(child: Expression) = this(child, Literal(0))
+case class BRound(
+    child: Expression,
+    scale: Expression,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN") {
+  def this(child: Expression) = this(child, Literal(0), SQLConf.get.ansiEnabled)
+
+  def this(child: Expression, scale: Expression) = this(child, scale, SQLConf.get.ansiEnabled)
+
+  override def flatArguments: Iterator[Any] = Iterator(child, scale)
+
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): BRound = copy(child = newLeft, scale = newRight)
 }
 
 object WidthBucket {
-
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
-    if (numBucket <= 0 || numBucket == Long.MaxValue || jl.Double.isNaN(value) || min == max ||
-        jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
-        jl.Double.isNaN(max) || jl.Double.isInfinite(max)) {
-      return null
+    if (isNull(value, min, max, numBucket)) {
+      null
+    } else {
+      computeBucketNumberNotNull(value, min, max, numBucket)
     }
+  }
 
+  /** This function is called by generated Java code, so it needs to be public. */
+  def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
+    numBucket <= 0 ||
+      numBucket == Long.MaxValue ||
+      jl.Double.isNaN(value) ||
+      min == max ||
+      jl.Double.isNaN(min) || jl.Double.isInfinite(min) ||
+      jl.Double.isNaN(max) || jl.Double.isInfinite(max)
+  }
+
+  /** This function is called by generated Java code, so it needs to be public. */
+  def computeBucketNumberNotNull(
+      value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     val lower = Math.min(min, max)
     val upper = Math.max(min, max)
 
@@ -1560,6 +1818,14 @@ object WidthBucket {
        5
       > SELECT _FUNC_(-0.9, 5.2, 0.5, 2);
        3
+      > SELECT _FUNC_(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
+       1
+      > SELECT _FUNC_(INTERVAL '1' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10);
+       2
+      > SELECT _FUNC_(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
+       1
+      > SELECT _FUNC_(INTERVAL '1' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
+       2
   """,
   since = "3.1.0",
   group = "math_funcs")
@@ -1570,23 +1836,49 @@ case class WidthBucket(
     numBucket: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
+    LongType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        (value.dataType, minValue.dataType, maxValue.dataType) match {
+          case (_: YearMonthIntervalType, _: YearMonthIntervalType, _: YearMonthIntervalType) =>
+            TypeCheckSuccess
+          case (_: DayTimeIntervalType, _: DayTimeIntervalType, _: DayTimeIntervalType) =>
+            TypeCheckSuccess
+          case _ =>
+            val types = Seq(value.dataType, minValue.dataType, maxValue.dataType)
+            TypeUtils.checkForSameTypeInputExpr(types, prettyName)
+        }
+      case f => f
+    }
+  }
+
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
   override def prettyName: String = "width_bucket"
 
   override protected def nullSafeEval(input: Any, min: Any, max: Any, numBucket: Any): Any = {
     WidthBucket.computeBucketNumber(
-      input.asInstanceOf[Double],
-      min.asInstanceOf[Double],
-      max.asInstanceOf[Double],
+      input.asInstanceOf[Number].doubleValue(),
+      min.asInstanceOf[Number].doubleValue(),
+      max.asInstanceOf[Number].doubleValue(),
       numBucket.asInstanceOf[Long])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (input, min, max, numBucket) =>
-      "org.apache.spark.sql.catalyst.expressions.WidthBucket" +
-        s".computeBucketNumber($input, $min, $max, $numBucket)")
+    nullSafeCodeGen(ctx, ev, (input, min, max, numBucket) => {
+      s"""${ev.isNull} = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |  .isNull($input, $min, $max, $numBucket);
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |    .computeBucketNumberNotNull($input, $min, $max, $numBucket);
+         |}""".stripMargin
+    })
   }
 
   override def first: Expression = value

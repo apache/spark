@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkSchemaUtils
 
 
 /**
@@ -39,24 +41,22 @@ private[spark] object SchemaUtils {
    * duplication exists.
    *
    * @param schema schema to check
-   * @param colType column type name, used in an exception message
    * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
    */
   def checkSchemaColumnNameDuplication(
       schema: DataType,
-      colType: String,
       caseSensitiveAnalysis: Boolean = false): Unit = {
     schema match {
       case ArrayType(elementType, _) =>
-        checkSchemaColumnNameDuplication(elementType, colType, caseSensitiveAnalysis)
+        checkSchemaColumnNameDuplication(elementType, caseSensitiveAnalysis)
       case MapType(keyType, valueType, _) =>
-        checkSchemaColumnNameDuplication(keyType, colType, caseSensitiveAnalysis)
-        checkSchemaColumnNameDuplication(valueType, colType, caseSensitiveAnalysis)
+        checkSchemaColumnNameDuplication(keyType, caseSensitiveAnalysis)
+        checkSchemaColumnNameDuplication(valueType, caseSensitiveAnalysis)
       case structType: StructType =>
         val fields = structType.fields
-        checkColumnNameDuplication(fields.map(_.name), colType, caseSensitiveAnalysis)
+        checkColumnNameDuplication(fields.map(_.name).toImmutableArraySeq, caseSensitiveAnalysis)
         fields.foreach { field =>
-          checkSchemaColumnNameDuplication(field.dataType, colType, caseSensitiveAnalysis)
+          checkSchemaColumnNameDuplication(field.dataType, caseSensitiveAnalysis)
         }
       case _ =>
     }
@@ -67,14 +67,10 @@ private[spark] object SchemaUtils {
    * duplication exists.
    *
    * @param schema schema to check
-   * @param colType column type name, used in an exception message
    * @param resolver resolver used to determine if two identifiers are equal
    */
-  def checkSchemaColumnNameDuplication(
-      schema: StructType,
-      colType: String,
-      resolver: Resolver): Unit = {
-    checkSchemaColumnNameDuplication(schema, colType, isCaseSensitiveAnalysis(resolver))
+  def checkSchemaColumnNameDuplication(schema: StructType, resolver: Resolver): Unit = {
+    checkSchemaColumnNameDuplication(schema, isCaseSensitiveAnalysis(resolver))
   }
 
   // Returns true if a given resolver is case-sensitive
@@ -95,12 +91,10 @@ private[spark] object SchemaUtils {
    * the duplication exists.
    *
    * @param columnNames column names to check
-   * @param colType column type name, used in an exception message
    * @param resolver resolver used to determine if two identifiers are equal
    */
-  def checkColumnNameDuplication(
-      columnNames: Seq[String], colType: String, resolver: Resolver): Unit = {
-    checkColumnNameDuplication(columnNames, colType, isCaseSensitiveAnalysis(resolver))
+  def checkColumnNameDuplication(columnNames: Seq[String], resolver: Resolver): Unit = {
+    checkColumnNameDuplication(columnNames, isCaseSensitiveAnalysis(resolver))
   }
 
   /**
@@ -108,19 +102,17 @@ private[spark] object SchemaUtils {
    * the duplication exists.
    *
    * @param columnNames column names to check
-   * @param colType column type name, used in an exception message
    * @param caseSensitiveAnalysis whether duplication checks should be case sensitive or not
    */
-  def checkColumnNameDuplication(
-      columnNames: Seq[String], colType: String, caseSensitiveAnalysis: Boolean): Unit = {
+  def checkColumnNameDuplication(columnNames: Seq[String], caseSensitiveAnalysis: Boolean): Unit = {
     // scalastyle:off caselocale
     val names = if (caseSensitiveAnalysis) columnNames else columnNames.map(_.toLowerCase)
     // scalastyle:on caselocale
     if (names.distinct.length != names.length) {
-      val duplicateColumns = names.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => s"`$x`"
-      }
-      throw QueryCompilationErrors.foundDuplicateColumnError(colType, duplicateColumns.toSeq)
+      val columnName = names.groupBy(identity).toSeq.sortBy(_._1).collectFirst {
+        case (x, ys) if ys.length > 1 => x
+      }.get
+      throw QueryCompilationErrors.columnAlreadyExistsError(columnName)
     }
   }
 
@@ -176,9 +168,10 @@ private[spark] object SchemaUtils {
       isCaseSensitive: Boolean): Unit = {
     val extractedTransforms = transforms.map {
       case b: BucketTransform =>
-        val colNames = b.columns.map(c => UnresolvedAttribute(c.fieldNames()).name)
+        val colNames =
+          b.columns.map(c => UnresolvedAttribute(c.fieldNames().toImmutableArraySeq).name)
         // We need to check that we're not duplicating columns within our bucketing transform
-        checkColumnNameDuplication(colNames, "in the bucket definition", isCaseSensitive)
+        checkColumnNameDuplication(colNames, isCaseSensitive)
         b.name -> colNames
       case NamedTransform(transformName, refs) =>
         val fieldNameParts =
@@ -199,7 +192,10 @@ private[spark] object SchemaUtils {
         case (x, ys) if ys.length > 1 => s"${x._2.mkString(".")}"
       }
       throw new AnalysisException(
-        s"Found duplicate column(s) $checkType: ${duplicateColumns.mkString(", ")}")
+        errorClass = "_LEGACY_ERROR_TEMP_3058",
+        messageParameters = Map(
+          "checkType" -> checkType,
+          "duplicateColumns" -> duplicateColumns.mkString(", ")))
     }
   }
 
@@ -232,9 +228,11 @@ private[spark] object SchemaUtils {
         case o =>
           if (column.length > 1) {
             throw new AnalysisException(
-              s"""Expected $columnPath to be a nested data type, but found $o. Was looking for the
-                 |index of ${UnresolvedAttribute(column).name} in a nested field
-              """.stripMargin)
+              errorClass = "_LEGACY_ERROR_TEMP_3062",
+              messageParameters = Map(
+                "columnPath" -> columnPath,
+                "o" -> o.toString,
+                "attr" -> UnresolvedAttribute(column).name))
           }
           Nil
       }
@@ -246,9 +244,12 @@ private[spark] object SchemaUtils {
     } catch {
       case i: IndexOutOfBoundsException =>
         throw new AnalysisException(
-          s"Couldn't find column ${i.getMessage} in:\n${schema.treeString}")
+          errorClass = "_LEGACY_ERROR_TEMP_3060",
+          messageParameters = Map("i" -> i.getMessage, "schema" -> schema.treeString))
       case e: AnalysisException =>
-        throw new AnalysisException(e.getMessage + s":\n${schema.treeString}")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3061",
+          messageParameters = Map("e" -> e.getMessage, "schema" -> schema.treeString))
     }
   }
 
@@ -268,7 +269,10 @@ private[spark] object SchemaUtils {
             (nameAndField._1 :+ nowField.name) -> nowField
           case _ =>
             throw new AnalysisException(
-              s"The positions provided ($pos) cannot be resolved in\n${schema.treeString}.")
+              errorClass = "_LEGACY_ERROR_TEMP_3059",
+              messageParameters = Map(
+                "pos" -> pos.toString,
+                "schema" -> schema.treeString))
       }
     }
     field._1
@@ -288,13 +292,15 @@ private[spark] object SchemaUtils {
    * @param str The string to be escaped.
    * @return The escaped string.
    */
-  def escapeMetaCharacters(str: String): String = {
-    str.replaceAll("\n", "\\\\n")
-      .replaceAll("\r", "\\\\r")
-      .replaceAll("\t", "\\\\t")
-      .replaceAll("\f", "\\\\f")
-      .replaceAll("\b", "\\\\b")
-      .replaceAll("\u000B", "\\\\v")
-      .replaceAll("\u0007", "\\\\a")
+  def escapeMetaCharacters(str: String): String = SparkSchemaUtils.escapeMetaCharacters(str)
+
+  /**
+   * Checks if a given data type has a non-default collation string type.
+   */
+  def hasNonDefaultCollatedString(dt: DataType): Boolean = {
+    dt.existsRecursively {
+      case st: StringType => !st.isDefaultCollation
+      case _ => false
+    }
   }
 }

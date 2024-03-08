@@ -41,6 +41,10 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   protected def builtinTopNamespaces: Seq[String] = Seq.empty
+  protected def isCasePreserving: Boolean = true
+  protected def createNamespaceWithSpecialName(ns: String): Unit = {
+    sql(s"CREATE NAMESPACE $catalog.`$ns`")
+  }
 
   test("default namespace") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
@@ -51,7 +55,7 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("at the top level") {
     withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
-      sql(s"CREATE DATABASE $catalog.ns1")
+      sql(s"CREATE NAMESPACE $catalog.ns1")
       sql(s"CREATE NAMESPACE $catalog.ns2")
 
       runShowNamespacesSql(
@@ -64,24 +68,12 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
     withNamespace(s"$catalog.ns1", s"$catalog.ns2") {
       sql(s"CREATE NAMESPACE $catalog.ns1")
       sql(s"CREATE NAMESPACE $catalog.ns2")
-      Seq(
-        s"SHOW NAMESPACES IN $catalog LIKE 'ns2'",
-        s"SHOW NAMESPACES IN $catalog 'ns2'",
-        s"SHOW NAMESPACES FROM $catalog LIKE 'ns2'",
-        s"SHOW NAMESPACES FROM $catalog 'ns2'").foreach { sqlCmd =>
-        withClue(sqlCmd) {
-          runShowNamespacesSql(sqlCmd, Seq("ns2"))
-        }
-      }
+      runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'ns2'", Seq("ns2"))
     }
   }
 
   test("does not match to any namespace") {
-    Seq(
-      "SHOW DATABASES LIKE 'non-existentdb'",
-      "SHOW NAMESPACES 'non-existentdb'").foreach { sqlCmd =>
-      runShowNamespacesSql(sqlCmd, Seq.empty)
-    }
+    runShowNamespacesSql("SHOW NAMESPACES LIKE 'non-existentdb'", Seq.empty)
   }
 
   test("show root namespaces with the default catalog") {
@@ -126,6 +118,45 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
     } finally {
       spark.sessionState.catalogManager.reset()
+    }
+  }
+
+  test("SPARK-34359: keep the legacy output schema") {
+    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+      assert(sql("SHOW NAMESPACES").schema.fieldNames.toSeq == Seq("databaseName"))
+    }
+  }
+
+  test("SPARK-39149: keep the legacy no-quote behavior") {
+    Seq(true, false).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> legacy.toString) {
+        withNamespace(s"$catalog.`123`") {
+          createNamespaceWithSpecialName("123")
+          val res = if (legacy) "123" else "`123`"
+          checkAnswer(
+            sql(s"SHOW NAMESPACES IN $catalog"),
+            (res +: builtinTopNamespaces).map(Row(_)))
+        }
+      }
+    }
+  }
+
+  test("case sensitivity of the pattern string") {
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
+          sql(s"CREATE NAMESPACE $catalog.AAA")
+          sql(s"CREATE NAMESPACE $catalog.bbb")
+          // TODO: The v1 in-memory catalog should be case preserving as well.
+          val casePreserving = isCasePreserving && (catalogVersion == "V2" || caseSensitive)
+          val expected = if (casePreserving) "AAA" else "aaa"
+          runShowNamespacesSql(
+            s"SHOW NAMESPACES IN $catalog",
+            Seq(expected, "bbb") ++ builtinTopNamespaces)
+          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq(expected))
+          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq(expected))
+        }
+      }
     }
   }
 }

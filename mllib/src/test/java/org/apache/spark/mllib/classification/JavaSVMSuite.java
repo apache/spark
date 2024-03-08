@@ -19,8 +19,8 @@ package org.apache.spark.mllib.classification;
 
 import java.util.List;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -58,7 +58,7 @@ public class JavaSVMSuite extends SharedSparkSession {
     SVMModel model = svmSGDImpl.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
-    Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
+    Assertions.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
 
   @Test
@@ -75,6 +75,6 @@ public class JavaSVMSuite extends SharedSparkSession {
     SVMModel model = SVMWithSGD.train(testRDD.rdd(), 100, 1.0, 1.0, 1.0);
 
     int numAccurate = validatePrediction(validationData, model);
-    Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
+    Assertions.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
   }
 }

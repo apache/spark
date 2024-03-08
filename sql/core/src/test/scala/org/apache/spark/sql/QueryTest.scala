@@ -18,17 +18,19 @@
 package org.apache.spark.sql
 
 import java.util.TimeZone
+import java.util.regex.Pattern
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.junit.Assert
 import org.scalatest.Assertions
 
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ArrayImplicits._
 
 
 abstract class QueryTest extends PlanTest {
@@ -97,7 +99,7 @@ abstract class QueryTest extends PlanTest {
 
   private def getResult[T](ds: => Dataset[T]): Array[T] = {
     val analyzedDS = try ds catch {
-      case ae: AnalysisException =>
+      case ae: ExtendedAnalysisException =>
         if (ae.plan.isDefined) {
           fail(
             s"""
@@ -132,7 +134,7 @@ abstract class QueryTest extends PlanTest {
    */
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     val analyzedDF = try df catch {
-      case ae: AnalysisException =>
+      case ae: ExtendedAnalysisException =>
         if (ae.plan.isDefined) {
           fail(
             s"""
@@ -156,7 +158,17 @@ abstract class QueryTest extends PlanTest {
   }
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
-    checkAnswer(df, expectedAnswer.collect())
+    checkAnswer(df, expectedAnswer.collect().toImmutableArraySeq)
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the [[DataFrame]] to be executed
+   * @param expectedAnswer the expected result in a [[Array]] of [[Row]]s.
+   */
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
+    checkAnswer(df, expectedAnswer.toImmutableArraySeq)
   }
 
   /**
@@ -207,11 +219,12 @@ abstract class QueryTest extends PlanTest {
    */
   def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
-    val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
-      val cacheBuilder = cached.cacheBuilder
-      cachedName == cacheBuilder.tableName.get &&
-        (storageLevel == cacheBuilder.storageLevel)
-    }.getOrElse(false)
+    val matched = planWithCaching.exists {
+      case cached: InMemoryRelation =>
+        val cacheBuilder = cached.cacheBuilder
+        cachedName == cacheBuilder.tableName.get && (storageLevel == cacheBuilder.storageLevel)
+      case _ => false
+    }
 
     assert(matched, s"Expected query plan to hit cache $cachedName with storage " +
       s"level $storageLevel, but it doesn't.")
@@ -227,6 +240,17 @@ abstract class QueryTest extends PlanTest {
       s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
       s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
+  }
+
+  protected def getCurrentClassCallSitePattern: String = {
+    val cs = Thread.currentThread().getStackTrace()(2)
+    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
+  }
+
+  protected def getNextLineCallSitePattern(lines: Int = 1): String = {
+    val cs = Thread.currentThread().getStackTrace()(2)
+    Pattern.quote(
+      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
 }
 
@@ -360,7 +384,7 @@ object QueryTest extends Assertions {
     None
   }
 
-  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
+  def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
     case (null, null) => true
     case (null, _) => false
     case (_, null) => false
@@ -419,7 +443,7 @@ object QueryTest extends Assertions {
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
     getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
-      case Some(errorMessage) => Assert.fail(errorMessage)
+      case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
   }

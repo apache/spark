@@ -61,7 +61,8 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
         s.outputMode,
         deleteCheckpointOnStop,
         s.inputQuery,
-        s.catalogAndIdent)
+        s.catalogAndIdent,
+        s.catalogTable)
   }
 
   def resolveCheckpointLocation(s: WriteToStreamStatement): (String, Boolean) = {
@@ -75,12 +76,21 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
     }.getOrElse {
       if (s.useTempCheckpointLocation) {
         deleteCheckpointOnStop = true
-        val tempDir = Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+        val tempDir = Utils.createTempDir(namePrefix = "temporary").getCanonicalPath
         logWarning("Temporary checkpoint location created which is deleted normally when" +
           s" the query didn't fail: $tempDir. If it's required to delete it under any" +
           s" circumstances, please set ${SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION.key} to" +
           s" true. Important to know deleting temp checkpoint folder is best effort.")
-        tempDir
+        // SPARK-42676 - Write temp checkpoints for streaming queries to local filesystem
+        // even if default FS is set differently.
+        // This is a band-aid fix. Ideally we should convert `tempDir` to URIs, but there
+        // are many legacy behaviors related to this.
+        if (Utils.isWindows) {
+          // For Windows local path, we can't treat that as a URI with file scheme.
+          tempDir
+        } else {
+          "file://" + tempDir
+        }
       } else {
         throw QueryCompilationErrors.checkpointLocationNotSpecifiedError()
       }

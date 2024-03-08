@@ -47,7 +47,9 @@
 
     .. autosummary::
     {% for item in attributes %}
-       ~{{ name }}.{{ item }}
+        {% if not (item == 'uid') %}
+           ~{{ name }}.{{ item }}
+        {% endif %}
     {%- endfor %}
 
     {% endif %}

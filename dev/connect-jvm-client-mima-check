@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+set -o pipefail
+set -e
+
+# Go to the Spark project root directory
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+cd "$FWDIR"
+export SPARK_HOME=$FWDIR
+echo $SPARK_HOME
+
+if [[ -x "$JAVA_HOME/bin/java" ]]; then
+  JAVA_CMD="$JAVA_HOME/bin/java"
+else
+  JAVA_CMD=java
+fi
+
+rm -f .connect-mima-check-result
+
+echo "Build required modules..."
+build/sbt "sql/package;connect-client-jvm/package;connect-client-jvm/Test/package;avro/package;protobuf/assembly"
+
+CONNECT_TEST_CLASSPATH="$(build/sbt -DcopyDependencies=false "export connect-client-jvm/Test/fullClasspath" | grep jar | tail -n1)"
+SQL_CLASSPATH="$(build/sbt -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
+
+echo "Do connect-client-jvm module mima check ..."
+
+$JAVA_CMD \
+  -Xmx2g \
+  -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.util.jar=ALL-UNNAMED \
+  -cp "$CONNECT_TEST_CLASSPATH:$SQL_CLASSPATH" \
+  org.apache.spark.sql.connect.client.CheckConnectJvmClientCompatibility
+
+echo "finish connect-client-jvm module mima check ..."
+
+RESULT_SIZE=$(wc -l .connect-mima-check-result | awk '{print $1}')
+
+# The file has no content if check passed.
+if [[ $RESULT_SIZE -eq "0" ]]; then
+  ERRORS=""
+else
+  ERRORS=$(grep ERROR .connect-mima-check-result | tail -n1)
+fi
+
+if test ! -z "$ERRORS"; then
+  cat .connect-mima-check-result
+  echo -e "connect-client-jvm module mima check failed."
+  rm .connect-mima-check-result
+  exit 1
+else
+  rm .connect-mima-check-result
+  echo -e "connect-client-jvm module mima check passed."
+fi

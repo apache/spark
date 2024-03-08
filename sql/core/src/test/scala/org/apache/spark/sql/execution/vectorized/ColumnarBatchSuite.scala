@@ -20,12 +20,17 @@ package org.apache.spark.sql.execution.vectorized
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
+import java.util
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.arrow.vector.IntVector
+import org.apache.parquet.bytes.ByteBufferInputStream
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
@@ -34,12 +39,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData, MapData}
 import org.apache.spark.sql.execution.RowToColumnConverter
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedPlainValuesReader
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.util.ArrayImplicits._
 
+@ExtendedSQLTest
 class ColumnarBatchSuite extends SparkFunSuite {
 
   private def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): WritableColumnVector = {
@@ -125,6 +134,97 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       reference.zipWithIndex.foreach { v =>
         assert(v._1 == column.isNullAt(v._2))
+      }
+  }
+
+  testVector("Boolean APIs", 1024, BooleanType) {
+    column =>
+      val reference = mutable.ArrayBuffer.empty[Boolean]
+
+      var values = Array(true, false, true, false, false)
+      var bits = values.foldRight(0)((b, i) => i << 1 | (if (b) 1 else 0)).toByte
+      column.appendBooleans(2, bits, 0)
+      reference ++= values.slice(0, 2)
+
+      column.appendBooleans(3, bits, 2)
+      reference ++= values.slice(2, 5)
+
+      column.appendBooleans(6, true)
+      reference ++= Array.fill(6)(true)
+
+      column.appendBoolean(false)
+      reference += false
+
+      var idx = column.elementsAppended
+
+      values = Array(true, true, false, true, false, true, false, true)
+      bits = values.foldRight(0)((b, i) => i << 1 | (if (b) 1 else 0)).toByte
+      column.putBooleans(idx, 2, bits, 0)
+      reference ++= values.slice(0, 2)
+      idx += 2
+
+      column.putBooleans(idx, 3, bits, 2)
+      reference ++= values.slice(2, 5)
+      idx += 3
+
+      column.putBooleans(idx, bits)
+      reference ++= values
+      idx += 8
+
+      column.putBoolean(idx, false)
+      reference += false
+      idx += 1
+
+      column.putBooleans(idx, 3, true)
+      reference ++= Array.fill(3)(true)
+      idx += 3
+
+      implicit def intToByte(i: Int): Byte = i.toByte
+      val buf = ByteBuffer.wrap(Array(0x33, 0x5A, 0xA5, 0xCC, 0x0F, 0xF0, 0xEE, 0x77, 0x88))
+      val reader = new VectorizedPlainValuesReader()
+      reader.initFromPage(0, ByteBufferInputStream.wrap(buf))
+
+      reader.skipBooleans(1) // bit index 0
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 1
+      reference += true
+      idx += 1
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 2
+      reference += false
+      idx += 1
+
+      reader.skipBooleans(5) // bit index [3, 7]
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 8
+      reference += false
+      idx += 1
+
+      reader.skipBooleans(8) // bit index [9, 16]
+      reader.skipBooleans(0) // no-op
+
+      column.putBoolean(idx, reader.readBoolean) // bit index 17
+      reference += false
+      idx += 1
+
+      reader.skipBooleans(16) // bit index [18, 33]
+
+      reader.readBooleans(4, column, idx) // bit index [34, 37]
+      reference ++= Array(true, true, false, false)
+      idx += 4
+
+      reader.readBooleans(11, column, idx) // bit index [38, 48]
+      reference ++= Array(false, false, false, false, false, false, true, true, true, true, false)
+      idx += 11
+
+      reader.skipBooleans(7) // bit index [49, 55]
+
+      reader.readBooleans(9, column, idx) // bit index [56, 64]
+      reference ++= Array(true, true, true, false, true, true, true, false, false)
+      idx += 9
+
+      reference.zipWithIndex.foreach { v =>
+        assert(v._1 == column.getBoolean(v._2), "VectorType=" + column.getClass.getSimpleName)
       }
   }
 
@@ -1151,6 +1251,109 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
+  test("ColumnarBatch customization") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+      val schema = new StructType()
+        .add("intCol", IntegerType)
+        .add("doubleCol", DoubleType)
+        .add("intCol2", IntegerType)
+        .add("string", BinaryType)
+
+      val capacity = 4 * 1024
+      val columns = schema.fields.map { field =>
+        allocate(capacity, field.dataType, memMode)
+      }
+      val batch = new CustomizedColumnarBatch(columns.toArray)
+      assert(batch.numCols() == 4)
+      assert(batch.numRows() == 0)
+      assert(batch.rowIterator().hasNext == false)
+
+      // Add a row [1, 1.1, NULL, "Hello"]
+      columns(0).putInt(0, 1)
+      columns(1).putDouble(0, 1.1)
+      columns(2).putNull(0)
+      columns(3).putByteArray(0, "Hello".getBytes(StandardCharsets.UTF_8))
+      batch.setNumRows(1)
+
+      // Verify the results of the row.
+      assert(batch.numCols() == 4)
+      assert(batch.numRows() == 1)
+      // rowId 0 is skipped
+      assert(batch.rowIterator().hasNext == false)
+
+      // Reset and add 3 rows
+      columns.foreach(_.reset())
+      // Add rows [NULL, 2.2, 2, "abc"], [3, NULL, 3, ""], [4, 4.4, 4, "world"]
+      columns(0).putNull(0)
+      columns(1).putDouble(0, 2.2)
+      columns(2).putInt(0, 2)
+      columns(3).putByteArray(0, "abc".getBytes(StandardCharsets.UTF_8))
+
+      columns(0).putInt(1, 3)
+      columns(1).putNull(1)
+      columns(2).putInt(1, 3)
+      columns(3).putByteArray(1, "".getBytes(StandardCharsets.UTF_8))
+
+      columns(0).putInt(2, 4)
+      columns(1).putDouble(2, 4.4)
+      columns(2).putInt(2, 4)
+      columns(3).putByteArray(2, "world".getBytes(StandardCharsets.UTF_8))
+      batch.setNumRows(3)
+
+      def rowEquals(x: InternalRow, y: Row): Unit = {
+        assert(x.isNullAt(0) == y.isNullAt(0))
+        if (!x.isNullAt(0)) assert(x.getInt(0) == y.getInt(0))
+
+        assert(x.isNullAt(1) == y.isNullAt(1))
+        if (!x.isNullAt(1)) assert(x.getDouble(1) == y.getDouble(1))
+
+        assert(x.isNullAt(2) == y.isNullAt(2))
+        if (!x.isNullAt(2)) assert(x.getInt(2) == y.getInt(2))
+
+        assert(x.isNullAt(3) == y.isNullAt(3))
+        if (!x.isNullAt(3)) assert(x.getString(3) == y.getString(3))
+      }
+
+      // Verify
+      assert(batch.numRows() == 3)
+      val it2 = batch.rowIterator()
+      // Only second row is valid
+      rowEquals(it2.next(), Row(3, null, 3, ""))
+      assert(!it2.hasNext)
+
+      batch.close()
+    }}
+  }
+
+  class CustomizedColumnarBatch(columns: Array[ColumnVector]) extends ColumnarBatch(columns) {
+    val skipRowIds = List(0, 2)
+    override def rowIterator(): util.Iterator[InternalRow] = {
+      val maxRows: Int = numRows
+      val row = new ColumnarBatchRow(columns)
+      new util.Iterator[InternalRow]() {
+        var rowId = 0
+
+        override def hasNext: Boolean = {
+          while (skipRowIds.contains(rowId)) {
+            rowId += 1
+          }
+          rowId < maxRows
+        }
+
+        override def next: InternalRow = {
+          while (skipRowIds.contains(rowId)) {
+            rowId += 1
+          }
+
+          if (rowId >= maxRows) throw new NoSuchElementException
+          row.rowId = rowId
+          rowId += 1
+          row
+        }
+      }
+    }
+  }
+
   private def doubleEquals(d1: Double, d2: Double): Boolean = {
     if (d1.isNaN && d2.isNaN) {
       true
@@ -1175,12 +1378,26 @@ class ColumnarBatchSuite extends SparkFunSuite {
             "Seed = " + seed)
           case DoubleType => assert(doubleEquals(r1.getDouble(ordinal), r2.getDouble(ordinal)),
             "Seed = " + seed)
+          case DateType =>
+            assert(r1.getInt(ordinal) == DateTimeUtils.fromJavaDate(r2.getDate(ordinal)),
+              "Seed = " + seed)
+          case TimestampType =>
+            assert(r1.getLong(ordinal) ==
+              DateTimeUtils.fromJavaTimestamp(r2.getTimestamp(ordinal)),
+              "Seed = " + seed)
+          case TimestampNTZType =>
+            assert(r1.getLong(ordinal) ==
+              DateTimeUtils.localDateTimeToMicros(r2.getAs[LocalDateTime](ordinal)),
+              "Seed = " + seed)
           case t: DecimalType =>
             val d1 = r1.getDecimal(ordinal, t.precision, t.scale).toBigDecimal
             val d2 = r2.getDecimal(ordinal)
             assert(d1.compare(d2) == 0, "Seed = " + seed)
           case StringType =>
             assert(r1.getString(ordinal) == r2.getString(ordinal), "Seed = " + seed)
+          case BinaryType =>
+            assert(r1.getBinary(ordinal) sameElements r2.getAs[Array[Byte]](ordinal),
+              "Seed = " + seed)
           case CalendarIntervalType =>
             assert(r1.getInterval(ordinal) === r2.get(ordinal).asInstanceOf[CalendarInterval])
           case ArrayType(childType, n) =>
@@ -1202,6 +1419,50 @@ class ColumnarBatchSuite extends SparkFunSuite {
                     "Seed = " + seed)
                   i += 1
                 }
+              case StringType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val s1 = a1(i).asInstanceOf[UTF8String].toString
+                    val s2 = a2(i).asInstanceOf[String]
+                    assert(s1 === s2, "Seed = " + seed)
+                  }
+                  i += 1
+                }
+              case DateType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val i1 = a1(i).asInstanceOf[Int]
+                    val i2 = DateTimeUtils.fromJavaDate(a2(i).asInstanceOf[Date])
+                    assert(i1 === i2, "Seed = " + seed)
+                  }
+                  i += 1
+                }
+              case TimestampType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val i1 = a1(i).asInstanceOf[Long]
+                    val i2 = DateTimeUtils.fromJavaTimestamp(a2(i).asInstanceOf[Timestamp])
+                    assert(i1 === i2, "Seed = " + seed)
+                  }
+                  i += 1
+                }
+              case TimestampNTZType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val i1 = a1(i).asInstanceOf[Long]
+                    val i2 = DateTimeUtils.localDateTimeToMicros(a2(i).asInstanceOf[LocalDateTime])
+                    assert(i1 === i2, "Seed = " + seed)
+                  }
+                  i += 1
+                }
               case t: DecimalType =>
                 var i = 0
                 while (i < a1.length) {
@@ -1216,7 +1477,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
               case _ => assert(a1 === a2, "Seed = " + seed)
             }
           case StructType(childFields) =>
-            compareStruct(childFields, r1.getStruct(ordinal, fields.length),
+            compareStruct(childFields.toImmutableArraySeq, r1.getStruct(ordinal, fields.length),
               r2.getStruct(ordinal), seed)
           case _ =>
             throw new UnsupportedOperationException("Not implemented " + field.dataType)
@@ -1253,12 +1514,12 @@ class ColumnarBatchSuite extends SparkFunSuite {
    * results.
    */
   def testRandomRows(flatSchema: Boolean, numFields: Int): Unit = {
-    // TODO: Figure out why StringType doesn't work on jenkins.
     val types = Array(
       BooleanType, ByteType, FloatType, DoubleType, IntegerType, LongType, ShortType,
       DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
       DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
-      new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType)
+      new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType,
+      DateType, StringType, BinaryType, TimestampType, TimestampNTZType)
     val seed = System.nanoTime()
     val NUM_ROWS = 200
     val NUM_ITERS = 1000
@@ -1266,9 +1527,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
     var i = 0
     while (i < NUM_ITERS) {
       val schema = if (flatSchema) {
-        RandomDataGenerator.randomSchema(random, numFields, types)
+        RandomDataGenerator.randomSchema(random, numFields, types.toImmutableArraySeq)
       } else {
-        RandomDataGenerator.randomNestedSchema(random, numFields, types)
+        RandomDataGenerator.randomNestedSchema(random, numFields, types.toImmutableArraySeq)
       }
       val rows = mutable.ArrayBuffer.empty[Row]
       var j = 0
@@ -1388,10 +1649,25 @@ class ColumnarBatchSuite extends SparkFunSuite {
         )) ::
         StructField("int_to_int", MapType(IntegerType, IntegerType)) ::
         StructField("binary", BinaryType) ::
+        StructField("ts_ntz", TimestampNTZType) ::
+        StructField("variant", VariantType) ::
         Nil)
     var mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     mapBuilder.put(1, 10)
     mapBuilder.put(20, null)
+
+    val tsString1 = "2015-01-01 23:50:59.123"
+    val ts1 = DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(tsString1))
+    val tsNTZ1 =
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(tsString1.replace(" ", "T")))
+    val tsString2 = "1880-01-05 12:45:21.321"
+    val ts2 = DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(tsString2))
+    val tsNTZ2 =
+      DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(tsString2.replace(" ", "T")))
+
+    val variantVal1 = new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5))
+    val variantVal2 = new VariantVal(Array[Byte](6), Array[Byte](7, 8))
+
     val row1 = new GenericInternalRow(Array[Any](
       UTF8String.fromString("a string"),
       true,
@@ -1403,12 +1679,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
       0.75D,
       Decimal("1234.23456"),
       DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
-      DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")),
+      ts1,
       new CalendarInterval(1, 0, 0),
       new GenericArrayData(Array(1, 2, 3, 4, null)),
       new GenericInternalRow(Array[Any](5.asInstanceOf[Any], 10)),
       mapBuilder.build(),
-      "Spark SQL".getBytes()
+      "Spark SQL".getBytes(),
+      tsNTZ1,
+      variantVal1
     ))
 
     mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
@@ -1425,15 +1703,19 @@ class ColumnarBatchSuite extends SparkFunSuite {
       Double.PositiveInfinity,
       Decimal("0.01000"),
       DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("1875-12-12")),
-      DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("1880-01-05 12:45:21.321")),
+      ts2,
       new CalendarInterval(-10, -50, -100),
       new GenericArrayData(Array(5, 10, -100)),
       new GenericInternalRow(Array[Any](20.asInstanceOf[Any], null)),
       mapBuilder.build(),
-      "Parquet".getBytes()
+      "Parquet".getBytes(),
+      tsNTZ2,
+      variantVal2
     ))
 
     val row3 = new GenericInternalRow(Array[Any](
+      null,
+      null,
       null,
       null,
       null,
@@ -1513,10 +1795,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(9).isNullAt(2))
 
       assert(columns(10).dataType() == TimestampType)
-      assert(columns(10).getLong(0) ==
-        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")))
-      assert(columns(10).getLong(1) ==
-        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("1880-01-05 12:45:21.321")))
+      assert(columns(10).getLong(0) == ts1)
+      assert(columns(10).getLong(1) == ts2)
       assert(columns(10).isNullAt(2))
 
       assert(columns(11).dataType() == CalendarIntervalType)
@@ -1574,8 +1854,57 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(new String(columns(15).getBinary(0)) == "Spark SQL")
       assert(new String(columns(15).getBinary(1)) == "Parquet")
       assert(columns(15).isNullAt(2))
+
+      assert(columns(16).dataType() == TimestampNTZType)
+      assert(columns(16).getLong(0) == tsNTZ1)
+      assert(columns(16).getLong(1) == tsNTZ2)
+      assert(columns(16).isNullAt(2))
+
+      assert(columns(17).dataType() == VariantType)
+      assert(columns(17).getVariant(0).debugString() == variantVal1.debugString())
+      assert(columns(17).getVariant(1).debugString() == variantVal2.debugString())
+      assert(columns(17).isNullAt(2))
+      assert(columns(17).getChild(0).isNullAt(2))
+      assert(columns(17).getChild(1).isNullAt(2))
     } finally {
       batch.close()
+    }
+  }
+
+  test("SPARK-37161: RowToColumnConverter for AnsiIntervalType") {
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+      val schema = new StructType().add(dt.typeName, dt)
+      val converter = new RowToColumnConverter(schema)
+      val columns = OnHeapColumnVector.allocateColumns(10, schema)
+      try {
+        assert(columns(0).dataType() == dt)
+        (0 until 9).foreach { i =>
+          val row = new GenericInternalRow(Array[Any](i))
+          converter.convert(row, columns.toArray)
+          assert(columns(0).getInt(i) == i)
+        }
+        converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
+        assert(columns(0).isNullAt(9))
+      } finally {
+        columns.foreach(_.close())
+      }
+    }
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+      val schema = new StructType().add(dt.typeName, dt)
+      val converter = new RowToColumnConverter(schema)
+      val columns = OnHeapColumnVector.allocateColumns(10, schema)
+      try {
+        assert(columns(0).dataType() == dt)
+        (0 until 9).foreach { i =>
+          val row = new GenericInternalRow(Array[Any](i.toLong))
+          converter.convert(row, columns.toArray)
+          assert(columns(0).getLong(i) == i)
+        }
+        converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
+        assert(columns(0).isNullAt(9))
+      } finally {
+        columns.foreach(_.close())
+      }
     }
   }
 
@@ -1643,10 +1972,57 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.close()
   }
 
+  testVector("Timestamp without timezone", 10, TimestampNTZType) {
+    column =>
+      val dt = TimestampNTZType
+      (0 until 10).foreach { i =>
+        column.putLong(i, i)
+      }
+      val bachRow = new ColumnarBatchRow(Array(column))
+      (0 until 10).foreach { i =>
+        bachRow.rowId = i
+        assert(bachRow.get(0, dt) === i)
+        val batchRowCopy = bachRow.copy()
+        assert(batchRowCopy.get(0, dt) === i)
+      }
+  }
+
   testVector("WritableColumnVector.reserve(): requested capacity is negative", 1024, ByteType) {
     column =>
       val ex = intercept[RuntimeException] { column.reserve(-1) }
       assert(ex.getMessage.contains(
           "Cannot reserve additional contiguous bytes in the vectorized reader (integer overflow)"))
+  }
+
+  DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+    testVector(dt.typeName, 10, dt) {
+      column =>
+        (0 until 10).foreach{ i =>
+          column.putInt(i, i)
+        }
+        val bachRow = new ColumnarBatchRow(Array(column))
+        (0 until 10).foreach { i =>
+          bachRow.rowId = i
+          assert(bachRow.get(0, dt) === i)
+          val batchRowCopy = bachRow.copy()
+          assert(batchRowCopy.get(0, dt) === i)
+        }
+    }
+  }
+
+  DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+    testVector(dt.typeName, 10, dt) {
+      column =>
+        (0 until 10).foreach{ i =>
+          column.putLong(i, i)
+        }
+        val bachRow = new ColumnarBatchRow(Array(column))
+        (0 until 10).foreach { i =>
+          bachRow.rowId = i
+          assert(bachRow.get(0, dt) === i)
+          val batchRowCopy = bachRow.copy()
+          assert(batchRowCopy.get(0, dt) === i)
+        }
+    }
   }
 }

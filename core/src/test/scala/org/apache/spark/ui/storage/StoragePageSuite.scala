@@ -17,10 +17,10 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
-import org.mockito.Mockito._
 import scala.xml.{Node, Text}
+
+import jakarta.servlet.http.HttpServletRequest
+import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.StreamBlockData
@@ -47,8 +47,8 @@ class StoragePageSuite extends SparkFunSuite {
 
     val rdd2 = new RDDStorageInfo(2,
       "rdd2",
-      10,
-      5,
+      1000,
+      56,
       StorageLevel.DISK_ONLY.description,
       0L,
       200L,
@@ -57,8 +57,8 @@ class StoragePageSuite extends SparkFunSuite {
 
     val rdd3 = new RDDStorageInfo(3,
       "rdd3",
-      10,
-      10,
+      1000,
+      103,
       StorageLevel.MEMORY_AND_DISK_SER.description,
       400L,
       500L,
@@ -77,7 +77,7 @@ class StoragePageSuite extends SparkFunSuite {
       "Size on Disk")
 
     val headerRow: Seq[Node] = {
-      headers.view.zipWithIndex.map { x =>
+      headers.zipWithIndex.map { x =>
         storagePage.tooltips(x._2) match {
           case Some(tooltip) =>
             <th width={""} class={""}>
@@ -87,25 +87,26 @@ class StoragePageSuite extends SparkFunSuite {
             </th>
           case None => <th width={""} class={""}>{Text(x._1)}</th>
         }
-      }.toList
+      }
     }
     assert((xmlNodes \\ "th").map(_.text) === headerRow.map(_.text))
 
     assert((xmlNodes \\ "tr").size === 3)
     assert(((xmlNodes \\ "tr")(0) \\ "td").map(_.text.trim) ===
-      Seq("1", "rdd1", "Memory Deserialized 1x Replicated", "10", "100%", "100.0 B", "0.0 B"))
+      Seq("1", "rdd1", "Memory Deserialized 1x Replicated", "10", "100.00%", "100.0 B", "0.0 B"))
     // Check the url
     assert(((xmlNodes \\ "tr")(0) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
       Some("http://localhost:4040/storage/rdd/?id=1"))
 
     assert(((xmlNodes \\ "tr")(1) \\ "td").map(_.text.trim) ===
-      Seq("2", "rdd2", "Disk Serialized 1x Replicated", "5", "50%", "0.0 B", "200.0 B"))
+      Seq("2", "rdd2", "Disk Serialized 1x Replicated", "56", "5.60%", "0.0 B", "200.0 B"))
     // Check the url
     assert(((xmlNodes \\ "tr")(1) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
       Some("http://localhost:4040/storage/rdd/?id=2"))
 
     assert(((xmlNodes \\ "tr")(2) \\ "td").map(_.text.trim) ===
-      Seq("3", "rdd3", "Disk Memory Serialized 1x Replicated", "10", "100%", "400.0 B", "500.0 B"))
+      Seq("3", "rdd3", "Disk Memory Serialized 1x Replicated", "103", "10.30%", "400.0 B",
+        "500.0 B"))
     // Check the url
     assert(((xmlNodes \\ "tr")(2) \\ "td" \ "a")(0).attribute("href").map(_.text) ===
       Some("http://localhost:4040/storage/rdd/?id=3"))

@@ -16,17 +16,17 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.minikube
 
-import io.fabric8.kubernetes.client.DefaultKubernetesClient
+import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.deploy.k8s.integrationtest.backend.IntegrationTestBackend
 
 private[spark] object MinikubeTestBackend extends IntegrationTestBackend {
 
-  private var defaultClient: DefaultKubernetesClient = _
+  private var defaultClient: KubernetesClient = _
 
   override def initialize(): Unit = {
     Minikube.logVersion()
-    val minikubeStatus = Minikube.getMinikubeStatus
+    val minikubeStatus = Minikube.getMinikubeStatus()
     require(minikubeStatus == MinikubeStatus.RUNNING,
         s"Minikube must be running to use the Minikube backend for integration tests." +
           s" Current status is: $minikubeStatus.")
@@ -34,10 +34,17 @@ private[spark] object MinikubeTestBackend extends IntegrationTestBackend {
   }
 
   override def cleanUp(): Unit = {
+    if (defaultClient != null) {
+      defaultClient.close()
+    }
     super.cleanUp()
   }
 
-  override def getKubernetesClient: DefaultKubernetesClient = {
+  override def getKubernetesClient: KubernetesClient = {
     defaultClient
   }
+
+  override def describePods(labels: String): Seq[String] =
+    Minikube.executeMinikube(false, "kubectl", "--", "describe", "pods", "--all-namespaces",
+      "-l", labels)
 }

@@ -19,8 +19,10 @@ package org.apache.spark.sql.vectorized;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.UserDefinedType;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * An interface representing in-memory columnar data in Spark. This interface defines the main APIs
@@ -287,13 +289,25 @@ public abstract class ColumnVector implements AutoCloseable {
    * containing all the day values of all the interval values in this vector. The third child vector
    * is a long type vector, containing all the microsecond values of all the interval values in this
    * vector.
+   * Note that the ArrowColumnVector leverages its built-in IntervalMonthDayNanoVector instead of
+   * above-mentioned protocol.
    */
-  public final CalendarInterval getInterval(int rowId) {
+  public CalendarInterval getInterval(int rowId) {
     if (isNullAt(rowId)) return null;
     final int months = getChild(0).getInt(rowId);
     final int days = getChild(1).getInt(rowId);
     final long microseconds = getChild(2).getLong(rowId);
     return new CalendarInterval(months, days, microseconds);
+  }
+
+  /**
+   * Returns the Variant value for {@code rowId}. Similar to {@link #getInterval(int)}, the
+   * implementation must implement {@link #getChild(int)} and define 2 child vectors of binary type
+   * for the Variant value and metadata.
+   */
+  public final VariantVal getVariant(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return new VariantVal(getChild(0).getBinary(rowId), getChild(1).getBinary(rowId));
   }
 
   /**
@@ -310,6 +324,10 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the data type of this column vector.
    */
   protected ColumnVector(DataType type) {
-    this.type = type;
+    if (type instanceof UserDefinedType) {
+      this.type = ((UserDefinedType) type).sqlType();
+    } else {
+      this.type = type;
+    }
   }
 }

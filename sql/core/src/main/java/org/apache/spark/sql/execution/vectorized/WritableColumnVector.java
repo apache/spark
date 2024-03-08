@@ -18,9 +18,14 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
+import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
@@ -46,12 +51,15 @@ import org.apache.spark.unsafe.types.UTF8String;
  * WritableColumnVector are intended to be reused.
  */
 public abstract class WritableColumnVector extends ColumnVector {
+  private final byte[] byte8 = new byte[8];
+
+  protected abstract void releaseMemory();
 
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
-    if (isConstant) return;
+    if (isConstant || isAllNull) return;
 
     if (childColumns != null) {
       for (WritableColumnVector c: childColumns) {
@@ -62,6 +70,12 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (numNulls > 0) {
       putNotNulls(0, capacity);
       numNulls = 0;
+    }
+
+    if (hugeVectorThreshold > 0 && capacity > hugeVectorThreshold) {
+      capacity = defaultCapacity;
+      releaseMemory();
+      reserveInternal(capacity);
     }
   }
 
@@ -79,13 +93,21 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds = null;
     }
     dictionary = null;
+    releaseMemory();
+  }
+
+  public void reserveAdditional(int additionalCapacity) {
+    reserve(elementsAppended + additionalCapacity);
   }
 
   public void reserve(int requiredCapacity) {
     if (requiredCapacity < 0) {
       throwUnsupportedException(requiredCapacity, null);
     } else if (requiredCapacity > capacity) {
-      int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
+      int newCapacity =
+          hugeVectorThreshold < 0 || requiredCapacity < hugeVectorThreshold ?
+              (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L) :
+              (int) Math.min(MAX_CAPACITY, requiredCapacity * hugeVectorReserveRatio);
       if (requiredCapacity <= newCapacity) {
         try {
           reserveInternal(newCapacity);
@@ -115,7 +137,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public boolean hasNull() {
-    return numNulls > 0;
+    return isAllNull || numNulls > 0;
   }
 
   @Override
@@ -200,6 +222,29 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets value to [rowId, rowId + count).
    */
   public abstract void putBooleans(int rowId, int count, boolean value);
+
+  /**
+   * Sets bits from [src[srcIndex], src[srcIndex + count]) to [rowId, rowId + count)
+   * src must contain bit-packed 8 booleans in the byte.
+   */
+  public void putBooleans(int rowId, int count, byte src, int srcIndex) {
+    assert ((srcIndex + count) <= 8);
+    byte8[0] = (byte)(src & 1);
+    byte8[1] = (byte)(src >>> 1 & 1);
+    byte8[2] = (byte)(src >>> 2 & 1);
+    byte8[3] = (byte)(src >>> 3 & 1);
+    byte8[4] = (byte)(src >>> 4 & 1);
+    byte8[5] = (byte)(src >>> 5 & 1);
+    byte8[6] = (byte)(src >>> 6 & 1);
+    byte8[7] = (byte)(src >>> 7 & 1);
+    putBytes(rowId, count, byte8, srcIndex);
+  }
+
+  /**
+   * Sets bits from [src[0], src[7]] to [rowId, rowId + 7]
+   * src must contain bit-packed 8 booleans in the byte.
+   */
+  public abstract void putBooleans(int rowId, byte src);
 
   /**
    * Sets `value` to the value at rowId.
@@ -420,6 +465,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
+   * Gets the values of bytes from [rowId, rowId + count), as a ByteBuffer.
+   * This method is similar to {@link ColumnVector#getBytes(int, int)}, but avoids making a copy.
+   */
+  public abstract ByteBuffer getByteBuffer(int rowId, int count);
+
+  /**
    * Append APIs. These APIs all behave similarly and will append data to the current vector.  It
    * is not valid to mix the put and append APIs. The append APIs are slower and should only be
    * used if the sizes are not known up front.
@@ -466,6 +517,18 @@ public abstract class WritableColumnVector extends ColumnVector {
     reserve(elementsAppended + count);
     int result = elementsAppended;
     putBooleans(elementsAppended, count, v);
+    elementsAppended += count;
+    return result;
+  }
+
+  /**
+   * Append bits from [src[offset], src[offset + count])
+   * src must contain bit-packed 8 booleans in the byte.
+   */
+  public final int appendBooleans(int count, byte src, int offset) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putBooleans(elementsAppended, count, src, offset);
     elementsAppended += count;
     return result;
   }
@@ -631,7 +694,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType) {
+        if (c.type instanceof StructType || c.type instanceof VariantType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -641,6 +704,108 @@ public abstract class WritableColumnVector extends ColumnVector {
       appendNotNull();
     }
     return elementsAppended;
+  }
+
+  /**
+   * Appends multiple copies of a Java Object to the vector using the corresponding append* method
+   * above.
+   * @param length: The number of instances to append
+   * @param value value to append to the vector
+   * @return the number of values appended if the value maps to one of the append* methods above,
+   * or Optional.empty() otherwise.
+   */
+  public Optional<Integer> appendObjects(int length, Object value) {
+    if (value instanceof Boolean) {
+      return Optional.of(appendBooleans(length, (Boolean) value));
+    }
+    if (value instanceof Byte) {
+      return Optional.of(appendBytes(length, (Byte) value));
+    }
+    if (value instanceof Decimal decimal) {
+      long unscaled = decimal.toUnscaledLong();
+      if (decimal.precision() <= Decimal.MAX_INT_DIGITS()) {
+        return Optional.of(appendInts(length, (int) unscaled));
+      } else if (decimal.precision() <= Decimal.MAX_LONG_DIGITS()) {
+        return Optional.of(appendLongs(length, unscaled));
+      } else {
+        BigInteger integer = decimal.toJavaBigDecimal().unscaledValue();
+        byte[] bytes = integer.toByteArray();
+        int result = 0;
+        for (int i = 0; i < length; ++i) {
+          result += appendByteArray(bytes, 0, bytes.length);
+        }
+        return Optional.of(result);
+      }
+    }
+    if (value instanceof Double) {
+      return Optional.of(appendDoubles(length, (Double) value));
+    }
+    if (value instanceof Float) {
+      return Optional.of(appendFloats(length, (Float) value));
+    }
+    if (value instanceof Integer) {
+      return Optional.of(appendInts(length, (Integer) value));
+    }
+    if (value instanceof Long) {
+      return Optional.of(appendLongs(length, (Long) value));
+    }
+    if (value instanceof Short) {
+      return Optional.of(appendShorts(length, (Short) value));
+    }
+    if (value instanceof UTF8String utf8) {
+      byte[] bytes = utf8.getBytes();
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        result += appendByteArray(bytes, 0, bytes.length);
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof GenericArrayData arrayData) {
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        appendArray(arrayData.numElements());
+        for (Object element : arrayData.array()) {
+          if (arrayData().appendObjects(1, element).isEmpty()) {
+            return Optional.empty();
+          }
+        }
+        result += arrayData.numElements();
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof GenericInternalRow row) {
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        appendStruct(false);
+        for (int j = 0; j < row.values().length; ++j) {
+          Object element = row.values()[j];
+          if (childColumns[j].appendObjects(1, element).isEmpty()) {
+            return Optional.empty();
+          }
+        }
+        result += row.values().length;
+      }
+      return Optional.of(result);
+    }
+    if (value instanceof ArrayBasedMapData data) {
+      appendArray(length);
+      int result = 0;
+      for (int i = 0; i < length; ++i) {
+        for (Object key : data.keyArray().array()) {
+          if (childColumns[0].appendObjects(1, key).isEmpty()) {
+            return Optional.empty();
+          }
+        }
+        for (Object val: data.valueArray().array()) {
+          if (childColumns[1].appendObjects(1, val).isEmpty()) {
+            return Optional.empty();
+          }
+        }
+        result += data.keyArray().numElements();
+      }
+      return Optional.of(result);
+    }
+    return Optional.empty();
   }
 
   // `WritableColumnVector` puts the data of array in the first child column vector, and puts the
@@ -671,14 +836,53 @@ public abstract class WritableColumnVector extends ColumnVector {
   public WritableColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
 
   /**
-   * Returns the elements appended.
+   * Returns the number of child vectors.
+   */
+  public int getNumChildren() {
+    return childColumns.length;
+  }
+
+  /**
+   * Returns the elements appended. This is useful
    */
   public final int getElementsAppended() { return elementsAppended; }
 
   /**
+   * Increment number of elements appended by 'num'.
+   *
+   * This is useful when one wants to use the 'putXXX' API to add new elements to the vector, but
+   * still want to keep count of how many elements have been added (since the 'putXXX' APIs don't
+   * increment count).
+   */
+  public final void addElementsAppended(int num) {
+    elementsAppended += num;
+  }
+
+  /**
    * Marks this column as being constant.
    */
-  public final void setIsConstant() { isConstant = true; }
+  public final void setIsConstant() {
+    if (childColumns != null) {
+      for (WritableColumnVector c : childColumns) {
+        c.setIsConstant();
+      }
+    }
+    isConstant = true;
+  }
+
+  /**
+   * Marks this column only contains null values.
+   */
+  public final void setAllNull() {
+    isAllNull = true;
+  }
+
+  /**
+   * Whether this column only contains null values.
+   */
+  public final boolean isAllNull() {
+    return isAllNull;
+  }
 
   /**
    * Maximum number of rows that can be stored in this column.
@@ -686,10 +890,19 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected int capacity;
 
   /**
+   * The default number of rows that can be stored in this column.
+   */
+  protected final int defaultCapacity;
+
+  /**
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
   protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
+
+  protected int hugeVectorThreshold;
+
+  protected double hugeVectorReserveRatio;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -701,6 +914,12 @@ public abstract class WritableColumnVector extends ColumnVector {
    * across resets.
    */
   protected boolean isConstant;
+
+  /**
+   * True if this column only contains nulls. This means the column values never change, even
+   * across resets. Comparing to 'isConstant' above, this doesn't require any allocation of space.
+   */
+  protected boolean isAllNull;
 
   /**
    * Default size of each array length value. This grows as necessary.
@@ -731,9 +950,12 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected WritableColumnVector(int capacity, DataType type) {
-    super(type);
+  protected WritableColumnVector(int capacity, DataType dataType) {
+    super(dataType);
     this.capacity = capacity;
+    this.defaultCapacity = capacity;
+    this.hugeVectorThreshold = SQLConf.get().vectorizedHugeVectorThreshold();
+    this.hugeVectorReserveRatio = SQLConf.get().vectorizedHugeVectorReserveRatio();
 
     if (isArray()) {
       DataType childType;
@@ -746,14 +968,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       }
       this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
-    } else if (type instanceof StructType) {
-      StructType st = (StructType)type;
+    } else if (type instanceof StructType st) {
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
-    } else if (type instanceof MapType) {
-      MapType mapType = (MapType) type;
+    } else if (type instanceof MapType mapType) {
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
       this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
@@ -763,6 +983,10 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+    } else if (type instanceof VariantType) {
+      this.childColumns = new WritableColumnVector[2];
+      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.BinaryType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.BinaryType);
     } else {
       this.childColumns = null;
     }

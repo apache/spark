@@ -22,14 +22,13 @@ import java.io.File
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
  * This testsuite tests master failures at random times while the stream is running using
  * the real clock.
  */
-class FailureSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class FailureSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val batchDuration: Duration = Milliseconds(1000)
   private val numBatches = 30

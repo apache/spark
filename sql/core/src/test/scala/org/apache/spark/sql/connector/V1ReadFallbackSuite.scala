@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, SupportsRead, Table, TableCapability}
@@ -104,10 +103,10 @@ class V1ReadFallbackCatalog extends BasicInMemoryTableCatalog {
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     // To simplify the test implementation, only support fixed schema.
     if (schema != V1ReadFallbackCatalog.schema || partitions.nonEmpty) {
-      throw new UnsupportedOperationException
+      throw SparkUnsupportedOperationException()
     }
     val table = new TableWithV1ReadFallback(ident.toString)
     tables.put(ident, table)
@@ -129,8 +128,8 @@ class TableWithV1ReadFallback(override val name: String) extends Table with Supp
 
   override def schema(): StructType = V1ReadFallbackCatalog.schema
 
-  override def capabilities(): util.Set[TableCapability] = {
-    util.EnumSet.of(TableCapability.BATCH_READ)
+  override def capabilities(): java.util.Set[TableCapability] = {
+    java.util.EnumSet.of(TableCapability.BATCH_READ)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -190,7 +189,7 @@ class V1TableScan(
     } else if (requiredSchema.map(_.name) == Seq("j")) {
       data.map(row => Row(row.getInt(1)))
     } else {
-      throw new UnsupportedOperationException
+      throw SparkUnsupportedOperationException()
     }
 
     SparkSession.active.sparkContext.makeRDD(result)

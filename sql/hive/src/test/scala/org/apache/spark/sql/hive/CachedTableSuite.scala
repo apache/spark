@@ -29,6 +29,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -102,18 +103,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("uncache of nonexistent tables") {
-    val expectedErrorMsg = "Table or view not found:"
     // make sure table doesn't exist
-    var e = intercept[AnalysisException](spark.table("nonexistentTable")).getMessage
-    assert(e.contains(s"$expectedErrorMsg nonexistentTable"))
+    var e = intercept[AnalysisException](spark.table("nonexistentTable"))
+    checkErrorTableNotFound(e, "`nonexistentTable`")
     e = intercept[AnalysisException] {
       uncacheTable("nonexistentTable")
-    }.getMessage
-    assert(e.contains(expectedErrorMsg))
-    e = intercept[AnalysisException] {
+    }
+    checkErrorTableNotFound(e, "`nonexistentTable`")
+     e = intercept[AnalysisException] {
       sql("UNCACHE TABLE nonexistentTable")
-    }.getMessage
-    assert(e.contains("Table or view not found: nonexistentTable"))
+    }
+    checkErrorTableNotFound(e, "`nonexistentTable`",
+      ExpectedContext("nonexistentTable", 14, 13 + "nonexistentTable".length))
     sql("UNCACHE TABLE IF EXISTS nonexistentTable")
   }
 
@@ -212,7 +213,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     assertCached(table("refreshTable"))
     checkAnswer(
       table("refreshTable"),
-      table("src").union(table("src")).collect())
+      table("src").union(table("src")).collect().toImmutableArraySeq)
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
@@ -224,7 +225,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("REFRESH TABLE refreshTable")
     checkAnswer(
       table("refreshTable"),
-      table("src").union(table("src")).collect())
+      table("src").union(table("src")).collect().toImmutableArraySeq)
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
 
@@ -240,7 +241,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sparkSession.catalog.createTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(
       table("refreshTable"),
-      table("src").collect())
+      table("src").collect().toImmutableArraySeq)
     // Cache the table.
     sql("CACHE TABLE refreshTable")
     assertCached(table("refreshTable"))
@@ -252,7 +253,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     assertCached(table("refreshTable"))
     checkAnswer(
       table("refreshTable"),
-      table("src").union(table("src")).collect())
+      table("src").union(table("src")).collect().toImmutableArraySeq)
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
@@ -264,7 +265,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql(s"REFRESH ${tempPath.toString}")
     checkAnswer(
       table("refreshTable"),
-      table("src").union(table("src")).collect())
+      table("src").union(table("src")).collect().toImmutableArraySeq)
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
 

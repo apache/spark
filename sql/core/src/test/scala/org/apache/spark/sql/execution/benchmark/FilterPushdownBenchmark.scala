@@ -24,6 +24,7 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.functions.{monotonically_increasing_id, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
@@ -35,8 +36,8 @@ import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType}
  * {{{
  *   1. without sbt: bin/spark-submit --class <this class>
  *      --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/FilterPushdownBenchmark-results.txt".
  * }}}
  */
@@ -49,8 +50,8 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       .set("spark.master", "local[1]")
       .setIfMissing("spark.driver.memory", "3g")
       .setIfMissing("spark.executor.memory", "3g")
-      .setIfMissing("orc.compression", "snappy")
-      .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
+      .setIfMissing("spark.sql.parquet.compression.codec",
+        ParquetCompressionCodec.SNAPPY.lowerCaseName())
 
     SparkSession.builder().config(conf).getOrCreate()
   }
@@ -74,7 +75,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
     } else {
       monotonically_increasing_id()
     }
-    val df = spark.range(numRows).map(_ => Random.nextLong).selectExpr(selectExpr: _*)
+    val df = spark.range(numRows).map(_ => Random.nextLong()).selectExpr(selectExpr: _*)
       .withColumn("value", valueCol)
       .sort("value")
 
@@ -236,6 +237,38 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
             s"value like '${mid.toString.substring(0, mid.toString.length - 1)}%'"
           ).foreach { whereExpr =>
             val title = s"StringStartsWith filter: ($whereExpr)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+
+    runBenchmark("Pushdown benchmark for StringEndsWith") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareStringDictTable(dir, numRows, 200, width)
+          Seq(
+            "value like '%10'",
+            "value like '%1000'",
+            s"value like '%${mid.toString.substring(0, mid.toString.length - 1)}'"
+          ).foreach { whereExpr =>
+            val title = s"StringEndsWith filter: ($whereExpr)"
+            filterPushDownBenchmark(numRows, title, whereExpr)
+          }
+        }
+      }
+    }
+
+    runBenchmark("Pushdown benchmark for StringContains") {
+      withTempPath { dir =>
+        withTempTable("orcTable", "parquetTable") {
+          prepareStringDictTable(dir, numRows, 200, width)
+          Seq(
+            "value like '%10%'",
+            "value like '%1000%'",
+            s"value like '%${mid.toString.substring(0, mid.toString.length - 1)}%'"
+          ).foreach { whereExpr =>
+            val title = s"StringContains filter: ($whereExpr)"
             filterPushDownBenchmark(numRows, title, whereExpr)
           }
         }

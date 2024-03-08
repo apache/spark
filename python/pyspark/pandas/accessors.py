@@ -18,7 +18,7 @@
 pandas-on-Spark specific features.
 """
 import inspect
-from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING, cast
+from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING, cast, List
 from types import FunctionType
 
 import numpy as np  # noqa: F401
@@ -27,13 +27,13 @@ import pandas as pd
 from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import DataType, LongType, StructField, StructType
-
 from pyspark.pandas._typing import DataFrameOrSeries, Name
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
     SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_SERIES_NAME,
+    SPARK_INDEX_NAME_PATTERN,
 )
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.utils import (
@@ -42,15 +42,16 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     verify_temp_column_name,
+    log_advice,
 )
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.series import Series
     from pyspark.sql._typing import UserDefinedFunctionLike
 
 
-class PandasOnSparkFrameMethods(object):
+class PandasOnSparkFrameMethods:
     """pandas-on-Spark specific features for DataFrame."""
 
     def __init__(self, frame: "DataFrame"):
@@ -58,10 +59,10 @@ class PandasOnSparkFrameMethods(object):
 
     def attach_id_column(self, id_type: str, column: Name) -> "DataFrame":
         """
-        Attach a column to be used as identifier of rows similar to the default index.
+        Attach a column to be used as an identifier of rows similar to the default index.
 
         See also `Default Index type
-        <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/options.html#default-index-type>`_.
 
         Parameters
         ----------
@@ -71,9 +72,9 @@ class PandasOnSparkFrameMethods(object):
             - 'sequence' : a sequence that increases one by one.
 
               .. note:: this uses Spark's Window without specifying partition specification.
-                  This leads to move all data into single partition in single machine and
+                  This leads to moving all data into a single partition in a single machine and
                   could cause serious performance degradation.
-                  Avoid this method against very large dataset.
+                  Avoid this method with very large datasets.
 
             - 'distributed-sequence' : a sequence that increases one by one,
               by group-by and group-map approach in a distributed manner.
@@ -202,16 +203,16 @@ class PandasOnSparkFrameMethods(object):
         DataFrame given to the function is of a batch used internally.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input frame. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input frame. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
 
             >>> # This case does not return the length of whole frame but of the batch internally
             ... # used.
-            ... def length(pdf) -> ps.DataFrame[int]:
+            ... def length(pdf) -> ps.DataFrame[int, [int]]:
             ...     return pd.DataFrame([len(pdf)])
             ...
             >>> df = ps.DataFrame({'A': range(1000)})
@@ -230,27 +231,23 @@ class PandasOnSparkFrameMethods(object):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def plus_one(x) -> ps.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[int, [float, float]]:
             ...     return x + 1
 
             If the return type is specified, the output column names become
             `c0, c1, c2 ... cn`. These names are positionally mapped to the returned
             DataFrame in ``func``.
 
-            To specify the column names, you can assign them in a pandas friendly style as below:
+            To specify the column names, you can assign them in a NumPy compound type style
+            as below:
 
-            >>> def plus_one(x) -> ps.DataFrame["a": float, "b": float]:
+            >>> def plus_one(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
-            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.dtypes, pdf.columns)]:
+            >>> def plus_one(x) -> ps.DataFrame[
+            ...         (pdf.index.name, pdf.index.dtype), zip(pdf.dtypes, pdf.columns)]:
             ...     return x + 1
-
-            When the given function has the return type annotated, the original index of the
-            DataFrame will be lost and a default index will be attached to the result DataFrame.
-            Please be careful about configuring the default index. See also `Default Index Type
-            <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
-
 
         Parameters
         ----------
@@ -284,17 +281,18 @@ class PandasOnSparkFrameMethods(object):
         1  3  4
         2  5  6
 
-        >>> def query_func(pdf) -> ps.DataFrame[int, int]:
+        >>> def query_func(pdf) -> ps.DataFrame[int, [int, int]]:
         ...     return pdf.query('A == 1')
         >>> df.pandas_on_spark.apply_batch(query_func)
            c0  c1
         0   1   2
 
-        >>> def query_func(pdf) -> ps.DataFrame["A": int, "B": int]:
+        >>> def query_func(pdf) -> ps.DataFrame[("idx", int), [("A", int), ("B", int)]]:
         ...     return pdf.query('A == 1')
-        >>> df.pandas_on_spark.apply_batch(query_func)
-           A  B
-        0  1  2
+        >>> df.pandas_on_spark.apply_batch(query_func)  # doctest: +NORMALIZE_WHITESPACE
+             A  B
+        idx
+        0    1  2
 
         You can also omit the type hints so pandas-on-Spark infers the return schema as below:
 
@@ -304,7 +302,7 @@ class PandasOnSparkFrameMethods(object):
 
         You can also specify extra arguments.
 
-        >>> def calculation(pdf, y, z) -> ps.DataFrame[int, int]:
+        >>> def calculation(pdf, y, z) -> ps.DataFrame[int, [int, int]]:
         ...     return pdf ** y + z
         >>> df.pandas_on_spark.apply_batch(calculation, args=(10,), z=20)
                 c0        c1
@@ -336,29 +334,38 @@ class PandasOnSparkFrameMethods(object):
         if not isinstance(func, FunctionType):
             assert callable(func), "the first argument should be a callable function."
             f = func
-            func = lambda *args, **kwargs: f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
 
         original_func = func
-        func = lambda o: original_func(o, *args, **kwds)
 
-        self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
+        def new_func(o: Any) -> pd.DataFrame:
+            return original_func(o, *args, **kwds)
+
+        self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `apply_batch`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self_applied.head(limit + 1)._to_internal_pandas()
-            applied = func(pdf)
+            applied = new_func(pdf)
             if not isinstance(applied, pd.DataFrame):
                 raise ValueError(
                     "The given function should return a frame; however, "
                     "the return type was %s." % type(applied)
                 )
-            psdf = ps.DataFrame(applied)  # type: DataFrame
+            psdf: DataFrame = DataFrame(applied)
             if len(pdf) <= limit:
                 return psdf
 
@@ -368,7 +375,7 @@ class PandasOnSparkFrameMethods(object):
             return_schema = StructType([field.struct_field for field in index_fields + data_fields])
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, func, return_schema, retain_index=True
+                self_applied, new_func, return_schema, retain_index=True
             )
             sdf = self_applied._internal.spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
@@ -386,22 +393,39 @@ class PandasOnSparkFrameMethods(object):
                     "The given function should specify a frame as its type "
                     "hints; however, the return type was %s." % return_sig
                 )
+            index_fields = cast(DataFrameType, return_type).index_fields
+            should_retain_index = len(index_fields) > 0
             return_schema = cast(DataFrameType, return_type).spark_type
 
             output_func = GroupBy._make_pandas_df_builder_func(
-                self_applied, func, return_schema, retain_index=False
+                self_applied, new_func, return_schema, retain_index=should_retain_index
             )
             sdf = self_applied._internal.to_internal_spark_frame.mapInPandas(
                 lambda iterator: map(output_func, iterator), schema=return_schema
             )
 
-            # Otherwise, it loses index.
+            index_spark_columns = None
+            index_names: Optional[List[Optional[Tuple[Any, ...]]]] = None
+
+            if should_retain_index:
+                index_spark_columns = [
+                    scol_for(sdf, index_field.struct_field.name) for index_field in index_fields
+                ]
+
+                if not any(
+                    [
+                        SPARK_INDEX_NAME_PATTERN.match(index_field.struct_field.name)
+                        for index_field in index_fields
+                    ]
+                ):
+                    index_names = [(index_field.struct_field.name,) for index_field in index_fields]
             internal = InternalFrame(
                 spark_frame=sdf,
-                index_spark_columns=None,
-                data_fields=cast(DataFrameType, return_type).fields,
+                index_names=index_names,
+                index_spark_columns=index_spark_columns,
+                index_fields=index_fields,
+                data_fields=cast(DataFrameType, return_type).data_fields,
             )
-
         return DataFrame(internal)
 
     def transform_batch(
@@ -413,9 +437,9 @@ class PandasOnSparkFrameMethods(object):
         each input and output should be the same.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input frame. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input frame. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
@@ -439,27 +463,23 @@ class PandasOnSparkFrameMethods(object):
 
             To avoid this, specify return type in ``func``, for instance, as below:
 
-            >>> def plus_one(x) -> ps.DataFrame[float, float]:
+            >>> def plus_one(x) -> ps.DataFrame[int, [float, float]]:
             ...     return x + 1
 
             If the return type is specified, the output column names become
             `c0, c1, c2 ... cn`. These names are positionally mapped to the returned
             DataFrame in ``func``.
 
-            To specify the column names, you can assign them in a pandas friendly style as below:
+            To specify the column names, you can assign them in a NumPy compound type style
+            as below:
 
-            >>> def plus_one(x) -> ps.DataFrame['a': float, 'b': float]:
+            >>> def plus_one(x) -> ps.DataFrame[("index", int), [("a", float), ("b", float)]]:
             ...     return x + 1
 
             >>> pdf = pd.DataFrame({'a': [1, 2, 3], 'b': [3, 4, 5]})
-            >>> def plus_one(x) -> ps.DataFrame[zip(pdf.dtypes, pdf.columns)]:
+            >>> def plus_one(x) -> ps.DataFrame[
+            ...         (pdf.index.name, pdf.index.dtype), zip(pdf.dtypes, pdf.columns)]:
             ...     return x + 1
-
-            When the given function returns DataFrame and has the return type annotated, the
-            original index of the DataFrame will be lost and then a default index will be attached
-            to the result. Please be careful about configuring the default index. See also
-            `Default Index Type
-            <https://koalas.readthedocs.io/en/latest/user_guide/options.html#default-index-type>`_.
 
         Parameters
         ----------
@@ -488,7 +508,7 @@ class PandasOnSparkFrameMethods(object):
         1  3  4
         2  5  6
 
-        >>> def plus_one_func(pdf) -> ps.DataFrame[int, int]:
+        >>> def plus_one_func(pdf) -> ps.DataFrame[int, [int, int]]:
         ...     return pdf + 1
         >>> df.pandas_on_spark.transform_batch(plus_one_func)
            c0  c1
@@ -496,13 +516,14 @@ class PandasOnSparkFrameMethods(object):
         1   4   5
         2   6   7
 
-        >>> def plus_one_func(pdf) -> ps.DataFrame['A': int, 'B': int]:
+        >>> def plus_one_func(pdf) -> ps.DataFrame[("index", int), [('A', int), ('B', int)]]:
         ...     return pdf + 1
-        >>> df.pandas_on_spark.transform_batch(plus_one_func)
-           A  B
-        0  2  3
-        1  4  5
-        2  6  7
+        >>> df.pandas_on_spark.transform_batch(plus_one_func)  # doctest: +NORMALIZE_WHITESPACE
+               A  B
+        index
+        0      2  3
+        1      4  5
+        2      6  7
 
         >>> def plus_one_func(pdf) -> ps.Series[int]:
         ...     return pdf.B + 1
@@ -551,18 +572,21 @@ class PandasOnSparkFrameMethods(object):
         spec = inspect.getfullargspec(func)
         return_sig = spec.annotations.get("return", None)
         should_infer_schema = return_sig is None
+        should_retain_index = should_infer_schema
         original_func = func
-        func = lambda o: original_func(o, *args, **kwargs)
+
+        def new_func(o: Any) -> Union[pd.DataFrame, pd.Series]:
+            return original_func(o, *args, **kwargs)
 
         def apply_func(pdf: pd.DataFrame) -> pd.DataFrame:
-            return func(pdf).to_frame()
+            return new_func(pdf).to_frame()
 
         def pandas_series_func(
             f: Callable[[pd.DataFrame], pd.DataFrame], return_type: DataType
         ) -> "UserDefinedFunctionLike":
             ff = f
 
-            @pandas_udf(returnType=return_type)  # type: ignore
+            @pandas_udf(returnType=return_type)  # type: ignore[call-overload]
             def udf(pdf: pd.DataFrame) -> pd.Series:
                 return first_series(ff(pdf))
 
@@ -571,9 +595,13 @@ class PandasOnSparkFrameMethods(object):
         if should_infer_schema:
             # Here we execute with the first 1000 to get the return type.
             # If the records were less than 1000, it uses pandas API directly for a shortcut.
+            log_advice(
+                "If the type hints is not specified for `transform_batch`, "
+                "it is expensive to infer the data type internally."
+            )
             limit = ps.get_option("compute.shortcut_limit")
             pdf = self._psdf.head(limit + 1)._to_internal_pandas()
-            transformed = func(pdf)
+            transformed = new_func(pdf)
             if not isinstance(transformed, (pd.DataFrame, pd.Series)):
                 raise ValueError(
                     "The given function should return a frame; however, "
@@ -584,7 +612,7 @@ class PandasOnSparkFrameMethods(object):
             psdf_or_psser = ps.from_pandas(transformed)
 
             if isinstance(psdf_or_psser, ps.Series):
-                psser = cast(ps.Series, psdf_or_psser)
+                psser = psdf_or_psser
 
                 field = psser._internal.data_fields[0].normalize_spark_type()
 
@@ -619,14 +647,19 @@ class PandasOnSparkFrameMethods(object):
                     [field.struct_field for field in index_fields + data_fields]
                 )
 
-                self_applied = DataFrame(self._psdf._internal.resolved_copy)  # type: DataFrame
+                self_applied: DataFrame = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=True
+                    self_applied,
+                    new_func,  # type: ignore[arg-type]
+                    return_schema,
+                    retain_index=True,
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(output_func, returnType=return_schema)  # type: ignore
+                pudf = pandas_udf(  # type: ignore[call-overload]
+                    output_func, returnType=return_schema
+                )
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
                 )
@@ -672,20 +705,29 @@ class PandasOnSparkFrameMethods(object):
                 )
                 return first_series(DataFrame(internal))
             else:
+                index_fields = cast(DataFrameType, return_type).index_fields
+                index_fields = [index_field.normalize_spark_type() for index_field in index_fields]
                 data_fields = [
                     field.normalize_spark_type()
-                    for field in cast(DataFrameType, return_type).fields
+                    for field in cast(DataFrameType, return_type).data_fields
                 ]
-                return_schema = StructType([field.struct_field for field in data_fields])
+                normalized_fields = index_fields + data_fields
+                return_schema = StructType([field.struct_field for field in normalized_fields])
+                should_retain_index = len(index_fields) > 0
 
                 self_applied = DataFrame(self._psdf._internal.resolved_copy)
 
                 output_func = GroupBy._make_pandas_df_builder_func(
-                    self_applied, func, return_schema, retain_index=False
+                    self_applied,
+                    new_func,  # type: ignore[arg-type]
+                    return_schema,
+                    retain_index=should_retain_index,
                 )
                 columns = self_applied._internal.spark_columns
 
-                pudf = pandas_udf(output_func, returnType=return_schema)  # type: ignore
+                pudf = pandas_udf(  # type: ignore[call-overload]
+                    output_func, returnType=return_schema
+                )
                 temp_struct_column = verify_temp_column_name(
                     self_applied._internal.spark_frame, "__temp_struct__"
                 )
@@ -693,13 +735,34 @@ class PandasOnSparkFrameMethods(object):
                 sdf = self_applied._internal.spark_frame.select(applied)
                 sdf = sdf.selectExpr("%s.*" % temp_struct_column)
 
+                index_spark_columns = None
+                index_names: Optional[List[Optional[Tuple[Any, ...]]]] = None
+
+                if should_retain_index:
+                    index_spark_columns = [
+                        scol_for(sdf, index_field.struct_field.name) for index_field in index_fields
+                    ]
+
+                    if not any(
+                        [
+                            SPARK_INDEX_NAME_PATTERN.match(index_field.struct_field.name)
+                            for index_field in index_fields
+                        ]
+                    ):
+                        index_names = [
+                            (index_field.struct_field.name,) for index_field in index_fields
+                        ]
                 internal = InternalFrame(
-                    spark_frame=sdf, index_spark_columns=None, data_fields=data_fields
+                    spark_frame=sdf,
+                    index_names=index_names,
+                    index_spark_columns=index_spark_columns,
+                    index_fields=index_fields,
+                    data_fields=data_fields,
                 )
                 return DataFrame(internal)
 
 
-class PandasOnSparkSeriesMethods(object):
+class PandasOnSparkSeriesMethods:
     """pandas-on-Spark specific features for Series."""
 
     def __init__(self, series: "Series"):
@@ -713,9 +776,9 @@ class PandasOnSparkSeriesMethods(object):
         The pandas Series given to the function is of a batch used internally.
 
         See also `Transform and apply a function
-        <https://koalas.readthedocs.io/en/latest/user_guide/transform_apply.html>`_.
+        <https://spark.apache.org/docs/latest/api/python/user_guide/pandas_on_spark/transform_apply.html>`_.
 
-        .. note:: the `func` is unable to access to the whole input series. pandas-on-Spark
+        .. note:: the `func` is unable to access the whole input series. pandas-on-Spark
             internally splits the input series into multiple batches and calls `func` with each
             batch multiple times. Therefore, operations such as global aggregations are impossible.
             See the example below.
@@ -828,7 +891,7 @@ class PandasOnSparkSeriesMethods(object):
                     "Expected the return type of this function to be of type column,"
                     " but found type {}".format(sig_return)
                 )
-            return_type = cast(SeriesType, sig_return)
+            return_type = sig_return
 
         return self._transform_batch(lambda c: func(c, *args, **kwargs), return_type)
 
@@ -841,7 +904,10 @@ class PandasOnSparkSeriesMethods(object):
 
         if not isinstance(func, FunctionType):
             f = func
-            func = lambda *args, **kwargs: f(*args, **kwargs)
+            # Note that the return type hint specified here affects actual return
+            # type in Spark (e.g., infer_return_type). And, MyPy does not allow
+            # redefinition of a function.
+            func = lambda *args, **kwargs: f(*args, **kwargs)  # noqa: E731
 
         if return_type is None:
             # TODO: In this case, it avoids the shortcut for now (but only infers schema)
@@ -851,7 +917,7 @@ class PandasOnSparkSeriesMethods(object):
             limit = ps.get_option("compute.shortcut_limit")
             pser = self._psser.head(limit + 1)._to_internal_pandas()
             transformed = pser.transform(func)
-            psser = Series(transformed)  # type: Series
+            psser: Series = Series(transformed)
 
             field = psser._internal.data_fields[0].normalize_spark_type()
         else:
@@ -870,7 +936,7 @@ class PandasOnSparkSeriesMethods(object):
 
         def pandas_concat(*series: pd.Series) -> pd.DataFrame:
             # The input can only be a DataFrame for struct from Spark 3.0.
-            # This works around to make the input as a frame. See SPARK-27240
+            # This works around makeing the input as a frame. See SPARK-27240
             pdf = pd.concat(series, axis=1)
             pdf.columns = columns
             return pdf
@@ -883,7 +949,7 @@ class PandasOnSparkSeriesMethods(object):
             psdf, apply_func, return_schema, retain_index=False
         )
 
-        @pandas_udf(returnType=field.spark_type)  # type: ignore
+        @pandas_udf(returnType=field.spark_type)  # type: ignore[call-overload]
         def pudf(*series: pd.Series) -> pd.Series:
             return first_series(output_func(pandas_concat(*series)))
 

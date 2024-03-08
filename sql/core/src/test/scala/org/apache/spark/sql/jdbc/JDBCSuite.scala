@@ -18,43 +18,44 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, SQLException, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.sql.{Date, DriverManager, Timestamp}
+import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.format.DateTimeFormatter
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
+import scala.util.Random
 
-import org.h2.jdbc.JdbcSQLException
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.{SparkException, SparkSQLException}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
-import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
+import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends QueryTest
-  with BeforeAndAfter with PrivateMethodTester with SharedSparkSession {
+class JDBCSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
 
-  val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
+  val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte) ++
+    Array.fill(15)(0.toByte)
 
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
@@ -87,7 +88,6 @@ class JDBCSuite extends QueryTest
     val properties = new Properties()
     properties.setProperty("user", "testUser")
     properties.setProperty("password", "testPass")
-    properties.setProperty("rowId", "false")
 
     conn = DriverManager.getConnection(url, properties)
     conn.prepareStatement("create schema test").executeUpdate()
@@ -162,7 +162,7 @@ class JDBCSuite extends QueryTest
         |OPTIONS (url '$url', dbtable 'TEST.STRTYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
-    conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP)"
+    conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))"
         ).executeUpdate()
     conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
       + "'1996-01-01', '2002-02-20 11:22:33.543543543')").executeUpdate()
@@ -177,12 +177,12 @@ class JDBCSuite extends QueryTest
        """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("CREATE TABLE test.timezone (tz TIMESTAMP WITH TIME ZONE) " +
-      "AS SELECT '1999-01-08 04:05:06.543543543 GMT-08:00'")
+      "AS SELECT '1999-01-08 04:05:06.543543543-08:00'")
       .executeUpdate()
     conn.commit()
 
-    conn.prepareStatement("CREATE TABLE test.array (ar ARRAY) " +
-      "AS SELECT '(1, 2, 3)'")
+    conn.prepareStatement("CREATE TABLE test.array_table (ar Integer ARRAY) " +
+      "AS SELECT ARRAY[1, 2, 3]")
       .executeUpdate()
     conn.commit()
 
@@ -279,6 +279,20 @@ class JDBCSuite extends QueryTest
       "INSERT INTO test.datetime VALUES ('2018-07-12', '2018-07-12 09:51:15.0')").executeUpdate()
     conn.commit()
 
+    conn.prepareStatement(
+      "CREATE TABLE test.composite_name (`last name` TEXT(32) NOT NULL, id INTEGER NOT NULL)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO test.composite_name VALUES ('smith', 1)").executeUpdate()
+    conn.prepareStatement("INSERT INTO test.composite_name VALUES ('jones', 2)").executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+        |CREATE OR REPLACE TEMPORARY VIEW composite_name
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.COMPOSITE_NAME', user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
+
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
@@ -303,8 +317,12 @@ class JDBCSuite extends QueryTest
     // the plan only has PhysicalRDD to scan JDBCRelation.
     assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
     val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
-    assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
+    val child = node.child match {
+      case ProjectExec(_, c) => c
+      case o => o
+    }
+    assert(child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
+    assert(child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
     df
   }
 
@@ -319,44 +337,46 @@ class JDBCSuite extends QueryTest
   }
 
   test("SELECT *") {
-    assert(sql("SELECT * FROM foobar").collect().size === 3)
+    assert(sql("SELECT * FROM foobar").collect().length === 3)
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().length == 0)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().length == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().length == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().length == 2)
 
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
-      .collect().size == 2)
+      .collect().length == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
-      .collect().size == 2)
+      .collect().length == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
-      .collect().size == 2)
+      .collect().length == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
-      + "AND THEID = 2")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+      + "AND THEID = 2")).collect().length == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().length == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().length == 0)
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
     val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
-    assert(df1.collect.toSet === Set(Row("mary", 2)))
+    assert(df1.collect().toSet === Set(Row("mary", 2)))
 
     // SPARK-22548: Incorrect nested AND expression pushed down to JDBC data source
     val df2 = sql("SELECT * FROM foobar " +
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
-    assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
+    assert(df2.collect().toSet === Set(Row("fred", 1), Row("mary", 2)))
 
-    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
-    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
+    val df3 = sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")
+    assert(checkNotPushdown(df3).collect().length == 0)
+    val df4 = sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")
+    assert(checkNotPushdown(df4).collect().length == 2)
   }
 
   test("SELECT COUNT(1) WHERE (predicates)") {
@@ -366,16 +386,17 @@ class JDBCSuite extends QueryTest
     // are applied for columns with Filter producing wrong results. On the other hand, JDBCRDD
     // correctly handles this case by assigning `requiredColumns` properly. See PR 10427 for more
     // discussions.
-    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect.toSet === Set(Row(1)))
+    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect().toSet === Set(Row(1)))
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
+    val df = sql("select * from foobar").where($"NAME" === "joe 'foo' \"bar\"")
+    assert(df.collect().length === 1)
   }
 
   test("SELECT first field") {
     val names = sql("SELECT NAME FROM foobar").collect().map(x => x.getString(0)).sortWith(_ < _)
-    assert(names.size === 3)
+    assert(names.length === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))
     assert(names(2).equals("mary"))
@@ -383,7 +404,7 @@ class JDBCSuite extends QueryTest
 
   test("SELECT first field when fetchsize is two") {
     val names = sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
-    assert(names.size === 3)
+    assert(names.length === 3)
     assert(names(0).equals("fred"))
     assert(names(1).equals("joe 'foo' \"bar\""))
     assert(names(2).equals("mary"))
@@ -391,7 +412,7 @@ class JDBCSuite extends QueryTest
 
   test("SELECT second field") {
     val ids = sql("SELECT THEID FROM foobar").collect().map(x => x.getInt(0)).sortWith(_ < _)
-    assert(ids.size === 3)
+    assert(ids.length === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
@@ -399,7 +420,7 @@ class JDBCSuite extends QueryTest
 
   test("SELECT second field when fetchsize is two") {
     val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
-    assert(ids.size === 3)
+    assert(ids.length === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
@@ -427,7 +448,7 @@ class JDBCSuite extends QueryTest
 
   test("SELECT second field partitioned") {
     val ids = sql("SELECT THEID FROM parts").collect().map(x => x.getInt(0)).sortWith(_ < _)
-    assert(ids.size === 3)
+    assert(ids.length === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
@@ -480,7 +501,7 @@ class JDBCSuite extends QueryTest
        """.stripMargin.replaceAll("\n", " "))
 
     val df = sql("SELECT * FROM renamed")
-    assert(df.schema.fields.size == 2)
+    assert(df.schema.fields.length == 2)
     assert(df.schema.fields(0).name == "NAME1")
     assert(df.schema.fields(1).name == "NAME2")
   }
@@ -638,7 +659,7 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getAs[Array[Byte]](0).sameElements(testBytes))
     assert(rows(0).getString(1).equals("Sensitive"))
     assert(rows(0).getString(2).equals("Insensitive"))
-    assert(rows(0).getString(3).equals("Twenty-byte CHAR"))
+    assert(rows(0).getString(3).equals("Twenty-byte CHAR    "))
     assert(rows(0).getAs[Array[Byte]](4).sameElements(testBytes))
     assert(rows(0).getString(5).equals("I am a clob!"))
   }
@@ -729,20 +750,6 @@ class JDBCSuite extends QueryTest
     assert(math.abs(rows(0).getDouble(1) - 1.00000023841859331) < 1e-12)
   }
 
-  test("Pass extra properties via OPTIONS") {
-    // We set rowId to false during setup, which means that _ROWID_ column should be absent from
-    // all tables. If rowId is true (default), the query below doesn't throw an exception.
-    intercept[JdbcSQLException] {
-      sql(
-        s"""
-          |CREATE OR REPLACE TEMPORARY VIEW abc
-          |USING org.apache.spark.sql.jdbc
-          |OPTIONS (url '$url', dbtable '(SELECT _ROWID_ FROM test.people)',
-          |         user 'testUser', password 'testPass')
-         """.stripMargin.replaceAll("\n", " "))
-    }
-  }
-
   test("Remap types via JdbcDialects") {
     JdbcDialects.registerDialect(testH2Dialect)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
@@ -788,33 +795,40 @@ class JDBCSuite extends QueryTest
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[Option[String]](Symbol("compileFilter"))
     def doCompileFilter(f: Filter): String =
-      JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
-    assert(doCompileFilter(EqualTo("col0", 3)) === """"col0" = 3""")
-    assert(doCompileFilter(Not(EqualTo("col1", "abc"))) === """(NOT ("col1" = 'abc'))""")
-    assert(doCompileFilter(And(EqualTo("col0", 0), EqualTo("col1", "def")))
-      === """("col0" = 0) AND ("col1" = 'def')""")
-    assert(doCompileFilter(Or(EqualTo("col0", 2), EqualTo("col1", "ghi")))
-      === """("col0" = 2) OR ("col1" = 'ghi')""")
-    assert(doCompileFilter(LessThan("col0", 5)) === """"col0" < 5""")
-    assert(doCompileFilter(LessThan("col3",
-      Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col3" < '1995-11-21 00:00:00.0'""")
-    assert(doCompileFilter(LessThan("col4", Date.valueOf("1983-08-04")))
-      === """"col4" < '1983-08-04'""")
-    assert(doCompileFilter(LessThanOrEqual("col0", 5)) === """"col0" <= 5""")
-    assert(doCompileFilter(GreaterThan("col0", 3)) === """"col0" > 3""")
-    assert(doCompileFilter(GreaterThanOrEqual("col0", 3)) === """"col0" >= 3""")
-    assert(doCompileFilter(In("col1", Array("jkl"))) === """"col1" IN ('jkl')""")
-    assert(doCompileFilter(In("col1", Array.empty)) ===
-      """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
-    assert(doCompileFilter(Not(In("col1", Array("mno", "pqr"))))
-      === """(NOT ("col1" IN ('mno', 'pqr')))""")
-    assert(doCompileFilter(IsNull("col1")) === """"col1" IS NULL""")
-    assert(doCompileFilter(IsNotNull("col1")) === """"col1" IS NOT NULL""")
-    assert(doCompileFilter(And(EqualNullSafe("col0", "abc"), EqualTo("col1", "def")))
-      === """((NOT ("col0" != 'abc' OR "col0" IS NULL OR 'abc' IS NULL) """
-        + """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
+      JdbcDialects.get("jdbc:").compileExpression(f.toV2).getOrElse("")
+
+    Seq(("col0", "col1"), ("`col0`", "`col1`")).foreach { case(col0, col1) =>
+      assert(doCompileFilter(EqualTo(col0, 3)) === """"col0" = 3""")
+      assert(doCompileFilter(Not(EqualTo(col1, "abc"))) === """NOT ("col1" = 'abc')""")
+      assert(doCompileFilter(And(EqualTo(col0, 0), EqualTo(col1, "def")))
+        === """("col0" = 0) AND ("col1" = 'def')""")
+      assert(doCompileFilter(Or(EqualTo(col0, 2), EqualTo(col1, "ghi")))
+        === """("col0" = 2) OR ("col1" = 'ghi')""")
+      assert(doCompileFilter(LessThan(col0, 5)) === """"col0" < 5""")
+      assert(doCompileFilter(LessThan(col0,
+        Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col0" < '1995-11-21 00:00:00.0'""")
+      assert(doCompileFilter(LessThan(col0,
+        LocalDateTime.parse("2007-12-03 10:15:30",
+          DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))))
+        === """"col0" < '2007-12-03 10:15:30'""")
+      assert(doCompileFilter(LessThan(col0, Date.valueOf("1983-08-04")))
+        === """"col0" < '1983-08-04'""")
+      assert(doCompileFilter(LessThanOrEqual(col0, 5)) === """"col0" <= 5""")
+      assert(doCompileFilter(GreaterThan(col0, 3)) === """"col0" > 3""")
+      assert(doCompileFilter(GreaterThanOrEqual(col0, 3)) === """"col0" >= 3""")
+      assert(doCompileFilter(In(col1, Array("jkl"))) === """"col1" IN ('jkl')""")
+      assert(doCompileFilter(In(col1, Array.empty)) ===
+        """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
+      assert(doCompileFilter(Not(In(col1, Array("mno", "pqr"))))
+        === """NOT ("col1" IN ('mno', 'pqr'))""")
+      assert(doCompileFilter(IsNull(col1)) === """"col1" IS NULL""")
+      assert(doCompileFilter(IsNotNull(col1)) === """"col1" IS NOT NULL""")
+      assert(doCompileFilter(And(EqualNullSafe(col0, "abc"), EqualTo(col1, "def")))
+        === """(("col0" = 'abc') OR ("col0" IS NULL AND 'abc' IS NULL))"""
+        + """ AND ("col1" = 'def')""")
+    }
+    assert(doCompileFilter(EqualTo("col0.nested", 3)).isEmpty)
   }
 
   test("Dialect unregister") {
@@ -908,6 +922,8 @@ class JDBCSuite extends QueryTest
     assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 1, metadata) == None)
     assert(mySqlDialect.getCatalystType(java.sql.Types.BIT, "TINYINT", 1, metadata) ==
       Some(BooleanType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ==
+      Some(ByteType))
   }
 
   test("SPARK-35446: MySQLDialect type mapping of float") {
@@ -923,7 +939,7 @@ class JDBCSuite extends QueryTest
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
-      Some(ArrayType(StringType)))
+      Some(ArrayType(CharType(64))))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -934,6 +950,13 @@ class JDBCSuite extends QueryTest
     assert(derbyDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(derbyDialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
     assert(derbyDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
+  test("SPARK-39604: DerbyDialect catalyst type mapping") {
+    val derbyDialect = JdbcDialects.get("jdbc:derby:db")
+    val metadata = new MetadataBuilder().putString("name", "test_column")
+    assert(derbyDialect.getCatalystType(java.sql.Types.REAL, "real",
+      0, metadata) == Some(FloatType))
   }
 
   test("OracleDialect jdbc type mapping") {
@@ -947,8 +970,23 @@ class JDBCSuite extends QueryTest
       Some(FloatType))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
       Some(DoubleType))
-    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_TZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null) ==
+      Some(TimestampType))
+  }
+
+  test("SPARK-42469: OracleDialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    assert(
+      OracleDialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT tab.* FROM (SELECT a,b FROM test    ) tab WHERE rownum <= 123")
   }
 
   test("MsSqlServerDialect jdbc type mapping") {
@@ -973,7 +1011,7 @@ class JDBCSuite extends QueryTest
     }
   }
 
-  test("SPARK-28152 MsSqlServerDialect catalyst type mapping") {
+  test("SPARK-28152: MsSqlServerDialect catalyst type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
 
@@ -994,6 +1032,32 @@ class JDBCSuite extends QueryTest
     }
   }
 
+  test("SPARK-42469: MsSqlServerDialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    assert(
+      MsSqlServerDialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT TOP (123) a,b FROM test")
+  }
+
+  test("SPARK-42534: DB2Dialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
+    assert(
+      DB2Dialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT a,b FROM test      FETCH FIRST 123 ROWS ONLY")
+  }
+
   test("table exists query by jdbc dialect") {
     val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
@@ -1001,10 +1065,9 @@ class JDBCSuite extends QueryTest
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
     val table = "weblogs"
-    val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
-    val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
-    assert(MySQL.getTableExistsQuery(table) == limitQuery)
-    assert(Postgres.getTableExistsQuery(table) == limitQuery)
+    val defaultQuery = s"SELECT 1 FROM $table WHERE 1=0"
+    assert(MySQL.getTableExistsQuery(table) == defaultQuery)
+    assert(Postgres.getTableExistsQuery(table) == defaultQuery)
     assert(db2.getTableExistsQuery(table) == defaultQuery)
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)
@@ -1023,14 +1086,16 @@ class JDBCSuite extends QueryTest
     val defaultQuery = s"TRUNCATE TABLE $table"
     val postgresQuery = s"TRUNCATE TABLE ONLY $table"
     val teradataQuery = s"DELETE FROM $table ALL"
+    val db2Query = s"TRUNCATE TABLE $table IMMEDIATE"
 
-    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+    Seq(mysql, h2, derby).foreach{ dialect =>
       assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
     }
 
     assert(postgres.getTruncateQuery(table) == postgresQuery)
     assert(oracle.getTruncateQuery(table) == defaultQuery)
     assert(teradata.getTruncateQuery(table) == teradataQuery)
+    assert(db2.getTruncateQuery(table) == db2Query)
   }
 
   test("SPARK-22880: Truncate table with CASCADE by jdbc dialect") {
@@ -1049,13 +1114,15 @@ class JDBCSuite extends QueryTest
     val postgresQuery = s"TRUNCATE TABLE ONLY $table CASCADE"
     val oracleQuery = s"TRUNCATE TABLE $table CASCADE"
     val teradataQuery = s"DELETE FROM $table ALL"
+    val db2Query = s"TRUNCATE TABLE $table IMMEDIATE"
 
-    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+    Seq(mysql, h2, derby).foreach{ dialect =>
       assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
     }
     assert(postgres.getTruncateQuery(table, Some(true)) == postgresQuery)
     assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
     assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
+    assert(db2.getTruncateQuery(table, Some(true)) == db2Query)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {
@@ -1149,7 +1216,7 @@ class JDBCSuite extends QueryTest
          """.stripMargin)
 
       val show = ShowCreateTableCommand(TableIdentifier(tableName), ShowCreateTable.getoutputAttrs)
-      spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+      spark.sessionState.executePlan(show).executedPlan.executeCollectPublic().foreach { r =>
         assert(!r.toString.contains(password))
         assert(r.toString.contains(dbTable))
         assert(r.toString.contains(userName))
@@ -1162,7 +1229,7 @@ class JDBCSuite extends QueryTest
       }
 
       withSQLConf(SQLConf.SQL_OPTIONS_REDACTION_PATTERN.key -> "(?i)dbtable|user") {
-        spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+        spark.sessionState.executePlan(show).executedPlan.executeCollectPublic().foreach { r =>
           assert(!r.toString.contains(password))
           assert(!r.toString.contains(dbTable))
           assert(!r.toString.contains(userName))
@@ -1207,8 +1274,8 @@ class JDBCSuite extends QueryTest
         .select("createtab_stmt").collect()
       assert(createTabStmt.length === 1)
       createTabStmt.foreach { r =>
-        assert(r.getString(0).contains(s"`url` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
-        assert(r.getString(0).contains(s"`password` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+        assert(r.getString(0).contains(s"'url' = '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+        assert(r.getString(0).contains(s"'password' = '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
       }
     }
   }
@@ -1238,6 +1305,7 @@ class JDBCSuite extends QueryTest
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
+    assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
   private def assertEmptyQuery(sqlString: String): Unit = {
@@ -1270,29 +1338,29 @@ class JDBCSuite extends QueryTest
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
     val schema = JdbcUtils.schemaString(
       df.schema,
-      df.sqlContext.conf.caseSensitiveAnalysis,
+      df.sparkSession.sessionState.conf.caseSensitiveAnalysis,
       "jdbc:mysql://localhost:3306/temp")
-    assert(schema.contains("`order` TEXT"))
+    assert(schema.contains("`order` LONGTEXT"))
   }
 
   test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id < 1").collect().size == 0)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <= 1").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id > 1").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id >= 1").collect().size == 3)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id != 2").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <=> 2").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE 'fr%'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%ed'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols").filter($"Name".isin()).collect().size == 0)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id < 1").collect().length == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <= 1").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id > 1").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id >= 1").collect().length == 3)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id != 2").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <=> 2").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE 'fr%'").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%ed'").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols").filter($"Name".isin()).collect().length == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().length == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().length == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").collect().length == 1)
   }
 
   test("SPARK-18419: Fix `asConnectionProperties` to filter case-insensitively") {
@@ -1321,20 +1389,20 @@ class JDBCSuite extends QueryTest
 
   test("jdbc API support custom schema") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    val customSchema = "NAME STRING, THEID INT"
+    val customSchema = "NAME VARCHAR(32), THEID INT"
     val props = new Properties()
     props.put("customSchema", customSchema)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
     val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema).map(
       f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
-    assert(df.schema === expectedSchema)
+    assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
     assert(df.count() === 3)
   }
 
   test("jdbc API custom schema DDL-like strings.") {
     withTempView("people_view") {
-      val customSchema = "NAME STRING, THEID INT"
+      val customSchema = "NAME VARCHAR(32), THEID INT"
       sql(
         s"""
            |CREATE TEMPORARY VIEW people_view
@@ -1346,7 +1414,8 @@ class JDBCSuite extends QueryTest
       assert(df.schema.length === 2)
       val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
         .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
-      assert(df.schema === expectedSchema)
+
+      assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
       assert(df.count() === 3)
     }
   }
@@ -1363,21 +1432,51 @@ class JDBCSuite extends QueryTest
       map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 
-  test("Checking metrics correctness with JDBC") {
+  test("SPARK-38846: TeradataDialect catalyst type mapping") {
+    val teradataDialect = JdbcDialects.get("jdbc:teradata")
+    val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", 0)
+    // When Number(*)/Number is specified, default DecimalType should be returned
+    val flexiblePrecision = 40
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      flexiblePrecision, metadata) == Some(DecimalType.SYSTEM_DEFAULT))
+    val specifiedScale = 10
+    val specifiedPrecision = 10
+    metadata.putLong("scale", specifiedScale)
+    // Both precision and scale is set explicitly
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      specifiedPrecision, metadata) == Some(DecimalType(specifiedPrecision, specifiedScale)))
+    // When precision is not specified, MAX_PRECISION should be used
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      flexiblePrecision, metadata) == Some(DecimalType(DecimalType.MAX_PRECISION, specifiedScale)))
+    // When precision and scale is set explicitly and scale is 0
+    metadata.putLong("scale", 0)
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      specifiedPrecision, metadata) == Some(DecimalType(specifiedPrecision, 0)))
+    // When MetadataBuilder is null, default DecimalType should be returned
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER",
+      specifiedPrecision, null) == Some(DecimalType.SYSTEM_DEFAULT))
+  }
+
+    test("Checking metrics correctness with JDBC") {
     val foobarCnt = spark.table("foobar").count()
     val res = InputOutputMetricsHelper.run(sql("SELECT * FROM foobar").toDF())
     assert(res === (foobarCnt, 0L, foobarCnt) :: Nil)
   }
 
   test("unsupported types") {
-    var e = intercept[SQLException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
-    }.getMessage
-    assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
-    e = intercept[SQLException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
-    }.getMessage
-    assert(e.contains("Unsupported type ARRAY"))
+    checkError(
+      exception = intercept[SparkSQLException] {
+        spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      parameters =
+        Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "TIMESTAMP_WITH_TIMEZONE"))
+    checkError(
+      exception = intercept[SparkSQLException] {
+        spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      parameters = Map("typeName" -> "INTEGER ARRAY", "jdbcType" -> "ARRAY"))
   }
 
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {
@@ -1461,9 +1560,9 @@ class JDBCSuite extends QueryTest
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    val schema = StructType(Seq(StructField("NAME", StringType, true, defaultMetadata),
+    var schema = StructType(Seq(StructField("NAME", VarcharType(32), true, defaultMetadata),
       StructField("THEID", IntegerType, true, defaultMetadata)))
-
+    schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
       .option("DbTaBle", "TEST.PEOPLE")
@@ -1753,8 +1852,8 @@ class JDBCSuite extends QueryTest
       rawPlan.execute().count()
     }
 
-    assert(getRowCount(df1) == df3.count)
-    assert(getRowCount(df2) < df3.count)
+    assert(getRowCount(df1) == df3.count())
+    assert(getRowCount(df2) < df3.count())
   }
 
   test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
@@ -1764,7 +1863,7 @@ class JDBCSuite extends QueryTest
         "dbtable" -> "table",
         "driver" -> "org.postgresql.Driver"
       )
-      spark.read.format("jdbc").options(opts).load
+      spark.read.format("jdbc").options(opts).load()
     }.getMessage
     assert(e.contains("The driver could not open a JDBC connection. " +
       "Check the URL: jdbc:mysql://localhost/db"))
@@ -1887,5 +1986,149 @@ class JDBCSuite extends QueryTest
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)
-   }
+  }
+
+  test("SPARK-39339: Handle TimestampNTZType null values") {
+    val tableName = "timestamp_ntz_null_table"
+
+    val df = Seq(null.asInstanceOf[LocalDateTime]).toDF("col1")
+
+    df.write.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName).save()
+
+    val readDf = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName)
+
+    val timestampTypes = Seq(
+      SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+      SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+    timestampTypes.foreach { timestampType =>
+      val inferTimestampNTZ = timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString
+      val tsType = if (inferTimestampNTZ) {
+        TimestampNTZType
+      } else {
+        TimestampType
+      }
+      val res = readDf.option("preferTimestampNTZ", inferTimestampNTZ).load()
+      checkAnswer(res, Seq(Row(null)))
+      assert(res.schema.fields.head.dataType == tsType)
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+        val res2 = readDf.load()
+        checkAnswer(res2, Seq(Row(null)))
+        assert(res2.schema.fields.head.dataType == tsType)
+      }
+    }
+  }
+
+  test("SPARK-39339: TimestampNTZType with different local time zones") {
+    val tableName = "timestamp_ntz_diff_tz_support_table"
+
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+        Seq(
+          "1972-07-04 03:30:00",
+          "2019-01-20 12:00:00.502",
+          "2019-01-20T00:00:00.123456",
+          "1500-01-20T00:00:00.123456"
+        ).foreach { case datetime =>
+          val df = spark.sql(s"select timestamp_ntz '$datetime'")
+          df.write.format("jdbc")
+            .mode("overwrite")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", tableName)
+            .save()
+          val zoneId = DateTimeTestUtils.outstandingZoneIds(
+          Random.nextInt(DateTimeTestUtils.outstandingZoneIds.length))
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            // Infer TimestmapNTZ column with data source option
+            val res = spark.read.format("jdbc")
+              .option("preferTimestampNTZ", "true")
+              .option("url", urlWithUserAndPass)
+              .option("dbtable", tableName)
+              .load()
+            checkAnswer(res, df)
+
+            withSQLConf(
+              SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+              val res2 = spark.read.format("jdbc")
+                .option("url", urlWithUserAndPass)
+                .option("dbtable", tableName)
+                .load()
+              checkAnswer(res2, df)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-41990: Filter with composite name") {
+    val df = sql("SELECT * FROM composite_name WHERE `last name` = 'smith'")
+    assert(df.collect().toSet === Set(Row("smith", 1)))
+  }
+
+  test("SPARK-44866: SnowflakeDialect BOOLEAN type mapping") {
+    val snowflakeDialect = JdbcDialects.get("jdbc:snowflake://account.snowflakecomputing.com")
+    assert(snowflakeDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
+  test("SPARK-45139: DatabricksDialect url handling") {
+    assert(JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com") == DatabricksDialect)
+  }
+
+  test("SPARK-45139: DatabricksDialect catalyst type mapping") {
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.TINYINT, "", 1, null) == Some(ByteType))
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.SMALLINT, "", 1, null) == Some(ShortType))
+    assert(databricksDialect
+      .getCatalystType(java.sql.Types.REAL, "", 1, null) == Some(FloatType))
+  }
+
+  test("SPARK-45139: DatabricksDialect JDBC type mapping") {
+    val databricksDialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
+    assert(databricksDialect
+      .getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+    assert(databricksDialect
+      .getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "DOUBLE")
+    assert(databricksDialect
+      .getJDBCType(StringType).map(_.databaseTypeDefinition).get == "STRING")
+    assert(databricksDialect
+      .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
+  }
+
+  test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+
+    Seq(true, false).foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED.key -> s"$flag") {
+        if (SQLConf.get.legacyMsSqlServerNumericMappingEnabled) {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).isEmpty)
+        } else {
+          assert(msSqlServerDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1,
+            metadata).get == ShortType)
+        }
+      }
+    }
+  }
+
+  test("SPARK-45475: saving a table via JDBC should work with observe API") {
+    val tableName = "test_table"
+    val namedObservation = Observation("named")
+    val observed_df = spark.range(100).observe(
+      namedObservation, percentile_approx($"id", lit(0.5), lit(100)).as("percentile_approx_val"))
+
+    observed_df.write.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName).save()
+
+    val expected = Map("percentile_approx_val" -> 49)
+    assert(namedObservation.get === expected)
+  }
 }

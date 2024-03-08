@@ -24,7 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
+class SparkFrameMethodsTestsMixin:
     def test_frame_apply_negative(self):
         with self.assertRaisesRegex(
             ValueError, "The output of the function.* pyspark.sql.DataFrame.*int"
@@ -143,12 +143,18 @@ class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
         self.assert_eq(psdf, new_psdf)
 
 
+class SparkFrameMethodsTests(
+    SparkFrameMethodsTestsMixin, PandasOnSparkTestCase, SQLTestUtils, TestUtils
+):
+    pass
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.pandas.tests.test_frame_spark import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

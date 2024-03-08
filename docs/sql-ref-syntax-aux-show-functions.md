@@ -30,7 +30,7 @@ clause is optional and supported only for compatibility with other systems.
 ### Syntax
 
 ```sql
-SHOW [ function_kind ] FUNCTIONS [ [ LIKE ] { function_name | regex_pattern } ]
+SHOW [ function_kind ] FUNCTIONS [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
 ```
 
 ### Parameters
@@ -43,14 +43,9 @@ SHOW [ function_kind ] FUNCTIONS [ [ LIKE ] { function_name | regex_pattern } ]
     * **SYSTEM** - Looks up the function(s) among the system defined functions.
     * **ALL** -  Looks up the function(s) among both user and system defined functions.
 
-* **function_name**
+* **{ FROM `|` IN } database_name**
 
-    Specifies a name of an existing function in the system. The function name may be
-    optionally qualified with a database name. If `function_name` is qualified with
-    a database then the function is resolved from the user specified database, otherwise
-    it is resolved from the current database.
-
-    **Syntax:** `[ database_name. ] function_name`
+  Specifies the database name from which functions are listed.
 
 * **regex_pattern**
 
@@ -83,7 +78,7 @@ SHOW SYSTEM FUNCTIONS concat;
 +--------+
 
 -- List a qualified function `max` from database `salesdb`. 
-SHOW SYSTEM FUNCTIONS salesdb.max;
+SHOW SYSTEM FUNCTIONS FROM salesdb LIKE 'max';
 +--------+
 |function|
 +--------+

@@ -34,6 +34,7 @@ import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.client.{TransportClient, TransportClientFactory}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
+import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 
 class NettyBlockTransferServiceSuite
   extends SparkFunSuite
@@ -142,10 +143,11 @@ class NettyBlockTransferServiceSuite
       rpcEndpointRef: RpcEndpointRef = null): NettyBlockTransferService = {
     val conf = new SparkConf()
       .set("spark.app.id", s"test-${getClass.getName}")
+    val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     val securityManager = new SecurityManager(conf)
     val blockDataManager = mock(classOf[BlockDataManager])
-    val service = new NettyBlockTransferService(conf, securityManager, "localhost", "localhost",
-      port, 1, rpcEndpointRef)
+    val service = new NettyBlockTransferService(
+      conf, securityManager, serializerManager, "localhost", "localhost", port, 1, rpcEndpointRef)
     service.init(blockDataManager)
     service
   }

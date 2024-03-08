@@ -386,7 +386,7 @@ class RFormulaModel private[feature](
   private def transformLabel(dataset: Dataset[_]): DataFrame = {
     val labelName = resolvedFormula.label
     if (labelName.isEmpty || hasLabelCol(dataset.schema)) {
-      dataset.toDF
+      dataset.toDF()
     } else if (dataset.schema.exists(_.name == labelName)) {
       dataset.schema(labelName).dataType match {
         case _: NumericType | BooleanType =>
@@ -397,7 +397,7 @@ class RFormulaModel private[feature](
     } else {
       // Ignore the label field. This is a hack so that this transformer can also work on test
       // datasets in a Pipeline.
-      dataset.toDF
+      dataset.toDF()
     }
   }
 
@@ -449,7 +449,7 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath).select("label", "terms", "hasIntercept").head()
       val label = data.getString(0)
-      val terms = data.getSeq[Seq[String]](1)
+      val terms = data.getSeq[scala.collection.Seq[String]](1).map(_.toSeq)
       val hasIntercept = data.getBoolean(2)
       val resolvedRFormula = ResolvedRFormula(label, terms, hasIntercept)
 
@@ -476,7 +476,8 @@ private class ColumnPruner(override val uid: String, val columnsToPrune: Set[Str
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
-    dataset.select(columnsToKeep.map(dataset.col): _*)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.select(columnsToKeep.map(dataset.col).toImmutableArraySeq: _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -564,7 +565,8 @@ private class VectorAttributeRewriter(
     }
     val otherCols = dataset.columns.filter(_ != vectorCol).map(dataset.col)
     val rewrittenCol = dataset.col(vectorCol).as(vectorCol, metadata)
-    dataset.select(otherCols :+ rewrittenCol : _*)
+    import org.apache.spark.util.ArrayImplicits._
+    dataset.select((otherCols :+ rewrittenCol).toImmutableArraySeq : _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {

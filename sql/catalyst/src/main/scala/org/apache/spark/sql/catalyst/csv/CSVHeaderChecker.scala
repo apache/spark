@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import com.univocity.parsers.csv.CsvParser
+import com.univocity.parsers.common.AbstractParser
+import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -58,7 +60,7 @@ class CSVHeaderChecker(
   private def checkHeaderColumnNames(columnNames: Array[String]): Unit = {
     if (columnNames != null) {
       val fieldNames = schema.map(_.name).toIndexedSeq
-      val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
+      val (headerLen, schemaSize) = (columnNames.length, fieldNames.length)
       var errorMessage: Option[String] = None
 
       if (headerLen == schemaSize) {
@@ -92,7 +94,9 @@ class CSVHeaderChecker(
         if (enforceSchema) {
           logWarning(msg)
         } else {
-          throw new IllegalArgumentException(msg)
+          throw new SparkIllegalArgumentException(
+            errorClass = "_LEGACY_ERROR_TEMP_3241",
+            messageParameters = Map("msg" -> msg))
         }
       }
     }
@@ -107,7 +111,7 @@ class CSVHeaderChecker(
   }
 
   // This is currently only used to parse CSV with multiLine mode.
-  private[csv] def checkHeaderColumnNames(tokenizer: CsvParser): Unit = {
+  private[csv] def checkHeaderColumnNames(tokenizer: AbstractParser[CsvParserSettings]): Unit = {
     assert(options.multiLine, "This method should be executed with multiLine.")
     if (options.headerFlag) {
       val firstRecord = tokenizer.parseNext()
@@ -116,7 +120,8 @@ class CSVHeaderChecker(
   }
 
   // This is currently only used to parse CSV with non-multiLine mode.
-  private[csv] def checkHeaderColumnNames(lines: Iterator[String], tokenizer: CsvParser): Unit = {
+  private[csv] def checkHeaderColumnNames(
+      lines: Iterator[String], tokenizer: AbstractParser[CsvParserSettings]): Unit = {
     assert(!options.multiLine, "This method should not be executed with multiline.")
     // Checking that column names in the header are matched to field names of the schema.
     // The header will be removed from lines.

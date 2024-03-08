@@ -27,13 +27,13 @@ import org.apache.spark.sql.internal.SQLConf
 class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   private val left = StatsTestPlan(
-    outputList = Seq('a.int, 'b.int, 'c.int),
+    outputList = Seq($"a".int, $"b".int, $"c".int),
     rowCount = 20000000,
     size = Some(20000000),
     attributeStats = AttributeMap(Seq()))
 
   private val right = StatsTestPlan(
-    outputList = Seq('d.int),
+    outputList = Seq($"d".int),
     rowCount = 1000,
     size = Some(1000),
     attributeStats = AttributeMap(Seq()))
@@ -103,15 +103,17 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
   }
 
   test("getBroadcastBuildSide (hintOnly = false) return None when right has no broadcast hint") {
-    val broadcastSide = getBroadcastBuildSide(
-      left,
-      right,
-      Inner,
-      JoinHint(None, hintNotToBroadcast ),
-      hintOnly = false,
-      SQLConf.get
-    )
-    assert(broadcastSide === None)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      val broadcastSide = getBroadcastBuildSide(
+        left,
+        right,
+        Inner,
+        JoinHint(None, hintNotToBroadcast ),
+        hintOnly = false,
+        SQLConf.get
+      )
+      assert(broadcastSide === None)
+    }
   }
 
   test("getShuffleHashJoinBuildSide (hintOnly = true) return BuildLeft with only a left hint") {
@@ -179,8 +181,10 @@ class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
   }
 
   test("canBroadcastBySize should return true if the plan size is less than 10MB") {
-    assert(canBroadcastBySize(left, SQLConf.get) === false)
-    assert(canBroadcastBySize(right, SQLConf.get) === true)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      assert(canBroadcastBySize(left, SQLConf.get) === false)
+      assert(canBroadcastBySize(right, SQLConf.get) === true)
+    }
   }
 
 }

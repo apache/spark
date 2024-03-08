@@ -21,15 +21,14 @@ import java.nio.file.{Files, Path}
 import java.util.concurrent.CountDownLatch
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.client.dsl.ExecListener
-import okhttp3.Response
+import io.fabric8.kubernetes.client.dsl.ExecListener.Response
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.utils.IOUtils
 import org.apache.commons.io.output.ByteArrayOutputStream
-import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
@@ -56,13 +55,14 @@ object Utils extends Logging {
     val pod = kubernetesTestComponents
       .kubernetesClient
       .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
       .withName(podName)
     // Avoid timing issues by looking for open/close
     class ReadyListener extends ExecListener {
       val openLatch: CountDownLatch = new CountDownLatch(1)
       val closeLatch: CountDownLatch = new CountDownLatch(1)
 
-      override def onOpen(response: Response): Unit = {
+      override def onOpen(): Unit = {
         openLatch.countDown()
       }
 
@@ -134,10 +134,6 @@ object Utils extends Logging {
       case _ => throw new SparkException(s"No valid $fileName file was found " +
         s"under spark home test dir ${sparkHomeDir.toAbsolutePath}!")
     }
-  }
-
-  def isHadoop3(): Boolean = {
-    VersionInfo.getVersion.startsWith("3")
   }
 
   def createZipFile(inFile: String, outFile: String): Unit = {

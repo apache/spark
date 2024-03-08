@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui._
@@ -38,7 +38,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val content = store.synchronized { // make sure all parts in this page are consistent
-        val sessionStat = store.getSession(parameterId).getOrElse(null)
+        val sessionStat = store.getSession(parameterId).orNull
         require(sessionStat != null, "Invalid sessionID[" + parameterId + "]")
 
         generateBasicStats() ++

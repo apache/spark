@@ -20,10 +20,10 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
@@ -43,7 +43,7 @@ class InMemoryPartitionTable(
     new ConcurrentHashMap[InternalRow, util.Map[String, String]]()
 
   def partitionSchema: StructType = {
-    val partitionColumnNames = partitioning.toSeq.asPartitionColumns
+    val partitionColumnNames = partitioning.toSeq.convertTransforms._1
     new StructType(schema.filter(p => partitionColumnNames.contains(p.name)).toArray)
   }
 
@@ -51,7 +51,7 @@ class InMemoryPartitionTable(
       ident: InternalRow,
       properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
-      throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
+      throw new PartitionsAlreadyExistException(name, ident, partitionSchema)
     } else {
       createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)
@@ -102,7 +102,7 @@ class InMemoryPartitionTable(
     val dataTypes = names.map(schema(_).dataType)
     val currentRow = new GenericInternalRow(new Array[Any](names.length))
     memoryTablePartitions.keySet().asScala.filter { key =>
-      for (i <- 0 until names.length) {
+      for (i <- names.indices) {
         currentRow.values(i) = key.get(indexes(i), dataTypes(i))
       }
       currentRow == ident
@@ -111,7 +111,7 @@ class InMemoryPartitionTable(
 
   override def renamePartition(from: InternalRow, to: InternalRow): Boolean = {
     if (memoryTablePartitions.containsKey(to)) {
-      throw new PartitionAlreadyExistsException(name, to, partitionSchema)
+      throw new PartitionsAlreadyExistException(name, to, partitionSchema)
     } else {
       val partValue = memoryTablePartitions.remove(from)
       if (partValue == null) {

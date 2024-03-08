@@ -53,6 +53,17 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
   }
 
   /**
+   * Return a list of all known jobs with a particular tag.
+   *
+   * The returned list may contain running, failed, and completed jobs, and may vary across
+   * invocations of this method.  This method does not guarantee the order of the elements in
+   * its result.
+   */
+  def getJobIdsForTag(jobTag: String): Array[Int] = {
+    store.jobsList(null).filter(_.jobTags.contains(jobTag)).map(_.jobId).toArray
+  }
+
+  /**
    * Returns an array containing the ids of all active stages.
    *
    * This method does not guarantee the order of the elements in its result.
@@ -114,10 +125,10 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
         port,
         cachedMem,
         exec.activeTasks,
-        exec.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0L),
         exec.memoryMetrics.map(_.usedOnHeapStorageMemory).getOrElse(0L),
-        exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L),
-        exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L))
+        exec.memoryMetrics.map(_.usedOffHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L),
+        exec.memoryMetrics.map(_.totalOffHeapStorageMemory).getOrElse(0L))
     }.toArray
   }
 }

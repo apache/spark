@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
@@ -82,5 +83,16 @@ class SortOrderExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       DoublePrefixComparator.computePrefix(201329.83d))
     checkEvaluation(SortPrefix(SortOrder(list1, Ascending)), 0L)
     checkEvaluation(SortPrefix(SortOrder(nullVal, Ascending)), null)
+  }
+
+  test("Cannot sort map type") {
+    val m = Literal.create(Map(), MapType(StringType, StringType, valueContainsNull = false))
+    val sortOrderExpression = SortOrder(m, Ascending)
+    assert(sortOrderExpression.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "INVALID_ORDERING_TYPE",
+        messageParameters = Map(
+          "functionName" -> "`sortorder`",
+          "dataType" -> "\"MAP<STRING, STRING>\"")))
   }
 }

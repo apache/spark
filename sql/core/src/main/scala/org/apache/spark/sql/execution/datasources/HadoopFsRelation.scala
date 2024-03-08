@@ -57,9 +57,6 @@ case class HadoopFsRelation(
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
       partitionSchema, sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-  def partitionSchemaOption: Option[StructType] =
-    if (partitionSchema.isEmpty) None else Some(partitionSchema)
-
   override def toString: String = {
     fileFormat match {
       case source: DataSourceRegister => source.shortName()
@@ -68,7 +65,7 @@ case class HadoopFsRelation(
   }
 
   override def sizeInBytes: Long = {
-    val compressionFactor = sqlContext.conf.fileCompressionFactor
+    val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
     (location.sizeInBytes * compressionFactor).toLong
   }
 

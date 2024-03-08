@@ -387,11 +387,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
       return released;
     }
 
-    @Override
-    public void remove() {
-      throw new UnsupportedOperationException();
-    }
-
     private void handleFailedDelete() {
       if (spillWriters.size() > 0) {
         // remove the spill file from disk
@@ -941,7 +936,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Returns the average number of probes per key lookup.
    */
-  public double getAvgHashProbeBucketListIterations() {
+  public double getAvgHashProbesPerKey() {
     return (1.0 * numProbes) / numKeyLookups;
   }
 

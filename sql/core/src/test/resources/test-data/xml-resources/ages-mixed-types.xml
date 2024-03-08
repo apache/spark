@@ -1,0 +1,15 @@
+<people>
+  <person>
+    <age born="1990-02-24">25</age>
+    <name><firstName>Hyukjin</firstName></name>
+  </person>
+  <person>
+    <age born="1985-01-01">30</age>
+    <name>Lars</name>
+  </person>
+  <person>
+    <age born="1980-01-01">30</age>
+    <name><firstName>Cheng</firstName>
+      <lastName>Lian</lastName></name>
+  </person>
+</people>

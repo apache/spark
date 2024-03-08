@@ -17,8 +17,10 @@
 
 package org.apache.spark.executor
 
-import scala.collection.JavaConverters._
+import java.util.concurrent.CopyOnWriteArrayList
+
 import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -227,6 +229,16 @@ class TaskMetrics private[spark] () extends Serializable {
     shuffleRead.LOCAL_BYTES_READ -> shuffleReadMetrics._localBytesRead,
     shuffleRead.FETCH_WAIT_TIME -> shuffleReadMetrics._fetchWaitTime,
     shuffleRead.RECORDS_READ -> shuffleReadMetrics._recordsRead,
+    shuffleRead.CORRUPT_MERGED_BLOCK_CHUNKS -> shuffleReadMetrics._corruptMergedBlockChunks,
+    shuffleRead.MERGED_FETCH_FALLBACK_COUNT -> shuffleReadMetrics._mergedFetchFallbackCount,
+    shuffleRead.REMOTE_MERGED_BLOCKS_FETCHED -> shuffleReadMetrics._remoteMergedBlocksFetched,
+    shuffleRead.LOCAL_MERGED_BLOCKS_FETCHED -> shuffleReadMetrics._localMergedBlocksFetched,
+    shuffleRead.REMOTE_MERGED_CHUNKS_FETCHED -> shuffleReadMetrics._remoteMergedChunksFetched,
+    shuffleRead.LOCAL_MERGED_CHUNKS_FETCHED -> shuffleReadMetrics._localMergedChunksFetched,
+    shuffleRead.REMOTE_MERGED_BYTES_READ -> shuffleReadMetrics._remoteMergedBytesRead,
+    shuffleRead.LOCAL_MERGED_BYTES_READ -> shuffleReadMetrics._localMergedBytesRead,
+    shuffleRead.REMOTE_REQS_DURATION -> shuffleReadMetrics._remoteReqsDuration,
+    shuffleRead.REMOTE_MERGED_REQS_DURATION -> shuffleReadMetrics._remoteMergedReqsDuration,
     shuffleWrite.BYTES_WRITTEN -> shuffleWriteMetrics._bytesWritten,
     shuffleWrite.RECORDS_WRITTEN -> shuffleWriteMetrics._recordsWritten,
     shuffleWrite.WRITE_TIME -> shuffleWriteMetrics._writeTime,
@@ -252,10 +264,12 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private[spark] lazy val externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
+  @transient private[spark] lazy val _externalAccums = new CopyOnWriteArrayList[AccumulatorV2[_, _]]
+
+  private[spark] def externalAccums = _externalAccums.asScala
 
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
-    externalAccums += a
+    _externalAccums.add(a)
   }
 
   private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
@@ -321,7 +335,7 @@ private[spark] object TaskMetrics extends Logging {
         tmAcc.metadata = acc.metadata
         tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
       } else {
-        tm.externalAccums += acc
+        tm._externalAccums.add(acc)
       }
     }
     tm

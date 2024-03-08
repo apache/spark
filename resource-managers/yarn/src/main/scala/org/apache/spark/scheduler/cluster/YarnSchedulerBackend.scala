@@ -19,12 +19,12 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.servlet.DispatcherType
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import jakarta.servlet.DispatcherType
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
@@ -58,20 +58,20 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
-  private val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv)
+  protected val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv)
   protected var amEndpoint: Option[RpcEndpointRef] = None
 
   private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
 
-  private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
+  private implicit val askTimeout: RpcTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
   /**
    * Declare implicit single thread execution context for futures doRequestTotalExecutors and
    * doKillExecutors below, avoiding using the global execution context that may cause conflict
    * with user code's execution of futures.
    */
-  private implicit val schedulerEndpointEC = ExecutionContext.fromExecutorService(
+  private implicit val schedulerEndpointEC: ExecutionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonSingleThreadExecutor("yarn-scheduler-endpoint"))
 
   /** Application ID. */
@@ -138,7 +138,7 @@ private[spark] abstract class YarnSchedulerBackend(
   override def applicationId(): String = {
     appId.map(_.toString).getOrElse {
       logWarning("Application ID is not initialized yet.")
-      super.applicationId
+      super.applicationId()
     }
   }
 
@@ -291,7 +291,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * An [[RpcEndpoint]] that communicates with the ApplicationMaster.
    */
-  private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
+  protected class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
 
     private[YarnSchedulerBackend] def handleExecutorDisconnectedFromDriver(
@@ -319,11 +319,24 @@ private[spark] abstract class YarnSchedulerBackend(
       removeExecutorMessage.foreach { message => driverEndpoint.send(message) }
     }
 
+    private[cluster] def signalDriverStop(exitCode: Int): Unit = {
+      amEndpoint match {
+        case Some(am) =>
+          am.send(Shutdown(exitCode))
+        case None =>
+          logWarning("Attempted to send shutdown message before the AM has registered!")
+      }
+    }
+
     override def receive: PartialFunction[Any, Unit] = {
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
         amEndpoint = Option(am)
         reset()
+
+      case s @ DecommissionExecutorsOnHost(hostId) =>
+        logDebug(s"Requesting to decommission host ${hostId}. Sending to driver")
+        driverEndpoint.send(s)
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)

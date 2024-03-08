@@ -47,6 +47,7 @@ abstract class AbstractCommandBuilder {
   String javaHome;
   String mainClass;
   String master;
+  String remote;
   protected String propertiesFile;
   final List<String> appArgs;
   final List<String> jars;
@@ -155,7 +156,6 @@ abstract class AbstractCommandBuilder {
         "launcher",
         "mllib",
         "repl",
-        "resource-managers/mesos",
         "resource-managers/yarn",
         "sql/catalyst",
         "sql/core",
@@ -229,17 +229,21 @@ abstract class AbstractCommandBuilder {
       return scala;
     }
     String sparkHome = getSparkHome();
-    File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
     File scala213 = new File(sparkHome, "launcher/target/scala-2.13");
-    checkState(!scala212.isDirectory() || !scala213.isDirectory(),
-      "Presence of build for multiple Scala versions detected.\n" +
-      "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    if (scala213.isDirectory()) {
-      return "2.13";
-    } else {
-      checkState(scala212.isDirectory(), "Cannot find any build directories.");
-      return "2.12";
-    }
+    checkState(scala213.isDirectory(), "Cannot find any build directories.");
+    return "2.13";
+    // String sparkHome = getSparkHome();
+    // File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
+    // File scala213 = new File(sparkHome, "launcher/target/scala-2.13");
+    // checkState(!scala212.isDirectory() || !scala213.isDirectory(),
+    //  "Presence of build for multiple Scala versions detected.\n" +
+    //  "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
+    // if (scala213.isDirectory()) {
+    //  return "2.13";
+    // } else {
+    //  checkState(scala212.isDirectory(), "Cannot find any build directories.");
+    //  return "2.12";
+    // }
   }
 
   String getSparkHome() {
@@ -267,6 +271,8 @@ abstract class AbstractCommandBuilder {
       Properties p = loadPropertiesFile();
       p.stringPropertyNames().forEach(key ->
         effectiveConfig.computeIfAbsent(key, p::getProperty));
+      effectiveConfig.putIfAbsent(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH,
+        SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH_VALUE);
     }
     return effectiveConfig;
   }

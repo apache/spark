@@ -35,26 +35,27 @@ class EliminateSerializationSuite extends PlanTest {
         EliminateSerialization) :: Nil
   }
 
-  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
-  implicit private def intEncoder = ExpressionEncoder[Int]()
+  implicit private def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+    ExpressionEncoder[T]()
+  implicit private def intEncoder: ExpressionEncoder[Int] = ExpressionEncoder[Int]()
 
   test("back to back serialization") {
-    val input = LocalRelation('obj.obj(classOf[(Int, Int)]))
+    val input = LocalRelation($"obj".obj(classOf[(Int, Int)]))
     val plan = input.serialize[(Int, Int)].deserialize[(Int, Int)].analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select('obj.as("obj")).analyze
+    val expected = input.select($"obj".as("obj")).analyze
     comparePlans(optimized, expected)
   }
 
   test("back to back serialization with object change") {
-    val input = LocalRelation('obj.obj(classOf[OtherTuple]))
+    val input = LocalRelation($"obj".obj(classOf[OtherTuple]))
     val plan = input.serialize[OtherTuple].deserialize[(Int, Int)].analyze
     val optimized = Optimize.execute(plan)
     comparePlans(optimized, plan)
   }
 
   test("back to back serialization in AppendColumns") {
-    val input = LocalRelation('obj.obj(classOf[(Int, Int)]))
+    val input = LocalRelation($"obj".obj(classOf[(Int, Int)]))
     val func = (item: (Int, Int)) => item._1
     val plan = AppendColumns(func, input.serialize[(Int, Int)]).analyze
 
@@ -70,7 +71,7 @@ class EliminateSerializationSuite extends PlanTest {
   }
 
   test("back to back serialization in AppendColumns with object change") {
-    val input = LocalRelation('obj.obj(classOf[OtherTuple]))
+    val input = LocalRelation($"obj".obj(classOf[OtherTuple]))
     val func = (item: (Int, Int)) => item._1
     val plan = AppendColumns(func, input.serialize[OtherTuple]).analyze
 

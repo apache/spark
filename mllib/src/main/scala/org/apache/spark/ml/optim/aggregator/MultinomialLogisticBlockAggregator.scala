@@ -91,6 +91,8 @@ private[ml] class MultinomialLogisticBlockAggregator(
     null
   }
 
+  @transient private var buffer: Array[Double] = _
+
   /**
    * Add a new training instance block to this BinaryLogisticBlockAggregator, and update the loss
    * and gradient of the objective function.
@@ -108,9 +110,12 @@ private[ml] class MultinomialLogisticBlockAggregator(
     if (block.weightIter.forall(_ == 0)) return this
     val size = block.size
 
-    // mat/arr here represents margins, shape: S X C
-    val mat = DenseMatrix.zeros(size, numClasses)
-    val arr = mat.values
+    if (buffer == null || buffer.length < size * numClasses) {
+      buffer = Array.ofDim[Double](size * numClasses)
+    }
+
+    // arr here represents margins, shape: S X C
+    val arr = buffer
     if (fitIntercept) {
       val offset = if (fitWithMean) marginOffset else intercept
       var j = 0
@@ -118,8 +123,10 @@ private[ml] class MultinomialLogisticBlockAggregator(
         if (offset(j) != 0) java.util.Arrays.fill(arr, j * size, (j + 1) * size, offset(j))
         j += 1
       }
+      BLAS.gemm(1.0, block.matrix, linear.transpose, 1.0, arr)
+    } else {
+      BLAS.gemm(1.0, block.matrix, linear.transpose, 0.0, arr)
     }
-    BLAS.gemm(1.0, block.matrix, linear.transpose, 1.0, mat)
 
     // in-place convert margins to multipliers
     // then, mat/arr represents multipliers
@@ -151,15 +158,39 @@ private[ml] class MultinomialLogisticBlockAggregator(
       case dm: DenseMatrix =>
         // gradientSumArray[0 : F X C] += mat.T X dm
         BLAS.nativeBLAS.dgemm("T", "T", numClasses, numFeatures, size, 1.0,
-          mat.values, size, dm.values, numFeatures, 1.0, gradientSumArray, numClasses)
+          arr, size, dm.values, numFeatures, 1.0, gradientSumArray, numClasses)
 
       case sm: SparseMatrix =>
-        // TODO: convert Coefficients to row major order to simplify BLAS operations?
-        // linearGradSumMat = sm.T X mat
-        // existing BLAS.gemm requires linearGradSumMat is NOT Transposed.
-        val linearGradSumMat = DenseMatrix.zeros(numFeatures, numClasses)
-        BLAS.gemm(1.0, sm.transpose, mat, 0.0, linearGradSumMat)
-        linearGradSumMat.foreachActive { (i, j, v) => gradientSumArray(i * numClasses + j) += v }
+        // dedicated sparse GEMM implementation for transposed C: C += A * B, where:
+        // A.isTransposed=false, B.isTransposed=false, C.isTransposed=true
+        // alpha = 1.0, beta = 1.0
+        val A = sm.transpose
+        val kA = A.numCols
+        val Avals = A.values
+        val ArowIndices = A.rowIndices
+        val AcolPtrs = A.colPtrs
+
+        val Bvals = arr
+        val nB = numClasses
+        val kB = size
+
+        var colCounterForB = 0
+        while (colCounterForB < nB) {
+          var colCounterForA = 0 // The column of A to multiply with the row of B
+          val Bstart = colCounterForB * kB
+          while (colCounterForA < kA) {
+            var i = AcolPtrs(colCounterForA)
+            val indEnd = AcolPtrs(colCounterForA + 1)
+            val Bval = Bvals(Bstart + colCounterForA)
+            while (i < indEnd) {
+              // different from BLAS.gemm, here gradientSumArray is NOT Transposed
+              gradientSumArray(colCounterForB + nB * ArowIndices(i)) += Avals(i) * Bval
+              i += 1
+            }
+            colCounterForA += 1
+          }
+          colCounterForB += 1
+        }
     }
 
     if (fitIntercept) {

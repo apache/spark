@@ -47,15 +47,19 @@ private[spark] class WorkerWatcher(
   private[deploy] var isShutDown = false
 
   // Lets filter events only from the worker's rpc system
-  private val expectedAddress = RpcAddress.fromURIString(workerUrl)
+  private val expectedAddress = RpcAddress.fromUrlString(workerUrl)
   private def isWorker(address: RpcAddress) = expectedAddress == address
 
   private def exitNonZero() =
     if (isTesting) {
       isShutDown = true
     } else if (isChildProcessStopping.compareAndSet(false, true)) {
-      // SPARK-35714: avoid the duplicate call of `System.exit` to avoid the dead lock
-      System.exit(-1)
+      // SPARK-35714: avoid the duplicate call of `System.exit` to avoid the dead lock.
+      // Same as SPARK-14180, we should run `System.exit` in a separate thread to avoid
+      // dead lock since `System.exit` will trigger the shutdown hook of `executor.stop`.
+      new Thread("WorkerWatcher-exit-executor") {
+        override def run(): Unit = System.exit(-1)
+      }.start()
     }
 
   override def receive: PartialFunction[Any, Unit] = {

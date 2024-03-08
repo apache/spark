@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.net.URI
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit._
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -28,14 +28,16 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxFiles, SupportsAdmissionControl, SupportsTriggerAvailableNow}
+import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxBytes, ReadMaxFiles, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -69,12 +71,15 @@ class FileStreamSource(
   private val sourceCleaner: Option[FileStreamSourceCleaner] = FileStreamSourceCleaner(
     fs, qualifiedBasePath, sourceOptions, hadoopConf)
 
-  private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {
-    if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
-      Map("basePath" -> path)
-    } else {
-      Map()
-    }}
+  private val optionsForInnerDataSource = sourceOptions.optionMapWithoutPath ++ {
+    val pathOption =
+      if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
+        Map("basePath" -> path)
+      } else {
+        Map()
+      }
+    pathOption ++ Map(DataSource.GLOB_PATHS_KEY -> "false")
+  }
 
   private val metadataLog =
     new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath)
@@ -82,6 +87,9 @@ class FileStreamSource(
 
   /** Maximum number of new files to be considered in each batch */
   private val maxFilesPerBatch = sourceOptions.maxFilesPerTrigger
+
+  /** Maximum number of new bytes to be considered in each batch */
+  private val maxBytesPerBatch = sourceOptions.maxBytesPerTrigger
 
   private val fileSortOrder = if (sourceOptions.latestFirst) {
       logWarning(
@@ -92,7 +100,8 @@ class FileStreamSource(
       implicitly[Ordering[Long]]
     }
 
-  private val maxFileAgeMs: Long = if (sourceOptions.latestFirst && maxFilesPerBatch.isDefined) {
+  private val maxFileAgeMs: Long = if (sourceOptions.latestFirst &&
+      (maxFilesPerBatch.isDefined || maxBytesPerBatch.isDefined)) {
     Long.MaxValue
   } else {
     sourceOptions.maxFileAgeMs
@@ -109,16 +118,42 @@ class FileStreamSource(
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
 
-  private var allFilesForTriggerAvailableNow: Seq[(String, Long)] = _
+  private var allFilesForTriggerAvailableNow: Seq[NewFileEntry] = _
 
   metadataLog.restore().foreach { entry =>
-    seenFiles.add(entry.path, entry.timestamp)
+    seenFiles.add(entry.sparkPath, entry.timestamp)
   }
   seenFiles.purge()
 
-  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAgeMs = $maxFileAgeMs")
+  logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, " +
+    s"maxBytesPerBatch = $maxBytesPerBatch, maxFileAgeMs = $maxFileAgeMs")
 
-  private var unreadFiles: Seq[(String, Long)] = _
+  private var unreadFiles: Seq[NewFileEntry] = _
+
+  /**
+   * Split files into a selected/unselected pair according to a total size threshold.
+   * Always puts the 1st element in a left split and keep adding it to a left split
+   * until reaches a specified threshold or [[Long.MaxValue]].
+   */
+  private def takeFilesUntilMax(files: Seq[NewFileEntry], maxSize: Long)
+    : (FilesSplit, FilesSplit) = {
+    var lSize = BigInt(0)
+    var rSize = BigInt(0)
+    val lFiles = ArrayBuffer[NewFileEntry]()
+    val rFiles = ArrayBuffer[NewFileEntry]()
+    for (i <- files.indices) {
+      val file = files(i)
+      val newSize = lSize + file.size
+      if (i == 0 || rFiles.isEmpty && newSize <= Long.MaxValue && newSize <= maxSize) {
+        lSize += file.size
+        lFiles += file
+      } else {
+        rSize += file.size
+        rFiles += file
+      }
+    }
+    (FilesSplit(lFiles.toSeq, lSize), FilesSplit(rFiles.toSeq, rSize))
+  }
 
   /**
    * Returns the maximum offset that can be retrieved from the source.
@@ -139,7 +174,7 @@ class FileStreamSource(
         fetchAllFiles()
       }
       allFiles.filter {
-        case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
+        case NewFileEntry(path, _, timestamp) => seenFiles.isNewFile(path, timestamp)
       }
     }
 
@@ -148,7 +183,7 @@ class FileStreamSource(
       case files: ReadMaxFiles if !sourceOptions.latestFirst =>
         // we can cache and reuse remaining fetched list of files in further batches
         val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
-        if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_FILES_RATIO) {
+        if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_INPUT_RATIO) {
           // Discard unselected files if the number of files are smaller than threshold.
           // This is to avoid the case when the next batch would have too few files to read
           // whereas there're new files available.
@@ -162,6 +197,25 @@ class FileStreamSource(
         // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
         (newFiles.take(files.maxFiles()), null)
 
+      case files: ReadMaxBytes if !sourceOptions.latestFirst =>
+        // we can cache and reuse remaining fetched list of files in further batches
+        val (FilesSplit(bFiles, _), FilesSplit(usFiles, rSize)) =
+          takeFilesUntilMax(newFiles, files.maxBytes())
+        if (rSize.toDouble < (files.maxBytes() * DISCARD_UNSEEN_INPUT_RATIO)) {
+          // Discard unselected files if the total size of files is smaller than threshold.
+          // This is to avoid the case when the next batch would have too small of a size of
+          // files to read whereas there're new files available.
+          logTrace(s"Discarding ${usFiles.length} unread files as it's smaller than threshold.")
+          (bFiles, null)
+        } else {
+          (bFiles, usFiles)
+        }
+
+      case files: ReadMaxBytes =>
+        val (FilesSplit(bFiles, _), _) = takeFilesUntilMax(newFiles, files.maxBytes())
+        // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
+        (bFiles, null)
+
       case _: ReadAllAvailable => (newFiles, null)
     }
 
@@ -174,9 +228,9 @@ class FileStreamSource(
       logTrace(s"No unread file is available for further batches.")
     }
 
-    batchFiles.foreach { file =>
-      seenFiles.add(file._1, file._2)
-      logDebug(s"New file: $file")
+    batchFiles.foreach { case NewFileEntry(p, _, timestamp) =>
+      seenFiles.add(p, timestamp)
+      logDebug(s"New file: $p")
     }
     val numPurged = seenFiles.purge()
 
@@ -192,8 +246,8 @@ class FileStreamSource(
     if (batchFiles.nonEmpty) {
       metadataLogCurrentOffset += 1
 
-      val fileEntries = batchFiles.map { case (p, timestamp) =>
-        FileEntry(path = p, timestamp = timestamp, batchId = metadataLogCurrentOffset)
+      val fileEntries = batchFiles.map { case NewFileEntry(p, _, timestamp) =>
+        FileEntry(path = p.urlEncoded, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray
       if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
         logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
@@ -211,7 +265,9 @@ class FileStreamSource(
   }
 
   override def getDefaultReadLimit: ReadLimit = {
-    maxFilesPerBatch.map(ReadLimit.maxFiles).getOrElse(super.getDefaultReadLimit)
+    maxFilesPerBatch.map(ReadLimit.maxFiles).getOrElse(
+      maxBytesPerBatch.map(ReadLimit.maxBytes).getOrElse(super.getDefaultReadLimit)
+    )
   }
 
   /**
@@ -239,11 +295,11 @@ class FileStreamSource(
     val newDataSource =
       DataSource(
         sparkSession,
-        paths = files.map(f => new Path(new URI(f.path)).toString),
+        paths = files.map(_.sparkPath.toPath.toString).toImmutableArraySeq,
         userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         className = fileFormatClassName,
-        options = optionsWithPartitionBasePath)
+        options = optionsForInnerDataSource)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
       checkFilesExist = false), isStreaming = true))
   }
@@ -286,7 +342,7 @@ class FileStreamSource(
   /**
    * Returns a list of files found, sorted by their timestamp.
    */
-  private def fetchAllFiles(): Seq[(String, Long)] = {
+  private def fetchAllFiles(): Seq[NewFileEntry] = {
     val startTime = System.nanoTime
 
     var allFiles: Seq[FileStatus] = null
@@ -318,7 +374,7 @@ class FileStreamSource(
     }
 
     val files = allFiles.sortBy(_.getModificationTime)(fileSortOrder).map { status =>
-      (status.getPath.toUri.toString, status.getModificationTime)
+      NewFileEntry(SparkPath.fromFileStatus(status), status.getLen, status.getModificationTime)
     }
     val endTime = System.nanoTime
     val listingTimeMs = NANOSECONDS.toMillis(endTime - startTime)
@@ -365,10 +421,20 @@ object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
 
-  val DISCARD_UNSEEN_FILES_RATIO = 0.2
+  val DISCARD_UNSEEN_INPUT_RATIO = 0.2
   val MAX_CACHED_UNSEEN_FILES = 10000
 
-  case class FileEntry(path: String, timestamp: Timestamp, batchId: Long) extends Serializable
+  case class FileEntry(
+      path: String, // uri-encoded path string
+      timestamp: Timestamp,
+      batchId: Long) extends Serializable {
+    def sparkPath: SparkPath = SparkPath.fromUrlString(path)
+  }
+
+  /** Newly fetched files metadata holder. */
+  private case class NewFileEntry(path: SparkPath, size: Long, timestamp: Long)
+
+  private case class FilesSplit(files: Seq[NewFileEntry], size: BigInt)
 
   /**
    * A custom hash map used to track the list of files seen. This map is not thread-safe.
@@ -388,12 +454,12 @@ object FileStreamSource {
     /** Timestamp for the last purge operation. */
     private var lastPurgeTimestamp: Timestamp = 0L
 
-    @inline private def stripPathIfNecessary(path: String) = {
-      if (fileNameOnly) new Path(new URI(path)).getName else path
+    @inline private def stripPathIfNecessary(path: SparkPath) = {
+      if (fileNameOnly) path.toPath.getName else path.urlEncoded
     }
 
     /** Add a new file to the map. */
-    def add(path: String, timestamp: Timestamp): Unit = {
+    def add(path: SparkPath, timestamp: Timestamp): Unit = {
       map.put(stripPathIfNecessary(path), timestamp)
       if (timestamp > latestTimestamp) {
         latestTimestamp = timestamp
@@ -404,7 +470,7 @@ object FileStreamSource {
      * Returns true if we should consider this file a new file. The file is only considered "new"
      * if it is new enough that we are still tracking, and we have not seen it before.
      */
-    def isNewFile(path: String, timestamp: Timestamp): Boolean = {
+    def isNewFile(path: SparkPath, timestamp: Timestamp): Boolean = {
       // Note that we are testing against lastPurgeTimestamp here so we'd never miss a file that
       // is older than (latestTimestamp - maxAgeMs) but has not been purged yet.
       timestamp >= lastPurgeTimestamp && !map.containsKey(stripPathIfNecessary(path))
@@ -551,7 +617,7 @@ object FileStreamSource {
     }
 
     override protected def cleanTask(entry: FileEntry): Unit = {
-      val curPath = new Path(new URI(entry.path))
+      val curPath = entry.sparkPath.toPath
       val newPath = new Path(baseArchivePath.toString.stripSuffix("/") + curPath.toUri.getPath)
 
       try {
@@ -575,7 +641,7 @@ object FileStreamSource {
     extends FileStreamSourceCleaner with Logging {
 
     override protected def cleanTask(entry: FileEntry): Unit = {
-      val curPath = new Path(new URI(entry.path))
+      val curPath = entry.sparkPath.toPath
       try {
         logDebug(s"Removing completed file $curPath")
 

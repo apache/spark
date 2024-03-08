@@ -24,12 +24,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 class SerializationSuite extends SparkFunSuite with SharedSparkSession {
 
   test("[SPARK-5235] SQLContext should be serializable") {
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession.builder().getOrCreate()
     new JavaSerializer(new SparkConf()).newInstance().serialize(spark.sqlContext)
   }
 
   test("[SPARK-26409] SQLConf should be serializable") {
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession.builder().getOrCreate()
     new JavaSerializer(new SparkConf()).newInstance().serialize(spark.sessionState.conf)
   }
 }

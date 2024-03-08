@@ -20,6 +20,7 @@ package org.apache.hive.service.cli;
 import java.util.Collections;
 
 import org.apache.hive.service.auth.HiveAuthFactory;
+import org.apache.hive.service.rpc.thrift.TRowSet;
 
 
 /**
@@ -35,7 +36,7 @@ public abstract class CLIServiceClient implements ICLIService {
   }
 
   @Override
-  public RowSet fetchResults(OperationHandle opHandle) throws HiveSQLException {
+  public TRowSet fetchResults(OperationHandle opHandle) throws HiveSQLException {
     // TODO: provide STATIC default value
     return fetchResults(opHandle, FetchOrientation.FETCH_NEXT, DEFAULT_MAX_ROWS, FetchType.QUERY_OUTPUT);
   }

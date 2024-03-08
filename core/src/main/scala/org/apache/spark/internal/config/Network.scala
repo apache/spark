@@ -92,16 +92,4 @@ private[spark] object Network {
       .version("1.6.0")
       .intConf
       .createOptional
-
-  private[spark] val RPC_NUM_RETRIES =
-    ConfigBuilder("spark.rpc.numRetries")
-      .version("1.4.0")
-      .intConf
-      .createWithDefault(3)
-
-  private[spark] val RPC_RETRY_WAIT =
-    ConfigBuilder("spark.rpc.retry.wait")
-      .version("1.4.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("3s")
 }

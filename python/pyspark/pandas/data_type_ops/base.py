@@ -17,20 +17,21 @@
 
 import numbers
 from abc import ABCMeta
-from itertools import chain
 from typing import Any, Optional, Union
+from itertools import chain
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     BooleanType,
     DataType,
     DateType,
+    DayTimeIntervalType,
     DecimalType,
     FractionalType,
     IntegralType,
@@ -44,7 +45,6 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -52,6 +52,9 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
+
+# For supporting Spark Connect
+from pyspark.sql.utils import get_column_class
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -115,21 +118,24 @@ def _as_categorical_type(
     assert isinstance(dtype, CategoricalDtype)
     if dtype.categories is None:
         codes, uniques = index_ops.factorize()
+        categories = uniques.astype(index_ops.dtype)
         return codes._with_new_scol(
             codes.spark.column,
-            field=codes._internal.data_fields[0].copy(dtype=CategoricalDtype(categories=uniques)),
+            field=codes._internal.data_fields[0].copy(
+                dtype=CategoricalDtype(categories=categories)
+            ),
         )
     else:
         categories = dtype.categories
         if len(categories) == 0:
-            scol = SF.lit(-1)
+            scol = F.lit(-1)
         else:
             kvs = chain(
-                *[(SF.lit(category), SF.lit(code)) for code, category in enumerate(categories)]
+                *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
+            scol = F.coalesce(map_scol[index_ops.spark.column], F.lit(-1))
 
-            scol = F.coalesce(map_scol[index_ops.spark.column], SF.lit(-1))
         return index_ops._with_new_scol(
             scol.cast(spark_type),
             field=index_ops._internal.data_fields[0].copy(
@@ -138,13 +144,16 @@ def _as_categorical_type(
         )
 
 
-def _as_bool_type(index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+def _as_bool_type(index_ops: IndexOpsLike, dtype: Dtype) -> IndexOpsLike:
     """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
     spark_type = BooleanType()
     if isinstance(dtype, extension_dtypes):
         scol = index_ops.spark.column.cast(spark_type)
     else:
-        scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
+        null_value = (
+            F.lit(True) if isinstance(index_ops.spark.data_type, DecimalType) else F.lit(False)
+        )
+        scol = F.when(index_ops.spark.column.isNull(), null_value).otherwise(
             index_ops.spark.column.cast(spark_type)
         )
     return index_ops._with_new_scol(
@@ -153,7 +162,7 @@ def _as_bool_type(index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> In
 
 
 def _as_string_type(
-    index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
+    index_ops: IndexOpsLike, dtype: Dtype, *, null_str: str = str(None)
 ) -> IndexOpsLike:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
     representing null Spark column. Note that `null_str` is for non-extension dtypes only.
@@ -169,9 +178,7 @@ def _as_string_type(
     )
 
 
-def _as_other_type(
-    index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], spark_type: DataType
-) -> IndexOpsLike:
+def _as_other_type(index_ops: IndexOpsLike, dtype: Dtype, spark_type: DataType) -> IndexOpsLike:
     """Cast `index_ops` to a `dtype` (`spark_type`) that needs no pre-processing.
 
     Destination types that need pre-processing: CategoricalDtype, BooleanType, and StringType.
@@ -215,6 +222,15 @@ def _is_boolean_type(right: Any) -> bool:
     )
 
 
+def _is_extension_dtypes(object: Any) -> bool:
+    """
+    Check whether the type of given object is extension dtype or not.
+    Extention dtype includes Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype, BooleanDtype,
+    StringDtype, Float32Dtype and Float64Dtype.
+    """
+    return isinstance(getattr(object, "dtype", None), extension_dtypes)
+
+
 class DataTypeOps(object, metaclass=ABCMeta):
     """The base class for binary operations of pandas-on-Spark objects (of different data types)."""
 
@@ -234,6 +250,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             IntegralOps,
         )
         from pyspark.pandas.data_type_ops.string_ops import StringOps, StringExtensionOps
+        from pyspark.pandas.data_type_ops.timedelta_ops import TimedeltaOps
         from pyspark.pandas.data_type_ops.udt_ops import UDTOps
 
         if isinstance(dtype, CategoricalDtype):
@@ -271,6 +288,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
             return object.__new__(DatetimeNTZOps)
         elif isinstance(spark_type, DateType):
             return object.__new__(DateOps)
+        elif isinstance(spark_type, DayTimeIntervalType):
+            return object.__new__(TimedeltaOps)
         elif isinstance(spark_type, BinaryType):
             return object.__new__(BinaryOps)
         elif isinstance(spark_type, ArrayType):
@@ -376,17 +395,105 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
+        if isinstance(right, (list, tuple)):
+            from pyspark.pandas.series import first_series, scol_for
+            from pyspark.pandas.frame import DataFrame
+            from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, InternalField
 
-        _sanitize_list_like(right)
+            if len(left) != len(right):
+                raise ValueError("Lengths must be equal")
 
-        return column_op(Column.__eq__)(left, right)
+            sdf = left._internal.spark_frame
+            structed_scol = F.struct(
+                sdf[NATURAL_ORDER_COLUMN_NAME],
+                *left._internal.index_spark_columns,
+                left.spark.column,
+            )
+            # The size of the list is expected to be small.
+            collected_structed_scol = F.collect_list(structed_scol)
+            # Sort the array by NATURAL_ORDER_COLUMN so that we can guarantee the order.
+            collected_structed_scol = F.array_sort(collected_structed_scol)
+            right_values_scol = F.array(*(F.lit(x) for x in right))
+            index_scol_names = left._internal.index_spark_column_names
+            scol_name = left._internal.spark_column_name_for(left._internal.column_labels[0])
+            # Compare the values of left and right by using zip_with function.
+            cond = F.zip_with(
+                collected_structed_scol,
+                right_values_scol,
+                lambda x, y: F.struct(
+                    *[
+                        x[index_scol_name].alias(index_scol_name)
+                        for index_scol_name in index_scol_names
+                    ],
+                    F.when(x[scol_name].isNull() | y.isNull(), False)
+                    .otherwise(
+                        x[scol_name] == y,
+                    )
+                    .alias(scol_name),
+                ),
+            ).alias(scol_name)
+            # 1. `sdf_new` here looks like the below (the first field of each set is Index):
+            # +----------------------------------------------------------+
+            # |0                                                         |
+            # +----------------------------------------------------------+
+            # |[{0, false}, {1, true}, {2, false}, {3, true}, {4, false}]|
+            # +----------------------------------------------------------+
+            sdf_new = sdf.select(cond)
+            # 2. `sdf_new` after the explode looks like the below:
+            # +----------+
+            # |       col|
+            # +----------+
+            # |{0, false}|
+            # | {1, true}|
+            # |{2, false}|
+            # | {3, true}|
+            # |{4, false}|
+            # +----------+
+            sdf_new = sdf_new.select(F.explode(scol_name))
+            # 3. Here, the final `sdf_new` looks like the below:
+            # +-----------------+-----+
+            # |__index_level_0__|    0|
+            # +-----------------+-----+
+            # |                0|false|
+            # |                1| true|
+            # |                2|false|
+            # |                3| true|
+            # |                4|false|
+            # +-----------------+-----+
+            sdf_new = sdf_new.select("col.*")
+
+            index_spark_columns = [
+                scol_for(sdf_new, index_scol_name) for index_scol_name in index_scol_names
+            ]
+            data_spark_columns = [scol_for(sdf_new, scol_name)]
+
+            internal = left._internal.copy(
+                spark_frame=sdf_new,
+                index_spark_columns=index_spark_columns,
+                data_spark_columns=data_spark_columns,
+                index_fields=[
+                    InternalField.from_struct_field(index_field)
+                    for index_field in sdf_new.select(index_spark_columns).schema.fields
+                ],
+                data_fields=[
+                    InternalField.from_struct_field(
+                        sdf_new.select(data_spark_columns).schema.fields[0]
+                    )
+                ],
+            )
+            return first_series(DataFrame(internal))
+        else:
+            from pyspark.pandas.base import column_op
+
+            Column = get_column_class()
+            return column_op(Column.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
 
+        Column = get_column_class()
         return column_op(Column.__ne__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:

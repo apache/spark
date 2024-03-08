@@ -19,9 +19,10 @@ package org.apache.spark.ui.storage
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{ExecutorSummary, RDDDataDistribution, RDDPartitionInfo}
@@ -160,7 +161,7 @@ private[ui] case class BlockTableRowData(
     executors: String)
 
 private[ui] class BlockDataSource(
-    rddPartitions: Seq[RDDPartitionInfo],
+    rddPartitions: collection.Seq[RDDPartitionInfo],
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
@@ -170,7 +171,7 @@ private[ui] class BlockDataSource(
 
   override def dataSize: Int = data.size
 
-  override def sliceData(from: Int, to: Int): Seq[BlockTableRowData] = {
+  override def sliceData(from: Int, to: Int): collection.Seq[BlockTableRowData] = {
     data.slice(from, to)
   }
 
@@ -210,7 +211,7 @@ private[ui] class BlockPagedTable(
     request: HttpServletRequest,
     rddTag: String,
     basePath: String,
-    rddPartitions: Seq[RDDPartitionInfo],
+    rddPartitions: collection.Seq[RDDPartitionInfo],
     executorSummaries: Seq[ExecutorSummary]) extends PagedTable[BlockTableRowData] {
 
   private val (sortColumn, desc, pageSize) = getTableParameters(request, rddTag, "Block Name")

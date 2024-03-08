@@ -85,10 +85,11 @@ trait FileScanSuiteBase extends SharedSparkSession {
     val options = new CaseInsensitiveStringMap(ImmutableMap.copyOf(optionsMap))
     val optionsNotEqual =
       new CaseInsensitiveStringMap(ImmutableMap.copyOf(ImmutableMap.of("key2", "value2")))
-    val partitionFilters = Seq(And(IsNull('data.int), LessThan('data.int, 0)))
-    val partitionFiltersNotEqual = Seq(And(IsNull('data.int), LessThan('data.int, 1)))
-    val dataFilters = Seq(And(IsNull('data.int), LessThan('data.int, 0)))
-    val dataFiltersNotEqual = Seq(And(IsNull('data.int), LessThan('data.int, 1)))
+    val partitionFilters = Seq(And(IsNull($"data".int), LessThan($"data".int, 0)))
+    val partitionFiltersNotEqual = Seq(And(IsNull($"data".int),
+      LessThan($"data".int, 1)))
+    val dataFilters = Seq(And(IsNull($"data".int), LessThan($"data".int, 0)))
+    val dataFiltersNotEqual = Seq(And(IsNull($"data".int), LessThan($"data".int, 1)))
 
     scanBuilders.foreach { case (name, scanBuilder, exclusions) =>
       test(s"SPARK-33482: Test $name equals") {
@@ -354,11 +355,11 @@ class FileScanSuite extends FileScanSuiteBase {
   val scanBuilders = Seq[(String, ScanBuilder, Seq[String])](
     ("ParquetScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
-        ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, o, pf, df),
+        ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, o, None, pf, df),
       Seq.empty),
     ("OrcScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
-        OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, f, pf, df),
+        OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, None, f, pf, df),
       Seq.empty),
     ("CSVScan",
       (s, fi, ds, rds, rps, f, o, pf, df) => CSVScan(s, fi, ds, rds, rps, o, f, pf, df),

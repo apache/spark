@@ -16,8 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.Breaks._
 import scala.util.control.NonFatal
 
@@ -105,7 +105,8 @@ private[spark] class Client(
     val configMapName = KubernetesClientUtils.configMapNameDriver
     val confFilesMap = KubernetesClientUtils.buildSparkConfDirFilesMap(configMapName,
       conf.sparkConf, resolvedDriverSpec.systemProperties)
-    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap)
+    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap +
+        (KUBERNETES_NAMESPACE.key -> conf.namespace))
 
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
@@ -133,45 +134,83 @@ private[spark] class Client(
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
+    // setup resources before pod creation
+    val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
+    try {
+      kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
+    } catch {
+      case NonFatal(e) =>
+        logError("Please check \"kubectl auth can-i create [resource]\" first." +
+          " It should be yes. And please also check your feature step implementation.")
+        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        throw e
+    }
+
     var watch: Watch = null
     var createdDriverPod: Pod = null
     try {
-      createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
+      createdDriverPod =
+        kubernetesClient.pods().inNamespace(conf.namespace).resource(resolvedDriverPod).create()
     } catch {
       case NonFatal(e) =>
+        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
         logError("Please check \"kubectl auth can-i create pod\" first. It should be yes.")
         throw e
     }
+
+    // Refresh all pre-resources' owner references
+    try {
+      addOwnerReference(createdDriverPod, preKubernetesResources)
+      kubernetesClient.resourceList(preKubernetesResources: _*).forceConflicts().serverSideApply()
+    } catch {
+      case NonFatal(e) =>
+        kubernetesClient.pods().resource(createdDriverPod).delete()
+        kubernetesClient.resourceList(preKubernetesResources: _*).delete()
+        throw e
+    }
+
+    // setup resources after pod creation, and refresh all resources' owner references
     try {
       val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
       addOwnerReference(createdDriverPod, otherKubernetesResources)
-      kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
+      kubernetesClient.resourceList(otherKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.pods().delete(createdDriverPod)
+        kubernetesClient.pods().resource(createdDriverPod).delete()
         throw e
     }
-    val sId = Seq(conf.namespace, driverPodName).mkString(":")
-    breakable {
-      while (true) {
-        val podWithName = kubernetesClient
-          .pods()
-          .withName(driverPodName)
-        // Reset resource to old before we start the watch, this is important for race conditions
-        watcher.reset()
-        watch = podWithName.watch(watcher)
 
-        // Send the latest pod state we know to the watcher to make sure we didn't miss anything
-        watcher.eventReceived(Action.MODIFIED, podWithName.get())
+    val sId = Client.submissionId(conf.namespace, driverPodName)
+    if (conf.get(WAIT_FOR_APP_COMPLETION)) {
+      breakable {
+        while (true) {
+          val podWithName = kubernetesClient
+            .pods()
+            .inNamespace(conf.namespace)
+            .withName(driverPodName)
+          // Reset resource to old before we start the watch, this is important for race conditions
+          watcher.reset()
+          watch = podWithName.watch(watcher)
 
-        // Break the while loop if the pod is completed or we don't want to wait
-        if(watcher.watchOrStop(sId)) {
-          watch.close()
-          break
+          // Send the latest pod state we know to the watcher to make sure we didn't miss anything
+          watcher.eventReceived(Action.MODIFIED, podWithName.get())
+
+          // Break the while loop if the pod is completed or we don't want to wait
+          if (watcher.watchOrStop(sId)) {
+            watch.close()
+            break()
+          }
         }
       }
+    } else {
+      logInfo(s"Deployed Spark application ${conf.appName} with application ID ${conf.appId} " +
+        s"and submission ID $sId into Kubernetes")
     }
   }
+}
+
+private[spark] object Client {
+  def submissionId(namespace: String, driverPodName: String): String = s"$namespace:$driverPodName"
 }
 
 /**
@@ -208,7 +247,6 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX,
       SparkKubernetesClientFactory.ClientType.Submission,
       sparkConf,
-      None,
       None)) { kubernetesClient =>
         val client = new Client(
           kubernetesConf,

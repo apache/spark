@@ -16,7 +16,6 @@
 #
 
 import base64
-from distutils.version import LooseVersion
 from io import BytesIO
 import unittest
 
@@ -40,19 +39,17 @@ if have_matplotlib:
 
 
 @unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
-class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
+class SeriesPlotMatplotlibTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        if LooseVersion(pd.__version__) >= LooseVersion("0.25"):
-            pd.set_option("plotting.backend", "matplotlib")
+        pd.set_option("plotting.backend", "matplotlib")
         set_option("plotting.backend", "matplotlib")
         set_option("plotting.max_rows", 1000)
 
     @classmethod
     def tearDownClass(cls):
-        if LooseVersion(pd.__version__) >= LooseVersion("0.25"):
-            pd.reset_option("plotting.backend")
+        pd.reset_option("plotting.backend")
         reset_option("plotting.backend")
         reset_option("plotting.max_rows")
         super().tearDownClass()
@@ -73,7 +70,7 @@ class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
 
     @property
     def pdf2(self):
-        return self.psdf2.to_pandas()
+        return self.psdf2._to_pandas()
 
     @staticmethod
     def plot_to_base64(ax):
@@ -396,11 +393,15 @@ class SeriesPlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         self.assertEqual(bin1, bin2)
 
 
+class SeriesPlotMatplotlibTests(SeriesPlotMatplotlibTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.plot.test_series_plot_matplotlib import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.streaming;
 
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeTimeout$;
 import org.apache.spark.sql.catalyst.plans.logical.NoTimeout$;
 import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
-import org.junit.Test;
 
 public class JavaGroupStateTimeoutSuite {
 
   @Test
   public void testTimeouts() {
-    assert (GroupStateTimeout.ProcessingTimeTimeout() == ProcessingTimeTimeout$.MODULE$);
-    assert (GroupStateTimeout.EventTimeTimeout() == EventTimeTimeout$.MODULE$);
-    assert (GroupStateTimeout.NoTimeout() == NoTimeout$.MODULE$);
+    Assertions
+      .assertSame(GroupStateTimeout.ProcessingTimeTimeout(), ProcessingTimeTimeout$.MODULE$);
+    Assertions.assertSame(GroupStateTimeout.EventTimeTimeout(), EventTimeTimeout$.MODULE$);
+    Assertions.assertSame(GroupStateTimeout.NoTimeout(), NoTimeout$.MODULE$);
   }
 }

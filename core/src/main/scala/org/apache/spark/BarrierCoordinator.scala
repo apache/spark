@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import java.util.{Timer, TimerTask}
-import java.util.concurrent.ConcurrentHashMap
+import java.util.TimerTask
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.function.Consumer
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
@@ -26,6 +26,7 @@ import scala.collection.mutable.{ArrayBuffer, HashSet}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerStageCompleted}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * For each barrier stage attempt, only at most one barrier() call can be active at any time, thus
@@ -51,13 +52,14 @@ private[spark] class BarrierCoordinator(
 
   // TODO SPARK-25030 Create a Timer() in the mainClass submitted to SparkSubmit makes it unable to
   // fetch result, we shall fix the issue.
-  private lazy val timer = new Timer("BarrierCoordinator barrier epoch increment timer")
+  private lazy val timer = ThreadUtils.newSingleThreadScheduledExecutor(
+    "BarrierCoordinator barrier epoch increment timer")
 
   // Listen to StageCompleted event, clear corresponding ContextBarrierState.
   private val listener = new SparkListener {
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
       val stageInfo = stageCompleted.stageInfo
-      val barrierId = ContextBarrierId(stageInfo.stageId, stageInfo.attemptNumber)
+      val barrierId = ContextBarrierId(stageInfo.stageId, stageInfo.attemptNumber())
       // Clear ContextBarrierState from a finished stage attempt.
       cleanupBarrierStage(barrierId)
     }
@@ -77,6 +79,7 @@ private[spark] class BarrierCoordinator(
       states.forEachValue(1, clearStateConsumer)
       states.clear()
       listenerBus.removeListener(listener)
+      ThreadUtils.shutdown(timer)
     } finally {
       super.onStop()
     }
@@ -168,7 +171,7 @@ private[spark] class BarrierCoordinator(
         // we may timeout for the sync.
         if (requesters.isEmpty) {
           initTimerTask(this)
-          timer.schedule(timerTask, timeoutInSecs * 1000)
+          timer.schedule(timerTask, timeoutInSecs, TimeUnit.SECONDS)
         }
         // Add the requester to array of RPCCallContexts pending for reply.
         requesters += requester
@@ -176,7 +179,7 @@ private[spark] class BarrierCoordinator(
         logInfo(s"Barrier sync epoch $barrierEpoch from $barrierId received update from Task " +
           s"$taskId, current progress: ${requesters.size}/$numTasks.")
         if (requesters.size == numTasks) {
-          requesters.foreach(_.reply(messages))
+          requesters.foreach(_.reply(messages.clone()))
           // Finished current barrier() call successfully, clean up ContextBarrierState and
           // increase the barrier epoch.
           logInfo(s"Barrier sync epoch $barrierEpoch from $barrierId received all updates from " +

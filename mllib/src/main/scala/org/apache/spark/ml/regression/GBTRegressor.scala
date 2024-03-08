@@ -27,11 +27,12 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils.extractInstances
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{Column, DataFrame, Dataset}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
@@ -165,12 +166,11 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   override protected def train(dataset: Dataset[_]): GBTRegressionModel = instrumented { instr =>
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
-
     val (trainDataset, validationDataset) = if (withValidation) {
-      (extractInstances(dataset.filter(not(col($(validationIndicatorCol))))),
-        extractInstances(dataset.filter(col($(validationIndicatorCol)))))
+      (extractInstances(this, dataset.filter(not(col($(validationIndicatorCol))))),
+        extractInstances(this, dataset.filter(col($(validationIndicatorCol)))))
     } else {
-      (extractInstances(dataset), null)
+      (extractInstances(this, dataset), null)
     }
 
     instr.logPipelineStage(this)
@@ -339,7 +339,7 @@ class GBTRegressionModel private[ml](
    */
   @Since("2.4.0")
   def evaluateEachIteration(dataset: Dataset[_], loss: String): Array[Double] = {
-    val data = extractInstances(dataset)
+    val data = extractInstances(this, dataset)
     GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights,
       convertToOldLossType(loss), OldAlgo.Regression)
   }

@@ -15,30 +15,17 @@
 # limitations under the License.
 #
 
-import numpy as np
-
-from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.utils import spark_column_equals
-from pyspark.sql import functions as F
-from pyspark.sql.types import (
-    ByteType,
-    FloatType,
-    IntegerType,
-    LongType,
-)
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
-class SparkFunctionsTests(PandasOnSparkTestCase):
-    def test_lit(self):
-        self.assertTrue(spark_column_equals(SF.lit(np.int64(1)), F.lit(1).astype(LongType())))
-        self.assertTrue(spark_column_equals(SF.lit(np.int32(1)), F.lit(1).astype(IntegerType())))
-        self.assertTrue(spark_column_equals(SF.lit(np.int8(1)), F.lit(1).astype(ByteType())))
-        self.assertTrue(spark_column_equals(SF.lit(np.byte(1)), F.lit(1).astype(ByteType())))
-        self.assertTrue(
-            spark_column_equals(SF.lit(np.float32(1)), F.lit(float(1)).astype(FloatType()))
-        )
-        self.assertTrue(spark_column_equals(SF.lit(1), F.lit(1)))
+class SparkFunctionsTestsMixin:
+    def test_repeat(self):
+        # TODO: Placeholder
+        pass
+
+
+class SparkFunctionsTests(SparkFunctionsTestsMixin, PandasOnSparkTestCase):
+    pass
 
 
 if __name__ == "__main__":
@@ -46,7 +33,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_spark_functions import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

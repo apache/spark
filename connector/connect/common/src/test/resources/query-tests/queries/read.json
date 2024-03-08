@@ -1,0 +1,16 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "read": {
+    "dataSource": {
+      "format": "csv",
+      "schema": "name STRING,age INT,job STRING",
+      "options": {
+        "header": "true",
+        "delimiter": ";"
+      },
+      "paths": ["../common/src/test/resources/query-tests/test-data/people.csv"]
+    }
+  }
+}

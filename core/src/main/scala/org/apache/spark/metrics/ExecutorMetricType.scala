@@ -19,8 +19,8 @@ package org.apache.spark.metrics
 import java.lang.management.{BufferPoolMXBean, ManagementFactory}
 import javax.management.ObjectName
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ProcfsMetricsGetter
@@ -109,10 +109,13 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     "MinorGCCount",
     "MinorGCTime",
     "MajorGCCount",
-    "MajorGCTime"
+    "MajorGCTime",
+    "TotalGCTime",
+    "ConcurrentGCCount",
+    "ConcurrentGCTime"
   )
 
-  /* We builtin some common GC collectors which categorized as young generation and old */
+  /* We builtin some common GC collectors */
   private[spark] val YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS = Seq(
     "Copy",
     "PS Scavenge",
@@ -127,6 +130,8 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     "G1 Old Generation"
   )
 
+  private[spark] val BUILTIN_CONCURRENT_GARBAGE_COLLECTOR = "G1 Concurrent GC"
+
   private lazy val youngGenerationGarbageCollector: Seq[String] = {
     SparkEnv.get.conf.get(config.EVENT_LOG_GC_METRICS_YOUNG_GENERATION_GARBAGE_COLLECTORS)
   }
@@ -136,14 +141,19 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   }
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
-    val gcMetrics = new Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
-    ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
+    val gcMetrics = new Array[Long](names.length)
+    val mxBeans = ManagementFactory.getGarbageCollectorMXBeans.asScala
+    gcMetrics(4) = mxBeans.map(_.getCollectionTime).sum
+    mxBeans.foreach { mxBean =>
       if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
         gcMetrics(0) = mxBean.getCollectionCount
         gcMetrics(1) = mxBean.getCollectionTime
       } else if (oldGenerationGarbageCollector.contains(mxBean.getName)) {
         gcMetrics(2) = mxBean.getCollectionCount
         gcMetrics(3) = mxBean.getCollectionTime
+      } else if (BUILTIN_CONCURRENT_GARBAGE_COLLECTOR.equals(mxBean.getName)) {
+        gcMetrics(5) = mxBean.getCollectionCount
+        gcMetrics(6) = mxBean.getCollectionTime
       } else if (!nonBuiltInCollectors.contains(mxBean.getName)) {
         nonBuiltInCollectors = mxBean.getName +: nonBuiltInCollectors
         // log it when first seen
@@ -205,7 +215,7 @@ private[spark] object ExecutorMetricType {
     var numberOfMetrics = 0
     val definedMetricsAndOffset = mutable.LinkedHashMap.empty[String, Int]
     metricGetters.foreach { m =>
-      (0 until m.names.length).foreach { idx =>
+      m.names.indices.foreach { idx =>
         definedMetricsAndOffset += (m.names(idx) -> (idx + numberOfMetrics))
       }
       numberOfMetrics += m.names.length

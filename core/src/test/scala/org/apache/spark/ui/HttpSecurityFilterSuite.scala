@@ -18,11 +18,11 @@
 package org.apache.spark.ui
 
 import java.util.UUID
-import javax.servlet.FilterChain
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import jakarta.servlet.FilterChain
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, times, verify, when}

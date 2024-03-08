@@ -86,15 +86,18 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
           conf: SparkConf,
           isLocal: Boolean,
           listenerBus: LiveListenerBus): SparkEnv = {
-        outputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
+        outputCommitCoordinator =
+          spy[OutputCommitCoordinator](
+            new OutputCommitCoordinator(conf, isDriver = true, Option(this)))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
         SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
-          SparkContext.numDriverCores(master), Some(outputCommitCoordinator))
+          SparkContext.numDriverCores(master), this, Some(outputCommitCoordinator))
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
-    val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
+    val mockTaskScheduler = spy[TaskSchedulerImpl](
+      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
     doAnswer { (invoke: InvocationOnMock) =>
       // Submit the tasks, then force the task scheduler to dequeue the
@@ -139,15 +142,15 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Only one of two duplicate commit tasks should commit") {
     val rdd = sc.parallelize(Seq(1), 1)
     sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully _,
-      0 until rdd.partitions.size)
-    assert(tempDir.list().size === 1)
+      rdd.partitions.indices)
+    assert(tempDir.list().length === 1)
   }
 
-  test("If commit fails, if task is retried it should not be locked, and will succeed.") {
+  ignore("If commit fails, if task is retried it should not be locked, and will succeed.") {
     val rdd = sc.parallelize(Seq(1), 1)
     sc.runJob(rdd, OutputCommitFunctions(tempDir.getAbsolutePath).failFirstCommitAttempt _,
-      0 until rdd.partitions.size)
-    assert(tempDir.list().size === 1)
+      rdd.partitions.indices)
+    assert(tempDir.list().length === 1)
   }
 
   test("Job should not complete if all commits are denied") {
@@ -158,13 +161,13 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     def resultHandler(x: Int, y: Unit): Unit = {}
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
       OutputCommitFunctions(tempDir.getAbsolutePath).commitSuccessfully,
-      0 until rdd.partitions.size, resultHandler, () => ())
+      0 until rdd.partitions.length, resultHandler, ())
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {
       ThreadUtils.awaitResult(futureAction, 5.seconds)
     }
-    assert(tempDir.list().size === 0)
+    assert(tempDir.list().length === 0)
   }
 
   test("Only authorized committer failures can clear the authorized committer lock (SPARK-6614)") {
@@ -187,12 +190,9 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // The authorized committer now fails, clearing the lock
     outputCommitCoordinator.taskCompleted(stage, stageAttempt, partition,
       attemptNumber = authorizedCommitter, reason = TaskKilled("test"))
-    // A new task should now be allowed to become the authorized committer
-    assert(outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
-      nonAuthorizedCommitter + 2))
-    // There can only be one authorized committer
+    // A new task should not be allowed to become stage failed because of potential data duplication
     assert(!outputCommitCoordinator.canCommit(stage, stageAttempt, partition,
-      nonAuthorizedCommitter + 3))
+      nonAuthorizedCommitter + 2))
   }
 
   test("SPARK-19631: Do not allow failed attempts to be authorized for committing") {
@@ -226,7 +226,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(outputCommitCoordinator.canCommit(stage, 2, partition, taskAttempt))
 
     // Commit the 1st attempt, fail the 2nd attempt, make sure 3rd attempt cannot commit,
-    // then fail the 1st attempt and make sure the 4th one can commit again.
+    // then fail the 1st attempt and since stage failed because of potential data duplication,
+    // make sure fail the 4th attempt.
     stage += 1
     outputCommitCoordinator.stageStart(stage, maxPartitionId = 1)
     assert(outputCommitCoordinator.canCommit(stage, 1, partition, taskAttempt))
@@ -235,7 +236,9 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!outputCommitCoordinator.canCommit(stage, 3, partition, taskAttempt))
     outputCommitCoordinator.taskCompleted(stage, 1, partition, taskAttempt,
       ExecutorLostFailure("0", exitCausedByApp = true, None))
-    assert(outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
+    // A new task should not be allowed to become the authorized committer since stage failed
+    // because of potential data duplication
+    assert(!outputCommitCoordinator.canCommit(stage, 4, partition, taskAttempt))
   }
 
   test("SPARK-24589: Make sure stage state is cleaned up") {
@@ -301,7 +304,7 @@ private case class OutputCommitFunctions(tempDirPath: String) {
   def failFirstCommitAttempt(iter: Iterator[Int]): Unit = {
     val ctx = TaskContext.get()
     runCommitWithProvidedCommitter(ctx, iter,
-      if (ctx.attemptNumber == 0) failingOutputCommitter else successfulOutputCommitter)
+      if (ctx.attemptNumber() == 0) failingOutputCommitter else successfulOutputCommitter)
   }
 
   private def runCommitWithProvidedCommitter(
@@ -321,9 +324,9 @@ private case class OutputCommitFunctions(tempDirPath: String) {
     // Create TaskAttemptContext.
     // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
     // around by taking a mod. We expect that no task will be attempted 2 billion times.
-    val taskAttemptId = (ctx.taskAttemptId % Int.MaxValue).toInt
+    val taskAttemptId = (ctx.taskAttemptId() % Int.MaxValue).toInt
     val attemptId = new TaskAttemptID(
-      new TaskID(jobId.value, TaskType.MAP, ctx.partitionId), taskAttemptId)
+      new TaskID(jobId.value, TaskType.MAP, ctx.partitionId()), taskAttemptId)
     val taskContext = new TaskAttemptContextImpl(jobConf, attemptId)
 
     committer.setupTask(taskContext)

@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector.metric;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.util.Arrays;
-
 /**
  * Built-in `CustomMetric` that sums up metric values. Note that please extend this class
  * and override `name` and `description` to create your custom metric for real usage.
@@ -31,6 +29,10 @@ import java.util.Arrays;
 public abstract class CustomSumMetric implements CustomMetric {
   @Override
   public String aggregateTaskMetrics(long[] taskMetrics) {
-    return String.valueOf(Arrays.stream(taskMetrics).sum());
+    long sum = 0L;
+    for (long taskMetric : taskMetrics) {
+      sum += taskMetric;
+    }
+    return String.valueOf(sum);
   }
 }

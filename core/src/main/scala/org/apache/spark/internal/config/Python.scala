@@ -36,6 +36,11 @@ private[spark] object Python {
     .booleanConf
     .createWithDefault(true)
 
+  val PYTHON_LOG_INFO = ConfigBuilder("spark.executor.python.worker.log.details")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val PYTHON_DAEMON_MODULE = ConfigBuilder("spark.python.daemon.module")
     .version("2.4.0")
     .stringConf

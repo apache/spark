@@ -17,16 +17,16 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Partitioner, SparkException}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
+
+import org.apache.spark.{Partitioner, PartitionIdPassthrough, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
 
 /**
  * A grid partitioner, which uses a regular grid to partition coordinates.
@@ -443,7 +443,7 @@ class BlockMatrix @Since("1.3.0") (
     val leftMatrix = blockInfo.keys.collect()
     val rightMatrix = other.blockInfo.keys.collect()
 
-    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).mapValues(_.map(_._2))
+    val rightCounterpartsHelper = rightMatrix.groupBy(_._1).transform((_, v) => v.map(_._2))
     val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
       val rightCounterparts = rightCounterpartsHelper.getOrElse(colIndex, Array.emptyIntArray)
       val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b)))
@@ -452,7 +452,7 @@ class BlockMatrix @Since("1.3.0") (
         partitions.toSet.map((pid: Int) => pid * midDimSplitNum + midDimSplitIndex))
     }.toMap
 
-    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).mapValues(_.map(_._1))
+    val leftCounterpartsHelper = leftMatrix.groupBy(_._2).transform((_, v) => v.map(_._1))
     val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
       val leftCounterparts = leftCounterpartsHelper.getOrElse(rowIndex, Array.emptyIntArray)
       val partitions = leftCounterparts.map(b => partitioner.getPartition((b, colIndex)))
@@ -520,10 +520,8 @@ class BlockMatrix @Since("1.3.0") (
         val destinations = rightDestinations.getOrElse((blockRowIndex, blockColIndex), Set.empty)
         destinations.map(j => (j, (blockRowIndex, blockColIndex, block)))
       }
-      val intermediatePartitioner = new Partitioner {
-        override def numPartitions: Int = resultPartitioner.numPartitions * numMidDimSplits
-        override def getPartition(key: Any): Int = key.asInstanceOf[Int]
-      }
+      val intermediatePartitioner = new PartitionIdPassthrough(
+        resultPartitioner.numPartitions * numMidDimSplits)
       val newBlocks = flatA.cogroup(flatB, intermediatePartitioner).flatMap { case (pId, (a, b)) =>
         a.flatMap { case (leftRowIndex, leftColIndex, leftBlock) =>
           b.filter(_._1 == leftColIndex).map { case (rightRowIndex, rightColIndex, rightBlock) =>

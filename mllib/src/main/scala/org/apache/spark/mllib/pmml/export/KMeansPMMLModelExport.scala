@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml.export
+package org.apache.spark.mllib.pmml.`export`
 
 import scala.{Array => SArray}
 
@@ -28,7 +28,7 @@ import org.apache.spark.mllib.clustering.KMeansModel
 /**
  * PMML Model Export for KMeansModel class
  */
-private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModelExport{
+private[mllib] class KMeansPMMLModelExport(model: KMeansModel) extends PMMLModelExport {
 
   populateKMeansPMML(model)
 

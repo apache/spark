@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<ROWSET>
+    <ROW>
+        <year>2015</year>
+        <make>Chevy</make>
+        <model>Volt</model>
+        <comment foo="bar">No</comment>
+    </ROW>
+</ROWSET>

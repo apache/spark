@@ -34,10 +34,10 @@ import org.apache.hive.service.cli.OperationHandle;
 import org.apache.hive.service.cli.OperationState;
 import org.apache.hive.service.cli.OperationStatus;
 import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -302,13 +302,9 @@ public abstract class Operation {
     cleanupOperationLog();
   }
 
-  public abstract TableSchema getResultSetSchema() throws HiveSQLException;
+  public abstract TTableSchema getResultSetSchema() throws HiveSQLException;
 
-  public abstract RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException;
-
-  public RowSet getNextRowSet() throws HiveSQLException {
-    return getNextRowSet(FetchOrientation.FETCH_NEXT, DEFAULT_FETCH_MAX_ROWS);
-  }
+  public abstract TRowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException;
 
   /**
    * Verify if the given fetch orientation is part of the default orientation types.

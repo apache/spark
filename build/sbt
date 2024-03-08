@@ -133,6 +133,13 @@ saveSttySettings() {
   fi
 }
 
+if [ ! -z "${SPARK_LOCAL_HOSTNAME}" ]; then
+  echo "Using SPARK_LOCAL_HOSTNAME=$SPARK_LOCAL_HOSTNAME" 1>&2
+fi
+if [ ! -z "${SPARK_LOCAL_IP}" ]; then
+  echo "Using SPARK_LOCAL_IP=$SPARK_LOCAL_IP" 1>&2
+fi
+
 saveSttySettings
 trap onExit INT
 

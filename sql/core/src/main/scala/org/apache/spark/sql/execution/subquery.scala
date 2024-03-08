@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.QueryContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression, Predicate, SupportQueryContext}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * The base class for subquery that is used in SparkPlan.
@@ -46,10 +48,10 @@ object ExecSubqueryExpression {
    * Returns true when an expression contains a subquery
    */
   def hasSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case _: ExecSubqueryExpression => true
       case _ => false
-    }.isDefined
+    }
   }
 }
 
@@ -61,12 +63,13 @@ object ExecSubqueryExpression {
 case class ScalarSubquery(
     plan: BaseSubqueryExec,
     exprId: ExprId)
-  extends ExecSubqueryExpression with LeafLike[Expression] {
+  extends ExecSubqueryExpression with LeafLike[Expression] with SupportQueryContext {
 
   override def dataType: DataType = plan.schema.fields.head.dataType
   override def nullable: Boolean = true
   override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(query: BaseSubqueryExec): ScalarSubquery = copy(plan = query)
+  def initQueryContext(): Option[QueryContext] = Some(origin.context)
 
   override lazy val canonicalized: Expression = {
     ScalarSubquery(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
@@ -79,7 +82,7 @@ case class ScalarSubquery(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     if (rows.length > 1) {
-      sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
+      throw QueryExecutionErrors.multipleRowScalarSubqueryError(getContextOrNull())
     }
     if (rows.length == 1) {
       assert(rows(0).numFields == 1,
@@ -98,30 +101,34 @@ case class ScalarSubquery(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    toLiteral.doGenCode(ctx, ev)
+  }
+
+  def toLiteral: Literal = {
     require(updated, s"$this has not finished")
-    Literal.create(result, dataType).doGenCode(ctx, ev)
+    Literal.create(result, dataType)
   }
 }
 
 /**
- * The physical node of in-subquery. This is for Dynamic Partition Pruning only, as in-subquery
- * coming from the original query will always be converted to joins.
+ * The physical node of in-subquery. When this is used for Dynamic Partition Pruning, as the pruning
+ * happens at the driver side, we don't broadcast subquery result.
  */
 case class InSubqueryExec(
     child: Expression,
     plan: BaseSubqueryExec,
     exprId: ExprId,
-    private var resultBroadcast: Broadcast[Array[Any]] = null)
-  extends ExecSubqueryExpression with UnaryLike[Expression] {
+    isDynamicPruning: Boolean = true,
+    private var resultBroadcast: Broadcast[Array[Any]] = null,
+    @transient private var result: Array[Any] = null)
+  extends ExecSubqueryExpression with UnaryLike[Expression] with Predicate {
 
-  @transient private var result: Array[Any] = _
   @transient private lazy val inSet = InSet(child, result.toSet)
 
-  override def dataType: DataType = BooleanType
   override def nullable: Boolean = child.nullable
   override def toString: String = s"$child IN ${plan.name}"
   override def withNewPlan(plan: BaseSubqueryExec): InSubqueryExec = copy(plan = plan)
-  final override def nodePatternsInternal: Seq[TreePattern] = Seq(IN_SUBQUERY_EXEC)
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(IN_SUBQUERY_EXEC)
 
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
@@ -130,14 +137,17 @@ case class InSubqueryExec(
     } else {
       rows.map(_.get(0, child.dataType))
     }
-    resultBroadcast = plan.session.sparkContext.broadcast(result)
+    if (!isDynamicPruning) {
+      resultBroadcast = plan.session.sparkContext.broadcast(result)
+    }
   }
 
-  def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
+  // This is used only by DPP where we don't need broadcast the result.
+  def values(): Option[Array[Any]] = Option(result)
 
   private def prepareResult(): Unit = {
-    require(resultBroadcast != null, s"$this has not finished")
-    if (result == null) {
+    require(result != null || resultBroadcast != null, s"$this has not finished")
+    if (result == null && resultBroadcast != null) {
       result = resultBroadcast.value
     }
   }
@@ -157,7 +167,8 @@ case class InSubqueryExec(
       child = child.canonicalized,
       plan = plan.canonicalized.asInstanceOf[BaseSubqueryExec],
       exprId = ExprId(0),
-      resultBroadcast = null)
+      resultBroadcast = null,
+      result = null)
   }
 
   override protected def withNewChildInternal(newChild: Expression): InSubqueryExec =
@@ -176,7 +187,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
-      case expressions.InSubquery(values, ListQuery(query, _, exprId, _, _)) =>
+      case expressions.InSubquery(values, ListQuery(query, _, exprId, _, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
         } else {
@@ -187,7 +198,8 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
           )
         }
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
-        InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan), exprId)
+        InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan),
+          exprId, isDynamicPruning = false)
     }
   }
 }

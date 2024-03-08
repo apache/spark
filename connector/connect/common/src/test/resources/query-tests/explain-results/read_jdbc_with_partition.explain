@@ -1,0 +1,1 @@
+Relation [NAME#0,THEID#0,Dept#0] JDBCRelation(TEST.EMP) [numPartitions=3]

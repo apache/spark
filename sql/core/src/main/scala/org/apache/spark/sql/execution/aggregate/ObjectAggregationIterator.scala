@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.util.ArrayImplicits._
 
 class ObjectAggregationIterator(
     partIndex: Int,
@@ -74,7 +76,8 @@ class ObjectAggregationIterator(
     }
     val newFunctions = initializeAggregateFunctions(newExpressions, 0)
     val newInputAttributes = newFunctions.flatMap(_.inputAggBufferAttributes)
-    generateProcessRow(newExpressions, newFunctions, newInputAttributes)
+    generateProcessRow(
+      newExpressions, newFunctions.toImmutableArraySeq, newInputAttributes.toImmutableArraySeq)
   }
 
   /**
@@ -106,7 +109,7 @@ class ObjectAggregationIterator(
       val defaultAggregationBuffer = createNewAggregationBuffer()
       generateOutput(UnsafeRow.createFromByteArray(0, 0), defaultAggregationBuffer)
     } else {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "This method should not be called when groupingExpressions is not empty.")
     }
   }
@@ -118,7 +121,7 @@ class ObjectAggregationIterator(
   //  - when creating the re-used buffer for sort-based aggregation
   private def createNewAggregationBuffer(): SpecificInternalRow = {
     val bufferFieldTypes = aggregateFunctions.flatMap(_.aggBufferAttributes.map(_.dataType))
-    val buffer = new SpecificInternalRow(bufferFieldTypes)
+    val buffer = new SpecificInternalRow(bufferFieldTypes.toImmutableArraySeq)
     initAggregationBuffer(buffer)
     buffer
   }
@@ -185,12 +188,12 @@ class ObjectAggregationIterator(
 
       if (sortBased) {
         val sortIteratorFromHashMap = hashMap
-          .dumpToExternalSorter(groupingAttributes, aggregateFunctions)
+          .dumpToExternalSorter(groupingAttributes, aggregateFunctions.toImmutableArraySeq)
           .sortedIterator()
         sortBasedAggregationStore = new SortBasedAggregator(
           sortIteratorFromHashMap,
-          StructType.fromAttributes(originalInputAttributes),
-          StructType.fromAttributes(groupingAttributes),
+          DataTypeUtils.fromAttributes(originalInputAttributes),
+          DataTypeUtils.fromAttributes(groupingAttributes),
           processRow,
           mergeAggregationBuffers,
           createNewAggregationBuffer())
@@ -207,7 +210,7 @@ class ObjectAggregationIterator(
     if (sortBased) {
       aggBufferIterator = sortBasedAggregationStore.destructiveIterator()
     } else {
-      aggBufferIterator = hashMap.iterator
+      aggBufferIterator = hashMap.destructiveIterator()
     }
   }
 }
@@ -253,7 +256,7 @@ class SortBasedAggregator(
       private var result: AggregationBufferEntry = _
       private var groupingKey: UnsafeRow = _
 
-      override def hasNext(): Boolean = {
+      override def hasNext: Boolean = {
         result != null || findNextSortedGroup()
       }
 

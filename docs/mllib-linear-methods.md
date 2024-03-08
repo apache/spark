@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -72,7 +72,7 @@ training error) and minimizing model complexity (i.e., to avoid overfitting).
 The following table summarizes the loss functions and their gradients or sub-gradients for the
 methods `spark.mllib` supports:
 
-<table class="table">
+<table>
   <thead>
     <tr><th></th><th>loss function $L(\wv; \x, y)$</th><th>gradient or sub-gradient</th></tr>
   </thead>
@@ -105,7 +105,7 @@ The purpose of the
 encourage simple models and avoid overfitting.  We support the following
 regularizers in `spark.mllib`:
 
-<table class="table">
+<table>
   <thead>
     <tr><th></th><th>regularizer $R(\wv)$</th><th>gradient or sub-gradient</th></tr>
   </thead>
@@ -138,7 +138,7 @@ especially when the number of training examples is small.
 Under the hood, linear methods use convex optimization methods to optimize the objective functions.
 `spark.mllib` uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).
 Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS.
-Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
+Refer to [this optimization section](mllib-optimization.html#choosing-an-optimization-method) for guidelines on choosing between optimization methods.
 
 ## Classification
 
@@ -177,6 +177,15 @@ otherwise.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+The following example shows how to load a sample dataset, build SVM model,
+and make predictions with the resulting model to compute the training error.
+
+Refer to the [`SVMWithSGD` Python docs](api/python/reference/api/pyspark.mllib.classification.SVMWithSGD.html) and [`SVMModel` Python docs](api/python/reference/api/pyspark.mllib.classification.SVMModel.html) for more details on the API.
+
+{% include_example python/mllib/svm_with_sgd_example.py %}
+</div>
 
 <div data-lang="scala" markdown="1">
 The following code snippet illustrates how to load a sample dataset, execute a
@@ -247,14 +256,6 @@ quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 </div>
 
-<div data-lang="python" markdown="1">
-The following example shows how to load a sample dataset, build SVM model,
-and make predictions with the resulting model to compute the training error.
-
-Refer to the [`SVMWithSGD` Python docs](api/python/reference/api/pyspark.mllib.classification.SVMWithSGD.html) and [`SVMModel` Python docs](api/python/reference/api/pyspark.mllib.classification.SVMModel.html) for more details on the API.
-
-{% include_example python/mllib/svm_with_sgd_example.py %}
-</div>
 </div>
 
 ### Logistic regression
@@ -302,6 +303,18 @@ We recommend L-BFGS over mini-batch gradient descent for faster convergence.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+The following example shows how to load a sample dataset, build Logistic Regression model,
+and make predictions with the resulting model to compute the training error.
+
+Note that the Python API does not yet support multiclass classification and model save/load but
+will in the future.
+
+Refer to the [`LogisticRegressionWithLBFGS` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionWithLBFGS.html) and [`LogisticRegressionModel` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionModel.html) for more details on the API.
+
+{% include_example python/mllib/logistic_regression_with_lbfgs_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 The following code illustrates how to load a sample multiclass dataset, split it into train and
 test, and use
@@ -327,17 +340,6 @@ Refer to the [`LogisticRegressionWithLBFGS` Java docs](api/java/org/apache/spark
 {% include_example java/org/apache/spark/examples/mllib/JavaLogisticRegressionWithLBFGSExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-The following example shows how to load a sample dataset, build Logistic Regression model,
-and make predictions with the resulting model to compute the training error.
-
-Note that the Python API does not yet support multiclass classification and model save/load but
-will in the future.
-
-Refer to the [`LogisticRegressionWithLBFGS` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionWithLBFGS.html) and [`LogisticRegressionModel` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionModel.html) for more details on the API.
-
-{% include_example python/mllib/logistic_regression_with_lbfgs_example.py %}
-</div>
 </div>
 
 # Regression
@@ -376,37 +378,12 @@ online to the first stream, and make predictions on the second stream.
 
 <div class="codetabs">
 
-<div data-lang="scala" markdown="1">
-
-First, we import the necessary classes for parsing our input data and creating the model.
-
-Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
-has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
-for more info. For this example, we use labeled points in training and testing streams,
-but in practice you will likely want to use unlabeled vectors for test data.
-
-We create our model by initializing the weights to zero and register the streams for training and
-testing then start the job. Printing predictions alongside true labels lets us easily see the
-result.
-
-Finally, we can save text files with data to the training or testing folders.
-Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
-and `x1,x2,x3` are the features. Anytime a text file is placed in `args(0)`
-the model will update. Anytime a text file is placed in `args(1)` you will see predictions.
-As you feed more data to the training directory, the predictions
-will get better!
-
-Here is a complete example:
-{% include_example scala/org/apache/spark/examples/mllib/StreamingLinearRegressionExample.scala %}
-
-</div>
-
 <div data-lang="python" markdown="1">
 
 First, we import the necessary classes for parsing our input data and creating the model.
 
 Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
-has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
+has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing-streamingcontext)
 for more info. For this example, we use labeled points in training and testing streams,
 but in practice you will likely want to use unlabeled vectors for test data.
 
@@ -423,6 +400,31 @@ will get better!
 
 Here a complete example:
 {% include_example python/mllib/streaming_linear_regression_example.py %}
+
+</div>
+
+<div data-lang="scala" markdown="1">
+
+First, we import the necessary classes for parsing our input data and creating the model.
+
+Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
+has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing-streamingcontext)
+for more info. For this example, we use labeled points in training and testing streams,
+but in practice you will likely want to use unlabeled vectors for test data.
+
+We create our model by initializing the weights to zero and register the streams for training and
+testing then start the job. Printing predictions alongside true labels lets us easily see the
+result.
+
+Finally, we can save text files with data to the training or testing folders.
+Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
+and `x1,x2,x3` are the features. Anytime a text file is placed in `args(0)`
+the model will update. Anytime a text file is placed in `args(1)` you will see predictions.
+As you feed more data to the training directory, the predictions
+will get better!
+
+Here is a complete example:
+{% include_example scala/org/apache/spark/examples/mllib/StreamingLinearRegressionExample.scala %}
 
 </div>
 
@@ -454,4 +456,3 @@ Algorithms are all implemented in Scala:
 * [LinearRegressionWithSGD](api/scala/org/apache/spark/mllib/regression/LinearRegressionWithSGD.html)
 * [RidgeRegressionWithSGD](api/scala/org/apache/spark/mllib/regression/RidgeRegressionWithSGD.html)
 * [LassoWithSGD](api/scala/org/apache/spark/mllib/regression/LassoWithSGD.html)
-

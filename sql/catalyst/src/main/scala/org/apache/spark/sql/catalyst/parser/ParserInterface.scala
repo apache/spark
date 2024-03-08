@@ -21,13 +21,12 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Interface for a parser.
  */
 @DeveloperApi
-trait ParserInterface {
+trait ParserInterface extends DataTypeParserInterface {
   /**
    * Parse a string to a [[LogicalPlan]].
    */
@@ -59,15 +58,8 @@ trait ParserInterface {
   def parseMultipartIdentifier(sqlText: String): Seq[String]
 
   /**
-   * Parse a string to a [[StructType]]. The passed SQL string should be a comma separated list
-   * of field definitions which will preserve the correct Hive metadata.
+   * Parse a query string to a [[LogicalPlan]].
    */
-  @throws[ParseException]("Text cannot be parsed to a schema")
-  def parseTableSchema(sqlText: String): StructType
-
-  /**
-   * Parse a string to a [[DataType]].
-   */
-  @throws[ParseException]("Text cannot be parsed to a DataType")
-  def parseDataType(sqlText: String): DataType
+  @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
+  def parseQuery(sqlText: String): LogicalPlan
 }

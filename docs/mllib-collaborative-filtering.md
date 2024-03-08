@@ -74,6 +74,24 @@ best parameter learned from a sampled subset to the full dataset and expect simi
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+In the following example we load rating data. Each row consists of a user, a product and a rating.
+We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
+recommendation by measuring the Mean Squared Error of rating prediction.
+
+Refer to the [`ALS` Python docs](api/python/reference/api/pyspark.mllib.recommendation.ALS.html) for more details on the API.
+
+{% include_example python/mllib/recommendation_example.py %}
+
+If the rating matrix is derived from other source of information (i.e. it is inferred from other
+signals), you can use the trainImplicit method to get better results.
+
+{% highlight python %}
+# Build the recommendation model using Alternating Least Squares based on implicit ratings
+model = ALS.trainImplicit(ratings, rank, numIterations, alpha=0.01)
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 In the following example, we load rating data. Each row consists of a user, a product and a rating.
 We use the default [ALS.train()](api/scala/org/apache/spark/mllib/recommendation/ALS$.html)
@@ -104,24 +122,6 @@ that is equivalent to the provided example in Scala is given below:
 Refer to the [`ALS` Java docs](api/java/org/apache/spark/mllib/recommendation/ALS.html) for more details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaRecommendationExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-In the following example we load rating data. Each row consists of a user, a product and a rating.
-We use the default ALS.train() method which assumes ratings are explicit. We evaluate the
-recommendation by measuring the Mean Squared Error of rating prediction.
-
-Refer to the [`ALS` Python docs](api/python/reference/api/pyspark.mllib.recommendation.ALS.html) for more details on the API.
-
-{% include_example python/mllib/recommendation_example.py %}
-
-If the rating matrix is derived from other source of information (i.e. it is inferred from other
-signals), you can use the trainImplicit method to get better results.
-
-{% highlight python %}
-# Build the recommendation model using Alternating Least Squares based on implicit ratings
-model = ALS.trainImplicit(ratings, rank, numIterations, alpha=0.01)
-{% endhighlight %}
 </div>
 
 </div>

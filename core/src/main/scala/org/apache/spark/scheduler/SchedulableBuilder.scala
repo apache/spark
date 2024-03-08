@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
+import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
@@ -86,9 +86,12 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
           logInfo(s"Creating Fair Scheduler pools from default file: $DEFAULT_SCHEDULER_FILE")
           Some((is, DEFAULT_SCHEDULER_FILE))
         } else {
-          logWarning("Fair Scheduler configuration file not found so jobs will be scheduled in " +
-            s"FIFO order. To use fair scheduling, configure pools in $DEFAULT_SCHEDULER_FILE or " +
-            s"set ${SCHEDULER_ALLOCATION_FILE.key} to a file that contains the configuration.")
+          val schedulingMode = SchedulingMode.withName(sc.conf.get(SCHEDULER_MODE))
+          rootPool.addSchedulable(new Pool(
+            DEFAULT_POOL_NAME, schedulingMode, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+          logInfo("Fair scheduler configuration not found, created default pool: " +
+            "%s, schedulingMode: %s, minShare: %d, weight: %d".format(
+            DEFAULT_POOL_NAME, schedulingMode, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
           None
         }
       }

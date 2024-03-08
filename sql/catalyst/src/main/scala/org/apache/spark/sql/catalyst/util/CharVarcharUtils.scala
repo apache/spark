@@ -23,13 +23,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
-object CharVarcharUtils extends Logging {
+object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
 
-  private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+  // visible for testing
+  private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
   /**
    * Replaces CharType/VarcharType with StringType recursively in the given struct type. If a
@@ -50,37 +51,18 @@ object CharVarcharUtils extends Logging {
   }
 
   /**
-   * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
+   * Replaces CharType with VarcharType recursively in the given data type.
    */
-  def hasCharVarchar(dt: DataType): Boolean = {
-    dt.existsRecursively(f => f.isInstanceOf[CharType] || f.isInstanceOf[VarcharType])
-  }
-
-  /**
-   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
-   */
-  def failIfHasCharVarchar(dt: DataType): DataType = {
-    if (!SQLConf.get.charVarcharAsString && hasCharVarchar(dt)) {
-      throw QueryCompilationErrors.charOrVarcharTypeAsStringUnsupportedError()
-    } else {
-      replaceCharVarcharWithString(dt)
-    }
-  }
-
-  /**
-   * Replaces CharType/VarcharType with StringType recursively in the given data type.
-   */
-  def replaceCharVarcharWithString(dt: DataType): DataType = dt match {
+  def replaceCharWithVarchar(dt: DataType): DataType = dt match {
     case ArrayType(et, nullable) =>
-      ArrayType(replaceCharVarcharWithString(et), nullable)
+      ArrayType(replaceCharWithVarchar(et), nullable)
     case MapType(kt, vt, nullable) =>
-      MapType(replaceCharVarcharWithString(kt), replaceCharVarcharWithString(vt), nullable)
+      MapType(replaceCharWithVarchar(kt), replaceCharWithVarchar(vt), nullable)
     case StructType(fields) =>
       StructType(fields.map { field =>
-        field.copy(dataType = replaceCharVarcharWithString(field.dataType))
+        field.copy(dataType = replaceCharWithVarchar(field.dataType))
       })
-    case _: CharType => StringType
-    case _: VarcharType => StringType
+    case CharType(length) => VarcharType(length)
     case _ => dt
   }
 
@@ -138,6 +120,21 @@ object CharVarcharUtils extends Logging {
     StructType(fields)
   }
 
+  def getRawSchema(schema: StructType, conf: SQLConf): StructType = {
+    val fields = schema.map { field =>
+      getRawType(field.metadata).map { dt =>
+        if (conf.getConf(SQLConf.CHAR_AS_VARCHAR)) {
+          val metadata = new MetadataBuilder().withMetadata(field.metadata)
+            .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY).build()
+          field.copy(dataType = replaceCharWithVarchar(dt), metadata = metadata)
+        } else {
+          field.copy(dataType = dt)
+        }
+      }.getOrElse(field)
+    }
+    StructType(fields)
+  }
+
   /**
    * Returns an expression to apply write-side string length check for the given expression. A
    * string value can not exceed N characters if it's written into a CHAR(N)/VARCHAR(N)
@@ -150,50 +147,91 @@ object CharVarcharUtils extends Logging {
   }
 
   def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
+    processStringForCharVarchar(
+      expr,
+      dt,
+      charFuncName = Some("charTypeWriteSideCheck"),
+      varcharFuncName = Some("varcharTypeWriteSideCheck"))
+  }
+
+  private def processStringForCharVarchar(
+      expr: Expression,
+      dt: DataType,
+      charFuncName: Option[String],
+      varcharFuncName: Option[String]): Expression = {
     dt match {
-      case CharType(length) =>
+      case CharType(length) if charFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           StringType,
-          "charTypeWriteSideCheck",
+          charFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
 
-      case VarcharType(length) =>
+      case VarcharType(length) if varcharFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           StringType,
-          "varcharTypeWriteSideCheck",
+          varcharFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-          Seq(Literal(f.name),
-            stringLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
-        })
-        if (expr.nullable) {
+          Seq(Literal(f.name), processStringForCharVarchar(
+            GetStructField(expr, i, Some(f.name)), f.dataType, charFuncName, varcharFuncName))
+        }.toImmutableArraySeq)
+        if (struct.valExprs.forall(_.isInstanceOf[GetStructField])) {
+          // No field needs char/varchar processing, just return the original expression.
+          expr
+        } else if (expr.nullable) {
           If(IsNull(expr), Literal(null, struct.dataType), struct)
         } else {
           struct
         }
 
-      case ArrayType(et, containsNull) => stringLengthCheckInArray(expr, et, containsNull)
+      case ArrayType(et, containsNull) =>
+        processStringForCharVarcharInArray(expr, et, containsNull, charFuncName, varcharFuncName)
 
       case MapType(kt, vt, valueContainsNull) =>
-        val newKeys = stringLengthCheckInArray(MapKeys(expr), kt, containsNull = false)
-        val newValues = stringLengthCheckInArray(MapValues(expr), vt, valueContainsNull)
-        MapFromArrays(newKeys, newValues)
+        val keys = MapKeys(expr)
+        val newKeys = processStringForCharVarcharInArray(
+          keys, kt, containsNull = false, charFuncName, varcharFuncName)
+        val values = MapValues(expr)
+        val newValues = processStringForCharVarcharInArray(
+          values, vt, valueContainsNull, charFuncName, varcharFuncName)
+        if (newKeys.fastEquals(keys) && newValues.fastEquals(values)) {
+          // If map key/value does not need char/varchar processing, return the original expression.
+          expr
+        } else {
+          MapFromArrays(newKeys, newValues)
+        }
 
       case _ => expr
     }
   }
 
-  private def stringLengthCheckInArray(
-      arr: Expression, et: DataType, containsNull: Boolean): Expression = {
+  private def processStringForCharVarcharInArray(
+      arr: Expression,
+      et: DataType,
+      containsNull: Boolean,
+      charFuncName: Option[String],
+      varcharFuncName: Option[String]): Expression = {
     val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val func = LambdaFunction(stringLengthCheck(param, et), Seq(param))
-    ArrayTransform(arr, func)
+    val funcBody = processStringForCharVarchar(param, et, charFuncName, varcharFuncName)
+    if (funcBody.fastEquals(param)) {
+      // If array element does not need char/varchar processing, return the original expression.
+      arr
+    } else {
+      ArrayTransform(arr, LambdaFunction(funcBody, Seq(param)))
+    }
+  }
+
+  def addPaddingForScan(attr: Attribute): Expression = {
+    getRawType(attr.metadata).map { rawType =>
+      processStringForCharVarchar(
+        attr, rawType, charFuncName = Some("readSidePadding"), varcharFuncName = None)
+    }.getOrElse(attr)
   }
 
   /**

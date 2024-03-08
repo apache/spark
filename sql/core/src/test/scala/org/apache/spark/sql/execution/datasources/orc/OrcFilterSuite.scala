@@ -20,26 +20,31 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, LocalDateTime, Period}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
+import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentImpl}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
  */
+@ExtendedSQLTest
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
   override protected def sparkConf: SparkConf =
@@ -57,15 +62,15 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
+      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
-        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for ${o.pushedFilters}")
+        val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
+        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for " +
+          s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         checker(maybeFilter.get)
 
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
+      case _ => assert(false, "Can not match OrcTable in the query.")
     }
   }
 
@@ -83,7 +88,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       (predicate: Predicate, stringExpr: String)
       (implicit df: DataFrame): Unit = {
     def checkLogicalOperator(filter: SearchArgument) = {
-      assert(filter.toString == stringExpr)
+      // HIVE-24458 changes toString output and provides `toOldString` for old style.
+      assert(filter.asInstanceOf[SearchArgumentImpl].toOldString == stringExpr)
     }
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
@@ -325,6 +331,39 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-36357: filter pushdown - timestamp_ntz") {
+    val localDateTimes = Seq(
+      LocalDateTime.of(1000, 1, 1, 1, 2, 3, 456000000),
+      LocalDateTime.of(1582, 10, 1, 0, 11, 22, 456000000),
+      LocalDateTime.of(1900, 1, 1, 23, 59, 59, 456000000),
+      LocalDateTime.of(2020, 5, 25, 10, 11, 12, 456000000))
+    withOrcFile(localDateTimes.map(Tuple1(_))) { path =>
+      readFile(path) { implicit df =>
+        checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+
+        checkFilterPredicate($"_1" === localDateTimes(0), PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate($"_1" <=> localDateTimes(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+        checkFilterPredicate($"_1" < localDateTimes(1), PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate($"_1" > localDateTimes(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate($"_1" <= localDateTimes(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate($"_1" >= localDateTimes(3), PredicateLeaf.Operator.LESS_THAN)
+
+        checkFilterPredicate(Literal(localDateTimes(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          Literal(localDateTimes(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(Literal(localDateTimes(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          Literal(localDateTimes(2)) < $"_1",
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          Literal(localDateTimes(0)) >= $"_1",
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(localDateTimes(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
+      }
+    }
+  }
+
   test("filter pushdown - combinations with logical operators") {
     withOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { implicit df =>
       checkFilterPredicate(
@@ -383,6 +422,101 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-36960: filter pushdown - year-month interval") {
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { ymIntervalType =>
+
+      def periods(i: Int): Expression = Literal(Period.of(i, i, 0)).cast(ymIntervalType)
+
+      val baseDF = spark.createDataFrame((1 to 4).map { i =>
+        Tuple1.apply(Period.of(i, i, 0))
+      }).select(col("_1").cast(ymIntervalType))
+
+      withNestedOrcDataFrame(baseDF) {
+        case (inputDF, colName, _) =>
+          implicit val df: DataFrame = inputDF
+
+          val ymIntervalAttr = df(colName).expr
+          assert(df(colName).expr.dataType === ymIntervalType)
+
+         checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+
+          checkFilterPredicate(ymIntervalAttr === periods(1),
+            PredicateLeaf.Operator.EQUALS)
+          checkFilterPredicate(ymIntervalAttr <=> periods(1),
+            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          checkFilterPredicate(ymIntervalAttr < periods(2),
+            PredicateLeaf.Operator.LESS_THAN)
+          checkFilterPredicate(ymIntervalAttr > periods(3),
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(ymIntervalAttr <= periods(1),
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(ymIntervalAttr >= periods(4),
+            PredicateLeaf.Operator.LESS_THAN)
+
+          checkFilterPredicate(periods(1) === ymIntervalAttr,
+            PredicateLeaf.Operator.EQUALS)
+          checkFilterPredicate(periods(1) <=> ymIntervalAttr,
+            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          checkFilterPredicate(periods(2) > ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN)
+          checkFilterPredicate(periods(3) < ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(periods(1) >= ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(periods(4) <= ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN)
+      }
+    }
+  }
+
+  test("SPARK-36960: filter pushdown - day-time interval") {
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dtIntervalType =>
+
+      def durations(i: Int): Expression =
+        Literal(Duration.ofDays(i).plusHours(i).plusMinutes(i).plusSeconds(i)).cast(dtIntervalType)
+
+      val baseDF = spark.createDataFrame((1 to 4).map { i =>
+        Tuple1.apply(Duration.ofDays(i).plusHours(i).plusMinutes(i).plusSeconds(i))
+      }).select(col("_1").cast(dtIntervalType))
+
+      withNestedOrcDataFrame(baseDF) {
+        case (inputDF, colName, _) =>
+          implicit val df: DataFrame = inputDF
+
+          val ymIntervalAttr = df(colName).expr
+          assert(df(colName).expr.dataType === dtIntervalType)
+
+          checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+
+          checkFilterPredicate(ymIntervalAttr === durations(1),
+            PredicateLeaf.Operator.EQUALS)
+          checkFilterPredicate(ymIntervalAttr <=> durations(1),
+            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          checkFilterPredicate(ymIntervalAttr < durations(2),
+            PredicateLeaf.Operator.LESS_THAN)
+          checkFilterPredicate(ymIntervalAttr > durations(3),
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(ymIntervalAttr <= durations(1),
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(ymIntervalAttr >= durations(4),
+            PredicateLeaf.Operator.LESS_THAN)
+
+          checkFilterPredicate(durations(1) === ymIntervalAttr,
+            PredicateLeaf.Operator.EQUALS)
+          checkFilterPredicate(durations(1) <=> ymIntervalAttr,
+            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          checkFilterPredicate(durations(2) > ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN)
+          checkFilterPredicate(durations(3) < ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(durations(1) >= ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(durations(4) <= ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN)
+      }
+    }
+  }
+
   test("no filter pushdown - non-supported types") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
@@ -412,7 +546,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),
         StringContains("b", "prefix")
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // The `LessThan` should be converted while the whole inner `And` shouldn't
@@ -423,7 +557,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           GreaterThan("a", 1),
           StringContains("b", "prefix")
         ))
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // Safely remove unsupported `StringContains` predicate and push down `LessThan`
@@ -433,7 +567,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           LessThan("a", 10),
           StringContains("b", "prefix")
         )
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     // Safely remove unsupported `StringContains` predicate, push down `LessThan` and `GreaterThan`.
@@ -447,7 +581,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           ),
           GreaterThan("a", 1)
         )
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
   }
 
@@ -470,7 +604,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             LessThan("a", 1)
           )
         )
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     assertResult("leaf-0 = (LESS_THAN_EQUALS a 10), leaf-1 = (LESS_THAN a 1)," +
@@ -486,7 +620,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             LessThan("a", 1)
           )
         )
-      )).get.toString
+      ).toImmutableArraySeq).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
 
     assert(OrcFilters.createFilter(schema, Array(
@@ -497,7 +631,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           LessThan("a", 1)
         )
       )
-    )).isEmpty)
+    ).toImmutableArraySeq).isEmpty)
   }
 
   test("SPARK-27160: Fix casting of the DecimalType literal") {
@@ -507,8 +641,8 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       OrcFilters.createFilter(schema, Array(
         LessThan(
           "a",
-          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2)))
-      ).get.toString
+          new java.math.BigDecimal(3.14, MathContext.DECIMAL64).setScale(2))).toImmutableArraySeq
+      ).get.asInstanceOf[SearchArgumentImpl].toOldString
     }
   }
 
@@ -516,7 +650,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     withTempPath { dir =>
       val count = 10
       val tableName = "spark_32622"
-      val tableDir1 = dir.getAbsoluteFile + "/table1"
+      val tableDir1 = s"${dir.getAbsoluteFile}/table1"
 
       // Physical ORC files have both `A` and `a` fields.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -543,11 +677,21 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
         // Exception thrown for ambiguous case.
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          val e = intercept[AnalysisException] {
-            sql(s"select a from $tableName where a < 0").collect()
-          }
-          assert(e.getMessage.contains(
-            "Reference 'a' is ambiguous"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"select a from $tableName where a < 0").collect()
+            },
+            errorClass = "AMBIGUOUS_REFERENCE",
+            parameters = Map(
+              "name" -> "`a`",
+              "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +
+                "`spark_catalog`.`default`.`spark_32622`.`a`]")),
+            context = ExpectedContext(
+              fragment = "a",
+              start = 32,
+              stop = 32
+            )
+          )
         }
       }
 
@@ -559,16 +703,18 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
                |CREATE TABLE $tableName (A LONG) USING ORC LOCATION '$tableDir1'
              """.stripMargin)
 
-          val e = intercept[SparkException] {
+          val ex = intercept[SparkException] {
             sql(s"select A from $tableName where A < 0").collect()
           }
-          assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
+          assert(ex.getErrorClass == "FAILED_READ_FILE")
+          assert(ex.getCause.isInstanceOf[SparkRuntimeException])
+          assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "A": [A, a] in case-insensitive mode"""))
         }
       }
 
       // Physical ORC files have only `A` field.
-      val tableDir2 = dir.getAbsoluteFile + "/table2"
+      val tableDir2 = s"${dir.getAbsoluteFile}/table2"
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         spark.range(count).repartition(count).selectExpr("id - 1 as A")
           .write.mode("overwrite").orc(tableDir2)

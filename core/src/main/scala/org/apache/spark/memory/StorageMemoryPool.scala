@@ -19,6 +19,7 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
@@ -50,7 +51,7 @@ private[memory] class StorageMemoryPool(
   private var _memoryStore: MemoryStore = _
   def memoryStore: MemoryStore = {
     if (_memoryStore == null) {
-      throw new IllegalStateException("memory store not initialized yet")
+      throw SparkException.internalError("memory store not initialized yet", category = "MEMORY")
     }
     _memoryStore
   }

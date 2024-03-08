@@ -250,4 +250,13 @@ class BitSet(numBits: Int) extends Serializable {
 
   /** Return the number of longs it would take to hold numBits. */
   private def bit2words(numBits: Int) = ((numBits - 1) >> 6) + 1
+
+  override def equals(other: Any): Boolean = other match {
+    case otherSet: BitSet => Arrays.equals(words, otherSet.words)
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Arrays.hashCode(words)
+  }
 }

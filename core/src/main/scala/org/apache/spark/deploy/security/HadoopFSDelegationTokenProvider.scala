@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.security
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -31,6 +31,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.security.HadoopDelegationTokenProvider
+import org.apache.spark.util.Utils
 
 private[deploy] class HadoopFSDelegationTokenProvider
     extends HadoopDelegationTokenProvider with Logging {
@@ -52,12 +53,12 @@ private[deploy] class HadoopFSDelegationTokenProvider
       val fsToExclude = sparkConf.get(YARN_KERBEROS_FILESYSTEM_RENEWAL_EXCLUDE)
         .map(new Path(_).getFileSystem(hadoopConf).getUri.getHost)
         .toSet
-      val fetchCreds = fetchDelegationTokens(getTokenRenewer(hadoopConf), fileSystems, creds,
-        fsToExclude)
+      val fetchCreds = fetchDelegationTokens(getTokenRenewer(sparkConf, hadoopConf), fileSystems,
+        creds, fsToExclude)
 
       // Get the token renewal interval if it is not set. It will only be called once.
       if (tokenRenewalInterval == null) {
-        tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf, fileSystems)
+        tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, fileSystems)
       }
 
       // Get the time of next renewal.
@@ -88,8 +89,13 @@ private[deploy] class HadoopFSDelegationTokenProvider
     UserGroupInformation.isSecurityEnabled
   }
 
-  private def getTokenRenewer(hadoopConf: Configuration): String = {
-    val tokenRenewer = Master.getMasterPrincipal(hadoopConf)
+  private def getTokenRenewer(sparkConf: SparkConf, hadoopConf: Configuration): String = {
+    val master = sparkConf.get("spark.master", null)
+    val tokenRenewer = if (master != null && master.contains("yarn")) {
+      Master.getMasterPrincipal(hadoopConf)
+    } else {
+      UserGroupInformation.getCurrentUser().getUserName()
+    }
     logDebug("Delegation token renewer is: " + tokenRenewer)
 
     if (tokenRenewer == null || tokenRenewer.length() == 0) {
@@ -111,10 +117,10 @@ private[deploy] class HadoopFSDelegationTokenProvider
       if (fsToExclude.contains(fs.getUri.getHost)) {
         // YARN RM skips renewing token with empty renewer
         logInfo(s"getting token for: $fs with empty renewer to skip renewal")
-        fs.addDelegationTokens("", creds)
+        Utils.tryLogNonFatalError { fs.addDelegationTokens("", creds) }
       } else {
         logInfo(s"getting token for: $fs with renewer $renewer")
-        fs.addDelegationTokens(renewer, creds)
+        Utils.tryLogNonFatalError { fs.addDelegationTokens(renewer, creds) }
       }
     }
 
@@ -123,7 +129,6 @@ private[deploy] class HadoopFSDelegationTokenProvider
 
   private def getTokenRenewalInterval(
       hadoopConf: Configuration,
-      sparkConf: SparkConf,
       filesystems: Set[FileSystem]): Option[Long] = {
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in

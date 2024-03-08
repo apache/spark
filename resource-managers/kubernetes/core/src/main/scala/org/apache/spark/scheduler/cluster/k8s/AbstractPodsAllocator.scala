@@ -26,9 +26,8 @@ import org.apache.spark.resource.ResourceProfile
  * :: DeveloperApi ::
  * A abstract interface for allowing different types of pods allocation.
  *
- * The internal Spark implementations are [[StatefulsetPodsAllocator]]
- * and [[ExecutorPodsAllocator]]. This may be useful for folks integrating with custom schedulers
- * such as Volcano, Yunikorn, etc.
+ * The internal Spark implementations are [[StatefulSetPodsAllocator]]
+ * and [[ExecutorPodsAllocator]]. This may be useful for folks integrating with custom schedulers.
  *
  * This API may change or be removed at anytime.
  *

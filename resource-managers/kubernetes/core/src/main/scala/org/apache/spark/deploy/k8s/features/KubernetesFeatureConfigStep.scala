@@ -70,7 +70,15 @@ trait KubernetesFeatureConfigStep {
 
   /**
    * Return any additional Kubernetes resources that should be added to support this feature. Only
-   * applicable when creating the driver in cluster mode.
+   * applicable when creating the driver in cluster mode. Resources would be setup/refresh before
+   * Pod creation.
+   */
+  def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = Seq.empty
+
+  /**
+   * Return any additional Kubernetes resources that should be added to support this feature. Only
+   * applicable when creating the driver in cluster mode. Resources would be setup/refresh after
+   * Pod creation.
    */
   def getAdditionalKubernetesResources(): Seq[HasMetadata] = Seq.empty
 }

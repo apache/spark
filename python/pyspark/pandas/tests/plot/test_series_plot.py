@@ -25,7 +25,7 @@ from pyspark.pandas.plot import PandasOnSparkPlotAccessor, BoxPlotBase
 from pyspark.testing.pandasutils import have_plotly, plotly_requirement_message
 
 
-class SeriesPlotTest(unittest.TestCase):
+class SeriesPlotTestsMixin:
     @property
     def pdf1(self):
         return pd.DataFrame(
@@ -90,11 +90,15 @@ class SeriesPlotTest(unittest.TestCase):
         check_box_summary(-self.psdf1, -self.pdf1)
 
 
+class SeriesPlotTests(SeriesPlotTestsMixin, unittest.TestCase):
+    pass
+
+
 if __name__ == "__main__":
     from pyspark.pandas.tests.plot.test_series_plot import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

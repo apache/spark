@@ -20,9 +20,10 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class is used to test SupportsAtomicPartitionManagement API.
@@ -39,7 +40,7 @@ class InMemoryAtomicPartitionTable (
       ident: InternalRow,
       properties: util.Map[String, String]): Unit = {
     if (memoryTablePartitions.containsKey(ident)) {
-      throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
+      throw new PartitionsAlreadyExistException(name, ident, partitionSchema)
     } else {
       createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)
@@ -61,7 +62,7 @@ class InMemoryAtomicPartitionTable (
       properties: Array[util.Map[String, String]]): Unit = {
     if (idents.exists(partitionExists)) {
       throw new PartitionsAlreadyExistException(
-        name, idents.filter(partitionExists), partitionSchema)
+        name, idents.filter(partitionExists).toImmutableArraySeq, partitionSchema)
     }
     idents.zip(properties).foreach { case (ident, property) =>
       createPartition(ident, property)

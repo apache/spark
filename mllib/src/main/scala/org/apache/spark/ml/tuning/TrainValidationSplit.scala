@@ -19,9 +19,9 @@ package org.apache.spark.ml.tuning
 
 import java.util.{List => JList, Locale}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
@@ -37,6 +37,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -167,7 +168,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     trainingDataset.unpersist()
     validationDataset.unpersist()
 
-    instr.logInfo(s"Train validation split metrics: ${metrics.toSeq}")
+    instr.logInfo(s"Train validation split metrics: ${metrics.toImmutableArraySeq}")
     val (bestMetric, bestIndex) =
       if (eval.isLargerBetter) metrics.zipWithIndex.maxBy(_._1)
       else metrics.zipWithIndex.minBy(_._1)
@@ -362,7 +363,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val persistSubModels = persistSubModelsParam.toBoolean
 
       import org.json4s.JsonDSL._
-      val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toSeq) ~
+      val extraMetadata = ("validationMetrics" -> instance.validationMetrics.toImmutableArraySeq) ~
         ("persistSubModels" -> persistSubModels)
       ValidatorParams.saveImpl(path, instance, sc, Some(extraMetadata))
       val bestModelPath = new Path(path, "bestModel").toString
@@ -372,7 +373,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
           "persistSubModels to true if the tuning was done with collectSubModels set to true. " +
           "To save the sub-models, try rerunning fitting with collectSubModels set to true.")
         val subModelsPath = new Path(path, "subModels")
-        for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
+        for (paramIndex <- instance.getEstimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           instance.subModels(paramIndex).asInstanceOf[MLWritable].save(modelPath)
         }
@@ -399,7 +400,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val subModels: Option[Array[Model[_]]] = if (persistSubModels) {
         val subModelsPath = new Path(path, "subModels")
         val _subModels = Array.ofDim[Model[_]](estimatorParamMaps.length)
-        for (paramIndex <- 0 until estimatorParamMaps.length) {
+        for (paramIndex <- estimatorParamMaps.indices) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
           _subModels(paramIndex) =
             DefaultParamsReader.loadParamsInstance(modelPath, sc)

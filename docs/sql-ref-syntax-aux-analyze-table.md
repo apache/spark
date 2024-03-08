@@ -22,7 +22,9 @@ license: |
 ### Description
 
 The `ANALYZE TABLE` statement collects statistics about one specific table or all the tables in one specified database,
-that are to be used by the query optimizer to find a better query execution plan.
+that are to be [used by the query optimizer][stats] to find a better query execution plan. These statistics are stored in the catalog.
+
+[stats]: sql-performance-tuning.html#leveraging-statistics
 
 ### Syntax
 

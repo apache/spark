@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for holding data from a command.
@@ -55,7 +56,7 @@ case class CommandResultExec(
     } else {
       val numSlices = math.min(
         unsafeRows.length, session.leafNodeDefaultParallelism)
-      sparkContext.parallelize(unsafeRows, numSlices)
+      sparkContext.parallelize(unsafeRows.toImmutableArraySeq, numSlices)
     }
   }
 
@@ -76,19 +77,24 @@ case class CommandResultExec(
   }
 
   override def executeCollect(): Array[InternalRow] = {
-    longMetric("numOutputRows").add(rows.size)
-    rows.toArray
+    longMetric("numOutputRows").add(unsafeRows.length)
+    sendDriverMetrics()
+    unsafeRows
   }
+
+  override def executeToIterator(): Iterator[InternalRow] = unsafeRows.iterator
 
   override def executeTake(limit: Int): Array[InternalRow] = {
     val taken = unsafeRows.take(limit)
-    longMetric("numOutputRows").add(taken.size)
+    longMetric("numOutputRows").add(taken.length)
+    sendDriverMetrics()
     taken
   }
 
   override def executeTail(limit: Int): Array[InternalRow] = {
-    val taken: Seq[InternalRow] = unsafeRows.takeRight(limit)
+    val taken: Seq[InternalRow] = unsafeRows.takeRight(limit).toImmutableArraySeq
     longMetric("numOutputRows").add(taken.size)
+    sendDriverMetrics()
     taken.toArray
   }
 
@@ -96,4 +102,9 @@ case class CommandResultExec(
   override protected val createUnsafeProjection: Boolean = false
 
   override def inputRDD: RDD[InternalRow] = rdd
+
+  private def sendDriverMetrics(): Unit = {
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+  }
 }

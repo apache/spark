@@ -13,7 +13,7 @@ WholeStageCodegen (4)
                         Filter [o_orderkey]
                           ColumnarToRow
                             InputAdapter
-                              Scan parquet default.orders [o_orderkey,o_orderpriority]
+                              Scan parquet spark_catalog.default.orders [o_orderkey,o_orderpriority]
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (1)
@@ -21,4 +21,4 @@ WholeStageCodegen (4)
                                 Filter [l_commitdate,l_receiptdate,l_shipdate,l_shipmode,l_orderkey]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.lineitem [l_orderkey,l_shipdate,l_commitdate,l_receiptdate,l_shipmode]
+                                      Scan parquet spark_catalog.default.lineitem [l_orderkey,l_shipdate,l_commitdate,l_receiptdate,l_shipmode]

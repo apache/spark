@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.execution.ui
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "SQL") with Logging {
+
+  def conf: SparkConf = sparkUI.conf
+
+  override val name = "SQL / DataFrame"
 
   val parent = sparkUI
 
@@ -30,6 +35,8 @@ class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   parent.attachTab(this)
 
   parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
+
+  override def displayOrder: Int = 0
 }
 
 object SQLTab {

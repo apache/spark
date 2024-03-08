@@ -21,6 +21,8 @@ import java.io._
 import java.util.concurrent.{ArrayBlockingQueue, RejectedExecutionException,
   ThreadPoolExecutor, TimeUnit}
 
+import scala.concurrent.duration.FiniteDuration
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -30,7 +32,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 private[streaming]
 class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
@@ -64,8 +67,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.yarn.principal",
       "spark.kerberos.keytab",
       "spark.kerberos.principal",
-      UI_FILTERS.key,
-      "spark.mesos.driver.frameworkId")
+      UI_FILTERS.key)
 
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
@@ -137,7 +139,7 @@ object Checkpoint extends Logging {
       if (statuses != null) {
         val paths = statuses.filterNot(_.isDirectory).map(_.getPath)
         val filtered = paths.filter(p => REGEX.findFirstIn(p.getName).nonEmpty)
-        filtered.sortWith(sortFunc)
+        filtered.sortWith(sortFunc).toImmutableArraySeq
       } else {
         logWarning(s"Listing $path returned null")
         Seq.empty
@@ -173,7 +175,7 @@ object Checkpoint extends Logging {
       // to find classes, which maybe the wrong class loader. Hence, an inherited version
       // of ObjectInputStream is used to explicitly use the current thread's default class
       // loader to find and load classes. This is a well know Java issue and has popped up
-      // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
+      // in other places (e.g., https://issues.apache.org/jira/browse/GROOVY-1627)
       val zis = compressionCodec.compressedInputStream(inputStream)
       ois = new ObjectInputStreamWithLoader(zis,
         Thread.currentThread().getContextClassLoader)
@@ -307,13 +309,9 @@ class CheckpointWriter(
   def stop(): Unit = synchronized {
     if (stopped) return
 
-    executor.shutdown()
     val startTimeNs = System.nanoTime()
-    val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
-    if (!terminated) {
-      executor.shutdownNow()
-    }
-    logInfo(s"CheckpointWriter executor terminated? $terminated," +
+    ThreadUtils.shutdown(executor, FiniteDuration(10, TimeUnit.SECONDS))
+    logInfo(s"CheckpointWriter executor terminated? ${executor.isTerminated}," +
       s" waited for ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms.")
     stopped = true
   }

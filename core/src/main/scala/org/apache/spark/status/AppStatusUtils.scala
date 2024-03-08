@@ -72,4 +72,16 @@ private[spark] object AppStatusUtils {
       -1
     }
   }
+
+  def getQuantilesValue(
+    values: IndexedSeq[Double],
+    quantiles: Array[Double]): IndexedSeq[Double] = {
+    val count = values.size
+    if (count > 0) {
+      val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
+      indices.map(i => values(i.toInt)).toIndexedSeq
+    } else {
+      IndexedSeq.fill(quantiles.length)(0.0)
+    }
+  }
 }

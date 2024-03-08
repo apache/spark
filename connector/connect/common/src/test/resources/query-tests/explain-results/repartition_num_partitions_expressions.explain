@@ -1,0 +1,2 @@
+RepartitionByExpression [a#0, id#0L], 22
++- LocalRelation <empty>, [id#0L, a#0, b#0]

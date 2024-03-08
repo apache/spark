@@ -19,13 +19,14 @@ package org.apache.spark.shuffle
 
 import java.io.{File, FileNotFoundException}
 import java.net.ConnectException
-import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.util.control.NonFatal
 
-import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
+import org.apache.spark.{SecurityManager, ShuffleDependency, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.Since
+import org.apache.spark.executor.{CoarseGrainedExecutorBackend, ExecutorBackend}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
@@ -50,11 +51,10 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   private[this] val maxBlockSizeToPush = conf.get(SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH)
   private[this] val maxBlockBatchSize = conf.get(SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH)
-  private[this] val maxBytesInFlight =
-    conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024
-  private[this] val maxReqsInFlight = conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue)
+  private[this] val maxBytesInFlight = conf.get(REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024
+  private[this] val maxReqsInFlight = conf.get(REDUCER_MAX_REQS_IN_FLIGHT)
   private[this] val maxBlocksInFlightPerAddress = conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS)
-  private[this] var bytesInFlight = 0L
+  private[shuffle] var bytesInFlight = 0L
   private[this] var reqsInFlight = 0
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
   private[this] val deferredPushRequests = new HashMap[BlockManagerId, Queue[PushRequest]]()
@@ -62,6 +62,10 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   private[this] val errorHandler = createErrorHandler()
   // VisibleForTesting
   private[shuffle] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
+  private[this] var shuffleId = -1
+  private[this] var mapIndex = -1
+  private[this] var shuffleMergeId = -1
+  private[this] var pushCompletionNotified = false
 
   // VisibleForTesting
   private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
@@ -85,6 +89,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       }
     }
   }
+  // VisibleForTesting
+  private[shuffle] def isPushCompletionNotified = pushCompletionNotified
 
   /**
    * Initiates the block push.
@@ -101,27 +107,32 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       dep: ShuffleDependency[_, _, _],
       mapIndex: Int): Unit = {
     val numPartitions = dep.partitioner.numPartitions
-    val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+    val securityManager = new SecurityManager(conf)
+    val transportConf = SparkTransportConf.fromSparkConf(
+      conf, "shuffle", sslOptions = Some(securityManager.getRpcSSLOptions()))
+    this.shuffleId = dep.shuffleId
+    this.shuffleMergeId = dep.shuffleMergeId
+    this.mapIndex = mapIndex
     val requests = prepareBlockPushRequests(numPartitions, mapIndex, dep.shuffleId,
       dep.shuffleMergeId, dataFile, partitionLengths, dep.getMergerLocs, transportConf)
     // Randomize the orders of the PushRequest, so different mappers pushing blocks at the same
     // time won't be pushing the same ranges of shuffle partitions.
     pushRequests ++= Utils.randomize(requests)
-
-    submitTask(() => {
-      tryPushUpToMax()
-    })
+    if (pushRequests.isEmpty) {
+      notifyDriverAboutPushCompletion()
+    } else {
+      submitTask(() => {
+        tryPushUpToMax()
+      })
+    }
   }
 
   private[shuffle] def tryPushUpToMax(): Unit = {
     try {
       pushUpToMax()
     } catch {
-      case e: FileNotFoundException =>
-        logWarning("The shuffle files got deleted when this shuffle-block-push-thread " +
-          "was reading from them which could happen when the job finishes and the driver " +
-          "instructs the executor to cleanup the shuffle. In this case, push of the blocks " +
-          "belonging to this shuffle will stop.", e)
+      case NonFatal(e) =>
+        logWarning("Failure during push so stopping the block push", e)
     }
   }
 
@@ -130,7 +141,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * VisibleForTesting
    */
   protected def submitTask(task: Runnable): Unit = {
-    if (BLOCK_PUSHER_POOL != null) {
+    if (BLOCK_PUSHER_POOL != null && !BLOCK_PUSHER_POOL.isShutdown) {
       BLOCK_PUSHER_POOL.execute(task)
     }
   }
@@ -283,7 +294,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         case (offset, size) =>
           new NioManagedBuffer(inMemoryBuffer.duplicate()
             .position(offset)
-            .limit(offset + size).asInstanceOf[ByteBuffer].slice())
+            .limit(offset + size).slice())
       }.toArray
     }
   }
@@ -305,7 +316,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       pushResult: PushResult): Boolean = synchronized {
     remainingBlocks -= pushResult.blockId
     bytesInFlight -= bytesPushed
-    numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+    numBlocksInFlightPerAddress(address) -= 1
     if (remainingBlocks.isEmpty) {
       reqsInFlight -= 1
     }
@@ -328,7 +339,31 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         s"stop.")
       return false
     } else {
+      if (reqsInFlight <= 0 && pushRequests.isEmpty && deferredPushRequests.isEmpty) {
+        notifyDriverAboutPushCompletion()
+      }
       remainingBlocks.isEmpty && (pushRequests.nonEmpty || deferredPushRequests.nonEmpty)
+    }
+  }
+
+  /**
+   * Notify the driver about all the blocks generated by the current map task having been pushed.
+   * This enables the DAGScheduler to finalize shuffle merge as soon as sufficient map tasks have
+   * completed push instead of always waiting for a fixed amount of time.
+   *
+   * VisibleForTesting
+   */
+  protected def notifyDriverAboutPushCompletion(): Unit = {
+    assert(shuffleId >= 0 && mapIndex >= 0)
+    if (!pushCompletionNotified) {
+      SparkEnv.get.executorBackend match {
+        case Some(cb: CoarseGrainedExecutorBackend) =>
+          cb.notifyDriverAboutPushCompletion(shuffleId, shuffleMergeId, mapIndex)
+        case Some(eb: ExecutorBackend) =>
+          logWarning(s"Currently $eb doesn't support push-based shuffle")
+        case None =>
+      }
+      pushCompletionNotified = true
     }
   }
 
@@ -463,7 +498,8 @@ private[spark] object ShuffleBlockPusher {
 
   private val BLOCK_PUSHER_POOL: ExecutorService = {
     val conf = SparkEnv.get.conf
-    if (Utils.isPushBasedShuffleEnabled(conf)) {
+    if (Utils.isPushBasedShuffleEnabled(conf,
+        isDriver = SparkContext.DRIVER_IDENTIFIER == SparkEnv.get.executorId)) {
       val numThreads = conf.get(SHUFFLE_NUM_PUSH_THREADS)
         .getOrElse(conf.getInt(SparkLauncher.EXECUTOR_CORES, 1))
       ThreadUtils.newDaemonFixedThreadPool(numThreads, "shuffle-block-push-thread")

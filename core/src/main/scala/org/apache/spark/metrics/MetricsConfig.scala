@@ -20,8 +20,8 @@ package org.apache.spark.metrics
 import java.io.{FileInputStream, InputStream}
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 import org.apache.spark.SparkConf
@@ -107,9 +107,9 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   def subProperties(prop: Properties, regex: Regex): mutable.HashMap[String, Properties] = {
     val subProperties = new mutable.HashMap[String, Properties]
     prop.asScala.foreach { kv =>
-      if (regex.findPrefixOf(kv._1.toString).isDefined) {
-        val regex(prefix, suffix) = kv._1.toString
-        subProperties.getOrElseUpdate(prefix, new Properties).setProperty(suffix, kv._2.toString)
+      if (regex.findPrefixOf(kv._1).isDefined) {
+        val regex(prefix, suffix) = kv._1
+        subProperties.getOrElseUpdate(prefix, new Properties).setProperty(suffix, kv._2)
       }
     }
     subProperties

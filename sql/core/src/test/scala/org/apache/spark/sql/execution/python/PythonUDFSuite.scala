@@ -20,14 +20,15 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 class PythonUDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   import IntegratedUDFTestUtils._
 
-  val scalaTestUDF = TestScalaUDF(name = "scalaUDF")
-  val pythonTestUDF = TestPythonUDF(name = "pyUDF")
+  val scalaTestUDF = TestScalaUDF(name = "scalaUDF", Some(LongType))
+  val pythonTestUDF = TestPythonUDF(name = "pyUDF", Some(LongType))
 
   lazy val base = Seq(
     (Some(1), Some(1)), (Some(1), Some(2)), (Some(2), Some(1)),
@@ -70,5 +71,45 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)),
         pythonTestUDF(count(pythonTestUDF(base("a") + 1))))
     checkAnswer(df1, df2)
+  }
+
+  test("SPARK-39962: Global aggregation of Pandas UDF should respect the column order") {
+    assume(shouldTestPandasUDFs)
+    val df = Seq[(java.lang.Integer, java.lang.Integer)]((1, null)).toDF("a", "b")
+
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+    val reorderedDf = df.select("b", "a")
+    val actual = reorderedDf.agg(
+      pandasTestUDF(reorderedDf("a")), pandasTestUDF(reorderedDf("b")))
+    val expected = df.agg(pandasTestUDF(df("a")), pandasTestUDF(df("b")))
+
+    checkAnswer(actual, expected)
+  }
+
+  test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {
+    assume(shouldTestPythonUDFs)
+    val pythonSQLMetrics = List(
+      "data sent to Python workers",
+      "data returned from Python workers",
+      "number of output rows")
+
+    val df = base.groupBy(pythonTestUDF(base("a") + 1))
+      .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
+    df.count()
+
+    val statusStore = spark.sharedState.statusStore
+    val lastExecId = statusStore.executionsList().last.executionId
+    val executionMetrics = statusStore.execution(lastExecId).get.metrics.mkString
+    for (metric <- pythonSQLMetrics) {
+      assert(executionMetrics.contains(metric))
+    }
+  }
+
+  test("PythonUDAF pretty name") {
+    assume(shouldTestPandasUDFs)
+    val udfName = "pandas_udf"
+    val df = spark.range(1)
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
+    assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
   }
 }

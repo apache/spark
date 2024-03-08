@@ -22,9 +22,10 @@ import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -82,16 +83,16 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("register user type: MyDenseVector for MyLabeledPoint") {
-    val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
+    val labels: RDD[Double] = pointsRDD.select($"label").rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
-    assert(labelsArrays.size === 2)
+    assert(labelsArrays.length === 2)
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
     val features: RDD[TestUDT.MyDenseVector] =
-      pointsRDD.select('features).rdd.map { case Row(v: TestUDT.MyDenseVector) => v }
+      pointsRDD.select($"features").rdd.map { case Row(v: TestUDT.MyDenseVector) => v }
     val featuresArrays: Array[TestUDT.MyDenseVector] = features.collect()
-    assert(featuresArrays.size === 2)
+    assert(featuresArrays.length === 2)
     assert(featuresArrays.contains(new TestUDT.MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new TestUDT.MyDenseVector(Array(0.2, 2.0))))
   }
@@ -137,8 +138,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     val df = Seq((1, vec)).toDF("int", "vec")
     assert(vec === df.collect()(0).getAs[TestUDT.MyDenseVector](1))
     assert(vec === df.take(1)(0).getAs[TestUDT.MyDenseVector](1))
-    checkAnswer(df.limit(1).groupBy('int).agg(first('vec)), Row(1, vec))
-    checkAnswer(df.orderBy('int).limit(1).groupBy('int).agg(first('vec)), Row(1, vec))
+    checkAnswer(df.limit(1).groupBy($"int").agg(first($"vec")), Row(1, vec))
+    checkAnswer(df.orderBy($"int").limit(1).groupBy($"int")
+      .agg(first($"vec")), Row(1, vec))
   }
 
   test("UDTs with JSON") {
@@ -270,5 +272,31 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     val result = agg.collect()
 
     assert(result.toSet === Set(FooWithDate(year, "FooFoo", 3), FooWithDate(year, "Foo", 1)))
+  }
+
+  test("Test unwrap_udt function") {
+    val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
+      .rdd.map { (row: Row) => row.getAs[Seq[Double]](0).toArray }
+    val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
+    assert(unwrappedFeaturesArrays.length === 2)
+
+    java.util.Arrays.equals(unwrappedFeaturesArrays(0), Array(0.1, 1.0))
+    java.util.Arrays.equals(unwrappedFeaturesArrays(1), Array(0.2, 2.0))
+  }
+
+  test("SPARK-46289: UDT ordering") {
+    val settings = Seq(
+      ("true", CodegenObjectFactoryMode.CODEGEN_ONLY.toString),
+      ("false", CodegenObjectFactoryMode.NO_CODEGEN.toString))
+    withTempView("v1") {
+      pointsRDD.createOrReplaceTempView("v1")
+      for ((wsSetting, cgSetting) <- settings) {
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wsSetting,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> cgSetting) {
+          val df = sql("select label from v1 order by features")
+          checkAnswer(df, Row(1.0) :: Row(0.0) :: Nil)
+        }
+      }
+    }
   }
 }

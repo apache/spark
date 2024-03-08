@@ -17,39 +17,50 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.StructType.fromDDL
+import org.apache.spark.sql.types.YearMonthIntervalType._
+import org.apache.spark.unsafe.types.UTF8String
 
 class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val s = StructType.fromDDL("a INT, b STRING")
 
   test("lookup a single missing field should output existing fields") {
-    val e = intercept[IllegalArgumentException](s("c")).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s("c")),
+      errorClass = "_LEGACY_ERROR_TEMP_3254",
+      parameters = Map("name" -> "c", "fieldNames" -> "a, b"))
   }
 
   test("lookup a set of missing fields should output existing fields") {
-    val e = intercept[IllegalArgumentException](s(Set("a", "c"))).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s(Set("a", "c"))),
+      errorClass = "_LEGACY_ERROR_TEMP_3253",
+      parameters = Map("nonExistFields" -> "c", "fieldNames" -> "a, b"))
   }
 
   test("lookup fieldIndex for missing field should output existing fields") {
-    val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
-    assert(e.contains("Available: a, b"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](s.fieldIndex("c")),
+      errorClass = "_LEGACY_ERROR_TEMP_3252",
+      parameters = Map("name" -> "c", "fieldNames" -> "a, b"))
   }
 
   test("SPARK-24849: toDDL - simple struct") {
     val struct = StructType(Seq(StructField("a", IntegerType)))
 
-    assert(struct.toDDL == "`a` INT")
+    assert(struct.toDDL == "a INT")
   }
 
   test("SPARK-24849: round trip toDDL - fromDDL") {
@@ -59,7 +70,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-24849: round trip fromDDL - toDDL") {
-    val struct = "`a` MAP<INT, STRING>,`b` INT"
+    val struct = "a MAP<INT, STRING>,b INT"
 
     assert(fromDDL(struct).toDDL === struct)
   }
@@ -68,14 +79,14 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val struct = new StructType()
       .add("metaData", new StructType().add("eventId", StringType))
 
-    assert(struct.toDDL == "`metaData` STRUCT<`eventId`: STRING>")
+    assert(struct.toDDL == "metaData STRUCT<eventId: STRING>")
   }
 
   test("SPARK-24849: toDDL should output field's comment") {
     val struct = StructType(Seq(
       StructField("b", BooleanType).withComment("Field's comment")))
 
-    assert(struct.toDDL == """`b` BOOLEAN COMMENT 'Field\'s comment'""")
+    assert(struct.toDDL == """b BOOLEAN COMMENT 'Field\'s comment'""")
   }
 
   private val nestedStruct = new StructType()
@@ -87,7 +98,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     ).withComment("comment"))
 
   test("SPARK-33846: toDDL should output nested field's comment") {
-    val ddl = "`a` STRUCT<`b`: STRUCT<`c`: STRING COMMENT 'Deep Nested comment'> " +
+    val ddl = "a STRUCT<b: STRUCT<c: STRING COMMENT 'Deep Nested comment'> " +
       "COMMENT 'Nested comment'> COMMENT 'comment'"
     assert(nestedStruct.toDDL == ddl)
   }
@@ -151,7 +162,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("interval keyword in schema string") {
-    val interval = "`a` INTERVAL"
+    val interval = "a INTERVAL"
     assert(fromDDL(interval).toDDL === interval)
   }
 
@@ -162,22 +173,22 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val source1 = StructType.fromDDL("c1 INT")
     val missing1 = StructType.fromDDL("c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
     assert(StructType.findMissingFields(source1, schema, resolver)
-      .exists(_.sameType(missing1)))
+      .exists(e => DataTypeUtils.sameType(e, missing1)))
 
     val source2 = StructType.fromDDL("c1 INT, c3 STRING")
     val missing2 = StructType.fromDDL("c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
     assert(StructType.findMissingFields(source2, schema, resolver)
-      .exists(_.sameType(missing2)))
+      .exists(e => DataTypeUtils.sameType(e, missing2)))
 
     val source3 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT>")
     val missing3 = StructType.fromDDL("c2 STRUCT<c4: STRUCT<c5: INT, c6: INT>>")
     assert(StructType.findMissingFields(source3, schema, resolver)
-      .exists(_.sameType(missing3)))
+      .exists(e => DataTypeUtils.sameType(e, missing3)))
 
     val source4 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c6: INT>>")
     val missing4 = StructType.fromDDL("c2 STRUCT<c4: STRUCT<c5: INT>>")
     assert(StructType.findMissingFields(source4, schema, resolver)
-      .exists(_.sameType(missing4)))
+      .exists(e => DataTypeUtils.sameType(e, missing4)))
   }
 
   test("find missing (nested) fields: array and map") {
@@ -188,7 +199,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val missing5 = StructType.fromDDL("c2 ARRAY<STRUCT<c3: INT, c4: LONG>>")
     assert(
       StructType.findMissingFields(source5, schemaWithArray, resolver)
-        .exists(_.sameType(missing5)))
+        .exists(e => DataTypeUtils.sameType(e, missing5)))
 
     val schemaWithMap1 = StructType.fromDDL(
       "c1 INT, c2 MAP<STRUCT<c3: INT, c4: LONG>, STRING>, c3 LONG")
@@ -196,7 +207,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val missing6 = StructType.fromDDL("c2 MAP<STRUCT<c3: INT, c4: LONG>, STRING>")
     assert(
       StructType.findMissingFields(source6, schemaWithMap1, resolver)
-        .exists(_.sameType(missing6)))
+        .exists(e => DataTypeUtils.sameType(e, missing6)))
 
     val schemaWithMap2 = StructType.fromDDL(
       "c1 INT, c2 MAP<STRING, STRUCT<c3: INT, c4: LONG>>, c3 STRING")
@@ -204,7 +215,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val missing7 = StructType.fromDDL("c2 MAP<STRING, STRUCT<c3: INT, c4: LONG>>")
     assert(
       StructType.findMissingFields(source7, schemaWithMap2, resolver)
-        .exists(_.sameType(missing7)))
+        .exists(e => DataTypeUtils.sameType(e, missing7)))
 
     // Unsupported: nested struct in array, map
     val source8 = StructType.fromDDL("c1 INT, c2 ARRAY<STRUCT<c3: INT>>")
@@ -228,30 +239,30 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       val source1 = StructType.fromDDL("c1 INT, C2 LONG")
       val missing1 = StructType.fromDDL("c2 STRUCT<c3: INT, C4: STRUCT<C5: INT, c6: INT>>")
       assert(StructType.findMissingFields(source1, schema, resolver)
-        .exists(_.sameType(missing1)))
+        .exists(e => DataTypeUtils.sameType(e, missing1)))
 
       val source2 = StructType.fromDDL("c2 LONG")
       val missing2 = StructType.fromDDL("c1 INT")
       assert(StructType.findMissingFields(source2, schema, resolver)
-        .exists(_.sameType(missing2)))
+        .exists(e => DataTypeUtils.sameType(e, missing2)))
 
       val source3 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, C4: STRUCT<c5: INT>>")
       val missing3 = StructType.fromDDL("c2 STRUCT<C4: STRUCT<C5: INT, c6: INT>>")
       assert(StructType.findMissingFields(source3, schema, resolver)
-        .exists(_.sameType(missing3)))
+        .exists(e => DataTypeUtils.sameType(e, missing3)))
 
       val source4 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, C4: STRUCT<C5: Int>>")
       val missing4 = StructType.fromDDL("c2 STRUCT<C4: STRUCT<c6: INT>>")
       assert(StructType.findMissingFields(source4, schema, resolver)
-        .exists(_.sameType(missing4)))
+        .exists(e => DataTypeUtils.sameType(e, missing4)))
     }
   }
 
   test("SPARK-35285: ANSI interval types in schema") {
-    val yearMonthInterval = "`ymi` INTERVAL YEAR TO MONTH"
+    val yearMonthInterval = "ymi INTERVAL YEAR TO MONTH"
     assert(fromDDL(yearMonthInterval).toDDL === yearMonthInterval)
 
-    val dayTimeInterval = "`dti` INTERVAL DAY TO SECOND"
+    val dayTimeInterval = "dti INTERVAL DAY TO SECOND"
     assert(fromDDL(dayTimeInterval).toDDL === dayTimeInterval)
   }
 
@@ -288,8 +299,13 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
         new StructType().add("a", "int"),
         new StructType().add("b", "int")
       ))
+      .add("m3", MapType(IntegerType, MapType(
+        IntegerType,
+        new StructType().add("ma", IntegerType))
+      ))
       .add("a1", ArrayType(IntegerType))
       .add("a2", ArrayType(new StructType().add("c", "int")))
+      .add("a3", ArrayType(ArrayType(new StructType().add("d", "int"))))
 
     def check(field: Seq[String], expect: Option[(Seq[String], StructField)]): Unit = {
       val res = input.findNestedField(field, resolver = caseInsensitiveResolution)
@@ -317,31 +333,53 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     var e = intercept[AnalysisException] {
       check(Seq("S1", "S12", "S123"), None)
     }
-    assert(e.getMessage.contains("Field name S1.S12.S123 is invalid: s1.s12 is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`S1`.`S12`.`S123`",
+        "path" -> "`s1`.`s12`"))
 
     // ambiguous name
     e = intercept[AnalysisException] {
       check(Seq("S2", "x"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name S2.x is ambiguous and has 2 matching fields in the struct"))
+    checkError(
+      exception = e,
+      errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+      parameters = Map("name" -> "`S2`.`x`", "n" -> "2"))
     caseSensitiveCheck(Seq("s2", "x"), Some(Seq("s2") -> StructField("x", IntegerType)))
 
     // simple map type
     e = intercept[AnalysisException] {
       check(Seq("m1", "key"), None)
     }
-    assert(e.getMessage.contains("Field name m1.key is invalid: m1 is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`m1`.`key`",
+        "path" -> "`m1`"))
     checkCollection(Seq("m1", "key"), Some(Seq("m1") -> StructField("key", IntegerType, false)))
     checkCollection(Seq("M1", "value"), Some(Seq("m1") -> StructField("value", IntegerType)))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M1", "key", "name"), None)
     }
-    assert(e.getMessage.contains("Field name M1.key.name is invalid: m1.key is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`M1`.`key`.`name`",
+        "path" -> "`m1`.`key`"))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M1", "value", "name"), None)
     }
-    assert(e.getMessage.contains("Field name M1.value.name is invalid: m1.value is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`M1`.`value`.`name`",
+        "path" -> "`m1`.`value`"))
 
     // map of struct
     checkCollection(Seq("M2", "key", "A"),
@@ -353,24 +391,41 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       checkCollection(Seq("m2", "key", "A", "name"), None)
     }
-    assert(e.getMessage.contains("Field name m2.key.A.name is invalid: m2.key.a is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`m2`.`key`.`A`.`name`",
+        "path" -> "`m2`.`key`.`a`"))
     e = intercept[AnalysisException] {
       checkCollection(Seq("M2", "value", "b", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name M2.value.b.name is invalid: m2.value.b is not a struct"))
-
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`M2`.`value`.`b`.`name`",
+        "path" -> "`m2`.`value`.`b`"))
     // simple array type
     e = intercept[AnalysisException] {
       check(Seq("A1", "element"), None)
     }
-    assert(e.getMessage.contains("Field name A1.element is invalid: a1 is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`A1`.`element`",
+        "path" -> "`a1`"))
     checkCollection(Seq("A1", "element"), Some(Seq("a1") -> StructField("element", IntegerType)))
     e = intercept[AnalysisException] {
       checkCollection(Seq("A1", "element", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name A1.element.name is invalid: a1.element is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`A1`.`element`.`name`",
+        "path" -> "`a1`.`element`"))
 
     // array of struct
     checkCollection(Seq("A2", "element", "C"),
@@ -379,7 +434,176 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     e = intercept[AnalysisException] {
       checkCollection(Seq("a2", "element", "C", "name"), None)
     }
-    assert(e.getMessage.contains(
-      "Field name a2.element.C.name is invalid: a2.element.c is not a struct"))
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`a2`.`element`.`C`.`name`",
+        "path" -> "`a2`.`element`.`c`"))
+
+    // nested maps
+    checkCollection(Seq("M3", "value", "value", "MA"),
+      Some(Seq("m3", "value", "value") -> StructField("ma", IntegerType)))
+    checkCollection(Seq("M3", "value", "value", "non_exist"), None)
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("M3", "value", "value", "MA", "name"), None)
+    }
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`M3`.`value`.`value`.`MA`.`name`",
+        "path" -> "`m3`.`value`.`value`.`ma`"))
+
+    // nested arrays
+    checkCollection(Seq("A3", "element", "element", "D"),
+      Some(Seq("a3", "element", "element") -> StructField("d", IntegerType)))
+    checkCollection(Seq("A3", "element", "element", "non_exist"), None)
+    e = intercept[AnalysisException] {
+      checkCollection(Seq("A3", "element", "element", "D", "name"), None)
+    }
+    checkError(
+      exception = e,
+      errorClass = "INVALID_FIELD_NAME",
+      parameters = Map(
+        "fieldName" -> "`A3`.`element`.`element`.`D`.`name`",
+        "path" -> "`a3`.`element`.`element`.`d`")
+    )
+  }
+
+  test("SPARK-36807: Merge ANSI interval types to a tightest common type") {
+    Seq(
+      (YM(YEAR), YM(YEAR)) -> YM(YEAR),
+      (YM(YEAR), YM(MONTH)) -> YM(YEAR, MONTH),
+      (YM(MONTH), YM(MONTH)) -> YM(MONTH),
+      (YM(YEAR, MONTH), YM(YEAR)) -> YM(YEAR, MONTH),
+      (YM(YEAR, MONTH), YM(YEAR, MONTH)) -> YM(YEAR, MONTH),
+      (DT(DAY), DT(DAY)) -> DT(DAY),
+      (DT(SECOND), DT(SECOND)) -> DT(SECOND),
+      (DT(DAY), DT(SECOND)) -> DT(DAY, SECOND),
+      (DT(HOUR, SECOND), DT(DAY, MINUTE)) -> DT(DAY, SECOND),
+      (DT(HOUR, MINUTE), DT(DAY, SECOND)) -> DT(DAY, SECOND)
+    ).foreach { case ((i1, i2), expected) =>
+      val st1 = new StructType().add("interval", i1)
+      val st2 = new StructType().add("interval", i2)
+      val expectedStruct = new StructType().add("interval", expected)
+      assert(st1.merge(st2) === expectedStruct)
+      assert(st2.merge(st1) === expectedStruct)
+    }
+  }
+
+  test("SPARK-37076: Implement StructType.toString explicitly for Scala 2.13") {
+    val struct = StructType(StructField("a", IntegerType) :: Nil)
+    assert(struct.toString() === "StructType(StructField(a,IntegerType,true))")
+  }
+
+  test("SPARK-37191: Merge DecimalType") {
+    val source1 = StructType.fromDDL("c1 DECIMAL(12, 2)")
+      .merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
+    assert(source1 === StructType.fromDDL("c1 DECIMAL(12, 2)"))
+
+    val source2 = StructType.fromDDL("c1 DECIMAL(12, 2)")
+      .merge(StructType.fromDDL("c1 DECIMAL(17, 2)"))
+    assert(source2 === StructType.fromDDL("c1 DECIMAL(17, 2)"))
+
+    val source3 = StructType.fromDDL("c1 DECIMAL(17, 2)")
+      .merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
+    assert(source3 === StructType.fromDDL("c1 DECIMAL(17, 2)"))
+
+    // Invalid merge cases:
+
+    checkError(
+      exception = intercept[SparkException] {
+        StructType.fromDDL("c1 DECIMAL(10, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
+      },
+      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      parameters = Map("left" -> "\"DECIMAL(10,5)\"", "right" -> "\"DECIMAL(12,2)\"")
+    )
+
+    checkError(
+      exception = intercept[SparkException] {
+        StructType.fromDDL("c1 DECIMAL(12, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
+      },
+      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      parameters = Map("left" -> "\"DECIMAL(12,5)\"", "right" -> "\"DECIMAL(12,2)\"")
+    )
+  }
+
+  test("SPARK-39143: Test parsing default column values out of struct types") {
+    // Positive test: the StructType.defaultValues evaluation is successful.
+    val source1 = StructType(Array(
+      StructField("c1", LongType, true,
+        new MetadataBuilder()
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
+          .putString(
+            ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
+          .build()),
+      StructField("c2", StringType, true,
+        new MetadataBuilder()
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
+          .build()),
+      StructField("c3", BooleanType)))
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1).length == 3)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1)(0) == 42)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1)(1) == UTF8String.fromString("abc"))
+    assert(ResolveDefaultColumns.existenceDefaultValues(source1)(2) == null)
+
+    // Positive test: StructType.defaultValues works because the existence default value parses and
+    // resolves successfully, then evaluates to a non-literal expression: this is constant-folded at
+    // reference time.
+    val source2 = StructType(
+      Array(StructField("c1", IntegerType, true,
+        new MetadataBuilder()
+        .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
+          .build())))
+    val error = "fails to parse as a valid literal value"
+    assert(ResolveDefaultColumns.existenceDefaultValues(source2).length == 1)
+    assert(ResolveDefaultColumns.existenceDefaultValues(source2)(0) == 2)
+
+    // Negative test: StructType.defaultValues fails because the existence default value fails to
+    // parse.
+    val source3 = StructType(Array(
+      StructField("c1", IntegerType, true,
+        new MetadataBuilder()
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "invalid")
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "invalid")
+          .build())))
+    assert(intercept[AnalysisException] {
+      ResolveDefaultColumns.existenceDefaultValues(source3)
+    }.getMessage.contains(error))
+
+    // Negative test: StructType.defaultValues fails because the existence default value fails to
+    // resolve.
+    val source4 = StructType(Array(
+      StructField("c1", IntegerType, true,
+        new MetadataBuilder()
+          .putString(
+            ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY,
+            "(SELECT 'abc' FROM missingtable)")
+          .putString(
+            ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+            "(SELECT 'abc' FROM missingtable)")
+          .build())))
+    assert(intercept[AnalysisException] {
+      ResolveDefaultColumns.existenceDefaultValues(source4)
+    }.getMessage.contains(error))
+  }
+
+  test("SPARK-46629: Test STRUCT DDL with NOT NULL round trip") {
+    val struct = StructType(
+      Seq(
+        StructField(
+          "b",
+          StructType(
+            Seq(StructField("c", StringType, nullable = false).withComment("struct comment"))),
+          nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType).withComment("nullable comment")))
+    assert(
+      struct.toDDL == "b STRUCT<c: STRING NOT NULL COMMENT 'struct comment'> NOT NULL," +
+        "b STRING NOT NULL,c STRING COMMENT 'nullable comment'")
+    assert(fromDDL(struct.toDDL) === struct)
   }
 }

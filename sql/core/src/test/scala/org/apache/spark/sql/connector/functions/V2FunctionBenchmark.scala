@@ -24,7 +24,7 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, Expression}
+import org.apache.spark.sql.catalyst.expressions.{BinaryArithmetic, EvalMode, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
@@ -40,8 +40,8 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, LongType, Numeric
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <sql core test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/V2FunctionBenchmark-results.txt".
  * }}}
  * '''NOTE''': to update the result of this benchmark, please use Github benchmark action:
@@ -104,7 +104,7 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
       left: Expression,
       right: Expression,
       override val nullable: Boolean) extends BinaryArithmetic {
-    override protected val failOnError: Boolean = false
+    protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "+"
 

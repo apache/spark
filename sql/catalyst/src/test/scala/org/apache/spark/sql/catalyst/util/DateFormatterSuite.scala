@@ -22,8 +22,7 @@ import java.time.{DateTimeException, LocalDate}
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 class DateFormatterSuite extends DatetimeFormatterSuite {
 
@@ -208,6 +207,6 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
     val errMsg = intercept[DateTimeException] {
       formatter.parse("x123")
     }.getMessage
-    assert(errMsg.contains("Cannot cast x123 to DateType"))
+    assert(errMsg.contains("""The value 'x123' of the type "STRING" cannot be cast to "DATE""""))
   }
 }

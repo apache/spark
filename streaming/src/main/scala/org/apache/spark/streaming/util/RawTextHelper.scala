@@ -47,11 +47,11 @@ object RawTextHelper {
           i += 1
         }
       }
-      map.toIterator.map {
+      map.iterator.map {
         case (k, v) => (k, v)
       }
     }
-    map.toIterator.map{case (k, v) => (k, v)}
+    map.iterator.map{case (k, v) => (k, v)}
   }
 
   /**
@@ -89,7 +89,7 @@ object RawTextHelper {
         }
       }
     }
-    taken.toIterator
+    taken.iterator
   }
 
   /**

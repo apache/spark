@@ -11,7 +11,7 @@ WholeStageCodegen (5)
                     Filter [l_partkey,l_quantity]
                       ColumnarToRow
                         InputAdapter
-                          Scan parquet default.lineitem [l_partkey,l_quantity,l_extendedprice]
+                          Scan parquet spark_catalog.default.lineitem [l_partkey,l_quantity,l_extendedprice]
                     InputAdapter
                       BroadcastExchange #2
                         WholeStageCodegen (1)
@@ -19,7 +19,7 @@ WholeStageCodegen (5)
                             Filter [p_brand,p_container,p_partkey]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.part [p_partkey,p_brand,p_container]
+                                  Scan parquet spark_catalog.default.part [p_partkey,p_brand,p_container]
                 InputAdapter
                   BroadcastExchange #3
                     WholeStageCodegen (3)
@@ -32,4 +32,4 @@ WholeStageCodegen (5)
                                   Filter [l_partkey]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.lineitem [l_partkey,l_quantity]
+                                        Scan parquet spark_catalog.default.lineitem [l_partkey,l_quantity]

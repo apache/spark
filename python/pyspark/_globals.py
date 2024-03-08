@@ -32,17 +32,17 @@ See gh-7844 for a discussion of the reload problem that motivated this module.
 Note that this approach is taken after from NumPy.
 """
 
-__ALL__ = ['_NoValue']
+__ALL__ = ["_NoValue"]
 
 
 # Disallow reloading this module so as to preserve the identities of the
 # classes defined here.
-if '_is_loaded' in globals():
-    raise RuntimeError('Reloading pyspark._globals is not allowed')
+if "_is_loaded" in globals():
+    raise RuntimeError("Reloading pyspark._globals is not allowed")
 _is_loaded = True
 
 
-class _NoValueType(object):
+class _NoValueType:
     """Special keyword value.
 
     The instance of this class may be used as the default value assigned to a
@@ -51,6 +51,7 @@ class _NoValueType(object):
 
     This class was copied from NumPy.
     """
+
     __instance = None
 
     def __new__(cls):

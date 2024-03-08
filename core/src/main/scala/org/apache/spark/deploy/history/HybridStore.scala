@@ -21,7 +21,7 @@ import java.util.Collection
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.google.common.collect.Lists;
 
@@ -32,24 +32,24 @@ import org.apache.spark.util.kvstore._
  *
  * When rebuilding the application state from event logs, HybridStore will
  * write data to InMemoryStore at first and use a background thread to dump
- * data to LevelDB once the app store is restored. We don't expect write
- * operations (except the case for caching) after calling switch to level DB.
+ * data to a disk-based KVStore once the app store is restored. We don't expect write
+ * operations (except the case for caching) after calling switch to the disk-based KVStore.
  */
 
 private[history] class HybridStore extends KVStore {
 
   private val inMemoryStore = new InMemoryStore()
 
-  private var levelDB: LevelDB = null
+  private var diskStore: KVStore = null
 
-  // Flag to indicate whether we should use inMemoryStore or levelDB
+  // Flag to indicate whether we should use inMemoryStore or RocksDB
   private val shouldUseInMemoryStore = new AtomicBoolean(true)
 
   // Flag to indicate whether this hybrid store is closed, use this flag
   // to avoid starting background thread after the store is closed
   private val closed = new AtomicBoolean(false)
 
-  // A background thread that dumps data from inMemoryStore to levelDB
+  // A background thread that dumps data from inMemoryStore to RocksDB
   private var backgroundThread: Thread = null
 
   // A hash map that stores all classes that had been written to inMemoryStore
@@ -80,7 +80,7 @@ private[history] class HybridStore extends KVStore {
   override def delete(klass: Class[_], naturalKey: Object): Unit = {
     if (backgroundThread != null) {
       throw new IllegalStateException("delete() shouldn't be called after " +
-        "the hybrid store begins switching to levelDB")
+        "the hybrid store begins switching to RocksDB")
     }
 
     getStore().delete(klass, naturalKey)
@@ -107,8 +107,8 @@ private[history] class HybridStore extends KVStore {
       }
     } finally {
       inMemoryStore.close()
-      if (levelDB != null) {
-        levelDB.close()
+      if (diskStore != null) {
+        diskStore.close()
       }
     }
   }
@@ -119,24 +119,24 @@ private[history] class HybridStore extends KVStore {
       indexValues: Collection[_]): Boolean = {
     if (backgroundThread != null) {
       throw new IllegalStateException("removeAllByIndexValues() shouldn't be " +
-        "called after the hybrid store begins switching to levelDB")
+        "called after the hybrid store begins switching to RocksDB")
     }
 
     getStore().removeAllByIndexValues(klass, index, indexValues)
   }
 
-  def setLevelDB(levelDB: LevelDB): Unit = {
-    this.levelDB = levelDB
+  def setDiskStore(diskStore: KVStore): Unit = {
+    this.diskStore = diskStore
   }
 
   /**
    * This method is called when the writing is done for inMemoryStore. A
    * background thread will be created and be started to dump data in inMemoryStore
-   * to levelDB. Once the dumping is completed, the underlying kvstore will be
-   * switched to levelDB.
+   * to diskStore. Once the dumping is completed, the underlying kvstore will be
+   * switched to diskStore.
    */
-  def switchToLevelDB(
-      listener: HybridStore.SwitchToLevelDBListener,
+  def switchToDiskStore(
+      listener: HybridStore.SwitchToDiskStoreListener,
       appId: String,
       attemptId: Option[String]): Unit = {
     if (closed.get) {
@@ -148,14 +148,18 @@ private[history] class HybridStore extends KVStore {
         for (klass <- klassMap.keys().asScala) {
           val values = Lists.newArrayList(
               inMemoryStore.view(klass).closeableIterator())
-          levelDB.writeAll(values)
+          diskStore match {
+            case db: LevelDB => db.writeAll(values)
+            case db: RocksDB => db.writeAll(values)
+            case _ => throw new IllegalStateException("Unknown disk-based KVStore")
+          }
         }
-        listener.onSwitchToLevelDBSuccess()
+        listener.onSwitchToDiskStoreSuccess()
         shouldUseInMemoryStore.set(false)
         inMemoryStore.close()
       } catch {
         case e: Exception =>
-          listener.onSwitchToLevelDBFail(e)
+          listener.onSwitchToDiskStoreFail(e)
       }
     })
     backgroundThread.setDaemon(true)
@@ -171,17 +175,17 @@ private[history] class HybridStore extends KVStore {
     if (shouldUseInMemoryStore.get) {
       inMemoryStore
     } else {
-      levelDB
+      diskStore
     }
   }
 }
 
 private[history] object HybridStore {
 
-  trait SwitchToLevelDBListener {
+  trait SwitchToDiskStoreListener {
 
-    def onSwitchToLevelDBSuccess(): Unit
+    def onSwitchToDiskStoreSuccess(): Unit
 
-    def onSwitchToLevelDBFail(e: Exception): Unit
+    def onSwitchToDiskStoreFail(e: Exception): Unit
   }
 }

@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFPercentileApprox
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{Column, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.hive.execution.TestingTypedCount
@@ -37,8 +37,8 @@ import org.apache.spark.sql.types.LongType
  *   1. without sbt: bin/spark-submit --class <this class>
  *        --jars <spark catalyst test jar>,<spark core test jar>,<spark sql test jar>
  *        <spark hive test jar>
- *   2. build/sbt "hive/test:runMain <this class>"
- *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/test:runMain <this class>"
+ *   2. build/sbt "hive/Test/runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/Test/runMain <this class>"
  *      Results will be written to "benchmarks/ObjectHashAggregateExecBenchmark-results.txt".
  * }}}
  */
@@ -46,7 +46,7 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
 
   override def getSparkSession: SparkSession = TestHive.sparkSession
 
-  private val sql = spark.sql _
+  private val sql: String => DataFrame = spark.sql _
   import spark.implicits._
 
   private def hiveUDAFvsSparkAF(N: Int): Unit = {

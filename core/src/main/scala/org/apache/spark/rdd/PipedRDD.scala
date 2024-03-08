@@ -26,10 +26,10 @@ import java.io.PrintWriter
 import java.util.StringTokenizer
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
@@ -72,9 +72,10 @@ private[spark] class PipedRDD[T: ClassTag](
 
     // for compatibility with Hadoop which sets these env variables
     // so the user code can access the input filename
-    if (split.isInstanceOf[HadoopPartition]) {
-      val hadoopSplit = split.asInstanceOf[HadoopPartition]
-      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars().asJava)
+    split match {
+      case hadoopSplit: HadoopPartition =>
+        currentEnvVars.putAll(hadoopSplit.getPipeEnvVars().asJava)
+      case _ => // do nothing
     }
 
     // When spark.worker.separated.working.directory option is turned on, each
@@ -117,7 +118,7 @@ private[spark] class PipedRDD[T: ClassTag](
       override def run(): Unit = {
         val err = proc.getErrorStream
         try {
-          for (line <- Source.fromInputStream(err)(encoding).getLines) {
+          for (line <- Source.fromInputStream(err)(encoding).getLines()) {
             // scalastyle:off println
             System.err.println(line)
             // scalastyle:on println
@@ -181,16 +182,16 @@ private[spark] class PipedRDD[T: ClassTag](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines
+    val lines = Source.fromInputStream(proc.getInputStream)(encoding).getLines()
     new Iterator[String] {
       def next(): String = {
-        if (!hasNext()) {
-          throw SparkCoreErrors.noSuchElementException()
+        if (!hasNext) {
+          throw SparkCoreErrors.noSuchElementError()
         }
         lines.next()
       }
 
-      def hasNext(): Boolean = {
+      def hasNext: Boolean = {
         val result = if (lines.hasNext) {
           true
         } else {

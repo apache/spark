@@ -21,8 +21,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
@@ -30,7 +31,7 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
 
   private SparkSubmitOptionParser parser;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     parser = spy(new DummyParser());
   }
@@ -74,9 +75,10 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
     verify(parser).handleExtraArgs(eq(Arrays.asList("bar")));
   }
 
-  @Test(expected=IllegalArgumentException.class)
+  @Test
   public void testMissingArg() {
-    parser.parse(Arrays.asList(parser.MASTER));
+    assertThrows(IllegalArgumentException.class,
+      () -> parser.parse(Arrays.asList(parser.MASTER)));
   }
 
   @Test

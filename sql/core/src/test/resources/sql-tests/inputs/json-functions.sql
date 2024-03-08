@@ -25,6 +25,10 @@ select from_json();
 SELECT json_tuple('{"a" : 1, "b" : 2}', CAST(NULL AS STRING), 'b', CAST(NULL AS STRING), 'a');
 CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a');
 SELECT json_tuple(jsonField, 'b', CAST(NULL AS STRING), a) FROM jsonTable;
+-- json_tuple exists no foldable null field
+SELECT json_tuple('{"a":"1"}', if(c1 < 1, null, 'a')) FROM ( SELECT rand() AS c1 );
+SELECT json_tuple('{"a":"1"}', if(c1 < 1, null, 'a'), if(c2 < 1, null, 'a')) FROM ( SELECT 0 AS c1, rand() AS c2 );
+
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;
 

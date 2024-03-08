@@ -23,9 +23,9 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType, DateType, StringType
-
+from pyspark.sql.utils import get_column_class
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
@@ -35,7 +35,6 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
     _sanitize_list_like,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
 
 
@@ -62,7 +61,7 @@ class DateOps(DataTypeOps):
             return column_op(F.datediff)(left, right).astype("long")
         elif isinstance(right, datetime.date) and not isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return column_op(F.datediff)(left, SF.lit(right)).astype("long")
+            return column_op(F.datediff)(left, F.lit(right)).astype("long")
         else:
             raise TypeError("Date subtraction can only be applied to date series.")
 
@@ -77,7 +76,7 @@ class DateOps(DataTypeOps):
         )
         if isinstance(right, datetime.date) and not isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return -column_op(F.datediff)(left, SF.lit(right)).astype("long")
+            return -column_op(F.datediff)(left, F.lit(right)).astype("long")
         else:
             raise TypeError("Date subtraction can only be applied to date series.")
 
@@ -85,24 +84,28 @@ class DateOps(DataTypeOps):
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
+        Column = get_column_class()
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
+        Column = get_column_class()
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
+        Column = get_column_class()
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
+        Column = get_column_class()
         return column_op(Column.__gt__)(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:

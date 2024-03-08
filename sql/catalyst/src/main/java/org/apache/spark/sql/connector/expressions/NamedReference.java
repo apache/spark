@@ -32,4 +32,10 @@ public interface NamedReference extends Expression {
    * Each string in the returned array represents a field name.
    */
   String[] fieldNames();
+
+  @Override
+  default Expression[] children() { return EMPTY_EXPRESSION; }
+
+  @Override
+  default NamedReference[] references() { return new NamedReference[]{ this }; }
 }

@@ -26,10 +26,9 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.regression.{FactorizationMachines, FactorizationMachinesParams}
 import org.apache.spark.ml.regression.FactorizationMachines._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.linalg.{Vector => OldVector}
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
 
@@ -40,12 +39,13 @@ private[classification] trait FMClassifierParams extends ProbabilisticClassifier
   with FactorizationMachinesParams {
 }
 
+// scalastyle:off line.size.limit
 /**
  * Factorization Machines learning algorithm for classification.
  * It supports normal gradient descent and AdamW solver.
  *
- * The implementation is based upon:
- * <a href="https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf">
+ * The implementation is based on:
+ * <a href="https://web.archive.org/web/20191225211603/https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf">
  * S. Rendle. "Factorization machines" 2010</a>.
  *
  * FM is able to estimate interactions even in problems with huge sparsity
@@ -68,6 +68,7 @@ private[classification] trait FMClassifierParams extends ProbabilisticClassifier
  *
  * @note Multiclass labels are not currently supported.
  */
+// scalastyle:on line.size.limit
 @Since("3.0.0")
 class FMClassifier @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
@@ -191,12 +192,16 @@ class FMClassifier @Since("3.0.0") (
       miniBatchFraction, initStd, maxIter, stepSize, tol, solver, thresholds)
     instr.logNumClasses(numClasses)
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+    val numFeatures = getNumFeatures(dataset, $(featuresCol))
     instr.logNumFeatures(numFeatures)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val labeledPoint = extractLabeledPoints(dataset, numClasses)
-    val data: RDD[(Double, OldVector)] = labeledPoint.map(x => (x.label, x.features))
+
+    val data = dataset.select(
+      checkClassificationLabels($(labelCol), Some(2)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, v: Vector) => (l, OldVectors.fromML(v))
+    }.setName("training instances")
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 

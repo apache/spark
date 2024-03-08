@@ -21,7 +21,7 @@ import java.io.InterruptedIOException
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.yarn.api.records.YarnApplicationState
+import org.apache.hadoop.yarn.api.records.{FinalApplicationStatus, YarnApplicationState}
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnAppReport}
@@ -53,13 +53,14 @@ private[spark] class YarnClientSchedulerBackend(
     sc.ui.foreach { ui => conf.set(DRIVER_APP_UI_ADDRESS, ui.webUrl) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
-    argsArrayBuf += ("--arg", hostport)
+    argsArrayBuf += "--arg" += hostport
 
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
     val args = new ClientArguments(argsArrayBuf.toArray)
     totalExpectedExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
     client = new Client(args, conf, sc.env.rpcEnv)
-    bindToYarn(client.submitApplication(), None)
+    client.submitApplication()
+    bindToYarn(client.getApplicationId(), None)
 
     waitForApplication()
 
@@ -78,8 +79,8 @@ private[spark] class YarnClientSchedulerBackend(
     val monitorInterval = conf.get(CLIENT_LAUNCH_MONITOR_INTERVAL)
 
     assert(client != null && appId.isDefined, "Application has not been submitted yet!")
-    val YarnAppReport(state, _, diags) = client.monitorApplication(appId.get,
-      returnOnRunning = true, interval = monitorInterval)
+    val YarnAppReport(state, _, diags) =
+      client.monitorApplication(returnOnRunning = true, interval = monitorInterval)
     if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {
@@ -114,7 +115,7 @@ private[spark] class YarnClientSchedulerBackend(
     override def run(): Unit = {
       try {
         val YarnAppReport(_, state, diags) =
-          client.monitorApplication(appId.get, logApplicationReport = false)
+          client.monitorApplication(logApplicationReport = false)
         logError(s"YARN application has exited unexpectedly with state $state! " +
           "Check the YARN application logs for more details.")
         diags.foreach { err =>
@@ -122,6 +123,14 @@ private[spark] class YarnClientSchedulerBackend(
         }
         allowInterrupt = false
         sc.stop()
+        state match {
+          case FinalApplicationStatus.FAILED | FinalApplicationStatus.KILLED
+            if conf.get(AM_CLIENT_MODE_EXIT_ON_ERROR) =>
+            logWarning(s"ApplicationMaster finished with status ${state}, " +
+              s"SparkContext should exit with code 1.")
+            System.exit(1)
+          case _ =>
+        }
       } catch {
         case _: InterruptedException | _: InterruptedIOException =>
           logInfo("Interrupting monitor thread")
@@ -151,8 +160,9 @@ private[spark] class YarnClientSchedulerBackend(
   /**
    * Stop the scheduler. This assumes `start()` has already been called.
    */
-  override def stop(): Unit = {
+  override def stop(exitCode: Int): Unit = {
     assert(client != null, "Attempted to stop this scheduler before starting it!")
+    yarnSchedulerEndpoint.signalDriverStop(exitCode)
     if (monitorThread != null) {
       monitorThread.stopMonitor()
     }

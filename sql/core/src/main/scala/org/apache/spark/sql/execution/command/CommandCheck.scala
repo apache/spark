@@ -30,7 +30,7 @@ object CommandCheck extends (LogicalPlan => Unit) with SQLConfHelper {
     plan.foreach {
       case AnalyzeColumnCommand(_, colsOpt, allColumns) if !allColumns =>
         colsOpt.foreach(SchemaUtils.checkColumnNameDuplication(
-          _, "in analyze columns.", conf.caseSensitiveAnalysis))
+          _, conf.caseSensitiveAnalysis))
 
       case _ =>
     }

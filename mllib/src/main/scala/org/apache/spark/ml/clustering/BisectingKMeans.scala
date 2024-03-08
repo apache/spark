@@ -21,11 +21,11 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
   BisectingKMeansModel => MLlibBisectingKMeansModel}
@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 
@@ -118,7 +118,7 @@ class BisectingKMeansModel private[ml] (
     val outputSchema = transformSchema(dataset.schema, logging = true)
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol),
-      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      predictUDF(columnToVector(dataset, getFeaturesCol)),
       outputSchema($(predictionCol)).metadata)
   }
 
@@ -152,7 +152,7 @@ class BisectingKMeansModel private[ml] (
     "summary.", "3.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.validateVectorCompatibleColumn(dataset.schema, getFeaturesCol)
-    val data = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
+    val data = columnToOldVector(dataset, getFeaturesCol)
     parentModel.computeCost(data)
   }
 
@@ -287,13 +287,11 @@ class BisectingKMeans @Since("2.0.0") (
       .setSeed($(seed))
       .setDistanceMeasure($(distanceMeasure))
 
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
-    val instances = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w)
-      .rdd.map { case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight) }
+    val instances = dataset.select(
+      checkNonNanVectors(columnToVector(dataset, $(featuresCol))),
+      checkNonNegativeWeights(get(weightCol))
+    ).rdd.map { case Row(f: Vector, w: Double) => (OldVectors.fromML(f), w)
+    }.setName("training instances")
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val parentModel = bkm.runWithWeight(instances, handlePersistence, Some(instr))

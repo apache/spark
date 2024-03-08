@@ -3,7 +3,7 @@
 -- !query schema
 struct<c_last_name:string,c_first_name:string,c_salutation:string,c_preferred_cust_flag:string,ss_ticket_number:int,cnt:bigint>
 -- !query output
-Ransom                        	Thomas              	Sir       	N	872	5
+Sauer                         	Larry               	Mr.       	N	215795	5
 Valle                         	Chandra             	Dr.       	N	45338	5
 Richardson                    	Harry               	Mr.       	Y	85055	5
-Sauer                         	Larry               	Mr.       	N	215795	5
+Ransom                        	Thomas              	Sir       	N	872	5

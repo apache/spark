@@ -86,5 +86,6 @@ Implementation considerations:
 * CPs are running in heavy multi-threaded environment and adding a state into a CP is not advised.
   If any state added then it must be synchronized properly. It could cause quite some headache to
   hunt down such issues.
-* Some of the CPs are modifying the JVM global security context so `getConnection` method is
-  synchronized by `org.apache.spark.security.SecurityConfigurationLock` to avoid race.
+* Some of the CPs are modifying the JVM global security context so if the CP's
+  `modifiesSecurityContext` method returns `true` then the CP's `getConnection` method will
+  be called synchronized by `org.apache.spark.security.SecurityConfigurationLock` to avoid race.

@@ -27,10 +27,12 @@ import org.apache.spark.{LocalSparkContext, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * Test logic related to choice of output committers.
  */
+@ExtendedSQLTest
 class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   with LocalSparkContext {
 

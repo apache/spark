@@ -46,7 +46,7 @@ class DiskStoreSuite extends SparkFunSuite {
     val byteBuffer = new ChunkedByteBuffer(ByteBuffer.wrap(bytes))
 
     val blockId = BlockId("rdd_1_2")
-    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
 
     val diskStoreMapped = new DiskStore(conf.clone().set(confKey, "0"), diskBlockManager,
       securityManager)
@@ -77,7 +77,7 @@ class DiskStoreSuite extends SparkFunSuite {
 
   test("block size tracking") {
     val conf = new SparkConf()
-    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
     val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
 
     val blockId = BlockId("rdd_1_2")
@@ -96,7 +96,7 @@ class DiskStoreSuite extends SparkFunSuite {
   test("blocks larger than 2gb") {
     val conf = new SparkConf()
       .set(config.MEMORY_MAP_LIMIT_FOR_TESTS.key, "10k")
-    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
     val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
 
     val blockId = BlockId("rdd_1_2")
@@ -117,7 +117,7 @@ class DiskStoreSuite extends SparkFunSuite {
 
     val chunkedByteBuffer = blockData.toChunkedByteBuffer(ByteBuffer.allocate)
     val chunks = chunkedByteBuffer.chunks
-    assert(chunks.size === 2)
+    assert(chunks.length === 2)
     for (chunk <- chunks) {
       assert(chunk.limit() === 10 * 1024)
     }
@@ -137,7 +137,7 @@ class DiskStoreSuite extends SparkFunSuite {
 
     val conf = new SparkConf()
     val securityManager = new SecurityManager(conf, Some(CryptoStreamUtils.createKey(conf)))
-    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
     val diskStore = new DiskStore(conf, diskBlockManager, securityManager)
 
     val blockId = BlockId("rdd_1_2")

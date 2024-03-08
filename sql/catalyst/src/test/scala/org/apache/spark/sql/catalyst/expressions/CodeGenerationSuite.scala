@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import scala.math.Ordering
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -328,7 +328,9 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
     GenerateUnsafeProjection.generate(
       ValidateExternalType(
-        GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"), IntegerType) :: Nil)
+        GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"),
+        IntegerType,
+        IntegerType) :: Nil)
   }
 
   test("SPARK-17160: field names are properly escaped by AssertTrue") {
@@ -520,7 +522,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-25113: should log when there exists generated methods above HugeMethodLimit") {
     val appender = new LogAppender("huge method limit")
-    withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName)) {
+    withLogAppender(appender, loggerNames = Seq(classOf[CodeGenerator[_, _]].getName),
+        Some(Level.INFO)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)
       val proj = GenerateUnsafeProjection.generate(Seq(expr))
@@ -528,7 +531,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(actual.getInt(0) == x)
     }
     assert(appender.loggingEvents
-      .exists(_.getRenderedMessage().contains("Generated method too long")))
+      .exists(_.getMessage().getFormattedMessage.contains("Generated method too long")))
   }
 
   test("SPARK-28916: subexpression elimination can cause 64kb code limit on UnsafeProjection") {
@@ -553,17 +556,17 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-32624: CodegenContext.addReferenceObj should work for nested Scala class") {
     // emulate TypeUtils.getInterpretedOrdering(StringType)
     val ctx = new CodegenContext
-    val comparator = implicitly[Ordering[UTF8String]]
+    val comparator = implicitly[Ordering[String]]
+
     val refTerm = ctx.addReferenceObj("comparator", comparator)
 
     // Expecting result:
-    //   "((scala.math.LowPriorityOrderingImplicits$$anon$3) references[0] /* comparator */)"
+    //   "((scala.math.Ordering) references[0] /* comparator */)"
     // Using lenient assertions to be resilient to anonymous class numbering changes
     assert(!refTerm.contains("null"))
-    assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
+    assert(refTerm.contains("scala.math.Ordering"))
   }
 
-  // TODO (SPARK-35579): Fix this bug in janino and upgrade janino in Spark.
   test("SPARK-35578: final local variable bug in janino") {
     val code =
       """

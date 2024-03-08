@@ -21,10 +21,10 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.AtomicType
 
 class DictionaryEncodingSuite extends SparkFunSuite {
   val nullValue = -1
@@ -32,7 +32,7 @@ class DictionaryEncodingSuite extends SparkFunSuite {
   testDictionaryEncoding(new LongColumnStats, LONG)
   testDictionaryEncoding(new StringColumnStats, STRING, false)
 
-  def testDictionaryEncoding[T <: AtomicType](
+  def testDictionaryEncoding[T <: PhysicalDataType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T],
       testDecompress: Boolean = true): Unit = {
@@ -142,7 +142,8 @@ class DictionaryEncodingSuite extends SparkFunSuite {
       assertResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = DictionaryEncoding.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(inputSeq.length, columnType.dataType)
+      val columnVector = new OnHeapColumnVector(inputSeq.length,
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, inputSeq.length)
 
       if (inputSeq.nonEmpty) {

@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The base trait for commands that need to alter a v2 table with [[TableChange]]s.
@@ -119,7 +120,8 @@ case class AddColumns(
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        col.position.map(_.position).orNull)
+        col.position.map(_.position).orNull,
+        col.getV2Default)
     }
   }
 
@@ -143,7 +145,8 @@ case class ReplaceColumns(
     // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
     require(table.resolved)
     val deleteChanges = table.schema.fieldNames.map { name =>
-      TableChange.deleteColumn(Array(name))
+      // REPLACE COLUMN should require column to exist
+      TableChange.deleteColumn(Array(name), false /* ifExists */)
     }
     val addChanges = columnsToAdd.map { col =>
       assert(col.path.isEmpty)
@@ -153,9 +156,10 @@ case class ReplaceColumns(
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        null)
+        null,
+        col.getV2Default)
     }
-    deleteChanges ++ addChanges
+    (deleteChanges ++ addChanges).toImmutableArraySeq
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
@@ -167,11 +171,12 @@ case class ReplaceColumns(
  */
 case class DropColumns(
     table: LogicalPlan,
-    columnsToDrop: Seq[FieldName]) extends AlterTableCommand {
+    columnsToDrop: Seq[FieldName],
+    ifExists: Boolean) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
     columnsToDrop.map { col =>
       require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
-      TableChange.deleteColumn(col.name.toArray)
+      TableChange.deleteColumn(col.name.toArray, ifExists)
     }
   }
 
@@ -204,7 +209,8 @@ case class AlterColumn(
     dataType: Option[DataType],
     nullable: Option[Boolean],
     comment: Option[String],
-    position: Option[FieldPosition]) extends AlterTableCommand {
+    position: Option[FieldPosition],
+    setDefaultExpression: Option[String]) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
     val colName = column.name.toArray
@@ -222,7 +228,17 @@ case class AlterColumn(
         "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
-    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
+    val defaultValueChange = setDefaultExpression.map { newDefaultExpression =>
+      if (newDefaultExpression.nonEmpty) {
+        // SPARK-45075: We call 'ResolveDefaultColumns.analyze' here to make sure that the default
+        // value parses successfully, and return an error otherwise
+        val newDataType = dataType.getOrElse(column.asInstanceOf[ResolvedFieldName].field.dataType)
+        ResolveDefaultColumns.analyze(column.name.last, newDataType, newDefaultExpression,
+          "ALTER TABLE ALTER COLUMN")
+      }
+      TableChange.updateColumnDefaultValue(colName, newDefaultExpression)
+    }
+    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++ defaultValueChange
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =

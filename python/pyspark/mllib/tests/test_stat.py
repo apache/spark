@@ -24,7 +24,7 @@ from pyspark.mllib.linalg import Vectors, Matrices
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
-from pyspark.sql.utils import IllegalArgumentException
+from pyspark.errors import IllegalArgumentException
 from pyspark.testing.mllibutils import MLlibTestCase
 
 
@@ -54,7 +54,8 @@ class StatTests(MLlibTestCase):
         summary2 = Statistics.colStats(data2)
         self.assertEqual(array([45.0]), summary2.normL1())
         import math
-        expectedNormL2 = math.sqrt(sum(map(lambda x: x*x, range(10))))
+
+        expectedNormL2 = math.sqrt(sum(map(lambda x: x * x, range(10))))
         self.assertTrue(math.fabs(summary2.normL2()[0] - expectedNormL2) < 1e-14)
 
 
@@ -64,6 +65,7 @@ class ChiSqTestTests(MLlibTestCase):
 
         observed = Vectors.dense([4, 6, 5])
         pearson = Statistics.chiSqTest(observed)
+        self.assertIn("Chi squared test summary", str(pearson))
 
         # Validated against the R command `chisq.test(c(4, 6, 5), p=c(1/3, 1/3, 1/3))`
         self.assertEqual(pearson.statistic, 0.4)
@@ -100,7 +102,8 @@ class ChiSqTestTests(MLlibTestCase):
         # 0.0 in expected and observed simultaneously
         zero_observed = Vectors.dense([2.0, 0.0, 1.0])
         self.assertRaises(
-            IllegalArgumentException, Statistics.chiSqTest, zero_observed, zero_expected)
+            IllegalArgumentException, Statistics.chiSqTest, zero_observed, zero_expected
+        )
 
     def test_matrix_independence(self):
         data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
@@ -131,7 +134,7 @@ class ChiSqTestTests(MLlibTestCase):
             LabeledPoint(1.0, Vectors.dense([1.5, 30.0])),
             LabeledPoint(0.0, Vectors.dense([3.5, 30.0])),
             LabeledPoint(0.0, Vectors.dense([3.5, 40.0])),
-            LabeledPoint(1.0, Vectors.dense([3.5, 40.0]))
+            LabeledPoint(1.0, Vectors.dense([3.5, 40.0])),
         ]
 
         for numParts in [2, 4, 6, 8]:
@@ -150,7 +153,7 @@ class ChiSqTestTests(MLlibTestCase):
         num_cols = 1001
         sparse_data = [
             LabeledPoint(0.0, Vectors.sparse(num_cols, [(100, 2.0)])),
-            LabeledPoint(0.1, Vectors.sparse(num_cols, [(200, 1.0)]))
+            LabeledPoint(0.1, Vectors.sparse(num_cols, [(200, 1.0)])),
         ]
         chi = Statistics.chiSqTest(self.sc.parallelize(sparse_data))
         self.assertEqual(len(chi), num_cols)
@@ -158,15 +161,31 @@ class ChiSqTestTests(MLlibTestCase):
 
 
 class KolmogorovSmirnovTest(MLlibTestCase):
-
     def test_R_implementation_equivalence(self):
-        data = self.sc.parallelize([
-            1.1626852897838, -0.585924465893051, 1.78546500331661, -1.33259371048501,
-            -0.446566766553219, 0.569606122374976, -2.88971761441412, -0.869018343326555,
-            -0.461702683149641, -0.555540910137444, -0.0201353678515895, -0.150382224136063,
-            -0.628126755843964, 1.32322085193283, -1.52135057001199, -0.437427868856691,
-            0.970577579543399, 0.0282226444247749, -0.0857821886527593, 0.389214404984942
-        ])
+        data = self.sc.parallelize(
+            [
+                1.1626852897838,
+                -0.585924465893051,
+                1.78546500331661,
+                -1.33259371048501,
+                -0.446566766553219,
+                0.569606122374976,
+                -2.88971761441412,
+                -0.869018343326555,
+                -0.461702683149641,
+                -0.555540910137444,
+                -0.0201353678515895,
+                -0.150382224136063,
+                -0.628126755843964,
+                1.32322085193283,
+                -1.52135057001199,
+                -0.437427868856691,
+                0.970577579543399,
+                0.0282226444247749,
+                -0.0857821886527593,
+                0.389214404984942,
+            ]
+        )
         model = Statistics.kolmogorovSmirnovTest(data, "norm")
         self.assertAlmostEqual(model.statistic, 0.189, 3)
         self.assertAlmostEqual(model.pValue, 0.422, 3)
@@ -180,8 +199,9 @@ if __name__ == "__main__":
     from pyspark.mllib.tests.test_stat import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+        import xmlrunner
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

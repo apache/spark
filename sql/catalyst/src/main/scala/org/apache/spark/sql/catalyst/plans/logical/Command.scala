@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
@@ -43,12 +44,22 @@ trait BinaryCommand extends Command with BinaryLike[LogicalPlan]
 
 /**
  * A logical node that can be used for a command that requires its children to be only analyzed,
- * but not optimized.
+ * but not optimized. An example would be "create view": we don't need to optimize the view subtree
+ * because we will just store the entire view text as is in the catalog.
+ *
+ * The way we do this is by setting the children to empty once the subtree is analyzed. This will
+ * prevent the optimizer (or the analyzer from that point on) from traversing into the children.
+ *
+ * There's a corresponding rule
+ * [[org.apache.spark.sql.catalyst.analysis.Analyzer.HandleSpecialCommand]] that marks these
+ * commands analyzed.
  */
 trait AnalysisOnlyCommand extends Command {
   val isAnalyzed: Boolean
   def childrenToAnalyze: Seq[LogicalPlan]
   override final def children: Seq[LogicalPlan] = if (isAnalyzed) Nil else childrenToAnalyze
   override def innerChildren: Seq[QueryPlan[_]] = if (isAnalyzed) childrenToAnalyze else Nil
-  def markAsAnalyzed(): LogicalPlan
+  // After the analysis finished, we give the command a chance to update it's state based
+  // on the `AnalysisContext`
+  def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan
 }

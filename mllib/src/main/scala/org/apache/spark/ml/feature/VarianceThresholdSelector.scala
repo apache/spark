@@ -29,7 +29,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
-
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Params for [[VarianceThresholdSelector]] and [[VarianceThresholdSelectorModel]].
@@ -56,7 +56,7 @@ private[feature] trait VarianceThresholdSelectorParams extends Params
 
 /**
  * Feature selector that removes all low-variance features. Features with a
- * variance not greater than the threshold will be removed. The default is to keep
+ * (sample) variance not greater than the threshold will be removed. The default is to keep
  * all features with non-zero variance, i.e. remove the features that have the
  * same value in all samples.
  */
@@ -188,7 +188,7 @@ object VarianceThresholdSelectorModel extends MLReadable[VarianceThresholdSelect
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.selectedFeatures.toSeq)
+      val data = Data(instance.selectedFeatures.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }

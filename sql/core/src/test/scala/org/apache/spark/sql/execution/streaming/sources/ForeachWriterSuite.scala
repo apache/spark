@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeAndAfter {
 
@@ -142,7 +143,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
         query.processAllAvailable()
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getCause.getMessage === "ForeachSinkSuite error")
+      assert(e.getCause.getCause.getMessage === "ForeachSinkSuite error")
       assert(query.isActive === false)
 
       val allEvents = ForeachWriterSuite.allEvents()
@@ -165,8 +166,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     val windowedAggregation = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"count".as[Long])
       .map(_.toInt)
       .repartition(1)
@@ -199,8 +200,8 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     val windowedAggregation = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"count".as[Long])
       .map(_.toInt)
       .repartition(1)
@@ -261,7 +262,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
     }
   }
 
-  testQuietly("foreach with error not caused by ForeachWriter") {
+  test("foreach with error not caused by ForeachWriter") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(1).map(_ / 0).writeStream
@@ -275,7 +276,7 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       }
 
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getCause.getMessage === "/ by zero")
+      assert(e.getCause.getCause.getMessage === "/ by zero")
       assert(query.isActive === false)
 
       val allEvents = ForeachWriterSuite.allEvents()
@@ -283,9 +284,11 @@ class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeA
       assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
       // `close` should be called with the error
       val errorEvent = allEvents(0)(1).asInstanceOf[ForeachWriterSuite.Close]
-      assert(errorEvent.error.get.isInstanceOf[SparkException])
-      assert(errorEvent.error.get.getMessage ===
-        "Foreach writer has been aborted due to a task failure")
+      checkError(
+        exception = errorEvent.error.get.asInstanceOf[SparkException],
+        errorClass = "_LEGACY_ERROR_TEMP_2256",
+        parameters = Map.empty
+      )
     }
   }
 }
@@ -308,7 +311,7 @@ object ForeachWriterSuite {
   }
 
   def allEvents(): Seq[Seq[Event]] = {
-    _allEvents.toArray(new Array[Seq[Event]](_allEvents.size()))
+    _allEvents.toArray(new Array[Seq[Event]](_allEvents.size())).toImmutableArraySeq
   }
 
   def clear(): Unit = {

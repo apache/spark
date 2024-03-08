@@ -28,11 +28,16 @@ private[spark] class YarnClusterSchedulerBackend(
   extends YarnSchedulerBackend(scheduler, sc) {
 
   override def start(): Unit = {
-    val attemptId = ApplicationMaster.getAttemptId
+    val attemptId = ApplicationMaster.getAttemptId()
     bindToYarn(attemptId.getApplicationId(), Some(attemptId))
     super.start()
     totalExpectedExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(sc.conf)
     startBindings()
+  }
+
+  override def stop(exitCode: Int): Unit = {
+    yarnSchedulerEndpoint.signalDriverStop(exitCode)
+    super.stop()
   }
 
   override def getDriverLogUrls: Option[Map[String, String]] = {

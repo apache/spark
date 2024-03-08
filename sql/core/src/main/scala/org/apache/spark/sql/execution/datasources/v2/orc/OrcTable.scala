@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.FileStatus
 
@@ -49,8 +49,6 @@ case class OrcTable(
     }
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
-    case _: AnsiIntervalType => false
-
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }

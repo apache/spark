@@ -28,7 +28,7 @@ class IntervalFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-36022: Respect interval fields in extract") {
     yearMonthIntervalTypes.foreach { dtype =>
-      val ymDF = Seq(Period.of(1, 2, 0)).toDF.select($"value" cast dtype as "value")
+      val ymDF = Seq(Period.of(1, 2, 0)).toDF().select($"value" cast dtype as "value")
         .select($"value" cast dtype as "value")
       val expectedMap = Map("year" -> 1, "month" -> 2)
       YM.yearMonthFields.foreach { field =>
@@ -45,7 +45,7 @@ class IntervalFunctionsSuite extends QueryTest with SharedSparkSession {
     }
 
     dayTimeIntervalTypes.foreach { dtype =>
-      val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF
+      val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF()
         .select($"value" cast dtype as "value")
       val expectedMap = Map("day" -> 1, "hour" -> 2, "minute" -> 3, "second" -> 4)
       DT.dayTimeFields.foreach { field =>

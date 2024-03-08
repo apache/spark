@@ -1,0 +1,2 @@
+Project [element_at(e#0, a#0, None, false) AS try_element_at(e, a)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

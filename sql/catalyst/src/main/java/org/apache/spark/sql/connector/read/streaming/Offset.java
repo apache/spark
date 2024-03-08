@@ -49,8 +49,8 @@ public abstract class Offset {
      */
     @Override
     public boolean equals(Object obj) {
-        if (obj instanceof Offset) {
-            return this.json().equals(((Offset) obj).json());
+        if (obj instanceof Offset offset) {
+            return this.json().equals(offset.json());
         } else {
             return false;
         }

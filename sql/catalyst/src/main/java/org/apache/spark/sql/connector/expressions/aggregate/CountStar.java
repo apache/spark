@@ -18,6 +18,8 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * An aggregate function that returns the number of rows in a group.
@@ -25,14 +27,11 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.2.0
  */
 @Evolving
-public final class CountStar implements AggregateFunc {
+public final class CountStar extends ExpressionWithToString implements AggregateFunc {
 
   public CountStar() {
   }
 
   @Override
-  public String toString() { return "COUNT(*)"; }
-
-  @Override
-  public String describe() { return this.toString(); }
+  public Expression[] children() { return EMPTY_EXPRESSION; }
 }

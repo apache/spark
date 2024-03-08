@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
 
@@ -26,18 +30,28 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
   extends Sink {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    val resolvedEncoder = encoder.resolveAndBind(
-      data.logicalPlan.output,
-      data.sparkSession.sessionState.analyzer)
-    val fromRow = resolvedEncoder.createDeserializer()
-    val rdd = data.queryExecution.toRdd.map[T](fromRow)(encoder.clsTag)
-    val ds = data.sparkSession.createDataset(rdd)(encoder)
-    batchWriter(ds, batchId)
+    val node = LogicalRDD.fromDataset(rdd = data.queryExecution.toRdd, originDataset = data,
+      isStreaming = false)
+    implicit val enc = encoder
+    val ds = Dataset.ofRows(data.sparkSession, node).as[T]
+    callBatchWriter(ds, batchId)
   }
 
   override def toString(): String = "ForeachBatchSink"
-}
 
+  private def callBatchWriter(ds: Dataset[T], batchId: Long): Unit = {
+    try {
+      batchWriter(ds, batchId)
+    } catch {
+      // The user code can throw any type of exception.
+      case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+        throw new SparkException(
+          errorClass = "FOREACH_BATCH_USER_FUNCTION_ERROR",
+          messageParameters = Map.empty,
+          cause = e)
+    }
+  }
+}
 
 /**
  * Interface that is meant to be extended by Python classes via Py4J.

@@ -81,8 +81,7 @@ public class CookieSigner {
       LOG.debug("Signature generated for " + rawValue + " inside verify is " + currentSignature);
     }
     if (!MessageDigest.isEqual(originalSignature.getBytes(), currentSignature.getBytes())) {
-      throw new IllegalArgumentException("Invalid sign, original = " + originalSignature +
-        " current = " + currentSignature);
+      throw new IllegalArgumentException("Invalid sign");
     }
     return rawValue;
   }

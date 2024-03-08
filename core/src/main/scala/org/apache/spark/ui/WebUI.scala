@@ -18,13 +18,13 @@
 package org.apache.spark.ui
 
 import java.util.EnumSet
-import javax.servlet.DispatcherType
-import javax.servlet.http.{HttpServlet, HttpServletRequest}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.xml.Node
 
+import jakarta.servlet.DispatcherType
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest}
 import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping, ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST.{JNothing, JValue}
 
@@ -140,9 +140,9 @@ private[spark] abstract class WebUI(
   def initialize(): Unit
 
   def initServer(): ServerInfo = {
-    val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
-    val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
-    logInfo(s"Bound $className to $host, and started at $webUrl")
+    val hostName = Option(conf.getenv("SPARK_LOCAL_IP"))
+        .getOrElse(if (Utils.preferIPv6) "[::]" else "0.0.0.0")
+    val server = startJettyServer(hostName, port, sslOptions, conf, name, poolSize)
     server
   }
 
@@ -153,6 +153,9 @@ private[spark] abstract class WebUI(
       val server = initServer()
       handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
+      val hostName = Option(conf.getenv("SPARK_LOCAL_IP"))
+          .getOrElse(if (Utils.preferIPv6) "[::]" else "0.0.0.0")
+      logInfo(s"Bound $className to $hostName, and started at $webUrl")
     } catch {
       case e: Exception =>
         logError(s"Failed to bind $className", e)
@@ -195,10 +198,12 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
     pages += page
   }
 
-  /** Get a list of header tabs from the parent UI. */
-  def headerTabs: Seq[WebUITab] = parent.getTabs
+  /** Get a list of header tabs from the parent UI sorted by displayOrder. */
+  def headerTabs: Seq[WebUITab] = parent.getTabs.sortBy(_.displayOrder)
 
   def basePath: String = parent.getBasePath
+
+  def displayOrder: Int = Integer.MIN_VALUE
 }
 
 

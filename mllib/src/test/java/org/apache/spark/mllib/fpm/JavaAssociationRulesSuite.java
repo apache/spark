@@ -18,7 +18,7 @@ package org.apache.spark.mllib.fpm;
 
 import java.util.Arrays;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
@@ -29,7 +29,6 @@ public class JavaAssociationRulesSuite extends SharedSparkSession {
   @Test
   public void runAssociationRules() {
 
-    @SuppressWarnings("unchecked")
     JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = jsc.parallelize(Arrays.asList(
       new FreqItemset<>(new String[]{"a"}, 15L),
       new FreqItemset<>(new String[]{"b"}, 35L),

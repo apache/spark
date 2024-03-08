@@ -24,7 +24,7 @@ import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.exceptions.TestFailedException
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkThrowable}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -72,7 +72,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
   }
 
   private def prepareEvaluation(expression: Expression): Expression = {
-    val serializer = new JavaSerializer(new SparkConf()).newInstance
+    val serializer = new JavaSerializer(new SparkConf()).newInstance()
     val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(expression)
     assert(expr.resolved)
@@ -123,11 +123,11 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
             result.get(i, f.dataType), expected.get(i, f.dataType), f.dataType, f.nullable)
         }
       case (result: ArrayData, expected: ArrayData) =>
-        result.numElements == expected.numElements && {
+        result.numElements() == expected.numElements() && {
           val ArrayType(et, cn) = dataType.asInstanceOf[ArrayType]
           var isSame = true
           var i = 0
-          while (isSame && i < result.numElements) {
+          while (isSame && i < result.numElements()) {
             isSame = checkResult(result.get(i, et), expected.get(i, et), et, cn)
             i += 1
           }
@@ -135,8 +135,8 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
         }
       case (result: MapData, expected: MapData) =>
         val MapType(kt, vt, vcn) = dataType.asInstanceOf[MapType]
-        checkResult(result.keyArray, expected.keyArray, ArrayType(kt, false), false) &&
-          checkResult(result.valueArray, expected.valueArray, ArrayType(vt, vcn), false)
+        checkResult(result.keyArray(), expected.keyArray(), ArrayType(kt, false), false) &&
+          checkResult(result.valueArray(), expected.valueArray(), ArrayType(vt, vcn), false)
       case (result: Double, expected: Double) =>
         if (expected.isNaN) result.isNaN else expected == result
       case (result: Float, expected: Float) =>
@@ -144,6 +144,54 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
       case (result: Row, expected: InternalRow) => result.toSeq == expected.toSeq(result.schema)
       case _ =>
         result == expected
+    }
+  }
+
+  protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      errorClass: String,
+      parameters: Map[String, String] = Map.empty): Unit = {
+    checkErrorInExpression[T](expression, InternalRow.empty, errorClass, parameters)
+  }
+
+  protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
+      errorClass: String): Unit = {
+    checkErrorInExpression[T](expression, inputRow, errorClass, Map.empty[String, String])
+  }
+
+  protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
+      errorClass: String,
+      parameters: Map[String, String]): Unit = {
+
+    def checkException(eval: => Unit, testMode: String): Unit = {
+      val modes = Seq(CodegenObjectFactoryMode.CODEGEN_ONLY, CodegenObjectFactoryMode.NO_CODEGEN)
+      withClue(s"($testMode)") {
+        val e = intercept[T] {
+          for (fallbackMode <- modes) {
+            withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> fallbackMode.toString) {
+              eval
+            }
+          }
+        }
+        checkError(
+          exception = e,
+          errorClass = errorClass,
+          parameters = parameters
+        )
+      }
+    }
+
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
+
+    checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
+    checkException(evaluateWithMutableProjection(expr, inputRow), "codegen mode")
+    if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      checkException(evaluateWithUnsafeProjection(expr, inputRow), "unsafe mode")
     }
   }
 
@@ -170,6 +218,10 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
         }.getMessage
         if (errMsg == null) {
           if (expectedErrMsg != null) {
+            fail(s"Expected `$expectedErrMsg` but null error message found")
+          }
+        } else if (expectedErrMsg == null) {
+          if (errMsg != null) {
             fail(s"Expected null error message, but `$errMsg` found")
           }
         } else if (!errMsg.contains(expectedErrMsg)) {
@@ -250,7 +302,7 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
 
         val dataType = expression.dataType
         if (!checkResult(unsafeRow.get(0, dataType), expected, dataType, expression.nullable)) {
-          fail("Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
+          fail(s"Incorrect evaluation in unsafe mode (fallback mode = $fallbackMode): " +
             s"$expression, actual: $unsafeRow, expected: $expected, " +
             s"dataType: $dataType, nullable: ${expression.nullable}")
         }

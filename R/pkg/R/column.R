@@ -72,7 +72,7 @@ column_functions1 <- c(
   "desc", "desc_nulls_first", "desc_nulls_last",
   "isNaN", "isNull", "isNotNull"
 )
-column_functions2 <- c("like", "rlike", "getField", "getItem", "contains")
+column_functions2 <- c("like", "rlike", "ilike", "getField", "getItem", "contains")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -85,7 +85,7 @@ createOperator <- function(op) {
                   callJMethod(e1@jc, operators[[op]])
                 }
               } else {
-                if (class(e2) == "Column") {
+                if (inherits(e2, "Column")) {
                   e2 <- e2@jc
                 }
                 if (op == "^") {
@@ -110,7 +110,7 @@ createColumnFunction2 <- function(name) {
   setMethod(name,
             signature(x = "Column"),
             function(x, data) {
-              if (class(data) == "Column") {
+              if (inherits(data, "Column")) {
                 data <- data@jc
               }
               jc <- callJMethod(x@jc, name, data)
@@ -306,7 +306,7 @@ setMethod("%in%",
 setMethod("otherwise",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
-            value <- if (class(value) == "Column") { value@jc } else { value }
+            value <- if (inherits(value, "Column")) { value@jc } else { value }
             jc <- callJMethod(x@jc, "otherwise", value)
             column(jc)
           })

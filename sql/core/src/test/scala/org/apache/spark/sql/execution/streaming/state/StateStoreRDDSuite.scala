@@ -23,7 +23,7 @@ import java.util.UUID
 
 import scala.util.Random
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDD
@@ -32,9 +32,11 @@ import org.apache.spark.sql.LocalSparkSession._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{CompletionIterator, Utils}
 
-class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
+@ExtendedSQLTest
+class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter {
 
   import StateStoreTestsHelper._
 
@@ -56,8 +58,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
   }
 
   test("versioning and immutability") {
-    withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
-      val path = Utils.createDirectory(tempDir, Random.nextFloat.toString).toString
+    withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
+      val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
       val rdd1 = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0), ("a", 0)))
         .mapPartitionsWithStateStore(spark.sqlContext, operatorStateInfo(path, version = 0),
           keySchema, valueSchema, numColsPrefixKey = 0)(increment)
@@ -75,7 +77,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
   }
 
   test("recovering from files") {
-    val path = Utils.createDirectory(tempDir, Random.nextFloat.toString).toString
+    val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
 
     def makeStoreRDD(
         spark: SparkSession,
@@ -88,22 +90,22 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
     }
 
     // Generate RDDs and state store data
-    withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
+    withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
       for (i <- 1 to 20) {
         require(makeStoreRDD(spark, Seq(("a", 0)), i - 1).collect().toSet === Set(("a", 0) -> i))
       }
     }
 
     // With a new context, try using the earlier state store data
-    withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
+    withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
       assert(makeStoreRDD(spark, Seq(("a", 0)), 20).collect().toSet === Set(("a", 0) -> 21))
     }
   }
 
   test("usage with iterators - only gets and only puts") {
-    withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
+    withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
       implicit val sqlContext = spark.sqlContext
-      val path = Utils.createDirectory(tempDir, Random.nextFloat.toString).toString
+      val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
       val opId = 0
 
       // Returns an iterator of the incremented value made into the store
@@ -156,9 +158,9 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
     quietly {
       val queryRunId = UUID.randomUUID
       val opId = 0
-      val path = Utils.createDirectory(tempDir, Random.nextFloat.toString).toString
+      val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
 
-      withSparkSession(SparkSession.builder.config(sparkConf).getOrCreate()) { spark =>
+      withSparkSession(SparkSession.builder().config(sparkConf).getOrCreate()) { spark =>
         implicit val sqlContext = spark.sqlContext
         val coordinatorRef = sqlContext.streams.stateStoreCoordinator
         val storeProviderId1 = StateStoreProviderId(StateStoreId(path, opId, 0), queryRunId)
@@ -192,11 +194,11 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
     quietly {
 
       withSparkSession(
-        SparkSession.builder
+        SparkSession.builder()
           .config(sparkConf.setMaster("local-cluster[2, 1, 1024]"))
           .getOrCreate()) { spark =>
         implicit val sqlContext = spark.sqlContext
-        val path = Utils.createDirectory(tempDir, Random.nextFloat.toString).toString
+        val path = Utils.createDirectory(tempDir, Random.nextFloat().toString).toString
         val opId = 0
         val rdd1 = makeRDD(spark.sparkContext, Seq(("a", 0), ("b", 0), ("a", 0)))
           .mapPartitionsWithStateStore(sqlContext, operatorStateInfo(path, version = 0),

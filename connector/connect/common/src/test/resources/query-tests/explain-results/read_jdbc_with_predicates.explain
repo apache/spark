@@ -1,0 +1,1 @@
+Relation [NAME#0,THEID#0] JDBCRelation(TEST.PEOPLE) [numPartitions=2]

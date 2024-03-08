@@ -160,18 +160,51 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Wrapper over newSingleThreadExecutor.
+   * Wrapper over newFixedThreadPool with single daemon thread.
    */
-  def newDaemonSingleThreadExecutor(threadName: String): ExecutorService = {
+  def newDaemonSingleThreadExecutor(threadName: String): ThreadPoolExecutor = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
-    Executors.newSingleThreadExecutor(threadFactory)
+    Executors.newFixedThreadPool(1, threadFactory).asInstanceOf[ThreadPoolExecutor]
   }
 
   /**
-   * Wrapper over ScheduledThreadPoolExecutor.
+   * Wrapper over newSingleThreadExecutor that allows the specification
+   * of a RejectedExecutionHandler
+   */
+  def newDaemonSingleThreadExecutorWithRejectedExecutionHandler(
+      threadName: String,
+      taskQueueCapacity: Int,
+      rejectedExecutionHandler: RejectedExecutionHandler): ThreadPoolExecutor = {
+
+    val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
+
+    new ThreadPoolExecutor(
+      1,
+      1,
+      0L,
+      TimeUnit.MILLISECONDS,
+      new ArrayBlockingQueue[Runnable](taskQueueCapacity),
+      threadFactory,
+      rejectedExecutionHandler)
+  }
+
+  /**
+   * Wrapper over ScheduledThreadPoolExecutor the pool with daemon threads.
    */
   def newDaemonSingleThreadScheduledExecutor(threadName: String): ScheduledExecutorService = {
     val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(threadName).build()
+    val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
+    // By default, a cancelled task is not automatically removed from the work queue until its delay
+    // elapses. We have to enable it manually.
+    executor.setRemoveOnCancelPolicy(true)
+    executor
+  }
+
+  /**
+   * Wrapper over ScheduledThreadPoolExecutor the pool with non-daemon threads.
+   */
+  def newSingleThreadScheduledExecutor(threadName: String): ScheduledThreadPoolExecutor = {
+    val threadFactory = new ThreadFactoryBuilder().setNameFormat(threadName).build()
     val executor = new ScheduledThreadPoolExecutor(1, threadFactory)
     // By default, a cancelled task is not automatically removed from the work queue until its delay
     // elapses. We have to enable it manually.
@@ -286,20 +319,7 @@ private[spark] object ThreadUtils {
    */
   @throws(classOf[SparkException])
   def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
-    try {
-      // `awaitPermission` is not actually used anywhere so it's safe to pass in null here.
-      // See SPARK-13747.
-      val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
-      awaitable.result(atMost)(awaitPermission)
-    } catch {
-      case e: SparkFatalException =>
-        throw e.throwable
-      // TimeoutException and RpcAbortException is thrown in the current thread, so not need to warp
-      // the exception.
-      case NonFatal(t)
-          if !t.isInstanceOf[TimeoutException] =>
-        throw new SparkException("Exception thrown in awaitResult: ", t)
-    }
+    SparkThreadUtils.awaitResult(awaitable, atMost)
   }
   // scalastyle:on awaitresult
 
@@ -355,6 +375,10 @@ private[spark] object ThreadUtils {
    * Comparing to the map() method of Scala parallel collections, this method can be interrupted
    * at any time. This is useful on canceling of task execution, for example.
    *
+   * Functions are guaranteed to be executed in freshly-created threads that inherit the calling
+   * thread's Spark thread-local variables. These threads also inherit the calling thread's active
+   * SparkSession.
+   *
    * @param in - the input collection which should be transformed in parallel.
    * @param prefix - the prefix assigned to the underlying thread pool.
    * @param maxThreads - maximum number of thread can be created during execution.
@@ -367,7 +391,7 @@ private[spark] object ThreadUtils {
   def parmap[I, O](in: Seq[I], prefix: String, maxThreads: Int)(f: I => O): Seq[O] = {
     val pool = newForkJoinPool(prefix, maxThreads)
     try {
-      implicit val ec = ExecutionContext.fromExecutor(pool)
+      implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(pool)
 
       val futures = in.map(x => Future(f(x)))
       val futureSeq = Future.sequence(futures)

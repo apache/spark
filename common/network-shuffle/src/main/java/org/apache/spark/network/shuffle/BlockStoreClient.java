@@ -46,6 +46,8 @@ public abstract class BlockStoreClient implements Closeable {
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
+  // Store the application attemptId
+  private String appAttemptId;
   protected TransportConf transportConf;
 
   /**
@@ -122,6 +124,16 @@ public abstract class BlockStoreClient implements Closeable {
 
   protected void checkInit() {
     assert appId != null : "Called before init()";
+  }
+
+  // Set the application attemptId
+  public void setAppAttemptId(String appAttemptId) {
+    this.appAttemptId = appAttemptId;
+  }
+
+  // Get the application attemptId
+  public String getAppAttemptId() {
+    return this.appAttemptId;
   }
 
   /**
@@ -241,6 +253,20 @@ public abstract class BlockStoreClient implements Closeable {
       int shuffleMergeId,
       int reduceId,
       MergedBlocksMetaListener listener) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Remove the shuffle merge data in shuffle services
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param shuffleId shuffle id.
+   * @param shuffleMergeId shuffle merge id.
+   *
+   * @since 3.4.0
+   */
+  public boolean removeShuffleMerge(String host, int port, int shuffleId, int shuffleMergeId) {
     throw new UnsupportedOperationException();
   }
 }

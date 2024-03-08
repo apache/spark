@@ -25,7 +25,7 @@ import scala.collection.mutable
 import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.{MetricsServlet, PrometheusServlet, Sink}
@@ -101,12 +101,12 @@ private[spark] class MetricsSystem private (
       registerSources()
     }
     registerSinks()
-    sinks.foreach(_.start)
+    sinks.foreach(_.start())
   }
 
   def stop(): Unit = {
     if (running) {
-      sinks.foreach(_.stop)
+      sinks.foreach(_.stop())
       registry.removeMatching((_: String, _: Metric) => true)
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
@@ -211,9 +211,18 @@ private[spark] class MetricsSystem private (
               .newInstance(kv._2, registry)
             prometheusServlet = Some(servlet)
           } else {
-            val sink = Utils.classForName[Sink](classPath)
-              .getConstructor(classOf[Properties], classOf[MetricRegistry])
-              .newInstance(kv._2, registry)
+            val sink = try {
+              Utils.classForName[Sink](classPath)
+                .getConstructor(classOf[Properties], classOf[MetricRegistry])
+                .newInstance(kv._2, registry)
+            } catch {
+              case _: NoSuchMethodException =>
+                // Fallback to three-parameters constructor having SecurityManager
+                Utils.classForName[Sink](classPath)
+                  .getConstructor(
+                    classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+                  .newInstance(kv._2, registry, null)
+            }
             sinks += sink
           }
         } catch {
@@ -224,6 +233,8 @@ private[spark] class MetricsSystem private (
       }
     }
   }
+
+  def metricsProperties(): Properties = metricsConfig.properties
 }
 
 private[spark] object MetricsSystem {
@@ -267,7 +278,4 @@ private[spark] object MetricsSystemInstances {
 
   // The Spark ApplicationMaster when running on YARN
   val APPLICATION_MASTER = "applicationMaster"
-
-  // The Spark cluster scheduler when running on Mesos
-  val MESOS_CLUSTER = "mesos_cluster"
 }

@@ -25,13 +25,16 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -124,13 +127,7 @@ private[this] object SharedFactory {
   group = "json_funcs",
   since = "1.5.0")
 case class GetJsonObject(json: Expression, path: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
-
-  import com.fasterxml.jackson.core.JsonToken._
-
-  import PathInstruction._
-  import SharedFactory._
-  import WriteStyle._
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = json
   override def right: Expression = path
@@ -139,18 +136,114 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
-  @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
+  @transient
+  private lazy val evaluator = if (path.foldable) {
+    new GetJsonObjectEvaluator(path.eval().asInstanceOf[UTF8String])
+  } else {
+    new GetJsonObjectEvaluator()
+  }
 
   override def eval(input: InternalRow): Any = {
-    val jsonStr = json.eval(input).asInstanceOf[UTF8String]
+    evaluator.setJson(json.eval(input).asInstanceOf[UTF8String])
+    if (!path.foldable) {
+      evaluator.setPath(path.eval(input).asInstanceOf[UTF8String])
+    }
+    evaluator.evaluate()
+  }
+
+  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evaluatorClass = classOf[GetJsonObjectEvaluator].getName
+    val initEvaluator = path.foldable match {
+      case true if path.eval() != null =>
+        val cachedPath = path.eval().asInstanceOf[UTF8String]
+        val refCachedPath = ctx.addReferenceObj("cachedPath", cachedPath)
+        s"new $evaluatorClass($refCachedPath)"
+      case _ => s"new $evaluatorClass()"
+    }
+    val evaluator = ctx.addMutableState(evaluatorClass, "evaluator",
+      v => s"""$v = $initEvaluator;""", forceInline = true)
+
+    val jsonEval = json.genCode(ctx)
+    val pathEval = path.genCode(ctx)
+
+    val setJson =
+      s"""
+         |if (${jsonEval.isNull}) {
+         |  $evaluator.setJson(null);
+         |} else {
+         |  $evaluator.setJson(${jsonEval.value});
+         |}
+         |""".stripMargin
+    val setPath = if (!path.foldable) {
+      s"""
+         |if (${pathEval.isNull}) {
+         |  $evaluator.setPath(null);
+         |} else {
+         |  $evaluator.setPath(${pathEval.value});
+         |}
+         |""".stripMargin
+    } else {
+      ""
+    }
+
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+    ev.copy(code =
+      code"""
+         |${jsonEval.code}
+         |${pathEval.code}
+         |$setJson
+         |$setPath
+         |$resultType $resultTerm = ($resultType) $evaluator.evaluate();
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+         |""".stripMargin
+    )
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetJsonObject =
+    copy(json = newLeft, path = newRight)
+}
+
+class GetJsonObjectEvaluator(cachedPath: UTF8String) {
+  import com.fasterxml.jackson.core.JsonToken._
+  import PathInstruction._
+  import SharedFactory._
+  import WriteStyle._
+
+  def this() = this(null)
+
+  @transient
+  private lazy val parsedPath: Option[List[PathInstruction]] =
+    parsePath(cachedPath)
+
+  @transient
+  private var jsonStr: UTF8String = null
+
+  @transient
+  private var pathStr: UTF8String = null
+
+  def setJson(arg: UTF8String): Unit = {
+    jsonStr = arg
+  }
+
+  def setPath(arg: UTF8String): Unit = {
+    pathStr = arg
+  }
+
+  def evaluate(): Any = {
     if (jsonStr == null) {
       return null
     }
 
-    val parsed = if (path.foldable) {
+    val parsed = if (cachedPath != null) {
       parsedPath
     } else {
-      parsePath(path.eval(input).asInstanceOf[UTF8String])
+      parsePath(pathStr)
     }
 
     if (parsed.isDefined) {
@@ -269,7 +362,7 @@ case class GetJsonObject(json: Expression, path: Expression)
         val nextStyle = style match {
           case RawStyle => QuotedStyle
           case FlattenStyle => FlattenStyle
-          case QuotedStyle => throw new IllegalStateException()
+          case QuotedStyle => throw SparkException.internalError("Unexpected the quoted style.")
         }
 
         // temporarily buffer child matches, the emitted json will need to be
@@ -293,7 +386,7 @@ case class GetJsonObject(json: Expression, path: Expression)
           g.writeRawValue(buf.toString)
         } else if (dirty == 1) {
           // remove outer array tokens
-          g.writeRawValue(buf.substring(1, buf.length()-1))
+          g.writeRawValue(buf.substring(1, buf.length() - 1))
         } // else do not write anything
 
         dirty > 0
@@ -336,10 +429,6 @@ case class GetJsonObject(json: Expression, path: Expression)
         false
     }
   }
-
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): GetJsonObject =
-    copy(json = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -354,7 +443,9 @@ case class GetJsonObject(json: Expression, path: Expression)
   since = "1.6.0")
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
-  extends Generator with CodegenFallback {
+  extends Generator
+  with CodegenFallback
+  with QueryErrorsBase {
 
   import SharedFactory._
 
@@ -392,15 +483,19 @@ case class JsonTuple(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 2) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least two arguments")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
+      )
     } else if (children.forall(child => StringType.acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName requires that all arguments are strings")
+      DataTypeMismatch(
+        errorSubClass = "NON_STRING_TYPE",
+        messageParameters = Map("funcName" -> toSQLId(prettyName)))
     }
   }
 
-  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
     if (json == null) {
       return nullRow
@@ -432,12 +527,15 @@ case class JsonTuple(children: Seq[Expression])
       foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
-      fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
+      fieldExpressions.map { expr =>
+        Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
+      }
     } else {
       // if there is a mix of constant and non-constant expressions
       // prefer the cached copy when available
       foldableFieldNames.zip(fieldExpressions).map {
-        case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
+        case (null, expr) =>
+          Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
         case (fieldName, _) => fieldName.orNull
       }
     }
@@ -496,7 +594,7 @@ case class JsonTuple(children: Seq[Expression])
         // a special case that needs to be handled outside of this method.
         // if a requested field is null, the result must be null. the easiest
         // way to achieve this is just by ignoring null tokens entirely
-        throw QueryExecutionErrors.copyNullFieldNotAllowedError
+        throw SparkException.internalError("Do not attempt to copy a null field.")
 
       case _ =>
         // handle other types including objects, arrays, booleans and numbers
@@ -521,6 +619,8 @@ case class JsonTuple(children: Seq[Expression])
        {"a":1,"b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
+      > SELECT _FUNC_('{"teacher": "Alice", "student": [{"name": "Bob", "rank": 1}, {"name": "Charlie", "rank": 2}]}', 'STRUCT<teacher: STRING, student: ARRAY<STRUCT<name: STRING, rank: INT>>>');
+       {"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}
   """,
   group = "json_funcs",
   since = "2.2.0")
@@ -530,8 +630,12 @@ case class JsonToStructs(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes
-    with NullIntolerant {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with NullIntolerant
+  with QueryErrorsBase {
 
   // The JSON input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions. In particular, the parquet-mr encoder
@@ -561,13 +665,12 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      ExprUtils.checkJsonSchema(nullableSchema).map { e =>
-        TypeCheckResult.TypeCheckFailure(e.getMessage)
-      } getOrElse {
-        super.checkInputDataTypes()
-      }
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
+      val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
+      if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_SCHEMA",
+        messageParameters = Map("schema" -> toSQLType(nullableSchema)))
   }
 
   // This converts parsed rows to the desired output by the given schema.
@@ -593,7 +696,7 @@ case class JsonToStructs(
         ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
         (s, StructType(s.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord)))
       case other =>
-        (StructType(StructField("value", other) :: Nil), other)
+        (StructType(Array(StructField("value", other))), other)
     }
 
     val rawParser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = false)
@@ -648,7 +751,7 @@ case class JsonToStructs(
        {"[1]":{"b":2}}
       > SELECT _FUNC_(map('a', 1));
        {"a":1}
-      > SELECT _FUNC_(array((map('a', 1))));
+      > SELECT _FUNC_(array(map('a', 1)));
        [{"a":1}]
   """,
   group = "json_funcs",
@@ -658,8 +761,13 @@ case class StructsToJson(
     options: Map[String, String],
     child: Expression,
     timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback
-    with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression
+  with TimeZoneAwareExpression
+  with CodegenFallback
+  with ExpectsInputTypes
+  with NullIntolerant
+  with QueryErrorsBase {
+
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
@@ -711,33 +819,12 @@ case class StructsToJson(
   override def dataType: DataType = StringType
 
   override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
-    case struct: StructType =>
-      try {
-        JacksonUtils.verifySchema(struct)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: UnsupportedOperationException =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
-    case map: MapType =>
-      try {
-        JacksonUtils.verifyType(prettyName, map)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: UnsupportedOperationException =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
-    case array: ArrayType =>
-      try {
-        JacksonUtils.verifyType(prettyName, array)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: UnsupportedOperationException =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${child.dataType.catalogString} must be a struct, array of structs or " +
-          "a map or array of map.")
+    case dt @ (_: StructType | _: MapType | _: ArrayType) =>
+      JacksonUtils.verifyType(prettyName, dt)
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "INVALID_JSON_SCHEMA",
+        messageParameters = Map("schema" -> toSQLType(child.dataType)))
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -761,16 +848,16 @@ case class StructsToJson(
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
-       ARRAY<STRUCT<`col`: BIGINT>>
+       ARRAY<STRUCT<col: BIGINT>>
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
-       ARRAY<STRUCT<`col`: BIGINT>>
+       ARRAY<STRUCT<col: BIGINT>>
   """,
   group = "json_funcs",
   since = "2.4.0")
 case class SchemaOfJson(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback {
+  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -797,10 +884,17 @@ case class SchemaOfJson(
   override def checkInputDataTypes(): TypeCheckResult = {
     if (child.foldable && json != null) {
       super.checkInputDataTypes()
+    } else if (!child.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("json"),
+          "inputType" -> toSQLType(child.dataType),
+          "inputExpr" -> toSQLExpr(child)))
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        "The input json should be a foldable string expression and not null; " +
-        s"however, got ${child.sql}.")
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "json"))
     }
   }
 
@@ -957,7 +1051,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
   }
 
   private def getJsonKeys(parser: JsonParser, input: InternalRow): GenericArrayData = {
-    var arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
+    val arrayBufferOfKeys = ArrayBuffer.empty[UTF8String]
 
     // traverse until the end of input and ensure it returns valid key
     while(parser.nextValue() != null && parser.currentName() != null) {

@@ -155,7 +155,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       case (e, i) =>
         val evaluationCode = e.genCode(ctx)
         val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
-        evaluationCode.code +
+        evaluationCode.code.toString +
           s"""
             if (${evaluationCode.isNull}) {
               mutableRow.setNullAt($i);

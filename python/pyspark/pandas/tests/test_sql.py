@@ -16,26 +16,25 @@
 #
 
 from pyspark import pandas as ps
-from pyspark.sql.utils import ParseException
+from pyspark.errors import ParseException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.utils import assertDataFrameEqual
 
 
-class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
+class SQLTestsMixin:
     def test_error_variable_not_exist(self):
-        msg = "The key variable_foo in the SQL statement was not found.*"
-        with self.assertRaisesRegex(ValueError, msg):
+        with self.assertRaisesRegex(KeyError, "variable_foo"):
             ps.sql("select * from {variable_foo}")
-
-    def test_error_unsupported_type(self):
-        msg = "Unsupported variable type dict: {'a': 1}"
-        with self.assertRaisesRegex(ValueError, msg):
-            some_dict = {"a": 1}
-            ps.sql("select * from {some_dict}")
 
     def test_error_bad_sql(self):
         with self.assertRaises(ParseException):
             ps.sql("this is not valid sql")
+
+    def test_series_not_referred(self):
+        psdf = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+        with self.assertRaisesRegex(ValueError, "The series in {ser}"):
+            ps.sql("SELECT {ser} FROM range(10)", ser=psdf.A)
 
     def test_sql_with_index_col(self):
         import pandas as pd
@@ -45,9 +44,13 @@ class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
             {"A": [1, 2, 3], "B": [4, 5, 6]}, index=pd.Index(["a", "b", "c"], name="index")
         )
         psdf_reset_index = psdf.reset_index()
-        actual = ps.sql("select * from {psdf_reset_index} where A > 1", index_col="index")
+        actual = ps.sql(
+            "select * from {psdf_reset_index} where A > 1",
+            index_col="index",
+            psdf_reset_index=psdf_reset_index,
+        )
         expected = psdf.iloc[[1, 2]]
-        self.assert_eq(actual, expected)
+        assertDataFrameEqual(actual, expected)
 
         # MultiIndex
         psdf = ps.DataFrame(
@@ -58,10 +61,53 @@ class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
         )
         psdf_reset_index = psdf.reset_index()
         actual = ps.sql(
-            "select * from {psdf_reset_index} where A > 1", index_col=["index1", "index2"]
+            "select * from {psdf_reset_index} where A > 1",
+            index_col=["index1", "index2"],
+            psdf_reset_index=psdf_reset_index,
         )
         expected = psdf.iloc[[1, 2]]
-        self.assert_eq(actual, expected)
+        assertDataFrameEqual(actual, expected)
+
+    def test_sql_with_pandas_objects(self):
+        import pandas as pd
+
+        pdf = pd.DataFrame({"a": [1, 2, 3, 4]})
+        assertDataFrameEqual(
+            ps.sql("SELECT {col} + 1 as a FROM {tbl}", col=pdf.a, tbl=pdf), pdf + 1
+        )
+
+    def test_sql_with_python_objects(self):
+        assertDataFrameEqual(
+            ps.sql("SELECT {col} as a FROM range(1)", col="lit"), ps.DataFrame({"a": ["lit"]})
+        )
+        assertDataFrameEqual(
+            ps.sql("SELECT id FROM range(10) WHERE id IN {pred}", col="lit", pred=(1, 2, 3)),
+            ps.DataFrame({"id": [1, 2, 3]}),
+        )
+        assertDataFrameEqual(
+            ps.sql("SELECT {col} as a FROM range(1)", col="a'''c''d"),
+            ps.DataFrame({"a": ["a'''c''d"]}),
+        )
+        assertDataFrameEqual(
+            ps.sql("SELECT id FROM range(10) WHERE id IN {pred}", col="a'''c''d", pred=(1, 2, 3)),
+            ps.DataFrame({"id": [1, 2, 3]}),
+        )
+
+    def test_sql_with_pandas_on_spark_objects(self):
+        psdf = ps.DataFrame({"a": [1, 2, 3, 4]})
+
+        assertDataFrameEqual(ps.sql("SELECT {col} FROM {tbl}", col=psdf.a, tbl=psdf), psdf)
+        assertDataFrameEqual(ps.sql("SELECT {tbl.a} FROM {tbl}", tbl=psdf), psdf)
+
+        psdf = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+        assertDataFrameEqual(
+            ps.sql("SELECT {col}, {col2} FROM {tbl}", col=psdf.A, col2=psdf.B, tbl=psdf), psdf
+        )
+        assertDataFrameEqual(ps.sql("SELECT {tbl.A}, {tbl.B} FROM {tbl}", tbl=psdf), psdf)
+
+
+class SQLTests(SQLTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":
@@ -69,7 +115,7 @@ if __name__ == "__main__":
     from pyspark.pandas.tests.test_sql import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

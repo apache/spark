@@ -129,47 +129,47 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
    */
   ignore("export test data into CSV format") {
     datasetGaussianIdentity.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianIdentity")
     datasetGaussianLog.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianLog")
     datasetGaussianInverse.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGaussianInverse")
     datasetBinomial.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetBinomial")
     datasetPoissonLog.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLog")
     datasetPoissonLogWithZero.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonLogWithZero")
     datasetPoissonIdentity.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonIdentity")
     datasetPoissonSqrt.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetPoissonSqrt")
     datasetGammaInverse.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaInverse")
     datasetGammaIdentity.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaIdentity")
     datasetGammaLog.rdd.map { case Row(label: Double, features: Vector) =>
-      label + "," + features.toArray.mkString(",")
+      s"$label,${features.toArray.mkString(",")}"
     }.repartition(1).saveAsTextFile(
       "target/tmp/GeneralizedLinearRegressionSuite/datasetGammaLog")
   }
@@ -209,6 +209,37 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     assert(model.hasParent)
     assert(model.getFamily === "gaussian")
     assert(model.getLink === "identity")
+  }
+
+  test("GeneralizedLinearRegression validate input dataset") {
+    testInvalidRegressionLabels(new GeneralizedLinearRegression().fit(_))
+    testInvalidWeights(new GeneralizedLinearRegression().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GeneralizedLinearRegression().fit(_))
+
+    // offsets contains NULL
+    val df1 = sc.parallelize(Seq(
+      (1.0, null, Vectors.dense(1.0, 2.0)),
+      (1.0, "1.0", Vectors.dense(1.0, 2.0))
+    )).toDF("label", "str_offset", "features")
+      .select(col("label"), col("str_offset").cast("double").as("offset"), col("features"))
+    val e1 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df1))
+    assert(e1.getMessage.contains("Offsets MUST NOT be Null or NaN"))
+
+    // offsets contains NaN
+    val df2 = sc.parallelize(Seq(
+      (1.0, Double.NaN, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "offset", "features")
+    val e2 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df2))
+    assert(e2.getMessage.contains("Offsets MUST NOT be Null or NaN"))
+
+    // offsets contains Infinity
+    val df3 = sc.parallelize(Seq(
+      (1.0, Double.PositiveInfinity, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "offset", "features")
+    val e3 = intercept[Exception](new GeneralizedLinearRegression().setOffsetCol("offset").fit(df3))
+    assert(e3.getMessage.contains("Offsets MUST NOT be Infinity"))
   }
 
   test("prediction on single instance") {
@@ -1655,7 +1686,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
         .setFeaturesCol("features")
       val model = trainer.fit(dataset)
       val actual = model.summary.aic
-      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with regParam = $regParam.")
+      assert(actual ~= expected(idx) absTol 1e-4, s"Model mismatch: GLM with regParam = $regParam.")
       idx += 1
     }
   }
@@ -1688,7 +1719,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     val conf = new SparkConf(false)
     val ser = new KryoSerializer(conf).newInstance()
     val trainer = new GeneralizedLinearRegression()
-    val model = trainer.fit(Seq(Instance(1.0, 1.0, Vectors.dense(1.0, 7.0))).toDF)
+    val model = trainer.fit(Seq(Instance(1.0, 1.0, Vectors.dense(1.0, 7.0))).toDF())
     ser.serialize[GeneralizedLinearRegressionModel](model)
   }
 }

@@ -14,9 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+from typing import Any, Dict, Optional
+
+from py4j.java_gateway import JavaObject, JVMView
+
+from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkAssertionError
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.utils import is_remote
 
 __all__ = ["Observation"]
 
@@ -24,7 +31,7 @@ __all__ = ["Observation"]
 class Observation:
     """Class to observe (named) metrics on a :class:`DataFrame`.
 
-    Metrics are aggregation expressions, which are applied to the DataFrame while is is being
+    Metrics are aggregation expressions, which are applied to the DataFrame while it is being
     processed by an action.
 
     The metrics have the following guarantees:
@@ -61,7 +68,15 @@ class Observation:
     >>> observation.get
     {'count': 2, 'max(age)': 5}
     """
-    def __init__(self, name=None):
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.observation import Observation as ConnectObservation
+
+            return ConnectObservation(*args, **kwargs)
+        return super().__new__(cls)
+
+    def __init__(self, name: Optional[str] = None) -> None:
         """Constructs a named or unnamed Observation instance.
 
         Parameters
@@ -71,14 +86,20 @@ class Observation:
         """
         if name is not None:
             if not isinstance(name, str):
-                raise TypeError("name should be a string")
-            if name == '':
-                raise ValueError("name should not be empty")
+                raise PySparkTypeError(
+                    error_class="NOT_STR",
+                    message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+                )
+            if name == "":
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_NON_EMPTY_STR",
+                    message_parameters={"arg_name": "name", "arg_value": name},
+                )
         self._name = name
-        self._jvm = None
-        self._jo = None
+        self._jvm: Optional[JVMView] = None
+        self._jo: Optional[JavaObject] = None
 
-    def _on(self, df, *exprs):
+    def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         """Attaches this observation to the given :class:`DataFrame` to observe aggregations.
 
         Parameters
@@ -93,20 +114,20 @@ class Observation:
         :class:`DataFrame`
             the observed :class:`DataFrame`.
         """
-        assert exprs, "exprs should not be empty"
-        assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-        assert self._jo is None, "an Observation can be used with a DataFrame only once"
+        if self._jo is not None:
+            raise PySparkAssertionError(error_class="REUSE_OBSERVATION", message_parameters={})
 
         self._jvm = df._sc._jvm
+        assert self._jvm is not None
         cls = self._jvm.org.apache.spark.sql.Observation
         self._jo = cls(self._name) if self._name is not None else cls()
-        observed_df = self._jo.on(df._jdf,
-                                  exprs[0]._jc,
-                                  column._to_seq(df._sc, [c._jc for c in exprs[1:]]))
-        return DataFrame(observed_df, df.sql_ctx)
+        observed_df = self._jo.on(
+            df._jdf, exprs[0]._jc, column._to_seq(df._sc, [c._jc for c in exprs[1:]])
+        )
+        return DataFrame(observed_df, df.sparkSession)
 
     @property
-    def get(self):
+    def get(self) -> Dict[str, Any]:
         """Get the observed metrics.
 
         Waits until the observed dataset finishes its first action. Only the result of the
@@ -117,21 +138,24 @@ class Observation:
         dict
             the observed metrics
         """
-        assert self._jo is not None, 'call DataFrame.observe'
+        if self._jo is None:
+            raise PySparkAssertionError(error_class="NO_OBSERVE_BEFORE_GET", message_parameters={})
+
         jmap = self._jo.getAsJava()
         # return a pure Python dict, not jmap which is a py4j JavaMap
         return {k: v for k, v in jmap.items()}
 
 
-def _test():
+def _test() -> None:
     import doctest
     import sys
     from pyspark.context import SparkContext
     from pyspark.sql import SparkSession
     import pyspark.sql.observation
+
     globs = pyspark.sql.observation.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['spark'] = SparkSession(sc)
+    sc = SparkContext("local[4]", "PythonTest")
+    globs["spark"] = SparkSession(sc)
 
     (failure_count, test_count) = doctest.testmod(pyspark.sql.observation, globs=globs)
     sc.stop()

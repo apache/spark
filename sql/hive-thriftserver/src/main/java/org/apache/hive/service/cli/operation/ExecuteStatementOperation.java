@@ -16,13 +16,9 @@
  */
 package org.apache.hive.service.cli.operation;
 
-import java.sql.SQLException;
 import java.util.Map;
 
-import org.apache.hadoop.hive.ql.processors.CommandProcessor;
-import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory;
 import org.apache.hadoop.hive.ql.session.OperationLog;
-import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.session.HiveSession;
 
@@ -37,23 +33,6 @@ public abstract class ExecuteStatementOperation extends Operation {
 
   public String getStatement() {
     return statement;
-  }
-
-  public static ExecuteStatementOperation newExecuteStatementOperation(HiveSession parentSession,
-     String statement, Map<String, String> confOverlay, boolean runAsync, long queryTimeout)
-      throws HiveSQLException {
-    String[] tokens = statement.trim().split("\\s+");
-    CommandProcessor processor = null;
-    try {
-      processor = CommandProcessorFactory.getForHiveCommand(tokens, parentSession.getHiveConf());
-    } catch (SQLException e) {
-      throw new HiveSQLException(e.getMessage(), e.getSQLState(), e);
-    }
-    if (processor == null) {
-      // runAsync, queryTimeout makes sense only for a SQLOperation
-      return new SQLOperation(parentSession, statement, confOverlay, runAsync, queryTimeout);
-    }
-    return new HiveCommandOperation(parentSession, statement, processor, confOverlay);
   }
 
   protected void registerCurrentOperationLog() {

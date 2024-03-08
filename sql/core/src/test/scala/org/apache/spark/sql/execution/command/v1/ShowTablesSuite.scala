@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
 
@@ -30,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowTablesSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowTablesSuite`
  */
-trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
+trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.TestsV1AndV2Commands {
   override def defaultNamespace: Seq[String] = Seq("default")
 
   private def withSourceViews(f: => Unit): Unit = {
@@ -53,10 +52,13 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   }
 
   test("only support single-level namespace") {
-    val errMsg = intercept[AnalysisException] {
-      runShowTablesSql("SHOW TABLES FROM a.b", Seq())
-    }.getMessage
-    assert(errMsg.contains("Nested databases are not supported by v1 session catalog: a.b"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        runShowTablesSql("SHOW TABLES FROM a.b", Seq())
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1126",
+      parameters = Map("catalog" -> "a.b")
+    )
   }
 
   test("SHOW TABLE EXTENDED from default") {
@@ -84,7 +86,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
         false -> "PARTITION(YEAR = 2015, Month = 1)"
       ).foreach { case (caseSensitive, partitionSpec) =>
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-          val df = sql(s"SHOW TABLE EXTENDED LIKE 'part_table' $partitionSpec")
+          val df = sql(s"SHOW TABLE EXTENDED IN ns LIKE 'part_table' $partitionSpec")
           val information = df.select("information").first().getString(0)
           assert(information.contains("Partition Values: [year=2015, month=1]"))
         }
@@ -96,10 +98,13 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     Seq(
       s"SHOW TABLES IN $catalog",
       s"SHOW TABLE EXTENDED IN $catalog LIKE '*tbl'").foreach { showTableCmd =>
-      val errMsg = intercept[AnalysisException] {
-        sql(showTableCmd)
-      }.getMessage
-      assert(errMsg.contains("Database from v1 session catalog is not specified"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(showTableCmd)
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1125",
+        parameters = Map.empty
+      )
     }
   }
 
@@ -128,21 +133,14 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       }
     }
   }
-
-
-  test("show table in a not existing namespace") {
-    val msg = intercept[NoSuchDatabaseException] {
-      runShowTablesSql(s"SHOW TABLES IN $catalog.unknown", Seq())
-    }.getMessage
-    assert(msg.matches("(Database|Namespace) 'unknown' not found"))
-  }
-
 }
 
 /**
  * The class contains tests for the `SHOW TABLES` command to check V1 In-Memory table catalog.
  */
 class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[ShowTablesSuiteBase].commandVersion
+
   test("SPARK-33670: show partitions from a datasource table") {
     import testImplicits._
     withNamespace(s"$catalog.ns") {
@@ -153,6 +151,65 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
         val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
         df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
         assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
+      }
+    }
+  }
+
+  override protected def extendedPartInNonPartedTableError(
+      catalog: String,
+      namespace: String,
+      table: String): (String, Map[String, String]) = {
+    ("_LEGACY_ERROR_TEMP_1251",
+      Map("action" -> "SHOW TABLE EXTENDED", "tableName" -> table))
+  }
+
+  protected override def extendedPartExpectedResult: String =
+    super.extendedPartExpectedResult +
+    """
+      |Location: <location>
+      |Created Time: <created time>
+      |Last Access: <last access>""".stripMargin
+
+  protected override def extendedTableInfo: String =
+    """Created Time: <created time>
+      |Last Access: <last access>
+      |Created By: <created by>
+      |Type: MANAGED
+      |Provider: parquet
+      |Location: <location>""".stripMargin
+
+  test("show table extended in permanent view") {
+    val namespace = "ns"
+    val table = "tbl"
+    withNamespaceAndTable(namespace, table, catalog) { t =>
+      sql(s"CREATE TABLE $t (id int) $defaultUsing")
+      val viewName = table + "_view"
+      withView(viewName) {
+        sql(s"CREATE VIEW $catalog.$namespace.$viewName AS SELECT id FROM $t")
+        val result = sql(s"SHOW TABLE EXTENDED in $namespace LIKE '$viewName*'").sort("tableName")
+        assert(result.schema.fieldNames ===
+          Seq("namespace", "tableName", "isTemporary", "information"))
+        val resultCollect = result.collect()
+        assert(resultCollect.length == 1)
+        assert(resultCollect(0).length == 4)
+        assert(resultCollect(0)(1) === viewName)
+        assert(resultCollect(0)(2) === false)
+        val actualResult = replace(resultCollect(0)(3).toString)
+        val expectedResult =
+          s"""Catalog: $catalog
+             |Database: $namespace
+             |Table: $viewName
+             |Created Time: <created time>
+             |Last Access: <last access>
+             |Created By: <created by>
+             |Type: VIEW
+             |View Text: SELECT id FROM $catalog.$namespace.$table
+             |View Original Text: SELECT id FROM $catalog.$namespace.$table
+             |View Catalog and Namespace: $catalog.$namespace
+             |View Query Output Columns: [id]
+             |Schema: root
+             | |-- id: integer (nullable = true)""".stripMargin
+        assert(actualResult === expectedResult)
       }
     }
   }

@@ -1,0 +1,81 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "struct",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "id"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }]
+      }
+    }, {
+      "unresolvedFunction": {
+        "functionName": "struct",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b"
+          }
+        }]
+      }
+    }, {
+      "unresolvedFunction": {
+        "functionName": "struct",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "id"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }]
+      }
+    }, {
+      "unresolvedFunction": {
+        "functionName": "struct",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "id"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }]
+      }
+    }, {
+      "unresolvedFunction": {
+        "functionName": "struct",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "a"
+          }
+        }, {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b"
+          }
+        }]
+      }
+    }]
+  }
+}

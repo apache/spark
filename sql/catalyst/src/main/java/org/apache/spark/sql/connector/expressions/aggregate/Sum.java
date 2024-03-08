@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
 /**
  * An aggregate function that returns the summation of all the values in a group.
@@ -26,27 +27,18 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.2.0
  */
 @Evolving
-public final class Sum implements AggregateFunc {
-  private final NamedReference column;
+public final class Sum extends ExpressionWithToString implements AggregateFunc {
+  private final Expression input;
   private final boolean isDistinct;
 
-  public Sum(NamedReference column, boolean isDistinct) {
-    this.column = column;
+  public Sum(Expression column, boolean isDistinct) {
+    this.input = column;
     this.isDistinct = isDistinct;
   }
 
-  public NamedReference column() { return column; }
+  public Expression column() { return input; }
   public boolean isDistinct() { return isDistinct; }
 
   @Override
-  public String toString() {
-    if (isDistinct) {
-      return "SUM(DISTINCT " + column.describe() + ")";
-    } else {
-      return "SUM(" + column.describe() + ")";
-    }
-  }
-
-  @Override
-  public String describe() { return this.toString(); }
+  public Expression[] children() { return new Expression[]{ input }; }
 }

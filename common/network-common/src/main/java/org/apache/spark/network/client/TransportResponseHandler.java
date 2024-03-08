@@ -108,14 +108,14 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   private void failOutstandingRequests(Throwable cause) {
     for (Map.Entry<StreamChunkId, ChunkReceivedCallback> entry : outstandingFetches.entrySet()) {
       try {
-        entry.getValue().onFailure(entry.getKey().chunkIndex, cause);
+        entry.getValue().onFailure(entry.getKey().chunkIndex(), cause);
       } catch (Exception e) {
         logger.warn("ChunkReceivedCallback.onFailure throws exception", e);
       }
     }
-    for (Map.Entry<Long, BaseResponseCallback> entry : outstandingRpcs.entrySet()) {
+    for (BaseResponseCallback callback : outstandingRpcs.values()) {
       try {
-        entry.getValue().onFailure(cause);
+        callback.onFailure(cause);
       } catch (Exception e) {
         logger.warn("RpcResponseCallback.onFailure throws exception", e);
       }
@@ -140,7 +140,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   @Override
   public void channelInactive() {
-    if (numOutstandingRequests() > 0) {
+    if (hasOutstandingRequests()) {
       String remoteAddress = getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
         numOutstandingRequests(), remoteAddress);
@@ -150,7 +150,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   @Override
   public void exceptionCaught(Throwable cause) {
-    if (numOutstandingRequests() > 0) {
+    if (hasOutstandingRequests()) {
       String remoteAddress = getRemoteAddress(channel);
       logger.error("Still have {} requests outstanding when connection from {} is closed",
         numOutstandingRequests(), remoteAddress);
@@ -160,8 +160,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   @Override
   public void handle(ResponseMessage message) throws Exception {
-    if (message instanceof ChunkFetchSuccess) {
-      ChunkFetchSuccess resp = (ChunkFetchSuccess) message;
+    if (message instanceof ChunkFetchSuccess resp) {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} since it is not outstanding",
@@ -169,22 +168,20 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         resp.body().release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onSuccess(resp.streamChunkId.chunkIndex, resp.body());
+        listener.onSuccess(resp.streamChunkId.chunkIndex(), resp.body());
         resp.body().release();
       }
-    } else if (message instanceof ChunkFetchFailure) {
-      ChunkFetchFailure resp = (ChunkFetchFailure) message;
+    } else if (message instanceof ChunkFetchFailure resp) {
       ChunkReceivedCallback listener = outstandingFetches.get(resp.streamChunkId);
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} ({}) since it is not outstanding",
           resp.streamChunkId, getRemoteAddress(channel), resp.errorString);
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onFailure(resp.streamChunkId.chunkIndex, new ChunkFetchFailureException(
+        listener.onFailure(resp.streamChunkId.chunkIndex(), new ChunkFetchFailureException(
           "Failure while fetching " + resp.streamChunkId + ": " + resp.errorString));
       }
-    } else if (message instanceof RpcResponse) {
-      RpcResponse resp = (RpcResponse) message;
+    } else if (message instanceof RpcResponse resp) {
       RpcResponseCallback listener = (RpcResponseCallback) outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
@@ -198,8 +195,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
           resp.body().release();
         }
       }
-    } else if (message instanceof RpcFailure) {
-      RpcFailure resp = (RpcFailure) message;
+    } else if (message instanceof RpcFailure resp) {
       BaseResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({}) since it is not outstanding",
@@ -208,8 +204,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         outstandingRpcs.remove(resp.requestId);
         listener.onFailure(new RuntimeException(resp.errorString));
       }
-    } else if (message instanceof MergedBlockMetaSuccess) {
-      MergedBlockMetaSuccess resp = (MergedBlockMetaSuccess) message;
+    } else if (message instanceof MergedBlockMetaSuccess resp) {
       try {
         MergedBlockMetaResponseCallback listener =
           (MergedBlockMetaResponseCallback) outstandingRpcs.get(resp.requestId);
@@ -224,8 +219,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       } finally {
         resp.body().release();
       }
-    } else if (message instanceof StreamResponse) {
-      StreamResponse resp = (StreamResponse) message;
+    } else if (message instanceof StreamResponse resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
@@ -251,8 +245,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       } else {
         logger.error("Could not find callback for StreamResponse.");
       }
-    } else if (message instanceof StreamFailure) {
-      StreamFailure resp = (StreamFailure) message;
+    } else if (message instanceof StreamFailure resp) {
       Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
         StreamCallback callback = entry.getValue();
@@ -273,6 +266,12 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   public int numOutstandingRequests() {
     return outstandingFetches.size() + outstandingRpcs.size() + streamCallbacks.size() +
       (streamActive ? 1 : 0);
+  }
+
+  /** Check if there are any outstanding requests (fetch requests + rpcs) */
+  public Boolean hasOutstandingRequests() {
+    return streamActive || !outstandingFetches.isEmpty() || !outstandingRpcs.isEmpty() ||
+        !streamCallbacks.isEmpty();
   }
 
   /** Returns the time in nanoseconds of when the last request was sent out. */

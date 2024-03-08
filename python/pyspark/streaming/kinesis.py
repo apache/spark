@@ -14,31 +14,99 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from typing import overload, Callable, Optional, TypeVar, Union
 
 from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming import DStream
+from pyspark.streaming.context import StreamingContext
 from pyspark.util import _print_missing_jar
 
 
-__all__ = ['KinesisUtils', 'InitialPositionInStream', 'utf8_decoder']
+__all__ = ["KinesisUtils", "InitialPositionInStream", "MetricsLevel", "utf8_decoder"]
 
 
-def utf8_decoder(s):
-    """ Decode the unicode as UTF-8 """
+class InitialPositionInStream:
+    LATEST, TRIM_HORIZON = (0, 1)
+
+
+class MetricsLevel:
+    DETAILED, SUMMARY, NONE = (0, 1, 2)
+
+
+T = TypeVar("T")
+
+
+def utf8_decoder(s: Optional[bytes]) -> Optional[str]:
+    """Decode the unicode as UTF-8"""
     if s is None:
         return None
-    return s.decode('utf-8')
+    return s.decode("utf-8")
 
 
-class KinesisUtils(object):
+class KinesisUtils:
+    @staticmethod
+    @overload
+    def createStream(
+        ssc: StreamingContext,
+        kinesisAppName: str,
+        streamName: str,
+        endpointUrl: str,
+        regionName: str,
+        initialPositionInStream: str,
+        checkpointInterval: int,
+        metricsLevel: int = MetricsLevel.DETAILED,
+        storageLevel: StorageLevel = ...,
+        awsAccessKeyId: Optional[str] = ...,
+        awsSecretKey: Optional[str] = ...,
+        *,
+        stsAssumeRoleArn: Optional[str] = ...,
+        stsSessionName: Optional[str] = ...,
+        stsExternalId: Optional[str] = ...,
+    ) -> "DStream[Optional[str]]":
+        ...
 
     @staticmethod
-    def createStream(ssc, kinesisAppName, streamName, endpointUrl, regionName,
-                     initialPositionInStream, checkpointInterval,
-                     storageLevel=StorageLevel.MEMORY_AND_DISK_2,
-                     awsAccessKeyId=None, awsSecretKey=None, decoder=utf8_decoder,
-                     stsAssumeRoleArn=None, stsSessionName=None, stsExternalId=None):
+    @overload
+    def createStream(
+        ssc: StreamingContext,
+        kinesisAppName: str,
+        streamName: str,
+        endpointUrl: str,
+        regionName: str,
+        initialPositionInStream: str,
+        checkpointInterval: int,
+        metricsLevel: int = MetricsLevel.DETAILED,
+        storageLevel: StorageLevel = ...,
+        awsAccessKeyId: Optional[str] = ...,
+        awsSecretKey: Optional[str] = ...,
+        decoder: Callable[[Optional[bytes]], T] = ...,
+        stsAssumeRoleArn: Optional[str] = ...,
+        stsSessionName: Optional[str] = ...,
+        stsExternalId: Optional[str] = ...,
+    ) -> "DStream[T]":
+        ...
+
+    @staticmethod
+    def createStream(
+        ssc: StreamingContext,
+        kinesisAppName: str,
+        streamName: str,
+        endpointUrl: str,
+        regionName: str,
+        initialPositionInStream: str,
+        checkpointInterval: int,
+        metricsLevel: int = MetricsLevel.DETAILED,
+        storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_2,
+        awsAccessKeyId: Optional[str] = None,
+        awsSecretKey: Optional[str] = None,
+        decoder: Union[
+            Callable[[Optional[bytes]], T], Callable[[Optional[bytes]], Optional[str]]
+        ] = utf8_decoder,
+        stsAssumeRoleArn: Optional[str] = None,
+        stsSessionName: Optional[str] = None,
+        stsExternalId: Optional[str] = None,
+    ) -> Union["DStream[Union[T, Optional[str]]]", "DStream[T]"]:
         """
         Create an input stream that pulls messages from a Kinesis stream. This uses the
         Kinesis Client Library (KCL) to pull messages from Kinesis.
@@ -67,6 +135,9 @@ class KinesisUtils(object):
             Checkpoint interval(in seconds) for Kinesis checkpointing. See the Kinesis
             Spark Streaming documentation for more details on the different
             types of checkpoints.
+        metricsLevel : int
+            Level of CloudWatch PutMetrics.
+            Can be set to either DETAILED, SUMMARY, or NONE. (default is DETAILED)
         storageLevel : :class:`pyspark.StorageLevel`, optional
             Storage level to use for storing the received objects (default is
             StorageLevel.MEMORY_AND_DISK_2)
@@ -100,23 +171,35 @@ class KinesisUtils(object):
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         jduration = ssc._jduration(checkpointInterval)
 
+        jvm = ssc._jvm
+        assert jvm is not None
+
         try:
-            helper = ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
+            helper = jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
                 _print_missing_jar(
                     "Streaming's Kinesis",
                     "streaming-kinesis-asl",
                     "streaming-kinesis-asl-assembly",
-                    ssc.sparkContext.version)
+                    ssc.sparkContext.version,
+                )
             raise
-        jstream = helper.createStream(ssc._jssc, kinesisAppName, streamName, endpointUrl,
-                                      regionName, initialPositionInStream, jduration, jlevel,
-                                      awsAccessKeyId, awsSecretKey, stsAssumeRoleArn,
-                                      stsSessionName, stsExternalId)
-        stream = DStream(jstream, ssc, NoOpSerializer())
+        jstream = helper.createStream(
+            ssc._jssc,
+            kinesisAppName,
+            streamName,
+            endpointUrl,
+            regionName,
+            initialPositionInStream,
+            jduration,
+            metricsLevel,
+            jlevel,
+            awsAccessKeyId,
+            awsSecretKey,
+            stsAssumeRoleArn,
+            stsSessionName,
+            stsExternalId,
+        )
+        stream: DStream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))
-
-
-class InitialPositionInStream(object):
-    LATEST, TRIM_HORIZON = (0, 1)

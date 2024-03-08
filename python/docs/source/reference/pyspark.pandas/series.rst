@@ -70,7 +70,6 @@ Indexing, iteration
    Series.keys
    Series.pop
    Series.items
-   Series.iteritems
    Series.item
    Series.xs
    Series.get
@@ -134,6 +133,7 @@ Computations / Descriptive Stats
    Series.abs
    Series.all
    Series.any
+   Series.autocorr
    Series.between
    Series.clip
    Series.corr
@@ -144,9 +144,9 @@ Computations / Descriptive Stats
    Series.cumsum
    Series.cumprod
    Series.describe
+   Series.ewm
    Series.filter
    Series.kurt
-   Series.mad
    Series.max
    Series.mean
    Series.min
@@ -170,7 +170,6 @@ Computations / Descriptive Stats
    Series.value_counts
    Series.round
    Series.diff
-   Series.is_monotonic
    Series.is_monotonic_increasing
    Series.is_monotonic_decreasing
 
@@ -183,6 +182,7 @@ Reindexing / Selection / Label manipulation
    Series.drop
    Series.droplevel
    Series.drop_duplicates
+   Series.duplicated
    Series.equals
    Series.add_prefix
    Series.add_suffix
@@ -198,6 +198,7 @@ Reindexing / Selection / Label manipulation
    Series.reindex_like
    Series.reset_index
    Series.sample
+   Series.searchsorted
    Series.swaplevel
    Series.swapaxes
    Series.take
@@ -213,6 +214,7 @@ Missing data handling
 
    Series.backfill
    Series.bfill
+   Series.ffill
    Series.isna
    Series.isnull
    Series.notna
@@ -220,6 +222,7 @@ Missing data handling
    Series.pad
    Series.dropna
    Series.fillna
+   Series.interpolate
 
 Reshaping, sorting, transposing
 -------------------------------
@@ -242,7 +245,6 @@ Combining / joining / merging
 .. autosummary::
    :toctree: api/
 
-   Series.append
    Series.compare
    Series.replace
    Series.update
@@ -254,6 +256,7 @@ Time series-related
    :toctree: api/
 
    Series.asof
+   Series.resample
    Series.shift
    Series.first_valid_index
    Series.last_valid_index
@@ -267,8 +270,14 @@ in Spark. These can be accessed by ``Series.spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    Series.spark.column
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    Series.spark.transform
    Series.spark.apply
 
@@ -301,6 +310,7 @@ Datetime Properties
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    Series.dt.date
    Series.dt.year
@@ -310,8 +320,7 @@ Datetime Properties
    Series.dt.minute
    Series.dt.second
    Series.dt.microsecond
-   Series.dt.week
-   Series.dt.weekofyear
+   Series.dt.isocalendar
    Series.dt.dayofweek
    Series.dt.weekday
    Series.dt.dayofyear
@@ -331,6 +340,7 @@ Datetime Methods
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
    Series.dt.normalize
    Series.dt.strftime
@@ -351,6 +361,7 @@ like ``Series.str.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
    Series.str.capitalize
    Series.str.cat
@@ -414,10 +425,16 @@ the ``Series.cat`` accessor.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_attribute.rst
 
    Series.cat.categories
    Series.cat.ordered
    Series.cat.codes
+
+.. autosummary::
+   :toctree: api/
+   :template: autosummary/accessor_method.rst
+
    Series.cat.rename_categories
    Series.cat.reorder_categories
    Series.cat.add_categories
@@ -436,8 +453,8 @@ specific plotting methods of the form ``Series.plot.<kind>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
-   Series.plot
    Series.plot.area
    Series.plot.bar
    Series.plot.barh
@@ -447,6 +464,10 @@ specific plotting methods of the form ``Series.plot.<kind>``.
    Series.plot.line
    Series.plot.pie
    Series.plot.kde
+
+.. autosummary::
+   :toctree: api/
+
    Series.hist
 
 Serialization / IO / Conversion
@@ -465,6 +486,7 @@ Serialization / IO / Conversion
    Series.to_json
    Series.to_csv
    Series.to_excel
+   Series.to_hdf
    Series.to_frame
 
 Pandas-on-Spark specific
@@ -474,6 +496,7 @@ These can be accessed by ``Series.pandas_on_spark.<function/property>``.
 
 .. autosummary::
    :toctree: api/
+   :template: autosummary/accessor_method.rst
 
    Series.pandas_on_spark.transform_batch
 

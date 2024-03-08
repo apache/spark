@@ -18,12 +18,15 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkUpgradeException}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -50,15 +53,14 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   lazy val sparkSession = SparkSession.active
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
-    val objectMapper = new ObjectMapper()
     val paths = Option(map.get("paths")).map { pathStr =>
-      objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
+      FileDataSourceV2.readPathsToSeq(pathStr)
     }.getOrElse(Seq.empty)
     paths ++ Option(map.get("path")).toSeq
   }
 
   protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val withoutPath = map.asCaseSensitiveMap().asScala.filterKeys { k =>
+    val withoutPath = map.asCaseSensitiveMap().asScala.filter { case (k, _) =>
       !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")
     }
     new CaseInsensitiveStringMap(withoutPath.toMap.asJava)
@@ -90,8 +92,9 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   private var t: Table = null
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     if (t == null) t = getTable(options)
-    t.schema()
+    t.columns.asSchema
   }
 
   // TODO: implement a light-weight partition inference which only looks at the path of one leaf
@@ -110,6 +113,33 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       t
     } else {
       getTable(new CaseInsensitiveStringMap(properties), schema)
+    }
+  }
+}
+
+object FileDataSourceV2 {
+  private lazy val objectMapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  private def readPathsToSeq(paths: String): Seq[String] =
+    objectMapper.readValue(paths, classOf[Seq[String]])
+
+  def attachFilePath(filePath: => String, ex: Throwable): Throwable = {
+    ex match {
+      case e: SchemaColumnConvertNotSupportedException =>
+        throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
+          filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
+      case sue: SparkUpgradeException => throw sue
+      // the following exceptions already contains file path, we don't need to wrap it with
+      // `QueryExecutionErrors.cannotReadFilesError` to provide the file path.
+      case e: SparkFileNotFoundException => throw e
+      case e: SparkException if e.getErrorClass == "CANNOT_READ_FILE_FOOTER" => throw e
+      case NonFatal(e) =>
+        // TODO: do we need to check the cause?
+        e.getCause match {
+          case sue: SparkUpgradeException => throw sue
+          case e: SparkFileNotFoundException => throw e
+          case e: SparkException if e.getErrorClass == "CANNOT_READ_FILE_FOOTER" => throw e
+          case _ => throw QueryExecutionErrors.cannotReadFilesError(e, filePath)
+        }
     }
   }
 }

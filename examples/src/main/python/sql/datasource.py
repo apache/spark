@@ -26,14 +26,27 @@ from pyspark.sql import Row
 # $example off:schema_merging$
 
 
-def generic_file_source_options_example(spark):
+def generic_file_source_options_example(spark: SparkSession) -> None:
     # $example on:ignore_corrupt_files$
-    # enable ignore corrupt files
+    # enable ignore corrupt files via the data source option
+    # dir1/file3.json is corrupt from parquet's view
+    test_corrupt_df0 = spark.read.option("ignoreCorruptFiles", "true")\
+        .parquet("examples/src/main/resources/dir1/",
+                 "examples/src/main/resources/dir1/dir2/")
+    test_corrupt_df0.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # |file2.parquet|
+    # +-------------+
+
+    # enable ignore corrupt files via the configuration
     spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
     # dir1/file3.json is corrupt from parquet's view
-    test_corrupt_df = spark.read.parquet("examples/src/main/resources/dir1/",
-                                         "examples/src/main/resources/dir1/dir2/")
-    test_corrupt_df.show()
+    test_corrupt_df1 = spark.read.parquet("examples/src/main/resources/dir1/",
+                                          "examples/src/main/resources/dir1/dir2/")
+    test_corrupt_df1.show()
     # +-------------+
     # |         file|
     # +-------------+
@@ -88,38 +101,43 @@ def generic_file_source_options_example(spark):
     # $example off:load_with_modified_time_filter$
 
 
-def basic_datasource_example(spark):
+def basic_datasource_example(spark: SparkSession) -> None:
     # $example on:generic_load_save_functions$
-    df = spark.read.load("examples/src/main/resources/users.parquet")
-    df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
+    users_df = spark.read.load("examples/src/main/resources/users.parquet")
+    users_df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
     # $example off:generic_load_save_functions$
 
     # $example on:write_partitioning$
-    df.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
+    users_df = spark.read.load("examples/src/main/resources/users.parquet")
+    users_df.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
     # $example off:write_partitioning$
 
     # $example on:write_partition_and_bucket$
-    df = spark.read.parquet("examples/src/main/resources/users.parquet")
-    (df
-        .write
+    users_df = spark.read.parquet("examples/src/main/resources/users.parquet")
+    (users_df.write
         .partitionBy("favorite_color")
         .bucketBy(42, "name")
         .saveAsTable("users_partitioned_bucketed"))
     # $example off:write_partition_and_bucket$
 
     # $example on:manual_load_options$
-    df = spark.read.load("examples/src/main/resources/people.json", format="json")
-    df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
+    people_df = spark.read.load("examples/src/main/resources/people.json", format="json")
+    people_df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
     # $example off:manual_load_options$
 
     # $example on:manual_load_options_csv$
-    df = spark.read.load("examples/src/main/resources/people.csv",
-                         format="csv", sep=";", inferSchema="true", header="true")
+    people_df = spark.read.load(
+        "examples/src/main/resources/people.csv",
+        format="csv",
+        sep=";",
+        inferSchema="true",
+        header="true"
+    )
     # $example off:manual_load_options_csv$
 
     # $example on:manual_save_options_orc$
-    df = spark.read.orc("examples/src/main/resources/users.orc")
-    (df.write.format("orc")
+    users_df = spark.read.orc("examples/src/main/resources/users.orc")
+    (users_df.write.format("orc")
         .option("orc.bloom.filter.columns", "favorite_color")
         .option("orc.dictionary.key.threshold", "1.0")
         .option("orc.column.encoding.direct", "name")
@@ -127,8 +145,8 @@ def basic_datasource_example(spark):
     # $example off:manual_save_options_orc$
 
     # $example on:manual_save_options_parquet$
-    df = spark.read.parquet("examples/src/main/resources/users.parquet")
-    (df.write.format("parquet")
+    users_df = spark.read.parquet("examples/src/main/resources/users.parquet")
+    (users_df.write.format("parquet")
         .option("parquet.bloom.filter.enabled#favorite_color", "true")
         .option("parquet.bloom.filter.expected.ndv#favorite_color", "1000000")
         .option("parquet.enable.dictionary", "true")
@@ -137,7 +155,8 @@ def basic_datasource_example(spark):
     # $example off:manual_save_options_parquet$
 
     # $example on:write_sorting_and_bucketing$
-    df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
+    people_df = spark.read.json("examples/src/main/resources/people.json")
+    people_df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
     # $example off:write_sorting_and_bucketing$
 
     # $example on:direct_sql$
@@ -148,7 +167,7 @@ def basic_datasource_example(spark):
     spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
 
 
-def parquet_example(spark):
+def parquet_example(spark: SparkSession) -> None:
     # $example on:basic_parquet_example$
     peopleDF = spark.read.json("examples/src/main/resources/people.json")
 
@@ -172,7 +191,7 @@ def parquet_example(spark):
     # $example off:basic_parquet_example$
 
 
-def parquet_schema_merging_example(spark):
+def parquet_schema_merging_example(spark: SparkSession) -> None:
     # $example on:schema_merging$
     # spark is from the previous example.
     # Create a simple DataFrame, stored into a partition directory
@@ -202,7 +221,7 @@ def parquet_schema_merging_example(spark):
     # $example off:schema_merging$
 
 
-def json_dataset_example(spark):
+def json_dataset_example(spark: SparkSession) -> None:
     # $example on:json_dataset$
     # spark is from the previous example.
     sc = spark.sparkContext
@@ -244,7 +263,7 @@ def json_dataset_example(spark):
     # $example off:json_dataset$
 
 
-def csv_dataset_example(spark):
+def csv_dataset_example(spark: SparkSession) -> None:
     # $example on:csv_dataset$
     # spark is from the previous example
     sc = spark.sparkContext
@@ -264,7 +283,7 @@ def csv_dataset_example(spark):
     # +------------------+
 
     # Read a csv with delimiter, the default delimiter is ","
-    df2 = spark.read.option(delimiter=';').csv(path)
+    df2 = spark.read.option("delimiter", ";").csv(path)
     df2.show()
     # +-----+---+---------+
     # |  _c0|_c1|      _c2|
@@ -308,7 +327,7 @@ def csv_dataset_example(spark):
     # $example off:csv_dataset$
 
 
-def text_dataset_example(spark):
+def text_dataset_example(spark: SparkSession) -> None:
     # $example on:text_dataset$
     # spark is from the previous example
     sc = spark.sparkContext
@@ -358,7 +377,7 @@ def text_dataset_example(spark):
     # $example off:text_dataset$
 
 
-def jdbc_dataset_example(spark):
+def jdbc_dataset_example(spark: SparkSession) -> None:
     # $example on:jdbc_dataset$
     # Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
     # Loading data from a JDBC source
@@ -405,6 +424,54 @@ def jdbc_dataset_example(spark):
     # $example off:jdbc_dataset$
 
 
+def xml_dataset_example(spark: SparkSession) -> None:
+    # $example on:xml_dataset$
+    # Primitive types (Int, String, etc) and Product types (case classes) encoders are
+    # supported by importing this when creating a Dataset.
+    # An XML dataset is pointed to by path.
+    # The path can be either a single xml file or more xml files
+    path = "examples/src/main/resources/people.xml"
+    peopleDF = spark.read.option("rowTag", "person").format("xml").load(path)
+
+    # The inferred schema can be visualized using the printSchema() method
+    peopleDF.printSchema()
+    # root
+    #  |-- age: long (nullable = true)
+    #  |-- name: string (nullable = true)
+
+    # Creates a temporary view using the DataFrame
+    peopleDF.createOrReplaceTempView("people")
+
+    # SQL statements can be run by using the sql methods provided by spark
+    teenagerNamesDF = spark.sql("SELECT name FROM people WHERE age BETWEEN 13 AND 19")
+    teenagerNamesDF.show()
+    # +------+
+    # |  name|
+    # +------+
+    # |Justin|
+    # +------+
+
+    # Alternatively, a DataFrame can be created for an XML dataset represented by a Dataset[String]
+    xmlStrings = ["""
+          <person>
+              <name>laglangyue</name>
+              <job>Developer</job>
+              <age>28</age>
+          </person>
+        """]
+    xmlRDD = spark.sparkContext.parallelize(xmlStrings)
+    otherPeople = spark.read \
+        .option("rowTag", "person") \
+        .xml(xmlRDD)
+    otherPeople.show()
+    # +---+---------+----------+
+    # |age|      job|      name|
+    # +---+---------+----------+
+    # | 28|Developer|laglangyue|
+    # +---+---------+----------+
+    # $example off:xml_dataset$
+
+
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
@@ -419,5 +486,6 @@ if __name__ == "__main__":
     csv_dataset_example(spark)
     text_dataset_example(spark)
     jdbc_dataset_example(spark)
+    xml_dataset_example(spark)
 
     spark.stop()

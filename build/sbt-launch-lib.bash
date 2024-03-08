@@ -183,8 +183,8 @@ run() {
 
   # run sbt
   execRunner "$java_cmd" \
-    ${SBT_OPTS:-$default_sbt_opts} \
     $(get_mem_opts $sbt_mem) \
+    ${SBT_OPTS:-$default_sbt_opts} \
     ${java_opts} \
     ${java_args[@]} \
     -jar "$sbt_jar" \

@@ -29,6 +29,10 @@ import org.apache.spark.sql.connector.read.PartitionReader;
  * The metrics will be gathered during query execution back to the driver and then combined. How
  * the task metrics are combined is defined by corresponding {@link CustomMetric} with same metric
  * name. The final result will be shown up in the data source scan operator in Spark UI.
+ * <p>
+ * There are a few special metric names: "bytesWritten" and "recordsWritten". If the data source
+ * defines custom metrics with the same names, the metric values will also be updated to
+ * corresponding task metrics.
  *
  * @since 3.2.0
  */

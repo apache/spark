@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<catalog xmlns:abc="abc" xmlns:def="def">
+   <book abc:id="bk101" >
+      <abc:author>Gambardella, Matthew</abc:author>
+   </book>
+   <book def:id="bk102">
+      <def:author>Ralls, Kim</def:author>
+   </book>
+   <book id="bk103">
+      <author>Corets, Eva</author>
+   </book>
+</catalog>

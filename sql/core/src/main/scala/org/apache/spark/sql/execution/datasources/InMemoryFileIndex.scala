@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
@@ -26,6 +27,8 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.FileSourceOptions
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.HadoopFSUtils
@@ -124,11 +127,10 @@ class InMemoryFileIndex(
         case None =>
           pathsToFetch += path
       }
-      () // for some reasons scalac 2.12 needs this; return type doesn't matter
     }
     val filter = FileInputFormat.getInputPathFilter(new JobConf(hadoopConf, this.getClass))
     val discovered = InMemoryFileIndex.bulkListLeafFiles(
-      pathsToFetch.toSeq, hadoopConf, filter, sparkSession)
+      pathsToFetch.toSeq, hadoopConf, filter, sparkSession, parameters)
     discovered.foreach { case (path, leafFiles) =>
       HiveCatalogMetrics.incrementFilesDiscovered(leafFiles.size)
       fileStatusCache.putLeafFiles(path, leafFiles.toArray)
@@ -146,16 +148,34 @@ object InMemoryFileIndex extends Logging {
       paths: Seq[Path],
       hadoopConf: Configuration,
       filter: PathFilter,
-      sparkSession: SparkSession): Seq[(Path, Seq[FileStatus])] = {
-    HadoopFSUtils.parallelListLeafFiles(
-      sc = sparkSession.sparkContext,
-      paths = paths,
-      hadoopConf = hadoopConf,
-      filter = new PathFilterWrapper(filter),
-      ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles,
-      ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
-      parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
-      parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+      sparkSession: SparkSession,
+      parameters: Map[String, String] = Map.empty): Seq[(Path, Seq[FileStatus])] = {
+    val fileSystemList =
+      sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
+    val ignoreMissingFiles =
+      new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles
+    val useListFiles = try {
+      val scheme = paths.head.getFileSystem(hadoopConf).getScheme
+      paths.size == 1 && fileSystemList.contains(scheme)
+    } catch {
+      case NonFatal(_) => false
+    }
+    if (useListFiles) {
+      HadoopFSUtils.listFiles(
+        path = paths.head,
+        hadoopConf = hadoopConf,
+        filter = new PathFilterWrapper(filter))
+    } else {
+      HadoopFSUtils.parallelListLeafFiles(
+        sc = sparkSession.sparkContext,
+        paths = paths,
+        hadoopConf = hadoopConf,
+        filter = new PathFilterWrapper(filter),
+        ignoreMissingFiles = ignoreMissingFiles,
+        ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
+        parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
+        parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
+    }
   }
 
 }

@@ -442,7 +442,7 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 setGeneric("distinct", function(x) { standardGeneric("distinct") })
 
 #' @rdname drop
-setGeneric("drop", function(x, ...) { standardGeneric("drop") })
+setGeneric("drop", function(x, col, ...) { standardGeneric("drop") })
 
 #' @rdname dropDuplicates
 setGeneric("dropDuplicates", function(x, ...) { standardGeneric("dropDuplicates") })
@@ -670,6 +670,16 @@ setGeneric("randomSplit", function(x, weights, seed) { standardGeneric("randomSp
 #' @rdname broadcast
 setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
 
+#' @rdname unpivot
+setGeneric("unpivot", function(x, ids, values, variableColumnName, valueColumnName) {
+  standardGeneric("unpivot")
+})
+
+#' @rdname melt
+setGeneric("melt", function(x, ids, values, variableColumnName, valueColumnName) {
+  standardGeneric("melt")
+})
+
 ###################### Column Methods ##########################
 
 #' @rdname columnfunctions
@@ -724,6 +734,9 @@ setGeneric("like", function(x, ...) { standardGeneric("like") })
 
 #' @rdname columnfunctions
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
+
+#' @rdname columnfunctions
+setGeneric("ilike", function(x, ...) { standardGeneric("ilike") })
 
 #' @rdname startsWith
 setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
@@ -837,7 +850,7 @@ setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") 
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
+setGeneric("array_sort", function(x, ...) { standardGeneric("array_sort") })
 
 #' @rdname column_ml_functions
 #' @name NULL
@@ -955,6 +968,10 @@ setGeneric("create_array", function(x, ...) { standardGeneric("create_array") })
 #' @name NULL
 setGeneric("create_map", function(x, ...) { standardGeneric("create_map") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("csc", function(x) { standardGeneric("csc") })
+
 #' @rdname column_misc_functions
 #' @name NULL
 setGeneric("hash", function(x, ...) { standardGeneric("hash") })
@@ -1002,6 +1019,14 @@ setGeneric("dayofweek", function(x) { standardGeneric("dayofweek") })
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
+
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("monthname", function(x) { standardGeneric("monthname") })
+
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("dayname", function(x) { standardGeneric("dayname") })
 
 #' @rdname column_string_functions
 #' @name NULL
@@ -1135,6 +1160,10 @@ setGeneric("levenshtein", function(y, x) { standardGeneric("levenshtein") })
 #' @name NULL
 setGeneric("lit", function(x) { standardGeneric("lit") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("ln", function(x) { standardGeneric("ln") })
+
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("locate", function(substr, str, ...) { standardGeneric("locate") })
@@ -1150,6 +1179,10 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("ltrim", function(x, trimString) { standardGeneric("ltrim") })
+
+#' @rdname column_datetime_functions
+#' @name NULL
+setGeneric("make_date", function(x, y, z) { standardGeneric("make_date") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1183,9 +1216,17 @@ setGeneric("map_values", function(x) { standardGeneric("map_values") })
 #' @name NULL
 setGeneric("map_zip_with", function(x, y, f) { standardGeneric("map_zip_with") })
 
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("max_by", function(x, y) { standardGeneric("max_by") })
+
 #' @rdname column_misc_functions
 #' @name NULL
 setGeneric("md5", function(x) { standardGeneric("md5") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("min_by", function(x, y) { standardGeneric("min_by") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
@@ -1218,6 +1259,10 @@ setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("negate", function(x) { standardGeneric("negate") })
+
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("negative", function(x) { standardGeneric("negative") })
 
 #' @rdname not
 setGeneric("not", function(x) { standardGeneric("not") })
@@ -1254,6 +1299,10 @@ setGeneric("percentile_approx",
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
+
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("positive", function(x) { standardGeneric("positive") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1332,6 +1381,10 @@ setGeneric("schema_of_json", function(x, ...) { standardGeneric("schema_of_json"
 #' @name NULL
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
 
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("sec", function(x) { standardGeneric("sec") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("second", function(x) { standardGeneric("second") })
@@ -1407,6 +1460,10 @@ setGeneric("spark_partition_id", function(x = "missing") { standardGeneric("spar
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("stddev", function(x) { standardGeneric("stddev") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("std", function(x) { standardGeneric("std") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
@@ -1531,6 +1588,11 @@ setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_arra
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("width_bucket",
+           function(v, min, max, numBucket) { standardGeneric("width_bucket") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

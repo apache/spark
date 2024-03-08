@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.text.SimpleDateFormat
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
@@ -40,10 +41,12 @@ class MetricsReporter(
   // together in Ganglia as a single metric group
   registerGauge("inputRate-total", _.inputRowsPerSecond, 0.0)
   registerGauge("processingRate-total", _.processedRowsPerSecond, 0.0)
-  registerGauge("latency", _.durationMs.get("triggerExecution").longValue(), 0L)
+  registerGauge("latency", _.durationMs.getOrDefault("triggerExecution", 0L).longValue(), 0L)
 
-  private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
+  private val timestampFormat =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
+      .withZone(DateTimeUtils.getZoneId("UTC"))
 
   registerGauge("eventTime-watermark",
     progress => convertStringDateToMillis(progress.eventTime.get("watermark")), 0L)
@@ -53,7 +56,8 @@ class MetricsReporter(
 
   private def convertStringDateToMillis(isoUtcDateStr: String) = {
     if (isoUtcDateStr != null) {
-      timestampFormat.parse(isoUtcDateStr).getTime
+      val zonedDateTime = ZonedDateTime.parse(isoUtcDateStr, timestampFormat)
+      zonedDateTime.toInstant.toEpochMilli
     } else {
       0L
     }

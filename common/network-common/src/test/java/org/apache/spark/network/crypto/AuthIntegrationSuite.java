@@ -24,9 +24,9 @@ import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.Channel;
-import org.junit.After;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.TestUtils;
@@ -48,7 +48,7 @@ public class AuthIntegrationSuite {
 
   private AuthTestCtx ctx;
 
-  @After
+  @AfterEach
   public void cleanUp() throws Exception {
     if (ctx != null) {
       ctx.close();
@@ -72,13 +72,9 @@ public class AuthIntegrationSuite {
     ctx = new AuthTestCtx();
     ctx.createServer("server");
 
-    try {
-      ctx.createClient("client");
-      fail("Should have failed to create client.");
-    } catch (Exception e) {
-      assertFalse(ctx.authRpcHandler.isAuthenticated());
-      assertFalse(ctx.serverChannel.isActive());
-    }
+    assertThrows(Exception.class, () -> ctx.createClient("client"));
+    assertFalse(ctx.authRpcHandler.isAuthenticated());
+    assertFalse(ctx.serverChannel.isActive());
   }
 
   @Test
@@ -115,13 +111,9 @@ public class AuthIntegrationSuite {
 
     assertNotNull(ctx.client.getChannel().pipeline()
       .remove(TransportCipher.ENCRYPTION_HANDLER_NAME));
-
-    try {
-      ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
-      fail("Should have failed unencrypted RPC.");
-    } catch (Exception e) {
-      assertTrue(ctx.authRpcHandler.isAuthenticated());
-    }
+    assertThrows(Exception.class,
+      () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000));
+    assertTrue(ctx.authRpcHandler.isAuthenticated());
   }
 
   @Test
@@ -147,17 +139,22 @@ public class AuthIntegrationSuite {
     ctx.createServer("secret");
     ctx.createClient("secret");
 
-    try {
-      ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000);
-      fail("Should have failed unencrypted RPC.");
-    } catch (Exception e) {
-      assertTrue(ctx.authRpcHandler.isAuthenticated());
-      assertTrue(e.getMessage() + " is not an expected error", e.getMessage().contains("DDDDD"));
-      // Verify we receive the complete error message
-      int messageStart = e.getMessage().indexOf("DDDDD");
-      int messageEnd = e.getMessage().lastIndexOf("DDDDD") + 5;
-      assertEquals(testErrorMessageLength, messageEnd - messageStart);
-    }
+    Exception e = assertThrows(Exception.class,
+      () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"), 5000));
+    assertTrue(ctx.authRpcHandler.isAuthenticated());
+    assertTrue(e.getMessage().contains("DDDDD"), e.getMessage() + " is not an expected error");
+    // Verify we receive the complete error message
+    int messageStart = e.getMessage().indexOf("DDDDD");
+    int messageEnd = e.getMessage().lastIndexOf("DDDDD") + 5;
+    assertEquals(testErrorMessageLength, messageEnd - messageStart);
+  }
+
+  @Test
+  public void testValidMergedBlockMetaReqHandler() throws Exception {
+    ctx = new AuthTestCtx();
+    ctx.createServer("secret");
+    ctx.createClient("secret");
+    assertNotNull(ctx.authRpcHandler.getMergedBlockMetaReqHandler());
   }
 
   private static class AuthTestCtx {
@@ -202,8 +199,8 @@ public class AuthIntegrationSuite {
     void createServer(String secret, boolean enableAes) throws Exception {
       TransportServerBootstrap introspector = (channel, rpcHandler) -> {
         this.serverChannel = channel;
-        if (rpcHandler instanceof AuthRpcHandler) {
-          this.authRpcHandler = (AuthRpcHandler) rpcHandler;
+        if (rpcHandler instanceof AuthRpcHandler authRpcHandler) {
+          this.authRpcHandler = authRpcHandler;
         }
         return rpcHandler;
       };

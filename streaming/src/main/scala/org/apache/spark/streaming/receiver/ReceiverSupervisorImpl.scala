@@ -21,8 +21,8 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
@@ -215,7 +215,7 @@ private[streaming] class ReceiverSupervisorImpl(
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
 
   private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
-    logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
+    logDebug(s"Cleaning up blocks older than $cleanupThreshTime")
     receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
   }
 }

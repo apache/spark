@@ -23,7 +23,7 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hive.service.ServiceException
 import org.apache.hive.service.cli.{HiveSQLException, OperationType}
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during
@@ -36,11 +36,13 @@ object HiveThriftServerErrors {
       " new task for execution, please retry the operation", rejected)
   }
 
-  def runningQueryError(e: Throwable): Throwable = e match {
-    case st: SparkThrowable =>
+  def runningQueryError(e: Throwable, format: ErrorMessageFormat.Value): Throwable = e match {
+    case st: SparkThrowable if format == ErrorMessageFormat.PRETTY =>
       val errorClassPrefix = Option(st.getErrorClass).map(e => s"[$e] ").getOrElse("")
       new HiveSQLException(
-        s"Error running query: ${errorClassPrefix}${st.toString}", st.getSqlState, st)
+        s"Error running query: $errorClassPrefix${st.toString}", st.getSqlState, st)
+    case st: SparkThrowable with Throwable =>
+      new HiveSQLException(SparkThrowableHelper.getMessage(st, format), st.getSqlState, st)
     case _ => new HiveSQLException(s"Error running query: ${e.toString}", e)
   }
 

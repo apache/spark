@@ -18,13 +18,15 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-
 
 /**
  * Command that runs
@@ -38,10 +40,10 @@ case class SetCommand(kv: Option[(String, Option[String])])
   extends LeafRunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("key", StringType, nullable = false) ::
-        StructField("value", StringType, nullable = false) :: Nil)
-    schema.toAttributes
+    val schema = StructType(Array(
+      StructField("key", StringType, nullable = false),
+        StructField("value", StringType, nullable = false)))
+    toAttributes(schema)
   }
 
   private val (_output, runFunc): (Seq[Attribute], SparkSession => Seq[Row]) = kv match {
@@ -90,6 +92,23 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
+        /**
+         * Be nice and detect if the key matches a SQL variable.
+         * If it does give a meaningful error pointing the user to SET VARIABLE
+         */
+        val varName = try {
+          sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key)
+        } catch {
+          case _: ParseException =>
+          Seq()
+        }
+        if (varName.nonEmpty && varName.length <= 3) {
+          if (sparkSession.sessionState.analyzer.lookupVariable(varName).isDefined) {
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+              messageParameters = Map("variableName" -> toSQLId(varName)))
+          }
+        }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
             key.startsWith("hive.")) {
           logWarning(s"'SET $key=$value' might not work, since Spark doesn't support changing " +
@@ -125,12 +144,12 @@ case class SetCommand(kv: Option[(String, Option[String])])
               Option(version).getOrElse("<unknown>"))
         }
       }
-      val schema = StructType(
-        StructField("key", StringType, nullable = false) ::
-          StructField("value", StringType, nullable = false) ::
-          StructField("meaning", StringType, nullable = false) ::
-          StructField("Since version", StringType, nullable = false) :: Nil)
-      (schema.toAttributes, runFunc)
+      val schema = StructType(Array(
+        StructField("key", StringType, nullable = false),
+          StructField("value", StringType, nullable = false),
+          StructField("meaning", StringType, nullable = false),
+          StructField("Since version", StringType, nullable = false)))
+      (toAttributes(schema), runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>

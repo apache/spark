@@ -34,7 +34,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
     // be added for which values are not needed.
     // the sparse matrix needs colPtrs and rowIndices, which are set as
     // null, while building the dense matrix.
-    StructType(Seq(
+    StructType(Array(
       StructField("type", ByteType, nullable = false),
       StructField("numRows", IntegerType, nullable = false),
       StructField("numCols", IntegerType, nullable = false),

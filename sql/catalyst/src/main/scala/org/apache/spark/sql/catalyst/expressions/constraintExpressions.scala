@@ -30,6 +30,17 @@ trait TaggingExpression extends UnaryExpression {
   override def eval(input: InternalRow): Any = child.eval(input)
 }
 
+case class KnownNullable(child: Expression) extends TaggingExpression {
+  override def nullable: Boolean = true
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.genCode(ctx)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): KnownNullable =
+    copy(child = newChild)
+}
+
 case class KnownNotNull(child: Expression) extends TaggingExpression {
   override def nullable: Boolean = false
 

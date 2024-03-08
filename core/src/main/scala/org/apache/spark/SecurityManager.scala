@@ -85,17 +85,28 @@ private[spark] class SecurityManager(
   setModifyAclsGroups(sparkConf.get(MODIFY_ACLS_GROUPS))
 
   private var secretKey: String = _
+
+  private val sslRpcEnabled = sparkConf.getBoolean(
+    "spark.ssl.rpc.enabled", false)
+
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
-    "; users  with view permissions: " + viewAcls.toString() +
-    "; groups with view permissions: " + viewAclsGroups.toString() +
-    "; users  with modify permissions: " + modifyAcls.toString() +
-    "; groups with modify permissions: " + modifyAclsGroups.toString())
+    "; users with view permissions: " +
+    (if (viewAcls.nonEmpty) viewAcls.mkString(", ") else "EMPTY") +
+    "; groups with view permissions: " +
+    (if (viewAclsGroups.nonEmpty) viewAclsGroups.mkString(", ") else "EMPTY") +
+    "; users with modify permissions: " +
+    (if (modifyAcls.nonEmpty) modifyAcls.mkString(", ") else "EMPTY") +
+    "; groups with modify permissions: " +
+    (if (modifyAclsGroups.nonEmpty) modifyAclsGroups.mkString(", ") else "EMPTY") +
+    "; RPC SSL " + (if (sslRpcEnabled) "enabled" else "disabled"))
 
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
   private val defaultSSLOptions =
     SSLOptions.parse(sparkConf, hadoopConf, "spark.ssl", defaults = None)
+  // the SSL configuration for RPCs
+  private val rpcSSLOptions = getSSLOptions("rpc")
 
   def getSSLOptions(module: String): SSLOptions = {
     val opts =
@@ -265,8 +276,27 @@ private[spark] class SecurityManager(
    * @return Whether to enable encryption when connecting to services that support it.
    */
   def isEncryptionEnabled(): Boolean = {
-    sparkConf.get(Network.NETWORK_CRYPTO_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)
+    val encryptionEnabled = sparkConf.get(Network.NETWORK_CRYPTO_ENABLED) ||
+      sparkConf.get(SASL_ENCRYPTION_ENABLED)
+    if (encryptionEnabled && sslRpcEnabled) {
+      logWarning("Network encryption disabled as RPC SSL encryption is enabled")
+      false
+    } else {
+      encryptionEnabled
+    }
   }
+
+  /**
+   * Checks whether RPC SSL is enabled or not
+   * @return Whether RPC SSL is enabled or not
+   */
+  def isSslRpcEnabled(): Boolean = sslRpcEnabled
+
+  /**
+   * Returns the SSLOptions object for the RPC namespace
+   * @return the SSLOptions object for the RPC namespace
+   */
+  def getRpcSSLOptions(): SSLOptions = rpcSSLOptions
 
   /**
    * Gets the user used for authenticating SASL connections.
@@ -280,7 +310,7 @@ private[spark] class SecurityManager(
    * @return the secret key as a String if authentication is enabled, otherwise returns null
    */
   def getSecretKey(): String = {
-    if (isAuthenticationEnabled) {
+    if (isAuthenticationEnabled()) {
       val creds = UserGroupInformation.getCurrentUser().getCredentials()
       Option(creds.getSecretKey(SECRET_LOOKUP_KEY))
         .map { bytes => new String(bytes, UTF_8) }
@@ -324,7 +354,7 @@ private[spark] class SecurityManager(
       case "yarn" | "local" | LOCAL_N_REGEX(_) | LOCAL_N_FAILURES_REGEX(_, _) =>
         true
 
-      case k8sRegex() =>
+      case KUBERNETES_REGEX(_) =>
         // Don't propagate the secret through the user's credentials in kubernetes. That conflicts
         // with the way k8s handles propagation of delegation tokens.
         false
@@ -354,7 +384,7 @@ private[spark] class SecurityManager(
   private def secretKeyFromFile(): Option[String] = {
     sparkConf.get(authSecretFileConf).flatMap { secretFilePath =>
       sparkConf.getOption(SparkLauncher.SPARK_MASTER).map {
-        case k8sRegex() =>
+        case SparkMasterRegex.KUBERNETES_REGEX(_) =>
           val secretFile = new File(secretFilePath)
           require(secretFile.isFile, s"No file found containing the secret key at $secretFilePath.")
           val base64Key = Base64.getEncoder.encodeToString(Files.readAllBytes(secretFile.toPath))
@@ -372,7 +402,7 @@ private[spark] class SecurityManager(
       aclUsers: Set[String],
       aclGroups: Set[String]): Boolean = {
     if (user == null ||
-        !aclsEnabled ||
+        !aclsEnabled() ||
         aclUsers.contains(WILDCARD_ACL) ||
         aclUsers.contains(user) ||
         aclGroups.contains(WILDCARD_ACL)) {
@@ -387,11 +417,33 @@ private[spark] class SecurityManager(
   // Default SecurityManager only has a single secret key, so ignore appId.
   override def getSaslUser(appId: String): String = getSaslUser()
   override def getSecretKey(appId: String): String = getSecretKey()
+
+  /**
+   * If the RPC SSL settings are enabled, returns a map containing the password
+   * values so they can be passed to executors or other subprocesses.
+   *
+   * @return Map containing environment variables to pass
+   */
+  def getEnvironmentForSslRpcPasswords: Map[String, String] = {
+    if (rpcSSLOptions.enabled) {
+      val map = scala.collection.mutable.Map[String, String]()
+      rpcSSLOptions.keyPassword.foreach(password =>
+        map += (SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> password))
+      rpcSSLOptions.privateKeyPassword.foreach(password =>
+        map += (SSLOptions.ENV_RPC_SSL_PRIVATE_KEY_PASSWORD -> password))
+      rpcSSLOptions.keyStorePassword.foreach(password =>
+        map += (SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> password))
+      rpcSSLOptions.trustStorePassword.foreach(password =>
+        map += (SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> password))
+      map.toMap
+    } else {
+      Map()
+    }
+  }
 }
 
 private[spark] object SecurityManager {
 
-  val k8sRegex = "k8s.*".r
   val SPARK_AUTH_CONF = NETWORK_AUTH_ENABLED.key
   val SPARK_AUTH_SECRET_CONF = AUTH_SECRET.key
   // This is used to set auth secret to an executor's env variable. It should have the same

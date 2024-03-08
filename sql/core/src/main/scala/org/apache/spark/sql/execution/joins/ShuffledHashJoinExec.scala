@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.collection.{BitSet, OpenHashSet}
 
 /**
@@ -55,8 +56,24 @@ case class ShuffledHashJoinExec(
   override def outputPartitioning: Partitioning = super[ShuffledJoin].outputPartitioning
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
+    // For outer joins where the outer side is build-side, order cannot be guaranteed.
+    // The algorithm performs an additional un-ordered iteration on build-side (HashedRelation)
+    // to find unmatched rows to satisfy the outer join semantic.
     case FullOuter => Nil
+    case LeftOuter if buildSide == BuildLeft => Nil
+    case RightOuter if buildSide == BuildRight => Nil
     case _ => super.outputOrdering
+  }
+
+  // Exposed for testing
+  @transient lazy val ignoreDuplicatedKey = joinType match {
+    case LeftExistence(_) =>
+      // For building hash relation, ignore duplicated rows with same join keys if:
+      // 1. Join condition is empty, or
+      // 2. Join condition only references streamed attributes and build join keys.
+      val streamedOutputAndBuildKeys = AttributeSet(streamedOutput ++ buildKeys)
+      condition.forall(_.references.subsetOf(streamedOutputAndBuildKeys))
+    case _ => false
   }
 
   /**
@@ -71,8 +88,11 @@ case class ShuffledHashJoinExec(
       iter,
       buildBoundKeys,
       taskMemoryManager = context.taskMemoryManager(),
-      // Full outer join needs support for NULL key in HashedRelation.
-      allowsNullKey = joinType == FullOuter)
+      // build-side or full outer join needs support for NULL key in HashedRelation.
+      allowsNullKey = joinType == FullOuter ||
+        (joinType == LeftOuter && buildSide == BuildLeft) ||
+        (joinType == RightOuter && buildSide == BuildRight),
+      ignoresDuplicatedKey = ignoreDuplicatedKey)
     buildTime += NANOSECONDS.toMillis(System.nanoTime() - start)
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
@@ -85,16 +105,22 @@ case class ShuffledHashJoinExec(
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
       val hashed = buildHashedRelation(buildIter)
       joinType match {
-        case FullOuter => fullOuterJoin(streamIter, hashed, numOutputRows)
+        case FullOuter => buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows,
+          isFullOuterJoin = true)
+        case LeftOuter if buildSide.equals(BuildLeft) =>
+          buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
+        case RightOuter if buildSide.equals(BuildRight) =>
+          buildSideOrFullOuterJoin(streamIter, hashed, numOutputRows, isFullOuterJoin = false)
         case _ => join(streamIter, hashed, numOutputRows)
       }
     }
   }
 
-  private def fullOuterJoin(
+  private def buildSideOrFullOuterJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
-      numOutputRows: SQLMetric): Iterator[InternalRow] = {
+      numOutputRows: SQLMetric,
+      isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val joinKeys = streamSideKeyGenerator()
     val joinRow = new JoinedRow
     val (joinRowWithStream, joinRowWithBuild) = {
@@ -117,11 +143,11 @@ case class ShuffledHashJoinExec(
     }
 
     val iter = if (hashedRelation.keyIsUnique) {
-      fullOuterJoinWithUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow)
+      buildSideOrFullOuterJoinUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, isFullOuterJoin)
     } else {
-      fullOuterJoinWithNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow)
+      buildSideOrFullOuterJoinNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, isFullOuterJoin)
     }
 
     val resultProj = UnsafeProjection.create(output, output)
@@ -132,7 +158,7 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Full outer shuffled hash join with unique join keys:
+   * Shuffled hash join with unique join keys, where an outer side is the build side.
    * 1. Process rows from stream side by looking up hash relation.
    *    Mark the matched rows from build side be looked up.
    *    A bit set is used to track matched rows with key index.
@@ -140,23 +166,30 @@ case class ShuffledHashJoinExec(
    *    Filter out rows from build side being matched already,
    *    by checking key index from bit set.
    */
-  private def fullOuterJoinWithUniqueKey(
+  private def buildSideOrFullOuterJoinUniqueKey(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       joinKeys: UnsafeProjection,
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
-      buildNullRow: GenericInternalRow): Iterator[InternalRow] = {
+      buildNullRow: GenericInternalRow,
+      isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
     longMetric("buildDataSize") += matchedKeys.capacity / 8
 
+    def noMatch = if (isFullOuterJoin) {
+      Some(joinRowWithBuild(buildNullRow))
+    } else {
+      None
+    }
+
     // Process stream side with looking up hash relation
-    val streamResultIter = streamIter.map { srow =>
+    val streamResultIter = streamIter.flatMap { srow =>
       joinRowWithStream(srow)
       val keys = joinKeys(srow)
       if (keys.anyNull) {
-        joinRowWithBuild(buildNullRow)
+        noMatch
       } else {
         val matched = hashedRelation.getValueWithKeyIndex(keys)
         if (matched != null) {
@@ -165,12 +198,12 @@ case class ShuffledHashJoinExec(
           val joinRow = joinRowWithBuild(buildRow)
           if (boundCondition(joinRow)) {
             matchedKeys.set(keyIndex)
-            joinRow
+            Some(joinRow)
           } else {
-            joinRowWithBuild(buildNullRow)
+            noMatch
           }
         } else {
-          joinRowWithBuild(buildNullRow)
+          noMatch
         }
       }
     }
@@ -192,7 +225,7 @@ case class ShuffledHashJoinExec(
   }
 
   /**
-   * Full outer shuffled hash join with non-unique join keys:
+   * Shuffled hash join with non-unique join keys, where an outer side is the build side.
    * 1. Process rows from stream side by looking up hash relation.
    *    Mark the matched rows from build side be looked up.
    *    A [[OpenHashSet]] (Long) is used to track matched rows with
@@ -206,14 +239,15 @@ case class ShuffledHashJoinExec(
    * the value indices of its tuples will be 0, 1 and 2.
    * Note that value indices of tuples with different keys are incomparable.
    */
-  private def fullOuterJoinWithNonUniqueKey(
+  private def buildSideOrFullOuterJoinNonUniqueKey(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
       joinKeys: UnsafeProjection,
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
-      buildNullRow: GenericInternalRow): Iterator[InternalRow] = {
+      buildNullRow: GenericInternalRow,
+      isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val matchedRows = new OpenHashSet[Long]
     TaskContext.get().addTaskCompletionListener[Unit](_ => {
       // At the end of the task, update the task's memory usage for this
@@ -239,7 +273,12 @@ case class ShuffledHashJoinExec(
       val joinRow = joinRowWithStream(srow)
       val keys = joinKeys(srow)
       if (keys.anyNull) {
-        Iterator.single(joinRowWithBuild(buildNullRow))
+        // return row with build side NULL row to satisfy full outer join semantics if enabled
+        if (isFullOuterJoin) {
+          Iterator.single(joinRowWithBuild(buildNullRow))
+        } else {
+          Iterator.empty
+        }
       } else {
         val buildIter = hashedRelation.getWithKeyIndex(keys)
         new RowIterator {
@@ -259,8 +298,8 @@ case class ShuffledHashJoinExec(
             }
             // When we reach here, it means no match is found for this key.
             // So we need to return one row with build side NULL row,
-            // to satisfy the full outer join semantic.
-            if (!found) {
+            // to satisfy the full outer join semantic if enabled.
+            if (!found && isFullOuterJoin) {
               joinRowWithBuild(buildNullRow)
               // Set `found` to be true as we only need to return one row
               // but no more.
@@ -299,9 +338,13 @@ case class ShuffledHashJoinExec(
     streamResultIter ++ buildResultIter
   }
 
-  // TODO(SPARK-32567): support full outer shuffled hash join code-gen
-  override def supportCodegen: Boolean = {
-    joinType != FullOuter
+  override def supportCodegen: Boolean = joinType match {
+    case FullOuter => conf.getConf(SQLConf.ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
+    case LeftOuter if buildSide == BuildLeft =>
+      conf.getConf(SQLConf.ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
+    case RightOuter if buildSide == BuildRight =>
+      conf.getConf(SQLConf.ENABLE_BUILD_SIDE_OUTER_SHUFFLED_HASH_JOIN_CODEGEN)
+    case _ => true
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -318,6 +361,277 @@ case class ShuffledHashJoinExec(
     val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"$v = $thisPlan.buildHashedRelation(inputs[1]);", forceInline = true)
     HashedRelationInfo(relationTerm, keyIsUnique = false, isEmpty = false)
+  }
+
+  override def doProduce(ctx: CodegenContext): String = {
+    // Specialize `doProduce` code for full outer join and build-side outer join,
+    // because we need to iterate streamed and build side separately.
+    val specializedProduce = joinType match {
+      case FullOuter => true
+      case LeftOuter if buildSide == BuildLeft => true
+      case RightOuter if buildSide == BuildRight => true
+      case _ => false
+    }
+    if (!specializedProduce) {
+      return super.doProduce(ctx)
+    }
+
+    val HashedRelationInfo(relationTerm, _, _) = prepareRelation(ctx)
+
+    // Inline mutable state since not many join operations in a task
+    val keyIsUnique = ctx.addMutableState("boolean", "keyIsUnique",
+      v => s"$v = $relationTerm.keyIsUnique();", forceInline = true)
+    val streamedInput = ctx.addMutableState("scala.collection.Iterator", "streamedInput",
+      v => s"$v = inputs[0];", forceInline = true)
+    val buildInput = ctx.addMutableState("scala.collection.Iterator", "buildInput",
+      v => s"$v = $relationTerm.valuesWithKeyIndex();", forceInline = true)
+    val streamedRow = ctx.addMutableState("InternalRow", "streamedRow", forceInline = true)
+    val buildRow = ctx.addMutableState("InternalRow", "buildRow", forceInline = true)
+
+    // Generate variables and related code from streamed side
+    val streamedVars = genOneSideJoinVars(ctx, streamedRow, streamedPlan, setDefaultValue = false)
+    val streamedKeyVariables = evaluateRequiredVariables(streamedOutput, streamedVars,
+      AttributeSet.fromAttributeSets(streamedKeys.map(_.references)))
+    ctx.currentVars = streamedVars
+    val streamedKeyExprCode = GenerateUnsafeProjection.createCode(ctx, streamedBoundKeys)
+    val streamedKeyEv =
+      s"""
+         |$streamedKeyVariables
+         |${streamedKeyExprCode.code}
+       """.stripMargin
+    val streamedKeyAnyNull = s"${streamedKeyExprCode.value}.anyNull()"
+
+    // Generate code for join condition
+    val (_, conditionCheck, _) =
+      getJoinCondition(ctx, streamedVars, streamedPlan, buildPlan, Some(buildRow))
+
+    // Generate code for result output in separate function, as we need to output result from
+    // multiple places in join code.
+    val streamedResultVars = genOneSideJoinVars(
+      ctx, streamedRow, streamedPlan, setDefaultValue = true)
+    val buildResultVars = genOneSideJoinVars(
+      ctx, buildRow, buildPlan, setDefaultValue = true)
+    val resultVars = buildSide match {
+      case BuildLeft => buildResultVars ++ streamedResultVars
+      case BuildRight => streamedResultVars ++ buildResultVars
+    }
+    val consumeOuterJoinRow = ctx.freshName("consumeOuterJoinRow")
+    ctx.addNewFunction(consumeOuterJoinRow,
+      s"""
+         |private void $consumeOuterJoinRow() throws java.io.IOException {
+         |  ${metricTerm(ctx, "numOutputRows")}.add(1);
+         |  ${consume(ctx, resultVars)}
+         |}
+       """.stripMargin)
+
+    val isFullOuterJoin = joinType == FullOuter
+    val joinWithUniqueKey = codegenBuildSideOrFullOuterJoinWithUniqueKey(
+      ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      isFullOuterJoin)
+    val joinWithNonUniqueKey = codegenBuildSideOrFullOuterJoinNonUniqueKey(
+      ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      isFullOuterJoin)
+
+    s"""
+       |if ($keyIsUnique) {
+       |  $joinWithUniqueKey
+       |} else {
+       |  $joinWithNonUniqueKey
+       |}
+     """.stripMargin
+  }
+
+  /**
+   * Generates the code for build-side or full outer join with unique join keys.
+   * This is code-gen version of `buildSideOrFullOuterJoinUniqueKey()`.
+   */
+  private def codegenBuildSideOrFullOuterJoinWithUniqueKey(
+      ctx: CodegenContext,
+      rows: (String, String),
+      inputs: (String, String),
+      streamedKeyEv: String,
+      streamedKeyAnyNull: String,
+      streamedKeyValue: ExprValue,
+      relationTerm: String,
+      conditionCheck: String,
+      consumeOuterJoinRow: String,
+      isFullOuterJoin: Boolean): String = {
+    // Inline mutable state since not many join operations in a task
+    val matchedKeySetClsName = classOf[BitSet].getName
+    val matchedKeySet = ctx.addMutableState(matchedKeySetClsName, "matchedKeySet",
+      v => s"$v = new $matchedKeySetClsName($relationTerm.maxNumKeysIndex());", forceInline = true)
+    val rowWithIndexClsName = classOf[ValueRowWithKeyIndex].getName
+    val rowWithIndex = ctx.freshName("rowWithIndex")
+    val foundMatch = ctx.freshName("foundMatch")
+    val (streamedRow, buildRow) = rows
+    val (streamedInput, buildInput) = inputs
+
+    val joinStreamSide =
+      s"""
+         |while ($streamedInput.hasNext()) {
+         |  $streamedRow = (InternalRow) $streamedInput.next();
+         |
+         |  // generate join key for stream side
+         |  $streamedKeyEv
+         |
+         |  // find matches from HashedRelation
+         |  boolean $foundMatch = false;
+         |  $buildRow = null;
+         |  $rowWithIndexClsName $rowWithIndex = $streamedKeyAnyNull ? null:
+         |    $relationTerm.getValueWithKeyIndex($streamedKeyValue);
+         |
+         |  if ($rowWithIndex != null) {
+         |    $buildRow = $rowWithIndex.getValue();
+         |    // check join condition
+         |    $conditionCheck {
+         |      // set key index in matched keys set
+         |      $matchedKeySet.set($rowWithIndex.getKeyIndex());
+         |      $foundMatch = true;
+         |    }
+         |
+         |    if (!$foundMatch) {
+         |      $buildRow = null;
+         |    }
+         |  }
+         |
+         |  if ($foundMatch || $isFullOuterJoin) {
+         |    $consumeOuterJoinRow();
+         |  }
+         |
+         |  if (shouldStop()) return;
+         |}
+       """.stripMargin
+
+    val filterBuildSide =
+      s"""
+         |$streamedRow = null;
+         |
+         |// find non-matched rows from HashedRelation
+         |while ($buildInput.hasNext()) {
+         |  $rowWithIndexClsName $rowWithIndex = ($rowWithIndexClsName) $buildInput.next();
+         |
+         |  // check if key index is not in matched keys set
+         |  if (!$matchedKeySet.get($rowWithIndex.getKeyIndex())) {
+         |    $buildRow = $rowWithIndex.getValue();
+         |    $consumeOuterJoinRow();
+         |  }
+         |
+         |  if (shouldStop()) return;
+         |}
+       """.stripMargin
+
+    s"""
+       |$joinStreamSide
+       |$filterBuildSide
+     """.stripMargin
+  }
+
+  /**
+   * Generates the code for build-side or full outer join with non-unique join keys.
+   * This is code-gen version of `buildSideOrFullOuterJoinNonUniqueKey()`.
+   */
+  private def codegenBuildSideOrFullOuterJoinNonUniqueKey(
+      ctx: CodegenContext,
+      rows: (String, String),
+      inputs: (String, String),
+      streamedKeyEv: String,
+      streamedKeyAnyNull: String,
+      streamedKeyValue: ExprValue,
+      relationTerm: String,
+      conditionCheck: String,
+      consumeOuterJoinRow: String,
+      isFullOuterJoin: Boolean): String = {
+    // Inline mutable state since not many join operations in a task
+    val matchedRowSetClsName = classOf[OpenHashSet[_]].getName
+    val matchedRowSet = ctx.addMutableState(matchedRowSetClsName, "matchedRowSet",
+      v => s"$v = new $matchedRowSetClsName(scala.reflect.ClassTag$$.MODULE$$.Long());",
+      forceInline = true)
+    val prevKeyIndex = ctx.addMutableState("int", "prevKeyIndex",
+      v => s"$v = -1;", forceInline = true)
+    val valueIndex = ctx.addMutableState("int", "valueIndex",
+      v => s"$v = -1;", forceInline = true)
+    val rowWithIndexClsName = classOf[ValueRowWithKeyIndex].getName
+    val rowWithIndex = ctx.freshName("rowWithIndex")
+    val buildIterator = ctx.freshName("buildIterator")
+    val foundMatch = ctx.freshName("foundMatch")
+    val keyIndex = ctx.freshName("keyIndex")
+    val (streamedRow, buildRow) = rows
+    val (streamedInput, buildInput) = inputs
+
+    val rowIndex = s"(((long)$keyIndex) << 32) | $valueIndex"
+
+    val joinStreamSide =
+      s"""
+         |while ($streamedInput.hasNext()) {
+         |  $streamedRow = (InternalRow) $streamedInput.next();
+         |
+         |  // generate join key for stream side
+         |  $streamedKeyEv
+         |
+         |  // find matches from HashedRelation
+         |  boolean $foundMatch = false;
+         |  $buildRow = null;
+         |  scala.collection.Iterator $buildIterator = $streamedKeyAnyNull ? null:
+         |    $relationTerm.getWithKeyIndex($streamedKeyValue);
+         |
+         |  int $valueIndex = -1;
+         |  while ($buildIterator != null && $buildIterator.hasNext()) {
+         |    $rowWithIndexClsName $rowWithIndex = ($rowWithIndexClsName) $buildIterator.next();
+         |    int $keyIndex = $rowWithIndex.getKeyIndex();
+         |    $buildRow = $rowWithIndex.getValue();
+         |    $valueIndex++;
+         |
+         |    // check join condition
+         |    $conditionCheck {
+         |      // set row index in matched row set
+         |      $matchedRowSet.add($rowIndex);
+         |      $foundMatch = true;
+         |      $consumeOuterJoinRow();
+         |    }
+         |  }
+         |
+         |  if (!$foundMatch) {
+         |    $buildRow = null;
+         |    if ($isFullOuterJoin) {
+         |      $consumeOuterJoinRow();
+         |    }
+         |  }
+         |
+         |  if (shouldStop()) return;
+         |}
+       """.stripMargin
+
+    val filterBuildSide =
+      s"""
+         |$streamedRow = null;
+         |
+         |// find non-matched rows from HashedRelation
+         |while ($buildInput.hasNext()) {
+         |  $rowWithIndexClsName $rowWithIndex = ($rowWithIndexClsName) $buildInput.next();
+         |  int $keyIndex = $rowWithIndex.getKeyIndex();
+         |  if ($prevKeyIndex == -1 || $keyIndex != $prevKeyIndex) {
+         |    $valueIndex = 0;
+         |    $prevKeyIndex = $keyIndex;
+         |  } else {
+         |    $valueIndex += 1;
+         |  }
+         |
+         |  // check if row index is not in matched row set
+         |  if (!$matchedRowSet.contains($rowIndex)) {
+         |    $buildRow = $rowWithIndex.getValue();
+         |    $consumeOuterJoinRow();
+         |  }
+         |
+         |  if (shouldStop()) return;
+         |}
+       """.stripMargin
+
+    s"""
+       |$joinStreamSide
+       |$filterBuildSide
+     """.stripMargin
   }
 
   override protected def withNewChildrenInternal(

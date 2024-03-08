@@ -25,9 +25,9 @@ import java.util.Map;
 
 import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.AdditionalMatchers.*;
 import static org.mockito.Mockito.*;
 

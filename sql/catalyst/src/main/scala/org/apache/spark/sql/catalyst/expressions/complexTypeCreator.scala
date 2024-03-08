@@ -19,18 +19,23 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Trait to indicate the expression does not throw an exception by itself when they are evaluated.
@@ -68,7 +73,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
   override def stringArgs: Iterator[Any] = super.stringArgs.take(1)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+    TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), prettyName)
   }
 
   private val defaultElementType: DataType = {
@@ -202,16 +207,25 @@ case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName expects a positive even number of arguments.")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
+      )
     } else if (!TypeCoercion.haveSameType(keys.map(_.dataType))) {
-      TypeCheckResult.TypeCheckFailure(
-        "The given keys of function map should all be the same type, but they are " +
-          keys.map(_.dataType.catalogString).mkString("[", ", ", "]"))
+      DataTypeMismatch(
+        errorSubClass = "CREATE_MAP_KEY_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> keys.map(key => toSQLType(key.dataType)).mkString("[", ", ", "]")
+        )
+      )
     } else if (!TypeCoercion.haveSameType(values.map(_.dataType))) {
-      TypeCheckResult.TypeCheckFailure(
-        "The given values of function map should all be the same type, but they are " +
-          values.map(_.dataType.catalogString).mkString("[", ", ", "]"))
+      DataTypeMismatch(
+        errorSubClass = "CREATE_MAP_VALUE_DIFF_TYPES",
+        messageParameters = Map(
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> values.map(value => toSQLType(value.dataType)).mkString("[", ", ", "]")
+        )
+      )
     } else {
       TypeUtils.checkForMapKeyType(dataType.keyType)
     }
@@ -359,8 +373,10 @@ object CreateStruct {
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
       case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
+      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType == StringType => Seq(e, u)
       case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
       case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
+      case (g @ GetStructField(_, _, Some(name)), _) => Seq(Literal(name), g)
       case (e, index) => Seq(Literal(s"col${index + 1}"), e)
     })
   }
@@ -443,17 +459,27 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an even number of arguments.")
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("2n (n > 0)"), children.length
+      )
     } else {
       val invalidNames = nameExprs.filterNot(e => e.foldable && e.dataType == StringType)
       if (invalidNames.nonEmpty) {
-        TypeCheckResult.TypeCheckFailure(
-          s"Only foldable ${StringType.catalogString} expressions are allowed to appear at odd" +
-            s" position, got: ${invalidNames.mkString(",")}")
+        DataTypeMismatch(
+          errorSubClass = "CREATE_NAMED_STRUCT_WITHOUT_FOLDABLE_STRING",
+          messageParameters = Map(
+            "inputExprs" -> invalidNames.map(toSQLExpr(_)).mkString("[", ", ", "]")
+          )
+        )
       } else if (!names.contains(null)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
-        TypeCheckResult.TypeCheckFailure("Field name should not be null")
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map(
+            "exprName" -> nameExprs.map(toSQLExpr).mkString("[", ", ", "]")
+          )
+        )
       }
     }
   }
@@ -547,14 +573,6 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def dataType: DataType = MapType(StringType, StringType)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (Seq(pairDelim, keyValueDelim).exists(! _.foldable)) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName's delimiters must be foldable.")
-    } else {
-      super.checkInputDataTypes()
-    }
-  }
-
   private lazy val mapBuilder = new ArrayBasedMapBuilder(StringType, StringType)
 
   override def nullSafeEval(
@@ -605,9 +623,15 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 /**
  * Represents an operation to be applied to the fields of a struct.
  */
-trait StructFieldsOperation {
+trait StructFieldsOperation extends Expression with Unevaluable {
 
   val resolver: Resolver = SQLConf.get.resolver
+
+  override def dataType: DataType = throw SparkException.internalError(
+    "StructFieldsOperation.dataType should not be called.")
+
+  override def nullable: Boolean = throw SparkException.internalError(
+    "StructFieldsOperation.nullable should not be called.")
 
   /**
    * Returns an updated list of StructFields and Expressions that will ultimately be used
@@ -624,7 +648,7 @@ trait StructFieldsOperation {
  * children, and thereby enable the analyzer to resolve and transform valExpr as necessary.
  */
 case class WithField(name: String, valExpr: Expression)
-  extends Unevaluable with StructFieldsOperation with UnaryLike[Expression] {
+  extends StructFieldsOperation with UnaryLike[Expression] {
 
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] = {
     val newFieldExpr = (StructField(name, valExpr.dataType, valExpr.nullable), valExpr)
@@ -644,12 +668,6 @@ case class WithField(name: String, valExpr: Expression)
 
   override def child: Expression = valExpr
 
-  override def dataType: DataType = throw new IllegalStateException(
-    "WithField.dataType should not be called.")
-
-  override def nullable: Boolean = throw new IllegalStateException(
-    "WithField.nullable should not be called.")
-
   override def prettyName: String = "WithField"
 
   override protected def withNewChildInternal(newChild: Expression): WithField =
@@ -659,7 +677,7 @@ case class WithField(name: String, valExpr: Expression)
 /**
  * Drop a field by name.
  */
-case class DropField(name: String) extends StructFieldsOperation {
+case class DropField(name: String) extends StructFieldsOperation with LeafLike[Expression] {
   override def apply(values: Seq[(StructField, Expression)]): Seq[(StructField, Expression)] =
     values.filterNot { case (field, _) => resolver(field.name, name) }
 }
@@ -675,10 +693,19 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
   override def checkInputDataTypes(): TypeCheckResult = {
     val dataType = structExpr.dataType
     if (!dataType.isInstanceOf[StructType]) {
-      TypeCheckResult.TypeCheckFailure("struct argument should be struct type, got: " +
-        dataType.catalogString)
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(StructType),
+          "inputSql" -> toSQLExpr(structExpr),
+          "inputType" -> toSQLType(structExpr.dataType))
+      )
     } else if (newExprs.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("cannot drop all fields in struct")
+      DataTypeMismatch(
+        errorSubClass = "CANNOT_DROP_ALL_FIELDS",
+        messageParameters = Map.empty
+      )
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -698,11 +725,13 @@ case class UpdateFields(structExpr: Expression, fieldOps: Seq[StructFieldsOperat
   override def prettyName: String = "update_fields"
 
   private lazy val newFieldExprs: Seq[(StructField, Expression)] = {
+    def getFieldExpr(i: Int): Expression = structExpr match {
+      case c: CreateNamedStruct => c.valExprs(i)
+      case _ => GetStructField(structExpr, i)
+    }
+    val fieldsWithIndex = structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex
     val existingFieldExprs: Seq[(StructField, Expression)] =
-      structExpr.dataType.asInstanceOf[StructType].fields.zipWithIndex.map {
-        case (field, i) => (field, GetStructField(structExpr, i))
-      }
-
+      fieldsWithIndex.map { case (field, i) => (field, getFieldExpr(i)) }.toImmutableArraySeq
     fieldOps.foldLeft(existingFieldExprs)((exprs, op) => op(exprs))
   }
 

@@ -40,6 +40,7 @@ class SparkSubmitOptionParser {
   protected final String CONF = "--conf";
   protected final String DEPLOY_MODE = "--deploy-mode";
   protected final String DRIVER_CLASS_PATH = "--driver-class-path";
+  protected final String DRIVER_DEFAULT_CLASS_PATH = "--driver-default-class-path";
   protected final String DRIVER_CORES = "--driver-cores";
   protected final String DRIVER_JAVA_OPTIONS =  "--driver-java-options";
   protected final String DRIVER_LIBRARY_PATH = "--driver-library-path";
@@ -49,6 +50,7 @@ class SparkSubmitOptionParser {
   protected final String JARS = "--jars";
   protected final String KILL_SUBMISSION = "--kill";
   protected final String MASTER = "--master";
+  protected final String REMOTE = "--remote";
   protected final String NAME = "--name";
   protected final String PACKAGES = "--packages";
   protected final String PACKAGES_EXCLUDE = "--exclude-packages";
@@ -93,6 +95,7 @@ class SparkSubmitOptionParser {
     { DEPLOY_MODE },
     { DRIVER_CLASS_PATH },
     { DRIVER_CORES },
+    { DRIVER_DEFAULT_CLASS_PATH },
     { DRIVER_JAVA_OPTIONS },
     { DRIVER_LIBRARY_PATH },
     { DRIVER_MEMORY },
@@ -103,6 +106,7 @@ class SparkSubmitOptionParser {
     { KEYTAB },
     { KILL_SUBMISSION },
     { MASTER },
+    { REMOTE },
     { NAME },
     { NUM_EXECUTORS },
     { PACKAGES },

@@ -61,6 +61,20 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
     mlpc.setLayers(Array[Int](1, 1))
   }
 
+  test("MultilayerPerceptronClassifier validate input dataset") {
+    testInvalidClassificationLabels(
+      new MultilayerPerceptronClassifier().setLayers(Array[Int](2, 5, 2)).fit(_),
+      Some(2)
+    )
+    testInvalidClassificationLabels(
+      new MultilayerPerceptronClassifier().setLayers(Array[Int](2, 5, 3)).fit(_),
+      Some(3)
+    )
+    testInvalidVectors(
+      new MultilayerPerceptronClassifier().setLayers(Array[Int](2, 5, 2)).fit(_)
+    )
+  }
+
   test("XOR function learning as binary classification problem with two outputs.") {
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()

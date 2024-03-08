@@ -70,11 +70,9 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
       return true;
     }
 
-    if (other == null || !(other instanceof CountMinSketchImpl)) {
+    if (!(other instanceof CountMinSketchImpl that)) {
       return false;
     }
-
-    CountMinSketchImpl that = (CountMinSketchImpl) other;
 
     return
       this.depth == that.depth &&
@@ -143,10 +141,10 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
 
   @Override
   public void add(Object item, long count) {
-    if (item instanceof String) {
-      addString((String) item, count);
-    } else if (item instanceof byte[]) {
-      addBinary((byte[]) item, count);
+    if (item instanceof String str) {
+      addString(str, count);
+    } else if (item instanceof byte[] bytes) {
+      addBinary(bytes, count);
     } else {
       addLong(Utils.integralToLong(item), count);
     }
@@ -227,10 +225,10 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
 
   @Override
   public long estimateCount(Object item) {
-    if (item instanceof String) {
-      return estimateCountForStringItem((String) item);
-    } else if (item instanceof byte[]) {
-      return estimateCountForBinaryItem((byte[]) item);
+    if (item instanceof String str) {
+      return estimateCountForStringItem(str);
+    } else if (item instanceof byte[] bytes) {
+      return estimateCountForBinaryItem(bytes);
     } else {
       return estimateCountForLongItem(Utils.integralToLong(item));
     }
@@ -268,13 +266,11 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
       throw new IncompatibleMergeException("Cannot merge null estimator");
     }
 
-    if (!(other instanceof CountMinSketchImpl)) {
+    if (!(other instanceof CountMinSketchImpl that)) {
       throw new IncompatibleMergeException(
           "Cannot merge estimator of class " + other.getClass().getName()
       );
     }
-
-    CountMinSketchImpl that = (CountMinSketchImpl) other;
 
     if (this.depth != that.depth) {
       throw new IncompatibleMergeException("Cannot merge estimators of different depth");

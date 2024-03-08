@@ -37,6 +37,23 @@ private[spark] object Worker {
     .longConf
     .createWithDefault(60)
 
+  val WORKER_INITIAL_REGISTRATION_RETRIES = ConfigBuilder("spark.worker.initialRegistrationRetries")
+    .version("4.0.0")
+    .internal()
+    .doc("The number of retries to reconnect in short intervals (between 5 and 15 seconds).")
+    .intConf
+    .checkValue(_ > 0, "The number of initial registration retries should be positive")
+    .createWithDefault(6)
+
+  val WORKER_MAX_REGISTRATION_RETRIES = ConfigBuilder("spark.worker.maxRegistrationRetries")
+    .version("4.0.0")
+    .internal()
+    .doc("The max number of retries to reconnect. After spark.worker.initialRegistrationRetries " +
+      "attempts, the interval is between 30 and 90 seconds.")
+    .intConf
+    .checkValue(_ > 0, "The max number of registration retries should be positive")
+    .createWithDefault(16)
+
   val WORKER_DRIVER_TERMINATE_TIMEOUT = ConfigBuilder("spark.worker.driverTerminateTimeout")
     .version("2.1.2")
     .timeConf(TimeUnit.MILLISECONDS)
@@ -45,7 +62,7 @@ private[spark] object Worker {
   val WORKER_CLEANUP_ENABLED = ConfigBuilder("spark.worker.cleanup.enabled")
     .version("1.0.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val WORKER_CLEANUP_INTERVAL = ConfigBuilder("spark.worker.cleanup.interval")
     .version("1.0.0")
@@ -89,4 +106,15 @@ private[spark] object Worker {
       .version("3.2.0")
       .stringConf
       .createWithDefaultString("PWR")
+
+  val WORKER_ID_PATTERN = ConfigBuilder("spark.worker.idPattern")
+    .internal()
+    .doc("The pattern for worker ID generation based on Java `String.format` method. The " +
+      "default value is `worker-%s-%s-%d` which represents the existing worker id string, e.g.," +
+      " `worker-20231109183042-[fe80::1%lo0]-39729`. Please be careful to generate unique IDs")
+    .version("4.0.0")
+    .stringConf
+    .checkValue(!_.format("20231109000000", "host", 0).exists(_.isWhitespace),
+      "Whitespace is not allowed.")
+    .createWithDefaultString("worker-%s-%s-%d")
 }

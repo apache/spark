@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * OrcTest
@@ -47,7 +48,7 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
  */
-abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
+trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
 
   val orcImp: String = "native"
 
@@ -56,6 +57,8 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
   override protected val dataSourceName: String = "orc"
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.ORC_VECTORIZED_READER_ENABLED.key
+  override protected val vectorizedReaderNestedEnabledKey: String =
+    SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -118,19 +121,19 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters,
-          DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
+      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         if (noneSupported) {
           assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
         } else {
           assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
-          val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
-          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for ${o.pushedFilters}")
+          val maybeFilter = OrcFilters
+            .createFilter(query.schema, o.pushedFilters.toImmutableArraySeq)
+          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for " +
+            s"${o.pushedFilters.mkString("pushedFilters(", ", ", ")")}")
         }
 
-      case _ =>
-        throw new AnalysisException("Can not match OrcTable in the query.")
+      case _ => assert(false, "Can not match OrcTable in the query.")
     }
   }
 
@@ -141,6 +144,13 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
     file.deleteOnExit();
     FileUtils.copyURLToFile(url, file)
     spark.read.orc(file.getAbsolutePath)
+  }
+
+  def withAllNativeOrcReaders(code: => Unit): Unit = {
+    // test the row-based reader
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    // test the vectorized reader
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "true")(code)
   }
 
   /**

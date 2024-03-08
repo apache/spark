@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.io.{CharConversionException, FileNotFoundException, IOException}
+import java.nio.charset.MalformedInputException
 import java.util.Comparator
 
 import scala.util.control.Exception.allCatch
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -30,11 +33,13 @@ import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
+class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -44,6 +49,29 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
+
+  private val ignoreCorruptFiles = options.ignoreCorruptFiles
+  private val ignoreMissingFiles = options.ignoreMissingFiles
+  private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
+  private val legacyMode = SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
+
+  private def handleJsonErrorsByParseMode(parseMode: ParseMode,
+      columnNameOfCorruptRecord: String, e: Throwable): Option[StructType] = {
+    parseMode match {
+      case PermissiveMode =>
+        Some(StructType(Array(StructField(columnNameOfCorruptRecord, StringType))))
+      case DropMalformedMode =>
+        None
+      case FailFastMode =>
+        throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+    }
+  }
 
   /**
    * Infer the type of a collection of json records in three stages:
@@ -68,16 +96,25 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             Some(inferField(parser))
           }
         } catch {
-          case  e @ (_: RuntimeException | _: JsonProcessingException) => parseMode match {
-            case PermissiveMode =>
-              Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
-            case DropMalformedMode =>
-              None
-            case FailFastMode =>
-              throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
-          }
+          case e @ (_: JsonProcessingException | _: MalformedInputException) =>
+            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
+          case e: CharConversionException if options.encoding.isEmpty =>
+            val msg =
+              """JSON parser cannot handle a character in its input.
+                |Specifying encoding as an input option explicitly might help to resolve the issue.
+                |""".stripMargin + e.getMessage
+            val wrappedCharException = new CharConversionException(msg)
+            wrappedCharException.initCause(e)
+            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning("Skipped missing file", e)
+            Some(StructType(Nil))
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e @ (_: IOException | _: RuntimeException) if ignoreCorruptFiles =>
+            logWarning("Skipped the rest of the content in the corrupted file", e)
+            Some(StructType(Nil))
         }
-      }.reduceOption(typeMerger).toIterator
+      }.reduceOption(typeMerger).iterator
     }
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
@@ -127,9 +164,28 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
         }
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
-        } else if (options.inferTimestamp &&
-            (allCatch opt timestampFormatter.parse(field)).isDefined) {
-          TimestampType
+        } else if (options.inferTimestamp) {
+          // For text-based format, it's ambiguous to infer a timestamp string without timezone, as
+          // it can be both TIMESTAMP LTZ and NTZ. To avoid behavior changes with the new support
+          // of NTZ, here we only try to infer NTZ if the config is set to use NTZ by default.
+          if (isDefaultNTZ &&
+            timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+            TimestampNTZType
+          } else if (timestampFormatter.parseOptional(field).isDefined) {
+            TimestampType
+          } else if (legacyMode) {
+            val utf8Value = UTF8String.fromString(field)
+            // There was a mistake that we use TIMESTAMP NTZ parser to infer LTZ type with legacy
+            // mode. The mistake makes it easier to infer TIMESTAMP LTZ type and we have to keep
+            // this behavior now. See SPARK-46769 for more details.
+            if (SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, false).isDefined) {
+              TimestampType
+            } else {
+              StringType
+            }
+          } else {
+            StringType
+          }
         } else {
           StringType
         }
@@ -329,9 +385,9 @@ object JsonInferSchema {
           // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
           // building a hash map or performing additional sorting.
           assert(isSorted(fields1),
-            s"${StructType.simpleString}'s fields were not sorted: ${fields1.toSeq}")
+            s"${StructType.simpleString}'s fields were not sorted: ${fields1.toImmutableArraySeq}")
           assert(isSorted(fields2),
-            s"${StructType.simpleString}'s fields were not sorted: ${fields2.toSeq}")
+            s"${StructType.simpleString}'s fields were not sorted: ${fields2.toImmutableArraySeq}")
 
           val newFields = new java.util.ArrayList[StructField]()
 
@@ -375,6 +431,9 @@ object JsonInferSchema {
           compatibleType(DecimalType.forType(t1), t2)
         case (t1: DecimalType, t2: IntegralType) =>
           compatibleType(t1, DecimalType.forType(t2))
+
+        case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
+          TimestampType
 
         // strings and every string is a Json object.
         case (_, _) => StringType

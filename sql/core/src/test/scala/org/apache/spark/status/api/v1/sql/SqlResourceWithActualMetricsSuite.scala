@@ -20,12 +20,15 @@ package org.apache.spark.status.api.v1.sql
 import java.net.URL
 import java.text.SimpleDateFormat
 
+import jakarta.servlet.http.HttpServletResponse
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
@@ -45,7 +48,7 @@ class SqlResourceWithActualMetricsSuite
   // Exclude nodes which may not have the metrics
   val excludedNodes = List("WholeStageCodegen", "Project", "SerializeFromObject")
 
-  implicit val formats = new DefaultFormats {
+  implicit val formats: DefaultFormats = new DefaultFormats {
     override def dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss")
   }
 
@@ -126,7 +129,35 @@ class SqlResourceWithActualMetricsSuite
       .filter(_.getAs[Int]("age") <= 30)
       .sort()
 
-    ds.toDF
+    ds.toDF()
   }
 
+  test("SPARK-44334: Status of a failed DDL/DML with no jobs should be FAILED") {
+    withTable("SPARK_44334") {
+      val sqlStr = "CREATE TABLE SPARK_44334 USING parquet AS SELECT 1 AS a"
+      sql(sqlStr)
+      intercept[TableAlreadyExistsException](sql(sqlStr))
+
+      val url = new URL(spark.sparkContext.ui.get.webUrl +
+        s"/api/v1/applications/${spark.sparkContext.applicationId}/sql")
+      eventually(timeout(20.seconds), interval(50.milliseconds)) {
+        val result = verifyAndGetSqlRestResult(url)
+        val executionDataList = JsonMethods.parse(result)
+          .extract[Seq[ExecutionData]]
+          .filter(_.planDescription.contains("SPARK_44334"))
+        assert(executionDataList.size == 2)
+        assert(executionDataList.head.status == "COMPLETED")
+        assert(executionDataList.last.status == "FAILED")
+      }
+    }
+  }
+
+  test("SPARK-45291: Use unknown query execution id instead of no such app when id is invalid") {
+    val url = new URL(spark.sparkContext.ui.get.webUrl +
+      s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/${Long.MaxValue}")
+    val (code, resultOpt, error) = getContentAndCode(url)
+    assert(code === HttpServletResponse.SC_NOT_FOUND)
+    assert(resultOpt.isEmpty)
+    assert(error.get === s"unknown query execution id: ${Long.MaxValue}")
+  }
 }

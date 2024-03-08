@@ -20,9 +20,9 @@ import warnings
 from pyspark.pandas._typing import T
 
 if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.indexes import Index
+    from pyspark.pandas.series import Series
 
 
 class CachedAccessor(Generic[T]):
@@ -34,7 +34,7 @@ class CachedAccessor(Generic[T]):
     Parameters
     ----------
     name : str
-        Namespace that accessor's methods, properties, etc will be accessed under, e.g. "foo" for a
+        Namespace that accessor methods, properties, etc will be accessed under, e.g. "foo" for a
         dataframe accessor yields the accessor ``df.foo``
     accessor: cls
         Class with the extension methods.
@@ -59,7 +59,7 @@ class CachedAccessor(Generic[T]):
     ) -> Union[T, Type[T]]:
         if obj is None:
             return self._accessor
-        accessor_obj = self._accessor(obj)  # type: ignore
+        accessor_obj = self._accessor(obj)  # type: ignore[call-arg]
         object.__setattr__(obj, self._name, accessor_obj)
         return accessor_obj
 
@@ -89,7 +89,7 @@ def _register_accessor(
 
     Notes
     -----
-    When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user
+    When accessed, your accessor will be initialized with the pandas-on-Spark object the user
     is interacting with. The code signature must be:
 
     .. code-block:: python
@@ -109,7 +109,7 @@ def _register_accessor(
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Note: This function is not meant to be used directly - instead, use register_dataframe_accessor,
     register_series_accessor, or register_index_accessor.
@@ -154,7 +154,7 @@ def register_dataframe_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
 
     Notes
     -----
-    When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user
+    When accessed, your accessor will be initialized with the pandas-on-Spark object the user
     is interacting with. The accessor's init method should always ingest the object being accessed.
     See the examples for the init signature.
 
@@ -169,7 +169,7 @@ def register_dataframe_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------
@@ -232,7 +232,7 @@ def register_series_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
 
     Notes
     -----
-    When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user is
+    When accessed, your accessor will be initialized with the pandas-on-Spark object the user is
     interacting with. The code signature must be::
 
         def __init__(self, pandas_on_spark_obj):
@@ -250,7 +250,7 @@ def register_series_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------
@@ -304,7 +304,7 @@ def register_index_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
 
     Notes
     -----
-    When accessed, your accessor will be initialiazed with the pandas-on-Spark object the user is
+    When accessed, your accessor will be initialized with the pandas-on-Spark object the user is
     interacting with. The code signature must be::
 
         def __init__(self, pandas_on_spark_obj):
@@ -322,7 +322,7 @@ def register_index_accessor(name: str) -> Callable[[Type[T]], Type[T]]:
     ...
     Traceback (most recent call last):
         ...
-    ValueError: Cannot call DatetimeMethods on type StringType
+    ValueError: Cannot call DatetimeMethods on type StringType()
 
     Examples
     --------

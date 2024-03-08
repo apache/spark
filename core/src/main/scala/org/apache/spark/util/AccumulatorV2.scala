@@ -19,7 +19,6 @@ package org.apache.spark.util
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
-import java.util.ArrayList
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -157,6 +156,10 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    */
   def value: OUT
 
+  // Serialize the buffer of this accumulator before sending back this accumulator to the driver.
+  // By default this method does nothing.
+  protected def withBufferSerialized(): AccumulatorV2[IN, OUT] = this
+
   // Called by Java when serializing an object
   final protected def writeReplace(): Any = {
     if (atDriverSide) {
@@ -179,7 +182,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       }
       copyAcc
     } else {
-      this
+      withBufferSerialized()
     }
   }
 
@@ -501,7 +504,7 @@ class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   }
 
   override def value: java.util.List[T] = this.synchronized {
-    java.util.Collections.unmodifiableList(new ArrayList[T](getOrCreate))
+    java.util.List.copyOf(getOrCreate)
   }
 
   private[spark] def setValue(newValue: java.util.List[T]): Unit = this.synchronized {

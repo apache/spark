@@ -69,6 +69,13 @@ $\alpha$ and `regParam` corresponds to $\lambda$.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.classification.LogisticRegression.html).
+
+{% include_example python/ml/logistic_regression_with_elastic_net.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/classification/LogisticRegression.html).
@@ -83,16 +90,9 @@ More details on parameters can be found in the [Java API documentation](api/java
 {% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionWithElasticNetExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.classification.LogisticRegression.html).
-
-{% include_example python/ml/logistic_regression_with_elastic_net.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+More details on parameters can be found in the [R API documentation](api/R/reference/spark.logit.html).
 
 {% include_example binomial r/ml/logit.R %}
 </div>
@@ -106,6 +106,18 @@ predictions and metrics which are stored as `DataFrame` in
 only available on the driver.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+[`LogisticRegressionTrainingSummary`](api/python/reference/api/pyspark.ml.classification.LogisticRegressionSummary.html)
+provides a summary for a
+[`LogisticRegressionModel`](api/python/reference/api/pyspark.ml.classification.LogisticRegressionModel.html).
+In the case of binary classification, certain additional metrics are
+available, e.g. ROC curve. See [`BinaryLogisticRegressionTrainingSummary`](api/python/reference/api/pyspark.ml.classification.BinaryLogisticRegressionTrainingSummary.html).
+
+Continuing the earlier example:
+
+{% include_example python/ml/logistic_regression_summary_example.py %}
+</div>
 
 <div data-lang="scala" markdown="1">
 
@@ -132,18 +144,6 @@ available, e.g. ROC curve. The binary summary can be accessed via the
 Continuing the earlier example:
 
 {% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionSummaryExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-[`LogisticRegressionTrainingSummary`](api/python/reference/api/pyspark.ml.classification.LogisticRegressionSummary.html)
-provides a summary for a
-[`LogisticRegressionModel`](api/python/reference/api/pyspark.ml.classification.LogisticRegressionModel.html).
-In the case of binary classification, certain additional metrics are
-available, e.g. ROC curve. See [`BinaryLogisticRegressionTrainingSummary`](api/python/reference/api/pyspark.ml.classification.BinaryLogisticRegressionTrainingSummary.html).
-
-Continuing the earlier example:
-
-{% include_example python/ml/logistic_regression_summary_example.py %}
 </div>
 
 </div>
@@ -181,6 +181,10 @@ training summary for evaluating the model.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+{% include_example python/ml/multiclass_logistic_regression_with_elastic_net.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 {% include_example scala/org/apache/spark/examples/ml/MulticlassLogisticRegressionWithElasticNetExample.scala %}
 </div>
@@ -189,13 +193,9 @@ training summary for evaluating the model.
 {% include_example java/org/apache/spark/examples/ml/JavaMulticlassLogisticRegressionWithElasticNetExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-{% include_example python/ml/multiclass_logistic_regression_with_elastic_net.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-More details on parameters can be found in the [R API documentation](api/R/spark.logit.html).
+More details on parameters can be found in the [R API documentation](api/R/reference/spark.logit.html).
 
 {% include_example multinomial r/ml/logit.R %}
 </div>
@@ -214,6 +214,15 @@ The following examples load a dataset in LibSVM format, split it into training a
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.classification.DecisionTreeClassifier.html).
+
+{% include_example python/ml/decision_tree_classification_example.py %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/classification/DecisionTreeClassifier.html).
@@ -230,17 +239,9 @@ More details on parameters can be found in the [Java API documentation](api/java
 
 </div>
 
-<div data-lang="python" markdown="1">
-
-More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.classification.DecisionTreeClassifier.html).
-
-{% include_example python/ml/decision_tree_classification_example.py %}
-
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.decisionTree.html) for more details.
 
 {% include_example classification r/ml/decisionTree.R %}
 
@@ -259,6 +260,14 @@ The following examples load a dataset in LibSVM format, split it into training a
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.RandomForestClassifier.html) for more details.
+
+{% include_example python/ml/random_forest_classifier_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/RandomForestClassifier.html) for more details.
@@ -273,16 +282,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/RandomF
 {% include_example java/org/apache/spark/examples/ml/JavaRandomForestClassifierExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.RandomForestClassifier.html) for more details.
-
-{% include_example python/ml/random_forest_classifier_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.randomForest.html) for more details.
 
 {% include_example classification r/ml/randomForest.R %}
 </div>
@@ -300,6 +302,14 @@ The following examples load a dataset in LibSVM format, split it into training a
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.GBTClassifier.html) for more details.
+
+{% include_example python/ml/gradient_boosted_tree_classifier_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/GBTClassifier.html) for more details.
@@ -314,16 +324,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/GBTClas
 {% include_example java/org/apache/spark/examples/ml/JavaGradientBoostedTreeClassifierExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.GBTClassifier.html) for more details.
-
-{% include_example python/ml/gradient_boosted_tree_classifier_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.gbt.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.gbt.html) for more details.
 
 {% include_example classification r/ml/gbt.R %}
 </div>
@@ -356,6 +359,13 @@ MLPC employs backpropagation for learning the model. We use the logistic loss fu
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.MultilayerPerceptronClassifier.html) for more details.
+
+{% include_example python/ml/multilayer_perceptron_classification.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/MultilayerPerceptronClassifier.html) for more details.
@@ -370,16 +380,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/Multila
 {% include_example java/org/apache/spark/examples/ml/JavaMultilayerPerceptronClassifierExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.MultilayerPerceptronClassifier.html) for more details.
-
-{% include_example python/ml/multilayer_perceptron_classification.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.mlp.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.mlp.html) for more details.
 
 {% include_example r/ml/mlp.R %}
 </div>
@@ -401,6 +404,13 @@ in Spark ML supports binary classification with linear SVM. Internally, it optim
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.LinearSVC.html) for more details.
+
+{% include_example python/ml/linearsvc.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/LinearSVC.html) for more details.
@@ -415,16 +425,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/LinearS
 {% include_example java/org/apache/spark/examples/ml/JavaLinearSVCExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.LinearSVC.html) for more details.
-
-{% include_example python/ml/linearsvc.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.svmLinear.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.svmLinear.html) for more details.
 
 {% include_example r/ml/svmLinear.R %}
 </div>
@@ -445,6 +448,14 @@ The example below demonstrates how to load the
 [Iris dataset](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/multiclass/iris.scale), parse it as a DataFrame and perform multiclass classification using `OneVsRest`. The test error is calculated to measure the algorithm accuracy.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.OneVsRest.html) for more details.
+
+{% include_example python/ml/one_vs_rest_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/OneVsRest.html) for more details.
@@ -459,12 +470,6 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 {% include_example java/org/apache/spark/examples/ml/JavaOneVsRestExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.OneVsRest.html) for more details.
-
-{% include_example python/ml/one_vs_rest_example.py %}
-</div>
 </div>
 
 ## Naive Bayes
@@ -499,6 +504,14 @@ setting the parameter $\lambda$ (default to $1.0$).
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.NaiveBayes.html) for more details.
+
+{% include_example python/ml/naive_bayes_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/NaiveBayes.html) for more details.
@@ -513,16 +526,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/NaiveBa
 {% include_example java/org/apache/spark/examples/ml/JavaNaiveBayesExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.NaiveBayes.html) for more details.
-
-{% include_example python/ml/naive_bayes_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.naiveBayes.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.naiveBayes.html) for more details.
 
 {% include_example r/ml/naiveBayes.R %}
 </div>
@@ -542,6 +548,14 @@ train on the first dataset, and then evaluate on the held-out test set.
 We scale features to be between 0 and 1 to prevent the exploding gradient problem.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.FMClassifier.html) for more details.
+
+{% include_example python/ml/fm_classifier_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/classification/FMClassifier.html) for more details.
@@ -556,16 +570,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/FMClass
 {% include_example java/org/apache/spark/examples/ml/JavaFMClassifierExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.classification.FMClassifier.html) for more details.
-
-{% include_example python/ml/fm_classifier_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.fmClassifier.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.fmClassifier.html) for more details.
 
 Note: At the moment SparkR doesn't support feature scaling.
 
@@ -592,6 +599,14 @@ regression model and extracting model summary statistics.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+<!--- TODO: Add python model summaries once implemented -->
+
+More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.regression.LinearRegression.html#pyspark.ml.regression.LinearRegression).
+
+{% include_example python/ml/linear_regression_with_elastic_net.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/regression/LinearRegression.html).
@@ -606,17 +621,9 @@ More details on parameters can be found in the [Java API documentation](api/java
 {% include_example java/org/apache/spark/examples/ml/JavaLinearRegressionWithElasticNetExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-<!--- TODO: Add python model summaries once implemented -->
-
-More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.regression.LinearRegression.html#pyspark.ml.regression.LinearRegression).
-
-{% include_example python/ml/linear_regression_with_elastic_net.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-More details on parameters can be found in the [R API documentation](api/R/spark.lm.html).
+More details on parameters can be found in the [R API documentation](api/R/reference/spark.lm.html).
 
 {% include_example r/ml/lm_with_elastic_net.R %}
 </div>
@@ -692,11 +699,13 @@ Spark's generalized linear regression interface also provides summary statistics
 fit of GLM models, including residuals, p-values, deviances, the Akaike information criterion, and
 others.
 
-[See here](http://data.princeton.edu/wws509/notes/) for a more comprehensive review of GLMs and their applications.
+[See here][glm] for a more comprehensive review of GLMs and their applications.
+
+[glm]: https://web.archive.org/web/20180217071524/http://data.princeton.edu/wws509/notes/
 
 ###  Available families
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th>Family</th>
@@ -740,6 +749,13 @@ function and extracting model summary statistics.
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.GeneralizedLinearRegression.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
+
+{% include_example python/ml/generalized_linear_regression_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/GeneralizedLinearRegression.html) for more details.
@@ -754,16 +770,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/Generalized
 {% include_example java/org/apache/spark/examples/ml/JavaGeneralizedLinearRegressionExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.GeneralizedLinearRegression.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
-
-{% include_example python/ml/generalized_linear_regression_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.glm.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.glm.html) for more details.
 
 {% include_example r/ml/glm.R %}
 </div>
@@ -782,6 +791,14 @@ The following examples load a dataset in LibSVM format, split it into training a
 We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.regression.DecisionTreeRegressor.html#pyspark.ml.regression.DecisionTreeRegressor).
+
+{% include_example python/ml/decision_tree_regression_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 More details on parameters can be found in the [Scala API documentation](api/scala/org/apache/spark/ml/regression/DecisionTreeRegressor.html).
@@ -796,16 +813,9 @@ More details on parameters can be found in the [Java API documentation](api/java
 {% include_example java/org/apache/spark/examples/ml/JavaDecisionTreeRegressionExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-More details on parameters can be found in the [Python API documentation](api/python/reference/api/pyspark.ml.regression.DecisionTreeRegressor.html#pyspark.ml.regression.DecisionTreeRegressor).
-
-{% include_example python/ml/decision_tree_regression_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.decisionTree.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.decisionTree.html) for more details.
 
 {% include_example regression r/ml/decisionTree.R %}
 </div>
@@ -824,6 +834,14 @@ The following examples load a dataset in LibSVM format, split it into training a
 We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.RandomForestRegressor.html#pyspark.ml.regression.RandomForestRegressor) for more details.
+
+{% include_example python/ml/random_forest_regressor_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/RandomForestRegressor.html) for more details.
@@ -838,16 +856,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/RandomFores
 {% include_example java/org/apache/spark/examples/ml/JavaRandomForestRegressorExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.RandomForestRegressor.html#pyspark.ml.regression.RandomForestRegressor) for more details.
-
-{% include_example python/ml/random_forest_regressor_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.randomForest.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.randomForest.html) for more details.
 
 {% include_example regression r/ml/randomForest.R %}
 </div>
@@ -865,6 +876,14 @@ Note: For this example dataset, `GBTRegressor` actually only needs 1 iteration, 
 be true in general.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.GBTRegressor.html#pyspark.ml.regression.GBTRegressor) for more details.
+
+{% include_example python/ml/gradient_boosted_tree_regressor_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/GBTRegressor.html) for more details.
@@ -879,16 +898,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GBTRegresso
 {% include_example java/org/apache/spark/examples/ml/JavaGradientBoostedTreeRegressorExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.GBTRegressor.html#pyspark.ml.regression.GBTRegressor) for more details.
-
-{% include_example python/ml/gradient_boosted_tree_regressor_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.gbt.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.gbt.html) for more details.
 
 {% include_example regression r/ml/gbt.R %}
 </div>
@@ -925,7 +937,7 @@ and $f_{0}(\epsilon_{i})$ is the corresponding density function.
 The most commonly used AFT model is based on the Weibull distribution of the survival time.
 The Weibull distribution for lifetime corresponds to the extreme value distribution for the
 log of the lifetime, and the $S_{0}(\epsilon)$ function is:
-`\[   
+`\[
 S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
 \]`
 the $f_{0}(\epsilon_{i})$ function is:
@@ -939,7 +951,7 @@ The log-likelihood function for AFT model with a Weibull distribution of lifetim
 Due to minimizing the negative log-likelihood equivalent to maximum a posteriori probability,
 the loss function we use to optimize is $-\iota(\beta,\sigma)$.
 The gradient functions for $\beta$ and $\log\sigma$ respectively are:
-`\[   
+`\[
 \frac{\partial (-\iota)}{\partial \beta}=\sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma}
 \]`
 `\[
@@ -959,6 +971,13 @@ The implementation matches the result from R's survival function
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.AFTSurvivalRegression.html#pyspark.ml.regression.AFTSurvivalRegression) for more details.
+
+{% include_example python/ml/aft_survival_regression.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/AFTSurvivalRegression.html) for more details.
@@ -973,16 +992,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/AFTSurvival
 {% include_example java/org/apache/spark/examples/ml/JavaAFTSurvivalRegressionExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.AFTSurvivalRegression.html#pyspark.ml.regression.AFTSurvivalRegression) for more details.
-
-{% include_example python/ml/aft_survival_regression.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/spark.survreg.html) for more details.
+Refer to the [R API docs](api/R/reference/spark.survreg.html) for more details.
 
 {% include_example r/ml/survreg.R %}
 </div>
@@ -1039,6 +1051,14 @@ is treated as piecewise linear function. The rules for prediction therefore are:
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [`IsotonicRegression` Python docs](api/python/reference/api/pyspark.ml.regression.IsotonicRegression.html#pyspark.ml.regression.IsotonicRegression) for more details on the API.
+
+{% include_example python/ml/isotonic_regression_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [`IsotonicRegression` Scala docs](api/scala/org/apache/spark/ml/regression/IsotonicRegression.html) for details on the API.
@@ -1051,16 +1071,10 @@ Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/ml/regre
 
 {% include_example java/org/apache/spark/examples/ml/JavaIsotonicRegressionExample.java %}
 </div>
-<div data-lang="python" markdown="1">
-
-Refer to the [`IsotonicRegression` Python docs](api/python/reference/api/pyspark.ml.regression.IsotonicRegression.html#pyspark.ml.regression.IsotonicRegression) for more details on the API.
-
-{% include_example python/ml/isotonic_regression_example.py %}
-</div>
 
 <div data-lang="r" markdown="1">
 
-Refer to the [`IsotonicRegression` R API docs](api/R/spark.isoreg.html) for more details on the API.
+Refer to the [`IsotonicRegression` R API docs](api/R/reference/spark.isoreg.html) for more details on the API.
 
 {% include_example r/ml/isoreg.R %}
 </div>
@@ -1080,6 +1094,14 @@ train on the first dataset, and then evaluate on the held-out test set.
 We scale features to be between 0 and 1 to prevent the exploding gradient problem.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.FMRegressor.html#pyspark.ml.regression.FMRegressor) for more details.
+
+{% include_example python/ml/fm_regressor_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [Scala API docs](api/scala/org/apache/spark/ml/regression/FMRegressor.html) for more details.
@@ -1094,16 +1116,9 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/FMRegressor
 {% include_example java/org/apache/spark/examples/ml/JavaFMRegressorExample.java %}
 </div>
 
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.FMRegressor.html#pyspark.ml.regression.FMRegressor) for more details.
-
-{% include_example python/ml/fm_regressor_example.py %}
-</div>
-
 <div data-lang="r" markdown="1">
 
-Refer to the [R API documentation](api/R/spark.fmRegressor.html) for more details.
+Refer to the [R API documentation](api/R/reference/spark.fmRegressor.html) for more details.
 
 Note: At the moment SparkR doesn't support feature scaling.
 
@@ -1144,9 +1159,11 @@ regression with elastic net regularization.
 
 # Factorization Machines
 
-[Factorization Machines](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) are able to estimate interactions
+[Factorization Machines][fm] are able to estimate interactions
 between features even in problems with huge sparsity (like advertising and recommendation system).
 The `spark.ml` implementation supports factorization machines for binary classification and for regression.
+
+[fm]: https://web.archive.org/web/20191225211603/https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf
 
 Factorization machines formula is:
 
@@ -1198,7 +1215,7 @@ The main differences between this API and the [original MLlib Decision Tree API]
 * use of DataFrame metadata to distinguish continuous and categorical features
 
 
-The Pipelines API for Decision Trees offers a bit more functionality than the original API.  
+The Pipelines API for Decision Trees offers a bit more functionality than the original API.
 In particular, for classification, users can get the predicted probability of each class (a.k.a. class conditional probabilities);
 for regression, users can get the biased sample variance of prediction.
 
@@ -1211,7 +1228,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Input Columns
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1238,7 +1255,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Output Columns
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1286,7 +1303,7 @@ All output columns are optional; to exclude an output column, set its correspond
 The DataFrame API supports two major tree ensemble algorithms: [Random Forests](http://en.wikipedia.org/wiki/Random_forest) and [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting).
 Both use [`spark.ml` decision trees](ml-classification-regression.html#decision-trees) as their base models.
 
-Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).  
+Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).
 In this section, we demonstrate the DataFrame API for ensembles.
 
 The main differences between this API and the [original MLlib ensembles API](mllib-ensembles.html) are:
@@ -1313,7 +1330,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1340,7 +1357,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Output Columns (Predictions)
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1394,7 +1411,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1423,7 +1440,7 @@ Note that `GBTClassifier` currently only supports binary labels.
 
 #### Output Columns (Predictions)
 
-<table class="table">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>

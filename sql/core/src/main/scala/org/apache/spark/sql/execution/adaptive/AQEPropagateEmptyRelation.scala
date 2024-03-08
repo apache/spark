@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelationBase
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
@@ -32,14 +34,33 @@ import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
  */
 object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
   override protected def isEmpty(plan: LogicalPlan): Boolean =
-    super.isEmpty(plan) || getRowCount(plan).contains(0)
+    super.isEmpty(plan) || (!isRootRepartition(plan) && getEstimatedRowCount(plan).contains(0))
 
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
-    super.nonEmpty(plan) || getRowCount(plan).exists(_ > 0)
+    super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
 
-  private def getRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
+  private def isRootRepartition(plan: LogicalPlan): Boolean = plan match {
+    case l: LogicalQueryStage if l.getTagValue(ROOT_REPARTITION).isDefined => true
+    case _ => false
+  }
+
+  // The returned value follows:
+  //   - 0 means the plan must produce 0 row
+  //   - positive value means an estimated row count which can be over-estimated
+  //   - none means the plan has not materialized or the plan can not be estimated
+  private def getEstimatedRowCount(plan: LogicalPlan): Option[BigInt] = plan match {
     case LogicalQueryStage(_, stage: QueryStageExec) if stage.isMaterialized =>
       stage.getRuntimeStatistics.rowCount
+
+    case LogicalQueryStage(_, agg: BaseAggregateExec) if agg.groupingExpressions.nonEmpty &&
+      agg.child.isInstanceOf[QueryStageExec] =>
+      val stage = agg.child.asInstanceOf[QueryStageExec]
+      if (stage.isMaterialized) {
+        stage.getRuntimeStatistics.rowCount
+      } else {
+        None
+      }
+
     case _ => None
   }
 
@@ -54,7 +75,14 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
       empty(j)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+  override protected def userSpecifiedRepartition(p: LogicalPlan): Boolean = p match {
+    case LogicalQueryStage(_, ShuffleQueryStageExec(_, shuffle: ShuffleExchangeLike, _))
+      if shuffle.shuffleOrigin == REPARTITION_BY_COL ||
+        shuffle.shuffleOrigin == REPARTITION_BY_NUM => true
+    case _ => false
+  }
+
+  override protected def applyInternal(p: LogicalPlan): LogicalPlan = p.transformUpWithPruning(
     // LOCAL_RELATION and TRUE_OR_FALSE_LITERAL pattern are matched at
     // `PropagateEmptyRelationBase.commonApplyFunc`
     // LOGICAL_QUERY_STAGE pattern is matched at `PropagateEmptyRelationBase.commonApplyFunc`

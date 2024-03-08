@@ -38,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestUtils
   with BeforeAndAfterEach {
@@ -84,7 +85,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         child = child,
         ioschema = defaultIOSchema
       ),
-      rowsDf.collect())
+      rowsDf.collect().toImmutableArraySeq)
     assert(uncaughtExceptionHandler.exception.isEmpty)
   }
 
@@ -101,7 +102,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = ExceptionInjectingOperator(child),
           ioschema = defaultIOSchema
         ),
-        rowsDf.collect())
+        rowsDf.collect().toImmutableArraySeq)
     }
     assert(e.getMessage().contains("intentional exception"))
     // Before SPARK-25158, uncaughtExceptionHandler will catch IllegalArgumentException
@@ -109,7 +110,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-25990: TRANSFORM should handle different data types correctly") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
 
     withTempView("v") {
@@ -126,18 +127,18 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
            |TRANSFORM(a, b, c, d, e)
            |  ROW FORMAT DELIMITED
            |  FIELDS TERMINATED BY '\t'
-           |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |  USING 'python3 $scriptFilePath' AS (a, b, c, d, e)
            |  ROW FORMAT DELIMITED
            |  FIELDS TERMINATED BY '\t'
            |FROM v
         """.stripMargin)
 
       checkAnswer(query, identity, df.select(
-        'a.cast("string"),
-        'b.cast("string"),
-        'c.cast("string"),
-        'd.cast("string"),
-        'e.cast("string")).collect())
+        $"a".cast("string"),
+        $"b".cast("string"),
+        $"c".cast("string"),
+        $"d".cast("string"),
+        $"e".cast("string")).collect().toImmutableArraySeq)
     }
   }
 
@@ -160,11 +161,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          $"a".cast("string").as("key"),
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
       checkAnswer(
-        df.select('a, 'b),
+        df.select($"a", $"b"),
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -174,11 +175,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          $"a".cast("string").as("key"),
+          $"b".cast("string").as("value")).collect().toImmutableArraySeq)
 
       checkAnswer(
-        df.select('a),
+        df.select($"a"),
         (child: SparkPlan) => createScriptTransformationExec(
           script = "cat",
           output = Seq(
@@ -188,8 +189,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
-          lit(null)).collect())
+          $"a".cast("string").as("key"),
+          lit(null)).collect().toImmutableArraySeq)
     }
   }
 
@@ -212,7 +213,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   def testBasicInputDataTypesWith(serde: ScriptTransformationIOSchema, testName: String): Unit = {
     test(s"SPARK-32400: TRANSFORM should support basic data types as input ($testName)") {
-      assume(TestUtils.testCommandAvailable("python"))
+      assume(TestUtils.testCommandAvailable("python3"))
       withTempView("v") {
         val df = Seq(
           (1, "1", 1.0f, 1.0, 11.toByte, BigDecimal(1.0), new Timestamp(1),
@@ -242,7 +243,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             child = child,
             ioschema = serde
           ),
-          df.select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j).collect())
+          df.select($"a", $"b", $"c", $"d", $"e",
+            $"f", $"g", $"h", $"i", $"j").collect().toImmutableArraySeq)
       }
     }
   }
@@ -251,7 +253,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
 
   test("SPARK-32400: TRANSFORM should support more data types (interval, array, map, struct " +
     "and udt) as input (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
       val df = Seq(
         (new CalendarInterval(7, 1, 1000), Array(0, 1, 2), Map("a" -> 1), (1, 2),
@@ -282,12 +284,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select('a, 'b, 'c, 'd, 'e).collect())
+        df.select($"a", $"b", $"c", $"d", $"e").collect().toImmutableArraySeq)
     }
   }
 
   test("SPARK-32400: TRANSFORM should respect DATETIME_JAVA8API_ENABLED (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     Array(false, true).foreach { java8AapiEnable =>
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8AapiEnable.toString) {
         withTempView("v") {
@@ -304,7 +306,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
               |USING 'cat' AS (a timestamp, b date)
               |FROM v
             """.stripMargin)
-          checkAnswer(query, identity, df.select('a, 'b).collect())
+          checkAnswer(query, identity, df.select($"a", $"b").collect().toImmutableArraySeq)
         }
       }
     }
@@ -339,11 +341,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  NULL DEFINED AS 'NULL'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       // input/output with different delimit and show result
       checkAnswer(
@@ -362,11 +364,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |FROM v
         """.stripMargin), identity, df.select(
           concat_ws(",",
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string"))).collect())
+            $"a".cast("string"),
+            $"b".cast("string"),
+            $"c".cast("string"),
+            $"d".cast("string"),
+            $"e".cast("string"))).collect().toImmutableArraySeq)
     }
   }
 
@@ -379,7 +381,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
 
     checkAnswer(
-      df.select('a, 'b),
+      df.select($"a", $"b"),
       (child: SparkPlan) => createScriptTransformationExec(
         script = "cat",
         output = Seq(
@@ -391,9 +393,9 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         ioschema = defaultIOSchema
       ),
       df.select(
-        'a.cast("string").as("a"),
-        'b.cast("string").as("b"),
-        lit(null), lit(null)).collect())
+        $"a".cast("string").as("a"),
+        $"b".cast("string").as("b"),
+        lit(null), lit(null)).collect().toImmutableArraySeq)
   }
 
   test("SPARK-32106: TRANSFORM with non-existent command/file") {
@@ -405,7 +407,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
        """.stripMargin,
       s"""
          |SELECT TRANSFORM(a)
-         |USING 'python some_non_existent_file' AS (a)
+         |USING 'python3 some_non_existent_file' AS (a)
          |FROM VALUES (1) t(a)
        """.stripMargin).foreach { query =>
       intercept[SparkException] {
@@ -442,7 +444,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-31936: Script transform support ArrayType/MapType/StructType (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
       val df = Seq(
         (Array(0, 1, 2), Array(Array(0, 1), Array(2)),
@@ -452,10 +454,10 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         (Array(6, 7, 8), Array(Array(6, 7), Array(8)),
           Map("c" -> 3), Map("d" -> Array("e", "f")))
       ).toDF("a", "b", "c", "d")
-        .select('a, 'b, 'c, 'd,
-          struct('a, 'b).as("e"),
-          struct('a, 'd).as("f"),
-          struct(struct('a, 'b), struct('a, 'd)).as("g")
+        .select($"a", $"b", $"c", $"d",
+          struct($"a", $"b").as("e"),
+          struct($"a", $"d").as("f"),
+          struct(struct($"a", $"b"), struct($"a", $"d")).as("g")
         )
 
       checkAnswer(
@@ -483,12 +485,13 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select('a, 'b, 'c, 'd, 'e, 'f, 'g).collect())
+        df.select($"a", $"b", $"c", $"d", $"e",
+          $"f", $"g").collect().toImmutableArraySeq)
     }
   }
 
   test("SPARK-33934: Add SparkFile's root dir to env property PATH") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
     withTempView("v") {
       val df = Seq(
@@ -498,7 +501,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
       df.createTempView("v")
 
-      // test 'python /path/to/script.py' with local file
+      // test 'python3 /path/to/script.py' with local file
       checkAnswer(
         sql(
           s"""
@@ -506,16 +509,16 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
-             |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+             |  USING 'python3 $scriptFilePath' AS (a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       // test '/path/to/script.py' with script not executable
       val e1 = intercept[TestFailedException] {
@@ -531,11 +534,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
                |  FIELDS TERMINATED BY '\t'
                |FROM v
         """.stripMargin), identity, df.select(
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string")).collect())
+            $"a".cast("string"),
+            $"b".cast("string"),
+            $"c".cast("string"),
+            $"d".cast("string"),
+            $"e".cast("string")).collect().toImmutableArraySeq)
       }.getMessage
       // Check with status exit code since in GA test, it may lose detail failed root cause.
       // Different root cause's exitcode is not same.
@@ -556,11 +559,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
       scriptFilePath.setExecutable(false)
       sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
@@ -577,29 +580,29 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect().toImmutableArraySeq)
 
-      // test `python script.py` when file added
+      // test `python3 script.py` when file added
       checkAnswer(
         sql(
           s"""
              |SELECT TRANSFORM(a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
-             |  USING 'python ${scriptFilePath.getName}' AS (a, b, c, d, e)
+             |  USING 'python3 ${scriptFilePath.getName}' AS (a, b, c, d, e)
              |  ROW FORMAT DELIMITED
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          $"a".cast("string"),
+          $"b".cast("string"),
+          $"c".cast("string"),
+          $"d".cast("string"),
+          $"e".cast("string")).collect().toImmutableArraySeq)
     }
   }
 
@@ -612,7 +615,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ).toDF("a", "b")
       df.createTempView("v")
 
-      if (defaultSerDe == "hive-serde") {
+      if (defaultSerDe() == "hive-serde") {
         checkAnswer(sql(
           """
             |SELECT TRANSFORM(a, b)
@@ -635,7 +638,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   test("SPARK-36208: TRANSFORM should support ANSI interval (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
+    assume(TestUtils.testCommandAvailable("python3"))
     withTempView("v") {
       val df = Seq(
         (Period.of(1, 2, 0), Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4))
@@ -651,7 +654,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select($"ym", $"dt").collect())
+        df.select($"ym", $"dt").collect().toImmutableArraySeq)
     }
   }
 
@@ -666,7 +669,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         child = child,
         ioschema = defaultIOSchema
       ),
-      df.select($"col").collect())
+      df.select($"col").collect().toImmutableArraySeq)
   }
 }
 

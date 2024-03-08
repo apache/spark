@@ -83,6 +83,7 @@ private[noop] object NoopWriter extends DataWriter[InternalRow] {
 private[noop] object NoopStreamingWrite extends StreamingWrite {
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): StreamingDataWriterFactory = NoopStreamingDataWriterFactory
+  override def useCommitCoordinator(): Boolean = false
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 }

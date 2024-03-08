@@ -50,4 +50,17 @@ public interface FunctionCatalog extends CatalogPlugin {
    */
   UnboundFunction loadFunction(Identifier ident) throws NoSuchFunctionException;
 
+  /**
+   * Returns true if the function exists, false otherwise.
+   *
+   * @since 3.3.0
+   */
+  default boolean functionExists(Identifier ident) {
+    try {
+      loadFunction(ident);
+      return true;
+    } catch (NoSuchFunctionException e) {
+      return false;
+    }
+  }
 }

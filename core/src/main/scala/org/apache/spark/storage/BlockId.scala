@@ -190,6 +190,11 @@ class UnrecognizedBlockId(name: String)
     extends SparkException(s"Failed to parse $name into a block ID")
 
 @DeveloperApi
+case class CacheId(sessionUUID: String, hash: String) extends BlockId {
+  override def name: String = s"cache_${sessionUUID}_$hash"
+}
+
+@DeveloperApi
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r

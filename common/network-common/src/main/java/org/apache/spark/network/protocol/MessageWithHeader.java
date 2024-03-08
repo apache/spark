@@ -35,7 +35,8 @@ import org.apache.spark.network.util.AbstractFileRegion;
  *
  * The header must be a ByteBuf, while the body can be a ByteBuf or a FileRegion.
  */
-class MessageWithHeader extends AbstractFileRegion {
+
+public class MessageWithHeader extends AbstractFileRegion {
 
   @Nullable private final ManagedBuffer managedBuffer;
   private final ByteBuf header;
@@ -117,10 +118,10 @@ class MessageWithHeader extends AbstractFileRegion {
 
     // Bytes written for body in this call.
     long writtenBody = 0;
-    if (body instanceof FileRegion) {
-      writtenBody = ((FileRegion) body).transferTo(target, totalBytesTransferred - headerLength);
-    } else if (body instanceof ByteBuf) {
-      writtenBody = copyByteBuf((ByteBuf) body, target);
+    if (body instanceof FileRegion fileRegion) {
+      writtenBody = fileRegion.transferTo(target, totalBytesTransferred - headerLength);
+    } else if (body instanceof ByteBuf byteBuf) {
+      writtenBody = copyByteBuf(byteBuf, target);
     }
     totalBytesTransferred += writtenBody;
 
@@ -140,7 +141,7 @@ class MessageWithHeader extends AbstractFileRegion {
     // SPARK-24578: cap the sub-region's size of returned nio buffer to improve the performance
     // for the case that the passed-in buffer has too many components.
     int length = Math.min(buf.readableBytes(), NIO_BUFFER_LIMIT);
-    // If the ByteBuf holds more then one ByteBuffer we should better call nioBuffers(...)
+    // If the ByteBuf holds more than one ByteBuffer we should better call nioBuffers(...)
     // to eliminate extra memory copies.
     int written = 0;
     if (buf.nioBufferCount() == 1) {

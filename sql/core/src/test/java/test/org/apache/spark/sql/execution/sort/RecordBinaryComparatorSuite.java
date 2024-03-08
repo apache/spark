@@ -32,10 +32,10 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.collection.unsafe.sort.*;
 
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.nio.ByteOrder;
 
@@ -57,7 +57,7 @@ public class RecordBinaryComparatorSuite {
   private LongArray array;
   private int pos;
 
-  @Before
+  @BeforeEach
   public void beforeEach() {
     // Only compare between two input rows.
     array = consumer.allocateArray(2);
@@ -67,7 +67,7 @@ public class RecordBinaryComparatorSuite {
     pageCursor = dataPage.getBaseOffset();
   }
 
-  @After
+  @AfterEach
   public void afterEach() {
     consumer.freePage(dataPage);
     dataPage = null;
@@ -84,14 +84,14 @@ public class RecordBinaryComparatorSuite {
     int recordLength = row.getSizeInBytes();
 
     Object baseObject = dataPage.getBaseObject();
-    Assert.assertTrue(pageCursor + recordLength <= dataPage.getBaseOffset() + dataPage.size());
+    Assertions.assertTrue(pageCursor + recordLength <= dataPage.getBaseOffset() + dataPage.size());
     long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, pageCursor);
     UnsafeAlignedOffset.putSize(baseObject, pageCursor, recordLength);
     pageCursor += uaoSize;
     Platform.copyMemory(recordBase, recordOffset, baseObject, pageCursor, recordLength);
     pageCursor += recordLength;
 
-    Assert.assertTrue(pos < 2);
+    Assertions.assertTrue(pos < 2);
     array.set(pos, recordAddress);
     pos++;
   }
@@ -144,8 +144,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertEquals(0, compare(0, 0));
-    Assert.assertTrue(compare(0, 1) < 0);
+    Assertions.assertEquals(0, compare(0, 0));
+    Assertions.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -169,8 +169,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertEquals(0, compare(0, 0));
-    Assert.assertTrue(compare(0, 1) < 0);
+    Assertions.assertEquals(0, compare(0, 0));
+    Assertions.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -196,8 +196,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertEquals(0, compare(0, 0));
-    Assert.assertTrue(compare(0, 1) > 0);
+    Assertions.assertEquals(0, compare(0, 0));
+    Assertions.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -229,8 +229,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertEquals(0, compare(0, 0));
-    Assert.assertTrue(compare(0, 1) > 0);
+    Assertions.assertEquals(0, compare(0, 0));
+    Assertions.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -255,8 +255,8 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertEquals(0, compare(0, 0));
-    Assert.assertTrue(compare(0, 1) > 0);
+    Assertions.assertEquals(0, compare(0, 0));
+    Assertions.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -293,7 +293,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertTrue(compare(0, 1) < 0);
+    Assertions.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -330,7 +330,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertTrue(compare(0, 1) > 0);
+    Assertions.assertTrue(compare(0, 1) > 0);
   }
 
   @Test
@@ -356,7 +356,7 @@ public class RecordBinaryComparatorSuite {
     insertRow(row1);
     insertRow(row2);
 
-    Assert.assertTrue(compare(0, 1) < 0);
+    Assertions.assertTrue(compare(0, 1) < 0);
   }
 
   @Test
@@ -378,7 +378,7 @@ public class RecordBinaryComparatorSuite {
     // both left and right offset is not aligned, it will start with byte-by-byte comparison
     int result2 = binaryComparator.compare(arr3, arrayOffset, 8, arr4, arrayOffset, 8);
 
-    Assert.assertEquals(result1, result2);
+    Assertions.assertEquals(result1, result2);
   }
 
   @Test
@@ -400,6 +400,6 @@ public class RecordBinaryComparatorSuite {
     // so it will start with byte-by-byte comparison
     int result2 = binaryComparator.compare(arr3, arrayOffset, 8, arr4, arrayOffset, 8);
 
-    Assert.assertEquals(result1, result2);
+    Assertions.assertEquals(result1, result2);
   }
 }

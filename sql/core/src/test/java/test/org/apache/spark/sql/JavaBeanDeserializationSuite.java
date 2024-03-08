@@ -26,8 +26,10 @@ import java.util.*;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
-import org.junit.*;
+import org.junit.jupiter.api.*;
 
+import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.api.java.function.ReduceFunction;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
@@ -37,17 +39,18 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 
 import org.apache.spark.sql.test.TestSparkSession;
+import scala.Tuple2;
 
 public class JavaBeanDeserializationSuite implements Serializable {
 
   private TestSparkSession spark;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = new TestSparkSession();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;
@@ -83,7 +86,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
       .as(encoder);
 
     List<ArrayRecord> records = dataset.collectAsList();
-    Assert.assertEquals(ARRAY_RECORDS, records);
+    Assertions.assertEquals(ARRAY_RECORDS, records);
   }
 
   private static final List<MapRecord> MAP_RECORDS = new ArrayList<>();
@@ -126,7 +129,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<MapRecord> records = dataset.collectAsList();
 
-    Assert.assertEquals(MAP_RECORDS, records);
+    Assertions.assertEquals(MAP_RECORDS, records);
   }
 
   @Test
@@ -164,7 +167,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<RecordSpark22000> records = dataset.collectAsList();
 
-    Assert.assertEquals(expectedRecords, records);
+    Assertions.assertEquals(expectedRecords, records);
   }
 
   @Test
@@ -183,18 +186,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
 
-    try {
-      dataFrame.as(encoder).collect();
-      Assert.fail("Expected AnalysisException, but passed.");
-    } catch (Throwable e) {
-      // Here we need to handle weird case: compiler complains AnalysisException never be thrown
-      // in try statement, but it can be thrown actually. Maybe Scala-Java interop issue?
-      if (e instanceof AnalysisException) {
-        Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
-      } else {
-        throw e;
-      }
-    }
+    AnalysisException e = Assertions.assertThrows(AnalysisException.class,
+      () -> dataFrame.as(encoder).collect());
+    Assertions.assertTrue(e.getMessage().contains("Cannot up cast "));
   }
 
   private static Row createRecordSpark22000Row(Long index) {
@@ -288,8 +282,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof ArrayRecord)) return false;
-      ArrayRecord other = (ArrayRecord) obj;
+      if (!(obj instanceof ArrayRecord other)) return false;
       return (other.id == this.id) && Objects.equals(other.intervals, this.intervals) &&
               Arrays.equals(other.ints, ints);
     }
@@ -336,8 +329,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof MapRecord)) return false;
-      MapRecord other = (MapRecord) obj;
+      if (!(obj instanceof MapRecord other)) return false;
       return (other.id == this.id) && Objects.equals(other.intervals, this.intervals);
     }
 
@@ -382,8 +374,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof Interval)) return false;
-      Interval other = (Interval) obj;
+      if (!(obj instanceof Interval other)) return false;
       return (other.startTime == this.startTime) && (other.endTime == this.endTime);
     }
 
@@ -556,9 +547,98 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
       List<LocalDateInstantRecord> records = dataset.collectAsList();
 
-      Assert.assertEquals(expectedRecords, records);
+      Assertions.assertEquals(expectedRecords, records);
     } finally {
         spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
+    }
+  }
+
+  @Test
+  public void testSPARK38823NoBeanReuse() {
+    List<Item> items = Arrays.asList(
+            new Item("a", 1),
+            new Item("b", 3),
+            new Item("c", 2),
+            new Item("a", 7));
+
+    Encoder<Item> encoder = Encoders.bean(Item.class);
+
+    Dataset<Item> ds = spark.createDataFrame(items, Item.class)
+            .as(encoder)
+            .coalesce(1);
+
+    MapFunction<Item, String> mf = new MapFunction<Item, String>() {
+      @Override
+      public String call(Item item) throws Exception {
+        return item.getK();
+      }
+    };
+
+    ReduceFunction<Item> rf = new ReduceFunction<Item>() {
+      @Override
+      public Item call(Item item1, Item item2) throws Exception {
+        Assertions.assertNotSame(item1, item2);
+        return item1.addValue(item2.getV());
+      }
+    };
+
+    Dataset<Tuple2<String, Item>> finalDs = ds
+            .groupByKey(mf, Encoders.STRING())
+            .reduceGroups(rf);
+
+    List<Tuple2<String, Item>> expectedRecords = Arrays.asList(
+            new Tuple2<>("a", new Item("a", 8)),
+            new Tuple2<>("b", new Item("b", 3)),
+            new Tuple2<>("c", new Item("c", 2)));
+
+    List<Tuple2<String, Item>> result = finalDs.collectAsList();
+
+    Assertions.assertEquals(expectedRecords, result);
+  }
+
+  public static class Item implements Serializable {
+    private String k;
+    private int v;
+
+    public String getK() {
+      return k;
+    }
+
+    public int getV() {
+      return v;
+    }
+
+    public void setK(String k) {
+      this.k = k;
+    }
+
+    public void setV(int v) {
+      this.v = v;
+    }
+
+    public Item() { }
+
+    public Item(String k, int v) {
+      this.k = k;
+      this.v = v;
+    }
+
+    public Item addValue(int inc) {
+      return new Item(k, v + inc);
+    }
+
+    public String toString() {
+      return "Item(" + k + "," + v + ")";
+    }
+
+    public boolean equals(Object o) {
+      if (!(o instanceof Item other)) {
+        return false;
+      }
+      if (other.getK().equals(k) && other.getV() == v) {
+        return true;
+      }
+      return false;
     }
   }
 

@@ -158,13 +158,13 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   }
 
   test("infer schema of CSV strings") {
-    checkEvaluation(new SchemaOfCsv(Literal.create("1,abc")), "STRUCT<`_c0`: INT, `_c1`: STRING>")
+    checkEvaluation(new SchemaOfCsv(Literal.create("1,abc")), "STRUCT<_c0: INT, _c1: STRING>")
   }
 
   test("infer schema of CSV strings by using options") {
     checkEvaluation(
       new SchemaOfCsv(Literal.create("1|abc"), Map("delimiter" -> "|")),
-      "STRUCT<`_c0`: INT, `_c1`: STRING>")
+      "STRUCT<_c0: INT, _c1: STRING>")
   }
 
   test("to_csv - struct") {
@@ -245,5 +245,12 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     checkEvaluation(
       CsvToStructs(schema, Map.empty, Literal.create("1 day")),
       InternalRow(new CalendarInterval(0, 1, 0)))
+  }
+
+  test("StructsToCsv should not generate codes beyond 64KB") {
+    val range = Range.inclusive(1, 5000)
+    val struct = CreateStruct.create(range.map(Literal.apply))
+    val expected = range.mkString(",")
+    checkEvaluation(StructsToCsv(Map.empty, struct), expected)
   }
 }

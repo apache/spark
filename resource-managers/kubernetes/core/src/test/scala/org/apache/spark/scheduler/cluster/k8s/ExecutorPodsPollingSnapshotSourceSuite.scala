@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.api.model.{ListOptionsBuilder, PodListBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{Mock, MockitoAnnotations}
-import org.mockito.Mockito.{verify, when}
+import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -33,9 +33,9 @@ import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
 class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAndAfter {
 
-  private val sparkConf = new SparkConf
+  private val defaultConf = new SparkConf()
 
-  private val pollingInterval = sparkConf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
+  private val pollingInterval = defaultConf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
 
   @Mock
   private var kubernetesClient: KubernetesClient = _
@@ -61,12 +61,6 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
   before {
     MockitoAnnotations.openMocks(this).close()
     pollingExecutor = new DeterministicScheduler()
-    pollingSourceUnderTest = new ExecutorPodsPollingSnapshotSource(
-      sparkConf,
-      kubernetesClient,
-      eventQueue,
-      pollingExecutor)
-    pollingSourceUnderTest.start(TEST_SPARK_APP_ID)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
       .thenReturn(appIdLabeledPods)
@@ -77,6 +71,13 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
   }
 
   test("Items returned by the API should be pushed to the event queue") {
+    val sparkConf = new SparkConf()
+    pollingSourceUnderTest = new ExecutorPodsPollingSnapshotSource(
+      sparkConf,
+      kubernetesClient,
+      eventQueue,
+      pollingExecutor)
+    pollingSourceUnderTest.start(TEST_SPARK_APP_ID)
     val exec1 = runningExecutor(1)
     val exec2 = runningExecutor(2)
     when(activeExecutorPods.list())
@@ -89,13 +90,27 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
     verify(eventQueue).replaceSnapshot(Seq(exec1, exec2))
   }
 
+  test("SPARK-36462: If polling is disabled we don't call pods() on the client") {
+    val sparkConf = new SparkConf()
+    val source = new ExecutorPodsPollingSnapshotSource(
+      sparkConf.set(KUBERNETES_EXECUTOR_ENABLE_API_POLLING, false),
+      kubernetesClient,
+      eventQueue,
+      pollingExecutor)
+    source.start(TEST_SPARK_APP_ID)
+    pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
+    verify(kubernetesClient, never()).pods()
+  }
+
   test("SPARK-36334: Support pod listing with resource version") {
     Seq(true, false).foreach { value =>
+      val sparkConf = new SparkConf()
       val source = new ExecutorPodsPollingSnapshotSource(
         sparkConf.set(KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION, value),
         kubernetesClient,
         eventQueue,
         pollingExecutor)
+      source.start(TEST_SPARK_APP_ID)
       pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
       if (value) {
         verify(activeExecutorPods).list(new ListOptionsBuilder().withResourceVersion("0").build())

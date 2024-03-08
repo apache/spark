@@ -21,7 +21,7 @@ import java.io.{BufferedReader, File, InputStream, InputStreamReader, OutputStre
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -123,8 +123,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
               .map { case (data, writer) => writer(data) })
       } else {
         // In schema less mode, hive will choose first two output column as output.
-        // If output column size less then 2, it will return NULL for columns with missing values.
-        // Here we split row string and choose first 2 values, if values's size less then 2,
+        // If output column size less than 2, it will return NULL for columns with missing values.
+        // Here we split row string and choose first 2 values, if values's size less than 2,
         // we pad NULL value until 2 to make behavior same with hive.
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
@@ -273,6 +273,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
   def taskContext: TaskContext
   def conf: Configuration
 
+  setName(s"Thread-${this.getClass.getSimpleName}-Feed")
   setDaemon(true)
 
   @volatile protected var _exception: Throwable = null
@@ -328,7 +329,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        logError("Thread-ScriptTransformation-Feed exit cause by: ", t)
+        logError(s"Thread-${this.getClass.getSimpleName}-Feed exit cause by: ", t)
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())

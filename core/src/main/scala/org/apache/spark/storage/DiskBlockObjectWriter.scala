@@ -19,8 +19,10 @@ package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, IOException, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
+import java.nio.file.Files
 import java.util.zip.Checksum
 
+import org.apache.spark.SparkException
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.MutableCheckedOutputStream
@@ -61,7 +63,7 @@ private[spark] class DiskBlockObjectWriter(
    */
   private trait ManualCloseOutputStream extends OutputStream {
     abstract override def close(): Unit = {
-      flush()
+      this.flush()
     }
 
     def manualClose(): Unit = {
@@ -119,6 +121,11 @@ private[spark] class DiskBlockObjectWriter(
   private var numRecordsWritten = 0
 
   /**
+   * Keep track the number of written records committed.
+   */
+  private var numRecordsCommitted = 0L
+
+  /**
    * Set the checksum that the checksumOutputStream should use
    */
   def setChecksum(checksum: Checksum): Unit = {
@@ -147,7 +154,8 @@ private[spark] class DiskBlockObjectWriter(
 
   def open(): DiskBlockObjectWriter = {
     if (hasBeenClosed) {
-      throw new IllegalStateException("Writer already closed. Cannot be reopened.")
+      throw SparkException.internalError(
+        "Writer already closed. Cannot be reopened.", category = "STORAGE")
     }
     if (!initialized) {
       initialize()
@@ -223,6 +231,7 @@ private[spark] class DiskBlockObjectWriter(
       // In certain compression codecs, more bytes are written after streams are closed
       writeMetrics.incBytesWritten(committedPosition - reportedPosition)
       reportedPosition = committedPosition
+      numRecordsCommitted += numRecordsWritten
       numRecordsWritten = 0
       fileSegment
     } else {
@@ -273,6 +282,25 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   /**
+   * Reverts write metrics and delete the file held by current `DiskBlockObjectWriter`.
+   * Callers should invoke this function when there are runtime exceptions in file
+   * writing process and the file is no longer needed.
+   */
+  def closeAndDelete(): Unit = {
+    Utils.tryWithSafeFinally {
+      if (initialized) {
+        writeMetrics.decBytesWritten(reportedPosition)
+        writeMetrics.decRecordsWritten(numRecordsCommitted + numRecordsWritten)
+        closeResources()
+      }
+    } {
+      if (!Files.deleteIfExists(file.toPath)) {
+        logWarning(s"Error deleting $file")
+      }
+    }
+  }
+
+  /**
    * Writes a key-value pair.
    */
   override def write(key: Any, value: Any): Unit = {
@@ -318,7 +346,7 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   // For testing
-  private[spark] override def flush(): Unit = {
+  override def flush(): Unit = {
     objOut.flush()
     bs.flush()
   }

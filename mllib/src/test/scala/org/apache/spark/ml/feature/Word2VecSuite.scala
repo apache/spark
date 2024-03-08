@@ -37,7 +37,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
 
   test("Word2Vec") {
     val sentence = "a b " * 100 + "a c " * 10
-    val numOfWords = sentence.split(" ").size
+    val numOfWords = sentence.split(" ").length
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
 
     val codes = Map(

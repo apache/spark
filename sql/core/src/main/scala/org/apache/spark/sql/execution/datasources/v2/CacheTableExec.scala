@@ -38,25 +38,20 @@ trait BaseCacheTableExec extends LeafV2CommandExec {
 
   override def run(): Seq[InternalRow] = {
     val storageLevelKey = "storagelevel"
-    val storageLevelValue =
-      CaseInsensitiveMap(options).get(storageLevelKey).map(_.toUpperCase(Locale.ROOT))
-    val withoutStorageLevel = options.filterKeys(_.toLowerCase(Locale.ROOT) != storageLevelKey)
+    val storageLevel = CaseInsensitiveMap(options).get(storageLevelKey)
+      .map(s => StorageLevel.fromString(s.toUpperCase(Locale.ROOT)))
+      .getOrElse(conf.defaultCacheStorageLevel)
+    val withoutStorageLevel = options
+      .filter { case (k, _) => k.toLowerCase(Locale.ROOT) != storageLevelKey }
     if (withoutStorageLevel.nonEmpty) {
       logWarning(s"Invalid options: ${withoutStorageLevel.mkString(", ")}")
     }
 
-    if (storageLevelValue.nonEmpty) {
-      session.sharedState.cacheManager.cacheQuery(
-        session,
-        planToCache,
-        Some(relationName),
-        StorageLevel.fromString(storageLevelValue.get))
-    } else {
-      session.sharedState.cacheManager.cacheQuery(
-        session,
-        planToCache,
-        Some(relationName))
-    }
+    session.sharedState.cacheManager.cacheQuery(
+      session,
+      planToCache,
+      Some(relationName),
+      storageLevel)
 
     if (!isLazy) {
       // Performs eager caching.
@@ -88,7 +83,8 @@ case class CacheTableAsSelectExec(
     query: LogicalPlan,
     originalText: String,
     override val isLazy: Boolean,
-    override val options: Map[String, String]) extends BaseCacheTableExec {
+    override val options: Map[String, String],
+    referredTempFunctions: Seq[String]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
 
   override lazy val planToCache: LogicalPlan = {
@@ -102,7 +98,8 @@ case class CacheTableAsSelectExec(
       allowExisting = false,
       replace = false,
       viewType = LocalTempView,
-      isAnalyzed = true
+      isAnalyzed = true,
+      referredTempFunctions = referredTempFunctions
     ).run(session)
 
     dataFrameForCachedPlan.logicalPlan

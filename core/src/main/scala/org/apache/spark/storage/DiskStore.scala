@@ -29,7 +29,7 @@ import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
@@ -50,6 +50,9 @@ private[spark] class DiskStore(
   private val maxMemoryMapBytes = conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS)
   private val blockSizes = new ConcurrentHashMap[BlockId, Long]()
 
+  private val shuffleServiceFetchRddEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED) &&
+    conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
+
   def getSize(blockId: BlockId): Long = blockSizes.get(blockId)
 
   /**
@@ -64,13 +67,21 @@ private[spark] class DiskStore(
         diskManager.getFile(blockId).delete()
       } catch {
         case e: Exception =>
-          throw new IllegalStateException(
-            s"Block $blockId is already present in the disk store and could not delete it $e")
+          throw SparkException.internalError(
+            s"Block $blockId is already present in the disk store and could not delete it $e",
+            category = "STORAGE")
       }
     }
     logDebug(s"Attempting to put block $blockId")
     val startTimeNs = System.nanoTime()
     val file = diskManager.getFile(blockId)
+
+    // SPARK-37618: If fetching cached RDDs from the shuffle service is enabled, we must make
+    // the file world readable, as it will not be owned by the group running the shuffle service
+    // in a secure environment. This is due to changing directory permissions to allow deletion,
+    if (shuffleServiceFetchRddEnabled) {
+      diskManager.createWorldReadableFile(file)
+    }
     val out = new CountingWritableChannel(openForWrite(file))
     var threwException: Boolean = true
     try {
@@ -173,6 +184,14 @@ private class DiskBlockData(
   */
   override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
 
+  /**
+   * Returns a Netty-friendly wrapper for the block's data.
+   *
+   * Please see `ManagedBuffer.convertToNettyForSsl()` for more details.
+   */
+  override def toNettyForSsl(): AnyRef =
+    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
+
   override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
     Utils.tryWithResource(open()) { channel =>
       var remaining = blockSize
@@ -222,6 +241,9 @@ private[spark] class EncryptedBlockData(
   override def toInputStream(): InputStream = Channels.newInputStream(open())
 
   override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
+
+  override def toNettyForSsl(): AnyRef =
+    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val source = open()
@@ -285,6 +307,8 @@ private[spark] class EncryptedManagedBuffer(
   override def nioByteBuffer(): ByteBuffer = blockData.toByteBuffer()
 
   override def convertToNetty(): AnyRef = blockData.toNetty()
+
+  override def convertToNettyForSsl(): AnyRef = blockData.toNettyForSsl()
 
   override def createInputStream(): InputStream = blockData.toInputStream()
 

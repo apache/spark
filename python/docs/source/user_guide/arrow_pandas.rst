@@ -21,4 +21,4 @@
 Apache Arrow in PySpark
 =======================
 
-This page has been moved to `Apache Arrow in PySpark <../sql/arrow_pandas.rst>`_.
+This page has been moved to `Apache Arrow in PySpark <sql/arrow_pandas.rst>`_.

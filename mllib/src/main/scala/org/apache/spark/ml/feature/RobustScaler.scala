@@ -145,7 +145,7 @@ class RobustScaler @Since("3.0.0") (@Since("3.0.0") override val uid: String)
   override def fit(dataset: Dataset[_]): RobustScalerModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(inputCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(inputCol))
     val vectors = dataset.select($(inputCol)).rdd.map {
       case Row(vec: Vector) =>
         require(vec.size == numFeatures,
@@ -190,10 +190,10 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
           val summaries = Array.fill(numFeatures)(
             new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
           while (iter.hasNext) {
-            val vec = iter.next
+            val vec = iter.next()
             vec.foreach { (i, v) => if (!v.isNaN) summaries(i) = summaries(i).insert(v) }
           }
-          Iterator.tabulate(numFeatures)(i => (i, summaries(i).compress))
+          Iterator.tabulate(numFeatures)(i => (i, summaries(i).compress()))
         } else Iterator.empty
       }.reduceByKey { (s1, s2) => s1.merge(s2) }
     } else {
@@ -206,9 +206,9 @@ object RobustScaler extends DefaultParamsReadable[RobustScaler] {
       }.aggregateByKey(
         new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))(
         seqOp = (s, v) => s.insert(v),
-        combOp = (s1, s2) => s1.compress.merge(s2.compress)
+        combOp = (s1, s2) => s1.compress().merge(s2.compress())
       ).map { case ((_, i), s) => (i, s)
-      }.reduceByKey { (s1, s2) => s1.compress.merge(s2.compress) }
+      }.reduceByKey { (s1, s2) => s1.compress().merge(s2.compress()) }
     }
   }
 

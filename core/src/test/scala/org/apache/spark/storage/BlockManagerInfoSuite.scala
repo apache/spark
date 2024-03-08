@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 
@@ -63,6 +63,8 @@ class BlockManagerInfoSuite extends SparkFunSuite {
     if (svcEnabled) {
       assert(getEssBlockStatus(bmInfo, rddId).isEmpty)
     }
+    bmInfo.updateBlockInfo(rddId, StorageLevel.NONE, memSize = 0, diskSize = 0)
+    assert(bmInfo.remainingMem === 30000)
   }
 
   testWithShuffleServiceOnOff("RDD block with MEMORY_AND_DISK") { (svcEnabled, bmInfo) =>

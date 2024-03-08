@@ -26,9 +26,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -47,7 +47,7 @@ public class JavaRowSuite {
   private Date dateValue;
   private Timestamp timestampValue;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     byteValue = (byte)127;
     shortValue = (short)32767;
@@ -88,44 +88,44 @@ public class JavaRowSuite {
       null                       // null
     );
 
-    Assert.assertEquals(byteValue, simpleRow.getByte(0));
-    Assert.assertEquals(byteValue, simpleRow.get(0));
-    Assert.assertEquals(byteValue, simpleRow.getByte(1));
-    Assert.assertEquals(byteValue, simpleRow.get(1));
-    Assert.assertEquals(shortValue, simpleRow.getShort(2));
-    Assert.assertEquals(shortValue, simpleRow.get(2));
-    Assert.assertEquals(shortValue, simpleRow.getShort(3));
-    Assert.assertEquals(shortValue, simpleRow.get(3));
-    Assert.assertEquals(intValue, simpleRow.getInt(4));
-    Assert.assertEquals(intValue, simpleRow.get(4));
-    Assert.assertEquals(intValue, simpleRow.getInt(5));
-    Assert.assertEquals(intValue, simpleRow.get(5));
-    Assert.assertEquals(longValue, simpleRow.getLong(6));
-    Assert.assertEquals(longValue, simpleRow.get(6));
-    Assert.assertEquals(longValue, simpleRow.getLong(7));
-    Assert.assertEquals(longValue, simpleRow.get(7));
+    Assertions.assertEquals(byteValue, simpleRow.getByte(0));
+    Assertions.assertEquals(byteValue, simpleRow.get(0));
+    Assertions.assertEquals(byteValue, simpleRow.getByte(1));
+    Assertions.assertEquals(byteValue, simpleRow.get(1));
+    Assertions.assertEquals(shortValue, simpleRow.getShort(2));
+    Assertions.assertEquals(shortValue, simpleRow.get(2));
+    Assertions.assertEquals(shortValue, simpleRow.getShort(3));
+    Assertions.assertEquals(shortValue, simpleRow.get(3));
+    Assertions.assertEquals(intValue, simpleRow.getInt(4));
+    Assertions.assertEquals(intValue, simpleRow.get(4));
+    Assertions.assertEquals(intValue, simpleRow.getInt(5));
+    Assertions.assertEquals(intValue, simpleRow.get(5));
+    Assertions.assertEquals(longValue, simpleRow.getLong(6));
+    Assertions.assertEquals(longValue, simpleRow.get(6));
+    Assertions.assertEquals(longValue, simpleRow.getLong(7));
+    Assertions.assertEquals(longValue, simpleRow.get(7));
     // When we create the row, we do not do any conversion
     // for a float/double value, so we just set the delta to 0.
-    Assert.assertEquals(floatValue, simpleRow.getFloat(8), 0);
-    Assert.assertEquals(floatValue, simpleRow.get(8));
-    Assert.assertEquals(floatValue, simpleRow.getFloat(9), 0);
-    Assert.assertEquals(floatValue, simpleRow.get(9));
-    Assert.assertEquals(doubleValue, simpleRow.getDouble(10), 0);
-    Assert.assertEquals(doubleValue, simpleRow.get(10));
-    Assert.assertEquals(doubleValue, simpleRow.getDouble(11), 0);
-    Assert.assertEquals(doubleValue, simpleRow.get(11));
-    Assert.assertEquals(decimalValue, simpleRow.get(12));
-    Assert.assertEquals(booleanValue, simpleRow.getBoolean(13));
-    Assert.assertEquals(booleanValue, simpleRow.get(13));
-    Assert.assertEquals(booleanValue, simpleRow.getBoolean(14));
-    Assert.assertEquals(booleanValue, simpleRow.get(14));
-    Assert.assertEquals(stringValue, simpleRow.getString(15));
-    Assert.assertEquals(stringValue, simpleRow.get(15));
-    Assert.assertEquals(binaryValue, simpleRow.get(16));
-    Assert.assertEquals(dateValue, simpleRow.get(17));
-    Assert.assertEquals(timestampValue, simpleRow.get(18));
-    Assert.assertTrue(simpleRow.isNullAt(19));
-    Assert.assertNull(simpleRow.get(19));
+    Assertions.assertEquals(floatValue, simpleRow.getFloat(8), 0);
+    Assertions.assertEquals(floatValue, simpleRow.get(8));
+    Assertions.assertEquals(floatValue, simpleRow.getFloat(9), 0);
+    Assertions.assertEquals(floatValue, simpleRow.get(9));
+    Assertions.assertEquals(doubleValue, simpleRow.getDouble(10), 0);
+    Assertions.assertEquals(doubleValue, simpleRow.get(10));
+    Assertions.assertEquals(doubleValue, simpleRow.getDouble(11), 0);
+    Assertions.assertEquals(doubleValue, simpleRow.get(11));
+    Assertions.assertEquals(decimalValue, simpleRow.get(12));
+    Assertions.assertEquals(booleanValue, simpleRow.getBoolean(13));
+    Assertions.assertEquals(booleanValue, simpleRow.get(13));
+    Assertions.assertEquals(booleanValue, simpleRow.getBoolean(14));
+    Assertions.assertEquals(booleanValue, simpleRow.get(14));
+    Assertions.assertEquals(stringValue, simpleRow.getString(15));
+    Assertions.assertEquals(stringValue, simpleRow.get(15));
+    Assertions.assertEquals(binaryValue, simpleRow.get(16));
+    Assertions.assertEquals(dateValue, simpleRow.get(17));
+    Assertions.assertEquals(timestampValue, simpleRow.get(18));
+    Assertions.assertTrue(simpleRow.isNullAt(19));
+    Assertions.assertNull(simpleRow.get(19));
   }
 
   @Test
@@ -145,7 +145,6 @@ public class JavaRowSuite {
       doubleValue, stringValue, timestampValue, null);
 
     // Complex array
-    @SuppressWarnings("unchecked")
     List<Map<String, Long>> arrayOfMaps = Arrays.asList(simpleMap);
     List<Row> arrayOfRows = Arrays.asList(simpleStruct);
 
@@ -162,19 +161,19 @@ public class JavaRowSuite {
       arrayOfRows,
       complexMap,
       null);
-    Assert.assertEquals(simpleStringArray, complexStruct.get(0));
-    Assert.assertEquals(simpleMap, complexStruct.get(1));
-    Assert.assertEquals(simpleStruct, complexStruct.get(2));
-    Assert.assertEquals(arrayOfMaps, complexStruct.get(3));
-    Assert.assertEquals(arrayOfRows, complexStruct.get(4));
-    Assert.assertEquals(complexMap, complexStruct.get(5));
-    Assert.assertNull(complexStruct.get(6));
+    Assertions.assertEquals(simpleStringArray, complexStruct.get(0));
+    Assertions.assertEquals(simpleMap, complexStruct.get(1));
+    Assertions.assertEquals(simpleStruct, complexStruct.get(2));
+    Assertions.assertEquals(arrayOfMaps, complexStruct.get(3));
+    Assertions.assertEquals(arrayOfRows, complexStruct.get(4));
+    Assertions.assertEquals(complexMap, complexStruct.get(5));
+    Assertions.assertNull(complexStruct.get(6));
 
     // A very complex row
     Row complexRow = RowFactory.create(arrayOfMaps, arrayOfRows, complexMap, complexStruct);
-    Assert.assertEquals(arrayOfMaps, complexRow.get(0));
-    Assert.assertEquals(arrayOfRows, complexRow.get(1));
-    Assert.assertEquals(complexMap, complexRow.get(2));
-    Assert.assertEquals(complexStruct, complexRow.get(3));
+    Assertions.assertEquals(arrayOfMaps, complexRow.get(0));
+    Assertions.assertEquals(arrayOfRows, complexRow.get(1));
+    Assertions.assertEquals(complexMap, complexRow.get(2));
+    Assertions.assertEquals(complexStruct, complexRow.get(3));
   }
 }

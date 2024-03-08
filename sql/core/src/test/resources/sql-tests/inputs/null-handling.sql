@@ -45,4 +45,7 @@ select a+130 from t1 where b<10 AND c=1;
 select a+140 from t1 where not (b<10 AND c=1);
 select a+150 from t1 where not (c=1 AND b<10);
 
+-- null-safe comparisons
+select b, c, equal_null(b, c), equal_null(c, b) from t1;
+
 drop table t1;

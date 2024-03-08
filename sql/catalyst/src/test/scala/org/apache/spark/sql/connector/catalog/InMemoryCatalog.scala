@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, NoSuchNamespaceException}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -54,5 +54,13 @@ class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog {
 
   def createFunction(ident: Identifier, fn: UnboundFunction): UnboundFunction = {
     functions.put(ident, fn)
+  }
+
+  def dropFunction(ident: Identifier): Unit = {
+    functions.remove(ident)
+  }
+
+  def clearFunctions(): Unit = {
+    functions.clear()
   }
 }

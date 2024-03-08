@@ -20,22 +20,25 @@ package org.apache.spark.unsafe.types;
 import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import com.ibm.icu.text.StringSearch;
+import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 import static org.apache.spark.unsafe.Platform.*;
+import org.apache.spark.util.SparkEnvUtils$;
 
 
 /**
@@ -96,9 +99,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 0xF5..0xFF - disallowed in UTF-8
   };
 
-  private static final boolean IS_LITTLE_ENDIAN =
-      ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
-
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
 
@@ -151,7 +151,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(spaces);
   }
 
-  protected UTF8String(Object base, long offset, int numBytes) {
+  /**
+   * Determines if the specified character (Unicode code point) is white space or an ISO control
+   * character according to Java.
+   */
+  public static boolean isWhitespaceOrISOControl(int codePoint) {
+    return Character.isWhitespace(codePoint) || Character.isISOControl(codePoint);
+  }
+
+  private UTF8String(Object base, long offset, int numBytes) {
     this.base = base;
     this.offset = offset;
     this.numBytes = numBytes;
@@ -188,8 +196,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   @Nonnull
   public ByteBuffer getByteBuffer() {
-    if (base instanceof byte[] && offset >= BYTE_ARRAY_OFFSET) {
-      final byte[] bytes = (byte[]) base;
+    if (base instanceof byte[] bytes && offset >= BYTE_ARRAY_OFFSET) {
 
       // the offset includes an object header... this is only needed for unsafe copies
       final long arrayOffset = offset - BYTE_ARRAY_OFFSET;
@@ -246,43 +253,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns a 64-bit integer that can be used as the prefix used in sorting.
    */
   public long getPrefix() {
-    // Since JVMs are either 4-byte aligned or 8-byte aligned, we check the size of the string.
-    // If size is 0, just return 0.
-    // If size is between 0 and 4 (inclusive), assume data is 4-byte aligned under the hood and
-    // use a getInt to fetch the prefix.
-    // If size is greater than 4, assume we have at least 8 bytes of data to fetch.
-    // After getting the data, we use a mask to mask out data that is not part of the string.
-    long p;
-    long mask = 0;
-    if (IS_LITTLE_ENDIAN) {
-      if (numBytes >= 8) {
-        p = Platform.getLong(base, offset);
-      } else if (numBytes > 4) {
-        p = Platform.getLong(base, offset);
-        mask = (1L << (8 - numBytes) * 8) - 1;
-      } else if (numBytes > 0) {
-        p = (long) Platform.getInt(base, offset);
-        mask = (1L << (8 - numBytes) * 8) - 1;
-      } else {
-        p = 0;
-      }
-      p = java.lang.Long.reverseBytes(p);
-    } else {
-      // byteOrder == ByteOrder.BIG_ENDIAN
-      if (numBytes >= 8) {
-        p = Platform.getLong(base, offset);
-      } else if (numBytes > 4) {
-        p = Platform.getLong(base, offset);
-        mask = (1L << (8 - numBytes) * 8) - 1;
-      } else if (numBytes > 0) {
-        p = ((long) Platform.getInt(base, offset)) << 32;
-        mask = (1L << (8 - numBytes) * 8) - 1;
-      } else {
-        p = 0;
-      }
-    }
-    p &= ~mask;
-    return p;
+    return ByteArray.getPrefix(base, offset, numBytes);
   }
 
   /**
@@ -290,9 +261,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public byte[] getBytes() {
     // avoid copy if `base` is `byte[]`
-    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[]
-      && ((byte[]) base).length == numBytes) {
-      return (byte[]) base;
+    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[] bytes
+      && bytes.length == numBytes) {
+      return bytes;
     } else {
       byte[] bytes = new byte[numBytes];
       copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
@@ -371,6 +342,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
+  public boolean contains(final UTF8String substring, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.contains(substring);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return this.toLowerCase().contains(substring.toLowerCase());
+    }
+    return collatedContains(substring, collationId);
+  }
+
+  private boolean collatedContains(final UTF8String substring, int collationId) {
+    if (substring.numBytes == 0) return true;
+    if (this.numBytes == 0) return false;
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
+    while (stringSearch.next() != StringSearch.DONE) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /**
    * Returns the byte at position `i`.
    */
@@ -385,12 +378,39 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
+  private boolean matchAt(final UTF8String s, int pos, int collationId) {
+    if (s.numBytes + pos > numBytes || pos < 0) {
+      return false;
+    }
+    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
+  }
+
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
 
+  public boolean startsWith(final UTF8String prefix, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.startsWith(prefix);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return this.toLowerCase().startsWith(prefix.toLowerCase());
+    }
+    return matchAt(prefix, 0, collationId);
+  }
+
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
+  }
+
+  public boolean endsWith(final UTF8String suffix, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.endsWith(suffix);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return this.toLowerCase().endsWith(suffix.toLowerCase());
+    }
+    return matchAt(suffix, numBytes - suffix.numBytes, collationId);
   }
 
   /**
@@ -409,7 +429,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // fallback
         return toUpperCaseSlow();
       }
-      int upper = Character.toUpperCase((int) b);
+      int upper = Character.toUpperCase(b);
       if (upper > 127) {
         // fallback
         return toUpperCaseSlow();
@@ -439,7 +459,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // fallback
         return toLowerCaseSlow();
       }
-      int lower = Character.toLowerCase((int) b);
+      int lower = Character.toLowerCase(b);
       if (lower > 127) {
         // fallback
         return toLowerCaseSlow();
@@ -574,14 +594,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimAll() {
     int s = 0;
     // skip all of the whitespaces in the left side
-    while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
+    while (s < this.numBytes && isWhitespaceOrISOControl(getByte(s))) s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the whitespaces in the right side
     int e = this.numBytes - 1;
-    while (e > s && Character.isWhitespace(getByte(e))) e--;
+    while (e > s && isWhitespaceOrISOControl(getByte(e))) e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -1039,13 +1059,46 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
+    // For the empty `pattern` a `split` function ignores trailing empty strings unless original
+    // string is empty.
+    if (numBytes() != 0 && pattern.numBytes() == 0) {
+      int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
+      byte[] input = getBytes();
+      int byteIndex = 0;
+      int charIndex = 0;
+      UTF8String[] result = new UTF8String[newLimit];
+      while (charIndex < newLimit) {
+        int currCharNumBytes = numBytesForFirstByte(input[byteIndex]);
+        result[charIndex++] = UTF8String.fromBytes(input, byteIndex, currCharNumBytes);
+        byteIndex += currCharNumBytes;
+      }
+      return result;
+    }
+    return split(pattern.toString(), limit);
+  }
+
+  public UTF8String[] splitSQL(UTF8String delimiter, int limit) {
+    // if delimiter is empty string, skip the regex based splitting directly as regex
+    // treats empty string as matching anything, thus use the input directly.
+    if (delimiter.numBytes() == 0) {
+      return new UTF8String[]{this};
+    } else {
+      // we do not treat delimiter as a regex but consider the whole string of delimiter
+      // as the separator to split string. Java String's split, however, only accept
+      // regex as the pattern to split, thus we can quote the delimiter to escape special
+      // characters in the string.
+      return split(Pattern.quote(delimiter.toString()), limit);
+    }
+  }
+
+  private UTF8String[] split(String delimiter, int limit) {
     // Java String's split method supports "ignore empty string" behavior when the limit is 0
     // whereas other languages do not. To avoid this java specific behavior, we fall back to
     // -1 when the limit is 0.
     if (limit == 0) {
       limit = -1;
     }
-    String[] splits = toString().split(pattern.toString(), limit);
+    String[] splits = toString().split(delimiter, limit);
     UTF8String[] res = new UTF8String[splits.length];
     for (int i = 0; i < res.length; i++) {
       res[i] = fromString(splits[i]);
@@ -1137,11 +1190,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    while (offset < this.numBytes && isWhitespaceOrISOControl(getByte(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && isWhitespaceOrISOControl(getByte(end))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1234,11 +1287,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
+    while (offset < this.numBytes && isWhitespaceOrISOControl(getByte(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && isWhitespaceOrISOControl(getByte(end))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1336,7 +1389,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toLong(result, false)) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   /**
@@ -1350,7 +1403,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toInt(result, false)) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   public short toShortExact() {
@@ -1359,7 +1412,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (result == value) {
       return result;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   public byte toByteExact() {
@@ -1368,7 +1421,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (result == value) {
       return result;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   @Override
@@ -1387,48 +1440,69 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(bytes);
   }
 
+  /**
+   * Implementation of Comparable interface. This method is kept for backwards compatibility.
+   * It should not be used in spark code base, given that string comparison requires passing
+   * collation id. Either explicitly use `binaryCompare` or use `semanticCompare`.
+   */
   @Override
   public int compareTo(@Nonnull final UTF8String other) {
-    int len = Math.min(numBytes, other.numBytes);
-    int wordMax = (len / 8) * 8;
-    long roffset = other.offset;
-    Object rbase = other.base;
-    for (int i = 0; i < wordMax; i += 8) {
-      long left = getLong(base, offset + i);
-      long right = getLong(rbase, roffset + i);
-      if (left != right) {
-        if (IS_LITTLE_ENDIAN) {
-          return Long.compareUnsigned(Long.reverseBytes(left), Long.reverseBytes(right));
-        } else {
-          return Long.compareUnsigned(left, right);
-        }
-      }
+    if (SparkEnvUtils$.MODULE$.isTesting()) {
+      throw new UnsupportedOperationException(
+        "compareTo should not be used in spark code base. Use binaryCompare or semanticCompare.");
+    } else {
+      return binaryCompare(other);
     }
-    for (int i = wordMax; i < len; i++) {
-      // In UTF-8, the byte should be unsigned, so we should compare them as unsigned int.
-      int res = (getByte(i) & 0xFF) - (Platform.getByte(rbase, roffset + i) & 0xFF);
-      if (res != 0) {
-        return res;
-      }
-    }
-    return numBytes - other.numBytes;
   }
 
-  public int compare(final UTF8String other) {
-    return compareTo(other);
+  /**
+   * Binary comparison of two UTF8String. Can only be used for default UCS_BASIC collation.
+   */
+  public int binaryCompare(final UTF8String other) {
+    return ByteArray.compareBinary(
+      base, offset, numBytes, other.base, other.offset, other.numBytes);
   }
 
+  /**
+   * Collation-aware comparison of two UTF8String. The collation to use is specified by the
+   * `collationId` parameter.
+   */
+  public int semanticCompare(final UTF8String other, int collationId) {
+    return CollationFactory.fetchCollation(collationId).comparator.compare(this, other);
+  }
+
+  /**
+   * Binary equality check of two UTF8String. Note that binary equality is not the same as
+   * equality under given collation. E.g. if string is collated in case-insensitive two strings
+   * are considered equal even if they are different in binary comparison.
+   */
   @Override
   public boolean equals(final Object other) {
-    if (other instanceof UTF8String) {
-      UTF8String o = (UTF8String) other;
-      if (numBytes != o.numBytes) {
-        return false;
-      }
-      return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
+    if (other instanceof UTF8String o) {
+      return binaryEquals(o);
     } else {
       return false;
     }
+  }
+
+  /**
+   * Binary equality check of two UTF8String. Note that binary equality is not the same as
+   * equality under given collation. E.g. if string is collated in case-insensitive two strings
+   * are considered equal even if they are different in binary comparison.
+   */
+  public boolean binaryEquals(final UTF8String other) {
+    if (numBytes != other.numBytes) {
+      return false;
+    }
+
+    return ByteArrayMethods.arrayEquals(base, offset, other.base, other.offset, numBytes);
+  }
+
+  /**
+   * Collation-aware equality comparison of two UTF8String.
+   */
+  public boolean semanticEquals(final UTF8String other, int collationId) {
+    return CollationFactory.fetchCollation(collationId).equalsFunction.apply(this, other);
   }
 
   /**
@@ -1437,7 +1511,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * substitutions) that are required to change one of the strings into the other.
    */
   public int levenshteinDistance(UTF8String other) {
-    // Implementation adopted from org.apache.common.lang3.StringUtils.getLevenshteinDistance
+    // Implementation adopted from
+    // org.apache.commons.text.similarity.LevenshteinDistance.unlimitedCompare
 
     int n = numChars();
     int m = other.numChars();
@@ -1493,6 +1568,96 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     return p[n];
+  }
+
+  public int levenshteinDistance(UTF8String other, int threshold) {
+    // Implementation adopted from
+    // org.apache.commons.text.similarity.LevenshteinDistance.limitedCompare
+
+    int n = numChars();
+    int m = other.numChars();
+
+    if (n == 0) {
+      return m <= threshold ? m : -1;
+    }
+    if (m == 0) {
+      return n <= threshold ? n : -1;
+    }
+
+    UTF8String s, t;
+
+    if (n <= m) {
+      s = this;
+      t = other;
+    } else {
+      s = other;
+      t = this;
+      int swap;
+      swap = n;
+      n = m;
+      m = swap;
+    }
+
+    if (m - n > threshold) {
+      return -1;
+    }
+
+    int[] p = new int[n + 1];
+    int[] d = new int[n + 1];
+    int[] swap;
+
+    int i, i_bytes, num_bytes_i, j, j_bytes, num_bytes_j;
+
+    final int boundary = Math.min(n, threshold) + 1;
+    for (i = 0; i < boundary; i++) { p[i] = i; }
+    Arrays.fill(p, boundary, p.length, Integer.MAX_VALUE);
+    Arrays.fill(d, Integer.MAX_VALUE);
+
+    for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
+      num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
+
+      d[0] = j + 1;
+
+      final int min = Math.max(1, j + 1 - threshold);
+      final int max = j + 1 > Integer.MAX_VALUE - threshold ? n : Math.min(n, j + 1 + threshold);
+      if (min > 1) {
+        d[min - 1] = Integer.MAX_VALUE;
+      }
+
+      int lowerBound = Integer.MAX_VALUE;
+
+      for (i = 0, i_bytes = 0; i <= max; i_bytes += num_bytes_i, i++) {
+        if (i < min - 1) {
+          num_bytes_i = numBytesForFirstByte(s.getByte(i_bytes));
+        } else if (i == min - 1) {
+          num_bytes_i = 0;
+        } else {
+          if (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes,
+                  s.base, s.offset + i_bytes, num_bytes_j)) {
+            d[i] = p[i - 1];
+          } else {
+            d[i] = 1 + Math.min(Math.min(d[i - 1], p[i]), p[i - 1]);
+          }
+          lowerBound = Math.min(lowerBound, d[i]);
+          num_bytes_i = numBytesForFirstByte(s.getByte(i_bytes));
+        }
+      }
+
+      if (lowerBound > threshold) {
+        return -1;
+      }
+
+      swap = p;
+      p = d;
+      d = swap;
+    }
+
+    // if p[n] is greater than the threshold, there's no guarantee on it
+    // being the correct distance
+    if (p[n] <= threshold) {
+      return p[n];
+    }
+    return -1;
   }
 
   @Override
@@ -1553,12 +1718,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return UTF8String.fromBytes(sx);
   }
 
+  @Override
   public void writeExternal(ObjectOutput out) throws IOException {
     byte[] bytes = getBytes();
     out.writeInt(bytes.length);
     out.write(bytes);
   }
 
+  @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();

@@ -66,7 +66,7 @@ object StructuredNetworkWordCountWindowed {
     val slideDuration = s"$slideSize seconds"
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("StructuredNetworkWordCountWindowed")
       .getOrCreate()
 

@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
@@ -41,8 +42,8 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode
     with CodegenSupport
-    with AliasAwareOutputPartitioning
-    with AliasAwareOutputOrdering {
+    with PartitioningPreservingUnaryExecNode
+    with OrderPreservingUnaryExecNode {
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -90,10 +91,14 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val project = UnsafeProjection.create(projectList, child.output)
-      project.initialize(index)
-      iter.map(project)
+    val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, iter)
+      }
     }
   }
 
@@ -152,7 +157,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
       val nullCheck = if (bound.nullable) {
         s"${ev.isNull} || "
       } else {
-        s""
+        ""
       }
 
       s"""
@@ -268,13 +273,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val predicate = Predicate.create(condition, child.output)
-      predicate.initialize(0)
-      iter.filter { row =>
-        val r = predicate.eval(row)
-        if (r) numOutputRows += 1
-        r
+    val evaluatorFactory = new FilterEvaluatorFactory(condition, child.output, numOutputRows)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, iter)
       }
     }
   }
@@ -684,7 +689,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     children.map(_.output).transpose.map { attrs =>
       val firstAttr = attrs.head
       val nullable = attrs.exists(_.nullable)
-      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
       if (firstAttr.dataType == newDt) {
         firstAttr.withNullability(nullable)
       } else {
@@ -696,6 +701,14 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
+
+  override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
+
+  override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
+
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    sparkContext.union(children.map(_.executeColumnar()))
+  }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
     copy(children = newChildren)
@@ -770,7 +783,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
 
   override def generateTreeString(
       depth: Int,
-      lastChildren: Seq[Boolean],
+      lastChildren: java.util.ArrayList[Boolean],
       append: String => Unit,
       verbose: Boolean,
       prefix: String = "",
@@ -853,15 +866,15 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.doExecute should never be called")
+    throw SparkException.internalError("SubqueryExec.doExecute should never be called")
   }
 
   override def executeTake(n: Int): Array[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.executeTake should never be called")
+    throw SparkException.internalError("SubqueryExec.executeTake should never be called")
   }
 
   override def executeTail(n: Int): Array[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.executeTail should never be called")
+    throw SparkException.internalError("SubqueryExec.executeTail should never be called")
   }
 
   override def stringArgs: Iterator[Any] = Iterator(name, child) ++ Iterator(s"[id=#$id]")

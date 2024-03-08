@@ -21,12 +21,9 @@ import java.io._
 
 import scala.annotation.meta.param
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkFunSuite
 
-
-class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
+class SerializationDebuggerSuite extends SparkFunSuite {
 
   import SerializationDebugger.find
 

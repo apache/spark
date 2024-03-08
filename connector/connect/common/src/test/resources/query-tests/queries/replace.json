@@ -1,0 +1,24 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "replace": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "cols": ["id"],
+    "replacements": [{
+      "oldValue": {
+        "double": 1.0
+      },
+      "newValue": {
+        "double": 8.0
+      }
+    }]
+  }
+}

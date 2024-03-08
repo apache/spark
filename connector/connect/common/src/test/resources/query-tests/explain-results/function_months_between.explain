@@ -1,0 +1,2 @@
+Project [months_between(cast(current_date(Some(America/Los_Angeles)) as timestamp), cast(d#0 as timestamp), true, Some(America/Los_Angeles)) AS months_between(current_date(), d, true)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

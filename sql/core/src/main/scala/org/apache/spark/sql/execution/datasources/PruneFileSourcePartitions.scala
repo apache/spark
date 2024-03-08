@@ -32,8 +32,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * statistics will be updated. And the partition filters will be kept in the filters of returned
  * logical plan.
  */
-private[sql] object PruneFileSourcePartitions
-  extends Rule[LogicalPlan] with PredicateHelper {
+private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
 
   private def rebuildPhysicalOperation(
       projects: Seq[NamedExpression],
@@ -62,9 +61,10 @@ private[sql] object PruneFileSourcePartitions
             _,
             _,
             _))
-        if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
+        if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)),
+        filters.filter(f =>
+          !SubqueryExpression.hasSubquery(f) && DataSourceUtils.shouldPushFilter(f)),
         logicalRelation.output)
       val (partitionKeyFilters, _) = DataSourceUtils
         .getPartitionFiltersAndDataFilters(partitionSchema, normalizedFilters)

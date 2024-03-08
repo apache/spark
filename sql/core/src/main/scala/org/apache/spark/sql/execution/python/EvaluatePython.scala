@@ -20,10 +20,11 @@ package org.apache.spark.sql.execution.python
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
 object EvaluatePython {
 
   def needConversionInPython(dt: DataType): Boolean = dt match {
-    case DateType | TimestampType | TimestampNTZType => true
+    case DateType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
@@ -45,7 +46,7 @@ object EvaluatePython {
   }
 
   /**
-   * Helper for converting from Catalyst type to java type suitable for Pyrolite.
+   * Helper for converting from Catalyst type to java type suitable for Pickle.
    */
   def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
     case (null, _) => null
@@ -137,11 +138,12 @@ object EvaluatePython {
       case c: Int => c
     }
 
-    case TimestampType | TimestampNTZType => (obj: Any) => nullSafeConvert(obj) {
-      case c: Long => c
-      // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
-      case c: Int => c.toLong
-    }
+    case TimestampType | TimestampNTZType | _: DayTimeIntervalType => (obj: Any) =>
+      nullSafeConvert(obj) {
+        case c: Long => c
+        // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
+        case c: Int => c.toLong
+      }
 
     case StringType => (obj: Any) => nullSafeConvert(obj) {
       case _ => UTF8String.fromString(obj.toString)
@@ -181,9 +183,9 @@ object EvaluatePython {
         case c if c.getClass.isArray =>
           val array = c.asInstanceOf[Array[_]]
           if (array.length != fields.length) {
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               s"Input row doesn't have expected number of values required by the schema. " +
-                s"${fields.length} fields are required while ${array.length} values are provided."
+              s"${fields.length} fields are required while ${array.length} values are provided."
             )
           }
 

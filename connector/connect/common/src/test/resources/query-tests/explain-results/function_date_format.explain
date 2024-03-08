@@ -1,0 +1,2 @@
+Project [date_format(cast(d#0 as timestamp), yyyy-MM-dd, Some(America/Los_Angeles)) AS date_format(d, yyyy-MM-dd)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

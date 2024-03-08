@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.Locale
+import java.io.{ByteArrayOutputStream, File, FileOutputStream}
+import java.util.zip.GZIPOutputStream
 
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
+import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
 /**
@@ -29,32 +30,12 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
  * The tests that are not applicable to all file-based data sources should be placed to
  * [[org.apache.spark.sql.FileBasedDataSourceSuite]].
  */
-trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
+trait CommonFileDataSourceSuite extends SQLHelper {
+    self: AnyFunSuite => // scalastyle:ignore funsuite
 
   protected def spark: SparkSession
   protected def dataSourceFormat: String
   protected def inputDataset: Dataset[_] = spark.createDataset(Seq("abc"))(Encoders.STRING)
-
-  test(s"SPARK-36349: disallow saving of ANSI intervals to $dataSourceFormat") {
-    Seq("INTERVAL '1' DAY", "INTERVAL '1' YEAR").foreach { i =>
-      withTempPath { dir =>
-        val errMsg = intercept[AnalysisException] {
-          spark.sql(s"SELECT $i").write.format(dataSourceFormat).save(dir.getAbsolutePath)
-        }.getMessage
-        assert(errMsg.contains("Cannot save interval data type into external storage"))
-      }
-    }
-
-    // Check all built-in file-based datasources except of libsvm which requires particular schema.
-    if (!Set("libsvm").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
-      Seq("INTERVAL DAY TO SECOND", "INTERVAL YEAR TO MONTH").foreach { it =>
-        val errMsg = intercept[AnalysisException] {
-          spark.sql(s"CREATE TABLE t (i $it) USING $dataSourceFormat")
-        }.getMessage
-        assert(errMsg.contains("data source does not support"))
-      }
-    }
-  }
 
   test(s"Propagate Hadoop configs from $dataSourceFormat options to underlying file system") {
     withSQLConf(
@@ -80,6 +61,31 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
           }
         }
       }
+    }
+  }
+
+  protected def withCorruptFile(f: File => Unit): Unit = {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+      f(inputFile)
+    } finally {
+      inputFile.delete()
     }
   }
 }

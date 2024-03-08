@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.nio.ByteBuffer;
+
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import org.apache.parquet.io.api.Binary;
@@ -46,7 +48,12 @@ public interface VectorizedValuesReader {
   void readUnsignedIntegers(int total, WritableColumnVector c, int rowId);
   void readUnsignedLongs(int total, WritableColumnVector c, int rowId);
   void readLongs(int total, WritableColumnVector c, int rowId);
-  void readLongsWithRebase(int total, WritableColumnVector c, int rowId, boolean failIfRebase);
+  void readLongsWithRebase(
+      int total,
+      WritableColumnVector c,
+      int rowId,
+      boolean failIfRebase,
+      String timeZone);
   void readFloats(int total, WritableColumnVector c, int rowId);
   void readDoubles(int total, WritableColumnVector c, int rowId);
   void readBinary(int total, WritableColumnVector c, int rowId);
@@ -63,4 +70,36 @@ public interface VectorizedValuesReader {
    void skipDoubles(int total);
    void skipBinary(int total);
    void skipFixedLenByteArray(int total, int len);
+
+  /**
+   * A functional interface to write integer values to columnar output
+   */
+  @FunctionalInterface
+  interface IntegerOutputWriter {
+
+    /**
+     * A functional interface that writes a long value to a specified row in an output column
+     * vector
+     *
+     * @param outputColumnVector the vector to write to
+     * @param rowId the row to write to
+     * @param val value to write
+     */
+    void write(WritableColumnVector outputColumnVector, int rowId, long val);
+  }
+
+  @FunctionalInterface
+  interface ByteBufferOutputWriter {
+    void write(WritableColumnVector c, int rowId, ByteBuffer val, int length);
+
+    static void writeArrayByteBuffer(WritableColumnVector c, int rowId, ByteBuffer val,
+        int length) {
+      c.putByteArray(rowId,
+          val.array(),
+          val.arrayOffset() + val.position(),
+          length);
+    }
+
+    static void skipWrite(WritableColumnVector c, int rowId, ByteBuffer val, int length) { }
+  }
 }

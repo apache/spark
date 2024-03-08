@@ -45,7 +45,8 @@ class BinaryClassificationMetrics @Since("3.0.0") (
     @Since("1.3.0") val scoreAndLabels: RDD[_ <: Product],
     @Since("1.3.0") val numBins: Int = 1000)
   extends Logging {
-  val scoreLabelsWeight: RDD[(Double, (Double, Double))] = scoreAndLabels.map {
+
+  private val scoreLabelsWeight: RDD[(Double, (Double, Double))] = scoreAndLabels.map {
     case (prediction: Double, label: Double, weight: Double) =>
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
       (prediction, (label, weight))

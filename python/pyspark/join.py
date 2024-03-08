@@ -31,8 +31,9 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-from pyspark.resultiterable import ResultIterable
 from functools import reduce
+
+from pyspark.resultiterable import ResultIterable
 
 
 def _do_python_join(rdd, other, numPartitions, dispatch):
@@ -44,19 +45,20 @@ def _do_python_join(rdd, other, numPartitions, dispatch):
 def python_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
-        for (n, v) in seq:
+        for n, v in seq:
             if n == 1:
                 vbuf.append(v)
             elif n == 2:
                 wbuf.append(v)
         return ((v, w) for v in vbuf for w in wbuf)
+
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
 def python_right_outer_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
-        for (n, v) in seq:
+        for n, v in seq:
             if n == 1:
                 vbuf.append(v)
             elif n == 2:
@@ -64,13 +66,14 @@ def python_right_outer_join(rdd, other, numPartitions):
         if not vbuf:
             vbuf.append(None)
         return ((v, w) for v in vbuf for w in wbuf)
+
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
 def python_left_outer_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
-        for (n, v) in seq:
+        for n, v in seq:
             if n == 1:
                 vbuf.append(v)
             elif n == 2:
@@ -78,13 +81,14 @@ def python_left_outer_join(rdd, other, numPartitions):
         if not wbuf:
             wbuf.append(None)
         return ((v, w) for v in vbuf for w in wbuf)
+
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
 def python_full_outer_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
-        for (n, v) in seq:
+        for n, v in seq:
             if n == 1:
                 vbuf.append(v)
             elif n == 2:
@@ -94,12 +98,14 @@ def python_full_outer_join(rdd, other, numPartitions):
         if not wbuf:
             wbuf.append(None)
         return ((v, w) for v in vbuf for w in wbuf)
+
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
 def python_cogroup(rdds, numPartitions):
     def make_mapper(i):
         return lambda v: (i, v)
+
     vrdds = [rdd.mapValues(make_mapper(i)) for i, rdd in enumerate(rdds)]
     union_vrdds = reduce(lambda acc, other: acc.union(other), vrdds)
     rdd_len = len(vrdds)

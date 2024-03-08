@@ -27,14 +27,14 @@ import org.apache.spark.sql.types._
 
 class ResolveGroupingAnalyticsSuite extends AnalysisTest {
 
-  lazy val a = 'a.int
-  lazy val b = 'b.string
-  lazy val c = 'c.string
+  lazy val a = $"a".int
+  lazy val b = $"b".string
+  lazy val c = $"c".string
   lazy val unresolved_a = UnresolvedAttribute("a")
   lazy val unresolved_b = UnresolvedAttribute("b")
   lazy val unresolved_c = UnresolvedAttribute("c")
-  lazy val gid = 'spark_grouping_id.long.withNullability(false)
-  lazy val hive_gid = 'grouping__id.long.withNullability(false)
+  lazy val gid = $"spark_grouping_id".long.withNullability(false)
+  lazy val hive_gid = $"grouping__id".long.withNullability(false)
   lazy val grouping_a = Cast(ShiftRight(gid, 1) & 1L, ByteType, Option(TimeZone.getDefault().getID))
   lazy val nulInt = Literal(null, IntegerType)
   lazy val nulStr = Literal(null, StringType)

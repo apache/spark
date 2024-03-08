@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.types.StructType
@@ -42,7 +43,7 @@ case class CollectMetricsExec(
   }
 
   val metricsSchema: StructType = {
-    StructType.fromAttributes(metricExpressions.map(_.toAttribute))
+    DataTypeUtils.fromAttributes(metricExpressions.map(_.toAttribute))
   }
 
   // This is not used very frequently (once a query); it is not useful to use code generation here.

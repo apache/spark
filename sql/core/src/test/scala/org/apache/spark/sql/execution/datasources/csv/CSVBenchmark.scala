@@ -33,9 +33,9 @@ import org.apache.spark.sql.types._
  *   1. without sbt:
  *      bin/spark-submit --class <this class> --jars <spark core test jar>,
  *       <spark catalyst test jar> <spark sql test jar>
- *   2. build/sbt "sql/test:runMain <this class>"
+ *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/CSVBenchmark-results.txt".
  * }}}
  */
@@ -70,6 +70,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
     val benchmark = new Benchmark(s"Wide rows with $colsNum columns", rowsNum, output = output)
 
     withTempPath { path =>
+      import org.apache.spark.util.ArrayImplicits._
       val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
       val schema = StructType(fields)
       val values = (0 until colsNum).map(i => i.toString).mkString(",")
@@ -87,7 +88,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       }
       val cols100 = columnNames.take(100).map(Column(_))
       benchmark.addCase(s"Select 100 columns", numIters) { _ =>
-        ds.select(cols100: _*).noop()
+        ds.select(cols100.toImmutableArraySeq: _*).noop()
       }
       benchmark.addCase(s"Select one column", numIters) { _ =>
         ds.select($"col1").noop()
@@ -100,7 +101,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
         (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
       val dsErr1 = spark.read.schema(schemaErr1).csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, one bad input field", numIters) { _ =>
-        dsErr1.select(cols100: _*).noop()
+        dsErr1.select(cols100.toImmutableArraySeq: _*).noop()
       }
 
       val badRecColName = "badRecord"
@@ -109,7 +110,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
         .option("columnNameOfCorruptRecord", badRecColName)
         .csv(path.getAbsolutePath)
       benchmark.addCase(s"Select 100 columns, corrupt record field", numIters) { _ =>
-        dsErr2.select((Column(badRecColName) +: cols100): _*).noop()
+        dsErr2.select((Column(badRecColName) +: cols100).toImmutableArraySeq: _*).noop()
       }
 
       benchmark.run()
@@ -290,6 +291,36 @@ object CSVBenchmark extends SqlBasedBenchmark {
       readBench.addCase("from_csv(date)", numIters) { _ =>
         val ds = dateStr.select(from_csv($"date", dateSchema, Map.empty[String, String]))
         ds.noop()
+      }
+
+      def errorTimestampStr: Dataset[String] = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map {
+            i => s"data${i % 200}"
+          }
+        }.select($"value".as("timestamp")).as[String]
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with default format",
+        numIters) { _ =>
+        spark.read.option("header", false)
+          .option("inferSchema", true)
+          .csv(errorTimestampStr).noop()
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with user-provided format",
+        numIters) { _ =>
+        spark.read.option("header", false)
+          .option("inferSchema", true).option("timestampFormat",
+          "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").csv(errorTimestampStr).noop()
+      }
+
+      readBench.addCase("infer error timestamps from Dataset[String] with legacy format",
+        numIters) { _ =>
+        withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+          spark.read.option("header", false)
+            .option("inferSchema", true).csv(errorTimestampStr).noop()
+        }
       }
 
       readBench.run()
