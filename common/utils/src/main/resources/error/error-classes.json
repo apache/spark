@@ -1777,12 +1777,6 @@
     ],
     "sqlState" : "22P03"
   },
-  "INVALID_CHARACTER_IN_DATETIME_PATTERN" : {
-    "message" : [
-      "Illegal pattern character found in datetime pattern: <c>. Please provide legal character."
-    ],
-    "sqlState" : "22007"
-  },
   "INVALID_COLUMN_NAME_AS_PATH" : {
     "message" : [
       "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
@@ -1841,6 +1835,11 @@
       "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern."
     ],
     "subClass" : {
+      "ILLEGAL_CHARACTER" : {
+        "message" : [
+          "Illegal pattern character found in datetime pattern: <c>. Please provide legal character."
+        ]
+      },
       "LENGTH" : {
         "message" : [
           "Too many letters in datetime pattern: <pattern>. Please reduce pattern length."
@@ -2907,21 +2906,9 @@
     ],
     "sqlState" : "07501"
   },
-  "NONEXISTENT_FIELD_NAME_INDEXING" : {
-    "message" : [
-      "Error while indexing field. Field with name <name> does not exist. Available fields: <fieldNames>"
-    ],
-    "sqlState" : "HV091"
-  },
   "NONEXISTENT_FIELD_NAME_IN_LIST" : {
     "message" : [
       "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
-    ],
-    "sqlState" : "HV091"
-  },
-  "NONEXISTENT_FIELD_NAME_LOOKUP" : {
-    "message" : [
-      "Error while accessing field. Field with name <name> does not exist. Available fields: <fieldNames>"
     ],
     "sqlState" : "HV091"
   },

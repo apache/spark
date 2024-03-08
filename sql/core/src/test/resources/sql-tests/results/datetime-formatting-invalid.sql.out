@@ -378,10 +378,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
   "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "A"
+    "c" : "A",
+    "pattern" : "A"
   }
 }
 
@@ -393,10 +394,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
   "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "n"
+    "c" : "n",
+    "pattern" : "n"
   }
 }
 
@@ -408,10 +410,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
   "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "N"
+    "c" : "N",
+    "pattern" : "N"
   }
 }
 
@@ -423,10 +426,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
   "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "p"
+    "c" : "p",
+    "pattern" : "p"
   }
 }
 
@@ -536,10 +540,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_CHARACTER_IN_DATETIME_PATTERN",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
   "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "B"
+    "c" : "B",
+    "pattern" : "B"
   }
 }
 

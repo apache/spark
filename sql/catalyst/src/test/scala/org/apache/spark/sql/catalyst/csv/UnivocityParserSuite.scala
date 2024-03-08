@@ -308,8 +308,8 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
       },
-      errorClass = "NONEXISTENT_FIELD_NAME_INDEXING",
-      parameters = Map("name" -> "invalid attr", "fieldNames" -> "i"))
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "invalid attr", "fields" -> "i"))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -319,8 +319,8 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
           filters = Seq(EqualTo("i", 1)),
           expected = Some(InternalRow.empty))
       },
-      errorClass = "NONEXISTENT_FIELD_NAME_INDEXING",
-      parameters = Map("name" -> "i", "fieldNames" -> ""))
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "i", "fields" -> ""))
   }
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {
@@ -374,7 +374,9 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         check(new UnivocityParser(StructType(Seq.empty), optionsWithPattern(false)))
       },
-      errorClass = "INVALID_CHARACTER_IN_DATETIME_PATTERN",
-      parameters = Map("c" -> "n"))
+      errorClass = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+      parameters = Map(
+        "c" -> "n",
+        "pattern" -> "invalid"))
   }
 }

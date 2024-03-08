@@ -283,10 +283,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
       throw new SparkIllegalArgumentException(
-        errorClass = "NONEXISTENT_FIELD_NAME_LOOKUP",
+        errorClass = "FIELD_NOT_FOUND",
         messageParameters = immutable.Map(
-          "name" -> name,
-          "fieldNames" -> fieldNames.mkString(", "))))
+          "fieldName" -> name,
+          "fields" -> fieldNames.mkString(", "))))
   }
 
   /**
@@ -316,10 +316,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
       throw new SparkIllegalArgumentException(
-        errorClass = "NONEXISTENT_FIELD_NAME_INDEXING",
+        errorClass = "FIELD_NOT_FOUND",
         messageParameters = immutable.Map(
-          "name" -> name,
-          "fieldNames" -> fieldNames.mkString(", "))))
+          "fieldName" -> name,
+          "fields" -> fieldNames.mkString(", "))))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {

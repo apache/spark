@@ -30,6 +30,10 @@ Unrecognized datetime pattern: `<pattern>`. Please provide correct datetime patt
 
 This error class has the following derived error classes:
 
+## ILLEGAL_CHARACTER
+
+Illegal pattern character found in datetime pattern: `<c>`. Please provide legal character.
+
 ## LENGTH
 
 Too many letters in datetime pattern: `<pattern>`. Please reduce pattern length.

@@ -1082,12 +1082,6 @@ Invalid bucket file: `<path>`.
 
 The expected format is ByteString, but was `<unsupported>` (`<class>`).
 
-### INVALID_CHARACTER_IN_DATETIME_PATTERN
-
-[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-Illegal pattern character found in datetime pattern: `<c>`. Please provide legal character.
-
 ### INVALID_COLUMN_NAME_AS_PATH
 
 [SQLSTATE: 46121](sql-error-conditions-sqlstates.html#class-46-java-ddl-1)
@@ -1644,23 +1638,11 @@ SQLSTATE: 07501
 
 Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
 
-### NONEXISTENT_FIELD_NAME_INDEXING
-
-SQLSTATE: HV091
-
-Error while indexing field. Field with name `<name>` does not exist. Available fields: `<fieldNames>`
-
 ### NONEXISTENT_FIELD_NAME_IN_LIST
 
 SQLSTATE: HV091
 
 Field(s) `<nonExistFields>` do(es) not exist. Available fields: `<fieldNames>`
-
-### NONEXISTENT_FIELD_NAME_LOOKUP
-
-SQLSTATE: HV091
-
-Error while accessing field. Field with name `<name>` does not exist. Available fields: `<fieldNames>`
 
 ### NON_FOLDABLE_ARGUMENT
 
