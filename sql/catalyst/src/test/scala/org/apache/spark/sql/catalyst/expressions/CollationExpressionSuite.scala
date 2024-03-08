@@ -70,8 +70,11 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("collation on explicitly collated string") {
-    checkEvaluation(Collation(Literal.create("abc", StringType(1))).replacement, "UTF8_BINARY_LCASE")
     checkEvaluation(
-      Collation(Collate(Literal("abc"), "UTF8_BINARY_LCASE")).replacement, "UTF8_BINARY_LCASE")
+      Collation(Literal.create("abc", StringType(1))).replacement,
+      "UTF8_BINARY_LCASE")
+    checkEvaluation(
+      Collation(Collate(Literal("abc"), "UTF8_BINARY_LCASE")).replacement,
+      "UTF8_BINARY_LCASE")
   }
 }
