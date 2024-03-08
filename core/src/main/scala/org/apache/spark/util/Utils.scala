@@ -3155,7 +3155,16 @@ private[spark] class RedirectThread(
   }
 }
 
-private[spark] class SparkProcess(
+/**
+ * PythonRunner process wrapper. In this wrapper will collect process error message,
+ * if process exit with exception, spark can get process exit message.
+ *
+ * @param process PythonRunner python process
+ * @param out Where to redirect the message.
+ * @param name process name.
+ * @param propagateEof If propagate Eof.
+ */
+private[spark] class PythonRunnerProcessWrapper(
     process: Process,
     out: OutputStream,
     name: String,
@@ -3166,11 +3175,11 @@ private[spark] class SparkProcess(
 
   def errorMessage: String = error.toString()
 
-  private class SparkProcessRedirectThread(
+  private class ProcessRedirectThread(
       in: InputStream,
       out: OutputStream,
       name: String,
-      stderr: Boolean)
+      isStderr: Boolean)
     extends Thread(name) {
 
     setDaemon(true)
@@ -3184,7 +3193,7 @@ private[spark] class SparkProcess(
             while (len > 0) {
               out.write(buf, 0, len)
               out.flush()
-              if (stderr) {
+              if (isStderr) {
                 error.write(buf, 0, len)
                 error.flush()
               }
@@ -3213,9 +3222,9 @@ private[spark] class SparkProcess(
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       Utils.tryWithSafeFinally {
         val inputThread =
-          new SparkProcessRedirectThread(process.getInputStream, out, "input stream", false)
+          new ProcessRedirectThread(process.getInputStream, out, "input stream", false)
         val errorThread =
-          new SparkProcessRedirectThread(process.getErrorStream, out, "error stream", true)
+          new ProcessRedirectThread(process.getErrorStream, out, "error stream", true)
 
         inputThread.start()
         errorThread.start()
