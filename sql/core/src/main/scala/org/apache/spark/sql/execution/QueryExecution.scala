@@ -543,15 +543,11 @@ object QueryExecution {
    * Converts asserts, null pointer exceptions and scala match errors to internal errors.
    */
   private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
-    case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
+    case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError |
+              _: scala.MatchError) =>
       SparkException.internalError(
         msg + " You hit a bug in Spark or the Spark plugins you use. Please, report this bug " +
           "to the corresponding communities or vendors, and provide the full stack trace.",
-        e)
-    case e @ (_: scala.MatchError) =>
-      SparkException.internalError(
-        msg + " You have tried to match an object which doesn't belong to any pattern or " +
-          "pattern matching expression.",
         e)
     case e: Throwable =>
       e
