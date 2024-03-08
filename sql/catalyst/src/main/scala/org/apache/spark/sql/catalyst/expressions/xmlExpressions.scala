@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
+
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
