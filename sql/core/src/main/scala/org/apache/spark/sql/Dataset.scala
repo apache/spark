@@ -197,39 +197,33 @@ class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
 
-  private var queryPersisted: Option[(LogicalPlan, QueryExecution)] = None
+  private var queryPersisted: Option[(Array[Boolean], QueryExecution)] = None
 
   def queryExecution: QueryExecution = {
-    val cacheManager = queryUnpersisted.sparkSession.sharedState.cacheManager
-    val plan = queryUnpersisted.logical
-    plan.find({
-      case _: IgnoreCachedData => false
-      case currentFragment => cacheManager.lookupCachedData(currentFragment).isDefined
-    }) match {
-      // if we can't find cached plan, we directly return the queryExec
-      case None =>
-        queryPersisted = None
-        queryUnpersisted
-      // when find the nearest cached child plan, we make sure that queryPersisted is consistent
-      // with it
-      case Some(childPlanPersisted) =>
-        queryPersisted match {
-          case None =>
-            val qe = new QueryExecution(queryUnpersisted)
-            queryPersisted = Some(childPlanPersisted, qe)
+    val cacheStatesSign = queryUnpersisted.computeCacheStateSignature()
+    // If all children aren't cached, directly return the queryUnpersisted
+    if (cacheStatesSign.forall(b => !b)) {
+      queryPersisted = None
+      queryUnpersisted
+    } else {
+      queryPersisted match {
+        // If we haven't cached queryPersisted, we create new one
+        case None =>
+          val qe = new QueryExecution(queryUnpersisted)
+          queryPersisted = Some((qe.computeCacheStateSignature(), qe))
+          qe
+        // If there exists cached queryPersisted, and cache signature doesn't change, we reuse it.
+        // Otherwise we create a new queryExecution and cache it.
+        case Some((lastCacheStateSign, qe)) =>
+          val currentCacheStateSign = qe.computeCacheStateSignature()
+          if (currentCacheStateSign.sameElements(lastCacheStateSign)) {
             qe
-          case Some((lastChildPlan, lastQueryExecution)) =>
-            // reuse the lastQueryExecution because cache doesn't change
-            if (lastChildPlan.sameResult(childPlanPersisted)) {
-              lastQueryExecution
-            } else {
-              // refresh the cached queryPersisted to make it
-              // correspond with the new cached plan
-              val qe = new QueryExecution(queryUnpersisted)
-              queryPersisted = Some(childPlanPersisted, qe)
-              qe
-            }
-        }
+          } else {
+            val qe = new QueryExecution(queryUnpersisted)
+            queryPersisted = Some((currentCacheStateSign, qe))
+            qe
+          }
+      }
     }
   }
 
