@@ -132,6 +132,8 @@ class ResourceProfile:
                     if is_remote():
                         from pyspark.sql.connect.resource.profile import ResourceProfile
 
+                        # Utilize the connect ResourceProfile to create Spark ResourceProfile
+                        # on the server and get the profile ID.
                         rp = ResourceProfile(
                             self._executor_resource_requests, self._task_resource_requests
                         )

@@ -16,7 +16,7 @@
 #
 import unittest
 
-from pyspark.resource import ResourceProfileBuilder, TaskResourceRequests
+from pyspark.resource import ResourceProfileBuilder, TaskResourceRequests, ExecutorResourceRequests
 from pyspark.sql import SparkSession
 
 
@@ -27,10 +27,52 @@ class ResourceProfileTests(unittest.TestCase):
         # no exception for building ResourceProfile
         rp = rpb.require(treqs).build
 
+        # check taskResources, similar to executorResources.
+        self.assertEqual(rp.taskResources["cpus"].amount, 2.0)
+
+        # SparkContext is not initialized and is not remote.
+        with self.assertRaisesRegex(
+            RuntimeError, "SparkContext must be created to get the profile id."
+        ):
+            rp.id
+
+        # Remote mode.
         spark = SparkSession.builder.remote("local-cluster[1, 2, 1024]").getOrCreate()
+        # Still can access taskResources, similar to executorResources.
+        self.assertEqual(rp.taskResources["cpus"].amount, 2.0)
         df = spark.range(10)
         df.mapInPandas(lambda x: x, df.schema, False, rp).collect()
         df.mapInArrow(lambda x: x, df.schema, False, rp).collect()
+
+        def assert_request_contents(exec_reqs, task_reqs):
+            self.assertEqual(len(exec_reqs), 6)
+            self.assertEqual(exec_reqs["cores"].amount, 2)
+            self.assertEqual(exec_reqs["memory"].amount, 6144)
+            self.assertEqual(exec_reqs["memoryOverhead"].amount, 1024)
+            self.assertEqual(exec_reqs["pyspark.memory"].amount, 2048)
+            self.assertEqual(exec_reqs["offHeap"].amount, 3072)
+            self.assertEqual(exec_reqs["gpu"].amount, 2)
+            self.assertEqual(exec_reqs["gpu"].discoveryScript, "testGpus")
+            self.assertEqual(exec_reqs["gpu"].resourceName, "gpu")
+            self.assertEqual(exec_reqs["gpu"].vendor, "nvidia.com")
+            self.assertEqual(len(task_reqs), 2)
+            self.assertEqual(task_reqs["cpus"].amount, 2.0)
+            self.assertEqual(task_reqs["gpu"].amount, 2.0)
+
+        # Error case.
+        rpb = ResourceProfileBuilder()
+        ereqs = ExecutorResourceRequests().cores(2).memory("6g").memoryOverhead("1g")
+        ereqs.pysparkMemory("2g").offheapMemory("3g").resource("gpu", 2, "testGpus", "nvidia.com")
+        treqs = TaskResourceRequests().cpus(2).resource("gpu", 2)
+        assert_request_contents(ereqs.requests, treqs.requests)
+        rp = rpb.require(ereqs).require(treqs).build
+
+        with self.assertRaisesRegex(
+            Exception,
+            "ResourceProfiles are only supported on YARN and Kubernetes and Standalone with dynamic allocation enabled.",
+        ):
+            df.mapInArrow(lambda x: x, df.schema, False, rp).collect()
+
         spark.stop()
 
 
