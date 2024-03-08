@@ -80,17 +80,11 @@ class PythonStreamingSourceRunner(
     envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
 
-    val prevConf = conf.get(PYTHON_USE_DAEMON)
-    conf.set(PYTHON_USE_DAEMON, false)
-    try {
-      val workerFactory =
-        new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
-      val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
-      pythonWorker = Some(worker)
-      pythonWorkerFactory = Some(workerFactory)
-    } finally {
-      conf.set(PYTHON_USE_DAEMON, prevConf)
-    }
+    val workerFactory =
+      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
+    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+    pythonWorker = Some(worker)
+    pythonWorkerFactory = Some(workerFactory)
 
     val stream = new BufferedOutputStream(
       pythonWorker.get.channel.socket().getOutputStream, bufferSize)
