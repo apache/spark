@@ -1615,15 +1615,15 @@ class Dataset[T] private[sql](
     val inputSet = logicalPlan.outputSet
     val rectifiedNamedExprs = namedExprs.map(ne => ne match {
 
-      case al: Alias if (!al.references.subsetOf(inputSet) || al.references.exists(attr =>
+      case al: Alias if !al.references.subsetOf(inputSet) || al.references.exists(attr =>
         attr.metadata.contains(DATASET_ID_KEY) && attr.metadata.getLong(DATASET_ID_KEY) !=
           inputSet.find(_.canonicalized == attr.canonicalized).map(x =>
             if (x.metadata.contains(DATASET_ID_KEY)) {
               x.metadata.getLong(DATASET_ID_KEY)
             } else {
-              -1
-          }).get)) &&
-        al.nonInheritableMetadataKeys.contains(Dataset.DATASET_ID_KEY) =>
+              Dataset.this.id
+          }).get)
+         =>
         val unresolvedExpr = al.child.transformUp {
           case attr: AttributeReference if attr.metadata.contains(Dataset.DATASET_ID_KEY) &&
             (!inputSet.contains(attr) || attr.metadata.getLong(DATASET_ID_KEY) !=
@@ -1631,7 +1631,7 @@ class Dataset[T] private[sql](
                 if (x.metadata.contains(DATASET_ID_KEY)) {
                   x.metadata.getLong(DATASET_ID_KEY)
                 } else {
-                  -1
+                  Dataset.this.id
                 }).get)
              =>
             UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
@@ -1648,7 +1648,7 @@ class Dataset[T] private[sql](
             if (x.metadata.contains(DATASET_ID_KEY)) {
               x.metadata.getLong(DATASET_ID_KEY)
             } else {
-              -1
+              Dataset.this.id
             }).get)
          =>
         UnresolvedAttributeWithTag(attr, attr.metadata.getLong(Dataset.DATASET_ID_KEY))
