@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.sources
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkThrowable}
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LogicalPlan, TransformWithState}
@@ -29,7 +28,7 @@ import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
 
 class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: ExpressionEncoder[T])
-  extends Sink with Logging {
+  extends Sink {
 
   private def isQueryStateful(logicalPlan: LogicalPlan): Boolean = {
     logicalPlan.collect {
