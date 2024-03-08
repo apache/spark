@@ -210,4 +210,52 @@ class AbbreviateSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("truncate map<string, string>") {
+    val read = proto.Read.NamedTable
+      .newBuilder()
+      .putAllOptions(Map("k1" * 4096 -> "v1" * 4096, "k2" * 4096 -> "v2" * 4096).asJava)
+      .build()
+
+    val threshold = 1024
+    val truncated = ProtoUtils.abbreviate(read, threshold)
+    assert(truncated.getOptionsMap.size() === 2)
+
+    truncated.getOptionsMap.asScala.foreach { case (k, v) =>
+      assert(k.indexOf("[truncated") === threshold)
+      assert(v.indexOf("[truncated") === threshold)
+    }
+  }
+
+  test("truncate map<string, message>") {
+    val sql = proto.SQL
+      .newBuilder()
+      .setQuery("SELECT * FROM T")
+      .putAllNamedArguments(Map(
+        "k1" -> proto.Expression
+          .newBuilder()
+          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier("v1" * 4096)
+            .build())
+          .build(),
+        "k2" -> proto.Expression
+          .newBuilder()
+          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier("v2" * 4096)
+            .build())
+          .build()).asJava)
+      .build()
+
+    val threshold = 1024
+    val truncated = ProtoUtils.abbreviate(sql, threshold)
+    assert(truncated.getQuery === "SELECT * FROM T")
+    assert(truncated.getNamedArgumentsMap.size() === 2)
+
+    truncated.getNamedArgumentsMap.asScala.foreach { case (k, v) =>
+      assert(k.indexOf("[truncated") === -1)
+      assert(v.getUnresolvedAttribute.getUnparsedIdentifier.indexOf("[truncated") === threshold)
+    }
+  }
 }

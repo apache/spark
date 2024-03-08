@@ -908,6 +908,18 @@ class SparkSession(SparkConversionMixin):
 
     @property
     def profile(self) -> Profile:
+        """Returns a :class:`Profile` for performance/memory profiling.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Profile`
+
+        Notes
+        -----
+        Supports Spark Connect.
+        """
         return Profile(self._profiler_collector)
 
     def range(

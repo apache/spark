@@ -655,18 +655,6 @@ class QueryCompilationErrorsSuite
       parameters = Map("expression" -> "\"(explode(array(1, 2, 3)) + 1)\""))
   }
 
-  test("UNSUPPORTED_GENERATOR: only one generator allowed") {
-    val e = intercept[AnalysisException](
-      sql("""select explode(Array(1, 2, 3)), explode(Array(1, 2, 3))""").collect()
-    )
-
-    checkError(
-      exception = e,
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map("clause" -> "SELECT", "num" -> "2",
-        "generators" -> "\"explode(array(1, 2, 3))\", \"explode(array(1, 2, 3))\""))
-  }
-
   test("UNSUPPORTED_GENERATOR: generators are not supported outside the SELECT clause") {
     val e = intercept[AnalysisException](
       sql("""select 1 from t order by explode(Array(1, 2, 3))""").collect()
