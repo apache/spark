@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.hasStringType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -153,8 +154,17 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     }
   }
 
-  override def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) =>
+  override def findWiderCommonType(exprs: Seq[Expression],
+                                   failOnIndeterminate: Boolean = false): Option[DataType] = {
+    val (stringTypes, nonStringTypes) = exprs.map(_.dataType).partition(hasStringType)
+    (if (stringTypes.distinct.size > 1) {
+      val collationId = CollationTypeCasts.getOutputCollation(exprs, failOnIndeterminate)
+      exprs.map(e =>
+        if (e.exists(e => e.dataType.isInstanceOf[StringType])) {
+          Cast(e, StringType(collationId))
+        }
+        else e)
+    } else exprs).map(_.dataType).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
       r match {
         case Some(d) => findWiderTypeForTwo(d, c)
         case _ => None
@@ -175,6 +185,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       inType: DataType,
       expectedType: AbstractDataType): Option[DataType] = {
     (inType, expectedType) match {
+      case (_: StringType, st: StringType) =>
+        Some(st)
       // If the expected type equals the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => Some(inType)
 
@@ -187,9 +199,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // `TypeCollection`, there is another branch to find the "closet convertible data type" below.
       case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
         Some(target.defaultConcreteType)
-
-      case (_: StringType, st: StringType) =>
-        Some(st)
 
       // This type coercion system will allow implicit converting String type as other
       // primitive types, in case of breaking too many existing Spark SQL queries.
