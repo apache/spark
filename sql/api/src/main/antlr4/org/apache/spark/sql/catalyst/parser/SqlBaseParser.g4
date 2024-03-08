@@ -1096,7 +1096,7 @@ colPosition
     ;
 
 collateClause
-    : COLLATE collationName=stringLit
+    : COLLATE collationName=identifier
     ;
 
 type

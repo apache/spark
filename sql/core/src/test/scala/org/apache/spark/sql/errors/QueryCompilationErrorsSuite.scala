@@ -955,9 +955,9 @@ class QueryCompilationErrorsSuite
   test("SPARK-47102: the collation feature is off without collate builder call") {
     withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
       Seq(
-        "CREATE TABLE t(col STRING COLLATE 'UNICODE_CI') USING parquet",
-        "CREATE TABLE t(col STRING COLLATE 'UNKNOWN_COLLATION_STRING') USING parquet",
-        "SELECT 'aaa' COLLATE 'UNICODE_CI'",
+        "CREATE TABLE t(col STRING COLLATE UNICODE_CI) USING parquet",
+        "CREATE TABLE t(col STRING COLLATE UNKNOWN_COLLATION_STRING) USING parquet",
+        "SELECT 'aaa' COLLATE UNICODE_CI",
         "select collation('aaa')"
       ).foreach { sqlText =>
         checkError(
