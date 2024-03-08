@@ -192,7 +192,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   }
 
   import StateStoreTestsHelper._
-  
+
   protected var schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
   protected var schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
