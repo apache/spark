@@ -83,10 +83,14 @@ object CSVExprUtils {
       case _ if str == "\u0000" => '\u0000'
       case Seq('\\', _) =>
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3236", messageParameters = Map("str" -> str))
+          errorClass =
+            "INVALID_DELIMITER_VALUE.UNSUPPORTED_SPECIAL_CHARACTER",
+            messageParameters = Map("str" -> str))
       case _ =>
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3237", messageParameters = Map("str" -> str))
+          errorClass =
+            "INVALID_DELIMITER_VALUE.DELIMITER_LONGER_THAN_EXPECTED",
+            messageParameters = Map("str" -> str))
     }
   }
 

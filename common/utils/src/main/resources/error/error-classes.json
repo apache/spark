@@ -7767,16 +7767,6 @@
       "The numbers of zipped arrays and field names should be the same"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3236" : {
-    "message" : [
-      "Unsupported special character for delimiter: <str>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3237" : {
-    "message" : [
-      "Delimiter cannot be more than one character: <str>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3238" : {
     "message" : [
       "Failed to convert value <v> (class of <class>) in type <dt> to XML."
@@ -7824,32 +7814,35 @@
   },
   "INVALID_DELIMITER_VALUE" : {
     "message" : [
-      "Invalid value for delimiter"
+      "Invalid value for delimiter."
     ],
     "subClass" : {
       "EMPTY_STRING": {
         "message" : [
-          "Delimiter cannot be empty string"
+          "Delimiter cannot be empty string."
         ]
       },
-      "SINGLE_BACKSLASH": {
+      "SINGLE_BACKSLASH" : {
         "message" : [
           "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
+        ]
+      },
+      "UNSUPPORTED_SPECIAL_CHARACTER" : {
+        "message" : [
+          "Unsupported special character for delimiter: <str>."
+        ]
+      },
+      "DELIMITER_LONGER_THAN_EXPECTED" : {
+        "message" : [
+          "Delimiter cannot be more than one character: <str>."
         ]
       }
     }
   },
-  "JSON_CONVERSION_ERROR" : {
+  "FAILED_ROW_TO_JSON" : {
     "message" : [
-      "Invalid JSON conversion."
-    ],
-    "subClass" : {
-      "UNSUPPORTED_VALUE_TYPE" : {
-        "message" : [
-          "Failed to convert value <value> (class of <valueClass>}) with the type of <dataType> to JSON."
-        ]
-      }
-    }
+      "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
+    ]
   },
   "_LEGACY_ERROR_TEMP_3250" : {
     "message" : [
