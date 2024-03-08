@@ -2876,23 +2876,8 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumnRenamed(existingName: String, newName: String): DataFrame = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
-    val shouldRename = output.exists(f => resolver(f.name, existingName))
-    if (shouldRename) {
-      val columns = output.map { col =>
-        if (resolver(col.name, existingName)) {
-          Column(col).as(newName)
-        } else {
-          Column(col)
-        }
-      }
-      select(columns : _*)
-    } else {
-      toDF()
-    }
-  }
+  def withColumnRenamed(existingName: String, newName: String): DataFrame =
+    withColumnsRenamed(Seq(existingName), Seq(newName))
 
   /**
    * (Scala-specific)
@@ -2921,18 +2906,24 @@ class Dataset[T] private[sql](
 
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output: Seq[NamedExpression] = queryExecution.analyzed.output
+    var shouldRename = false
 
     val projectList = colNames.zip(newColNames).foldLeft(output) {
       case (attrs, (existingName, newName)) =>
         attrs.map(attr =>
           if (resolver(attr.name, existingName)) {
+            shouldRename = true
             Alias(attr, newName)()
           } else {
             attr
           }
         )
     }
-    withPlan(Project(projectList, logicalPlan))
+    if (shouldRename) {
+      withPlan(Project(projectList, logicalPlan))
+    } else {
+      toDF()
+    }
   }
 
   /**
