@@ -689,8 +689,6 @@ private[spark] class ExternalSorter[K, V, C](
   /**
    * Write all the data added into this ExternalSorter into a map output writer that pushes bytes
    * to some arbitrary backing store. This is called by the SortShuffleWriter.
-   *
-   * Update the partition's length, when call partition pair writer to close.
    */
   def writePartitionedMapOutput(
       shuffleId: Int,
