@@ -2700,15 +2700,15 @@ case class Base64(child: Expression, chunkBase64: Boolean = SQLConf.get.base64Ch
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
-      s"""
-        if ($chunkBase64) {
-           ${ev.value} = UTF8String.fromBytes(
-              ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
-        } else {
-          ${ev.value} = UTF8String.fromBytes(
-              ${classOf[JBase64].getName}.getMimeEncoder(-1, new byte[0]).encode($child));
-        }
-      """
+      if (chunkBase64) {
+        s"""${ev.value} = UTF8String.fromBytes(
+             ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
+        """
+      } else {
+        s"""${ev.value} = UTF8String.fromBytes(
+             ${classOf[JBase64].getName}.getMimeEncoder(-1, new byte[0]).encode($child));
+        """
+      }
     })
   }
 
