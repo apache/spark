@@ -1268,11 +1268,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : " 10 nanoseconds",
-    "msg" : "invalid unit 'nanoseconds'"
+    "unit" : "nanoseconds"
   }
 }
 
