@@ -226,11 +226,11 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val data = Seq(Row(1))
 
     val outputForStream = Seq($"a".int)
-    val schemaForStream = DataTypeUtils.fromAttributes(outputForStream)
+    val schemaForStream = StructType.fromAttributes(outputForStream)
     val converterForStream = CatalystTypeConverters.createToCatalystConverter(schemaForStream)
 
     val outputForBatch = Seq($"b".int)
-    val schemaForBatch = DataTypeUtils.fromAttributes(outputForBatch)
+    val schemaForBatch = StructType.fromAttributes(outputForBatch)
     val converterForBatch = CatalystTypeConverters.createToCatalystConverter(schemaForBatch)
 
     val streamingRelation = LocalRelation(
