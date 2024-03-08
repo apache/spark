@@ -44,6 +44,8 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
       isStreaming = false)
     implicit val enc = encoder
     val ds = Dataset.ofRows(data.sparkSession, node).as[T]
+    // SPARK-47329 - persist the dataframe for stateful queries to prevent state stores
+    // from reloading state multiple times in each batch
     val isStateful = isQueryStateful(data.logicalPlan)
     if (isStateful) {
       ds.persist()
