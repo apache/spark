@@ -378,13 +378,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
-  private boolean matchAt(final UTF8String s, int pos, int collationId) {
-    if (s.numBytes + pos > numBytes || pos < 0) {
-      return false;
-    }
-    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
-  }
-
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
@@ -396,8 +389,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
-    if (prefix.numBytes == 0 || this.numBytes == 0) return prefix.numBytes==0;
+    return collatedStartsWith(prefix, collationId);
+  }
 
+  private boolean collatedStartsWith(final UTF8String prefix, int collationId) {
+    if (prefix.numBytes == 0 || this.numBytes == 0) {
+      return prefix.numBytes==0;
+    }
     return CollationFactory.getStringSearch(this, prefix, collationId).first() == 0;
   }
 
@@ -412,8 +410,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
-    if (suffix.numBytes == 0 || this.numBytes == 0) return suffix.numBytes==0;
+    return collatedEndsWith(suffix, collationId);
+  }
 
+  private boolean collatedEndsWith(final UTF8String suffix, int collationId) {
+    if (suffix.numBytes == 0 || this.numBytes == 0) {
+      return suffix.numBytes==0;
+    }
     return CollationFactory.getStringSearch(this, suffix, collationId).last()==this.numChars()-suffix.numChars();
   }
 
