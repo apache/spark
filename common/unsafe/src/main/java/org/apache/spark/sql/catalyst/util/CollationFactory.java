@@ -117,7 +117,7 @@ public final class CollationFactory {
     // No custom comparators will be used for this collation.
     // Instead, we rely on byte for byte comparison.
     collationTable[0] = new Collation(
-      "UCS_BASIC",
+      "UTF8_BINARY",
       null,
       UTF8String::binaryCompare,
       "1.0",
@@ -127,7 +127,7 @@ public final class CollationFactory {
     // Case-insensitive UTF8 binary collation.
     // TODO: Do in place comparisons instead of creating new strings.
     collationTable[1] = new Collation(
-      "UCS_BASIC_LCASE",
+      "UTF8_BINARY_LCASE",
       null,
       (s1, s2) -> s1.toLowerCase().binaryCompare(s2.toLowerCase()),
       "1.0",

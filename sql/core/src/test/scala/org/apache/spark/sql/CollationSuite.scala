@@ -36,7 +36,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   test("collate returns proper type") {
-    Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
+    Seq("utf8_binary", "utf8_binary_lcase", "unicode", "unicode_ci").foreach { collationName =>
       checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
       val collationId = CollationFactory.collationNameToId(collationName)
       assert(sql(s"select 'aaa' collate $collationName").schema(0).dataType
@@ -45,7 +45,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("collation name is case insensitive") {
-    Seq("uCs_BasIc", "uCs_baSic_Lcase", "uNicOde", "UNICODE_ci").foreach { collationName =>
+    Seq("uTf8_BiNaRy", "uTf8_BiNaRy_Lcase", "uNicOde", "UNICODE_ci").foreach { collationName =>
       checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
       val collationId = CollationFactory.collationNameToId(collationName)
       assert(sql(s"select 'aaa' collate $collationName").schema(0).dataType
@@ -54,15 +54,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("collation expression returns name of collation") {
-    Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
+    Seq("utf8_binary", "utf8_binary_lcase", "unicode", "unicode_ci").foreach { collationName =>
       checkAnswer(
         sql(s"select collation('aaa' collate $collationName)"), Row(collationName.toUpperCase()))
     }
   }
 
   test("collate function syntax") {
-    assert(sql(s"select collate('aaa', 'ucs_basic')").schema(0).dataType == StringType(0))
-    assert(sql(s"select collate('aaa', 'ucs_basic_lcase')").schema(0).dataType == StringType(1))
+    assert(sql(s"select collate('aaa', 'utf8_binary')").schema(0).dataType == StringType(0))
+    assert(sql(s"select collate('aaa', 'utf8_binary_lcase')").schema(0).dataType == StringType(1))
   }
 
   test("collate function syntax invalid arg count") {
@@ -113,7 +113,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("collate function invalid input data type") {
     checkError(
-      exception = intercept[ExtendedAnalysisException] { sql(s"select collate(1, 'UCS_BASIC')") },
+      exception = intercept[ExtendedAnalysisException] { sql(s"select collate(1, 'UTF8_BINARY')") },
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       sqlState = "42K09",
       parameters = Map(
@@ -123,28 +123,28 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "inputType" -> "\"INT\"",
         "requiredType" -> "\"STRING\""),
       context = ExpectedContext(
-        fragment = s"collate(1, 'UCS_BASIC')", start = 7, stop = 29))
+        fragment = s"collate(1, 'UTF8_BINARY')", start = 7, stop = 31))
   }
 
   test("collation expression returns default collation") {
-    checkAnswer(sql(s"select collation('aaa')"), Row("UCS_BASIC"))
+    checkAnswer(sql(s"select collation('aaa')"), Row("UTF8_BINARY"))
   }
 
   test("invalid collation name throws exception") {
     checkError(
-      exception = intercept[SparkException] { sql("select 'aaa' collate UCS_BASIS") },
+      exception = intercept[SparkException] { sql("select 'aaa' collate UTF8_BS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
-      parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
+      parameters = Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
   }
 
   test("equality check respects collation") {
     Seq(
-      ("ucs_basic", "aaa", "AAA", false),
-      ("ucs_basic", "aaa", "aaa", true),
-      ("ucs_basic_lcase", "aaa", "aaa", true),
-      ("ucs_basic_lcase", "aaa", "AAA", true),
-      ("ucs_basic_lcase", "aaa", "bbb", false),
+      ("utf8_binary", "aaa", "AAA", false),
+      ("utf8_binary", "aaa", "aaa", true),
+      ("utf8_binary_lcase", "aaa", "aaa", true),
+      ("utf8_binary_lcase", "aaa", "AAA", true),
+      ("utf8_binary_lcase", "aaa", "bbb", false),
       ("unicode", "aaa", "aaa", true),
       ("unicode", "aaa", "AAA", false),
       ("unicode_CI", "aaa", "aaa", true),
@@ -163,12 +163,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("comparisons respect collation") {
     Seq(
-      ("ucs_basic", "AAA", "aaa", true),
-      ("ucs_basic", "aaa", "aaa", false),
-      ("ucs_basic", "aaa", "BBB", false),
-      ("ucs_basic_lcase", "aaa", "aaa", false),
-      ("ucs_basic_lcase", "AAA", "aaa", false),
-      ("ucs_basic_lcase", "aaa", "bbb", true),
+      ("utf8_binary", "AAA", "aaa", true),
+      ("utf8_binary", "aaa", "aaa", false),
+      ("utf8_binary", "aaa", "BBB", false),
+      ("utf8_binary_lcase", "aaa", "aaa", false),
+      ("utf8_binary_lcase", "AAA", "aaa", false),
+      ("utf8_binary_lcase", "aaa", "bbb", true),
       ("unicode", "aaa", "aaa", false),
       ("unicode", "aaa", "AAA", true),
       ("unicode", "aaa", "BBB", true),
@@ -252,15 +252,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("Support contains string expression with Collation") {
     // Supported collations
     val checks = Seq(
-      CollationTestCase("", "", "UCS_BASIC", true),
-      CollationTestCase("c", "", "UCS_BASIC", true),
-      CollationTestCase("", "c", "UCS_BASIC", false),
-      CollationTestCase("abcde", "c", "UCS_BASIC", true),
-      CollationTestCase("abcde", "C", "UCS_BASIC", false),
-      CollationTestCase("abcde", "bcd", "UCS_BASIC", true),
-      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
-      CollationTestCase("abcde", "fgh", "UCS_BASIC", false),
-      CollationTestCase("abcde", "FGH", "UCS_BASIC", false),
+      CollationTestCase("", "", "UTF8_BINARY", true),
+      CollationTestCase("c", "", "UTF8_BINARY", true),
+      CollationTestCase("", "c", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "c", "UTF8_BINARY", true),
+      CollationTestCase("abcde", "C", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "bcd", "UTF8_BINARY", true),
+      CollationTestCase("abcde", "BCD", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "fgh", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "FGH", "UTF8_BINARY", false),
       CollationTestCase("", "", "UNICODE", true),
       CollationTestCase("c", "", "UNICODE", true),
       CollationTestCase("", "c", "UNICODE", false),
@@ -270,15 +270,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       CollationTestCase("abcde", "BCD", "UNICODE", false),
       CollationTestCase("abcde", "fgh", "UNICODE", false),
       CollationTestCase("abcde", "FGH", "UNICODE", false),
-      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
-      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
-      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
-      CollationTestCase("abcde", "c", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "C", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "fgh", "UCS_BASIC_LCASE", false),
-      CollationTestCase("abcde", "FGH", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("c", "", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("", "c", "UTF8_BINARY_LCASE", false),
+      CollationTestCase("abcde", "c", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "C", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "BCD", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "fgh", "UTF8_BINARY_LCASE", false),
+      CollationTestCase("abcde", "FGH", "UTF8_BINARY_LCASE", false),
       CollationTestCase("", "", "UNICODE_CI", true),
       CollationTestCase("c", "", "UNICODE_CI", true),
       CollationTestCase("", "c", "UNICODE_CI", false),
@@ -298,15 +298,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("Support startsWith string expression with Collation") {
     // Supported collations
     val checks = Seq(
-      CollationTestCase("", "", "UCS_BASIC", true),
-      CollationTestCase("c", "", "UCS_BASIC", true),
-      CollationTestCase("", "c", "UCS_BASIC", false),
-      CollationTestCase("abcde", "a", "UCS_BASIC", true),
-      CollationTestCase("abcde", "A", "UCS_BASIC", false),
-      CollationTestCase("abcde", "abc", "UCS_BASIC", true),
-      CollationTestCase("abcde", "ABC", "UCS_BASIC", false),
-      CollationTestCase("abcde", "bcd", "UCS_BASIC", false),
-      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
+      CollationTestCase("", "", "UTF8_BINARY", true),
+      CollationTestCase("c", "", "UTF8_BINARY", true),
+      CollationTestCase("", "c", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "a", "UTF8_BINARY", true),
+      CollationTestCase("abcde", "A", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "abc", "UTF8_BINARY", true),
+      CollationTestCase("abcde", "ABC", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "bcd", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "BCD", "UTF8_BINARY", false),
       CollationTestCase("", "", "UNICODE", true),
       CollationTestCase("c", "", "UNICODE", true),
       CollationTestCase("", "c", "UNICODE", false),
@@ -316,15 +316,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       CollationTestCase("abcde", "ABC", "UNICODE", false),
       CollationTestCase("abcde", "bcd", "UNICODE", false),
       CollationTestCase("abcde", "BCD", "UNICODE", false),
-      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
-      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
-      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
-      CollationTestCase("abcde", "a", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "A", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "abc", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "ABC", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", false),
-      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("c", "", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("", "c", "UTF8_BINARY_LCASE", false),
+      CollationTestCase("abcde", "a", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "A", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "abc", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "ABC", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", false),
+      CollationTestCase("abcde", "BCD", "UTF8_BINARY_LCASE", false),
       CollationTestCase("", "", "UNICODE_CI", true),
       CollationTestCase("c", "", "UNICODE_CI", true),
       CollationTestCase("", "c", "UNICODE_CI", false),
@@ -344,15 +344,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("Support endsWith string expression with Collation") {
     // Supported collations
     val checks = Seq(
-      CollationTestCase("", "", "UCS_BASIC", true),
-      CollationTestCase("c", "", "UCS_BASIC", true),
-      CollationTestCase("", "c", "UCS_BASIC", false),
-      CollationTestCase("abcde", "e", "UCS_BASIC", true),
-      CollationTestCase("abcde", "E", "UCS_BASIC", false),
-      CollationTestCase("abcde", "cde", "UCS_BASIC", true),
-      CollationTestCase("abcde", "CDE", "UCS_BASIC", false),
-      CollationTestCase("abcde", "bcd", "UCS_BASIC", false),
-      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
+      CollationTestCase("", "", "UTF8_BINARY", true),
+      CollationTestCase("c", "", "UTF8_BINARY", true),
+      CollationTestCase("", "c", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "e", "UTF8_BINARY", true),
+      CollationTestCase("abcde", "E", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "cde", "UTF8_BINARY", true),
+      CollationTestCase("abcde", "CDE", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "bcd", "UTF8_BINARY", false),
+      CollationTestCase("abcde", "BCD", "UTF8_BINARY", false),
       CollationTestCase("", "", "UNICODE", true),
       CollationTestCase("c", "", "UNICODE", true),
       CollationTestCase("", "c", "UNICODE", false),
@@ -362,15 +362,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       CollationTestCase("abcde", "CDE", "UNICODE", false),
       CollationTestCase("abcde", "bcd", "UNICODE", false),
       CollationTestCase("abcde", "BCD", "UNICODE", false),
-      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
-      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
-      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
-      CollationTestCase("abcde", "e", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "E", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "cde", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "CDE", "UCS_BASIC_LCASE", true),
-      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", false),
-      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("c", "", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("", "c", "UTF8_BINARY_LCASE", false),
+      CollationTestCase("abcde", "e", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "E", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "cde", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "CDE", "UTF8_BINARY_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", false),
+      CollationTestCase("abcde", "BCD", "UTF8_BINARY_LCASE", false),
       CollationTestCase("", "", "UNICODE_CI", true),
       CollationTestCase("c", "", "UNICODE_CI", true),
       CollationTestCase("", "c", "UNICODE_CI", false),
@@ -389,12 +389,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("aggregates count respects collation") {
     Seq(
-      ("ucs_basic", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
-      ("ucs_basic", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("ucs_basic", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
-      ("ucs_basic_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
-      ("ucs_basic_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
-      ("ucs_basic_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("utf8_binary", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("utf8_binary", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("utf8_binary", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("utf8_binary_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("utf8_binary_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("utf8_binary_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
       ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
       ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
       ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
@@ -420,9 +420,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val tableNameBinary = "T_BINARY"
     withTable(tableNameNonBinary) {
       withTable(tableNameBinary) {
-        sql(s"CREATE TABLE $tableNameNonBinary (c STRING COLLATE UCS_BASIC_LCASE) USING PARQUET")
+        sql(s"CREATE TABLE $tableNameNonBinary (c STRING COLLATE UTF8_BINARY_LCASE) USING PARQUET")
         sql(s"INSERT INTO $tableNameNonBinary VALUES ('aaa')")
-        sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE UCS_BASIC) USING PARQUET")
+        sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE UTF8_BINARY) USING PARQUET")
         sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
 
         val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
@@ -450,7 +450,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("create table with collation") {
     val tableName = "parquet_dummy_tbl"
-    val collationName = "UCS_BASIC_LCASE"
+    val collationName = "UTF8_BINARY_LCASE"
     val collationId = CollationFactory.collationNameToId(collationName)
 
     withTable(tableName) {
@@ -470,7 +470,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("create table with collations inside a struct") {
     val tableName = "struct_collation_tbl"
-    val collationName = "UCS_BASIC_LCASE"
+    val collationName = "UTF8_BINARY_LCASE"
     val collationId = CollationFactory.collationNameToId(collationName)
 
     withTable(tableName) {
@@ -492,8 +492,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("add collated column with alter table") {
     val tableName = "alter_column_tbl"
-    val defaultCollation = "UCS_BASIC"
-    val collationName = "UCS_BASIC_LCASE"
+    val defaultCollation = "UTF8_BINARY"
+    val collationName = "UTF8_BINARY_LCASE"
     val collationId = CollationFactory.collationNameToId(collationName)
 
     withTable(tableName) {
@@ -526,7 +526,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("create v2 table with collation column") {
     val tableName = "testcat.table_name"
-    val collationName = "UCS_BASIC_LCASE"
+    val collationName = "UTF8_BINARY_LCASE"
     val collationId = CollationFactory.collationNameToId(collationName)
 
     withTable(tableName) {
@@ -590,7 +590,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     val schema = StructType(StructField(
       "col",
-      StringType(CollationFactory.collationNameToId("UCS_BASIC_LCASE"))) :: Nil)
+      StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE"))) :: Nil)
     val df = spark.createDataFrame(sparkContext.parallelize(in), schema)
 
     df.repartition(10, df.col("col")).foreachPartition(
@@ -609,7 +609,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     val schema = StructType(StructField(
       "col_non_binary",
-      StringType(CollationFactory.collationNameToId("UCS_BASIC_LCASE"))) ::
+      StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE"))) ::
       StructField("col_binary", StringType) :: Nil)
     val df1 = spark.createDataFrame(sparkContext.parallelize(in), schema)
 
