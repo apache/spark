@@ -25,7 +25,7 @@ import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsu
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class SupportsPartitionManagementSuite extends SparkFunSuite {
@@ -39,10 +39,10 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog.createTable(
       ident,
-      new StructType()
-        .add("id", IntegerType)
-        .add("data", StringType)
-        .add("dt", StringType),
+      Array(
+        Column.create("id", IntegerType),
+        Column.create("data", StringType),
+        Column.create("dt", StringType)),
       Array[Transform](LogicalExpressions.identity(ref("dt"))),
       util.Collections.emptyMap[String, String])
     newCatalog
@@ -163,10 +163,10 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     val table = partCatalog.createTable(
       ident,
-      new StructType()
-        .add("col0", IntegerType)
-        .add("part0", IntegerType)
-        .add("part1", StringType),
+      Array(
+        Column.create("col0", IntegerType),
+        Column.create("part0", IntegerType),
+        Column.create("part1", StringType)),
       Array[Transform](
         LogicalExpressions.identity(ref("part0")), LogicalExpressions.identity(ref("part1"))),
       util.Collections.emptyMap[String, String])

@@ -416,17 +416,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-43040: timestamp_ntz roundtrip test") {
     val prop = new Properties
     prop.setProperty("preferTimestampNTZ", "true")
-
-    val sparkQuery = """
-      |select
-      |  timestamp_ntz'2020-12-10 11:22:33' as col0
-      """.stripMargin
-
-    val df_expected = sqlContext.sql(sparkQuery)
+    val df_expected = sql("select timestamp_ntz'2020-12-10 11:22:33' as col0")
     df_expected.write.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
+    val df_actual = spark.read.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
+    checkAnswer(df_actual, df_expected)
+  }
 
-    val df_actual = sqlContext.read.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
-    assert(df_actual.collect()(0) == df_expected.collect()(0))
+  test("SPARK-47316: timestamp_ntz_array roundtrip test") {
+    val prop = new Properties
+    prop.setProperty("preferTimestampNTZ", "true")
+    val df_expected = sql("select array(timestamp_ntz'2020-12-10 11:22:33') as col0")
+    df_expected.write.jdbc(jdbcUrl, "timestamp_ntz_array_roundtrip", prop)
+    val df_actual = spark.read.jdbc(jdbcUrl, "timestamp_ntz_array_roundtrip", prop)
+    checkAnswer(df_actual, df_expected)
   }
 
   test("SPARK-43267: user-defined column in array test") {
