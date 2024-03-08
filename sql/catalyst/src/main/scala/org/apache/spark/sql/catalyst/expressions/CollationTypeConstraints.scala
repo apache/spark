@@ -23,12 +23,11 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types.{DataType, StringType}
 
-object CollationUtils {
+object CollationTypeConstraints {
   def checkCollationCompatibility(
-                                   superCheck: => TypeCheckResult,
-                                   collationId: Int,
-                                   rightDataType: DataType
-                                 ): TypeCheckResult = {
+      superCheck: => TypeCheckResult,
+      collationId: Int,
+      rightDataType: DataType): TypeCheckResult = {
     val checkResult = superCheck
     if (checkResult.isFailure) return checkResult
     // Additional check needed for collation compatibility
@@ -45,30 +44,34 @@ object CollationUtils {
     TypeCheckResult.TypeCheckSuccess
   }
 
-  final val SUPPORT_BINARY_ONLY: Int = 0
-  final val SUPPORT_LOWERCASE: Int = 1
-  final val SUPPORT_ALL_COLLATIONS: Int = 2
+  object CollationSupportLevel extends Enumeration {
+    type CollationSupportLevel = Value
+
+    val SUPPORT_BINARY_ONLY: Value = Value(0)
+    val SUPPORT_LOWERCASE: Value = Value(1)
+    val SUPPORT_ALL_COLLATIONS: Value = Value(2)
+  }
 
   def checkCollationSupport(
-                             superCheck: => TypeCheckResult,
-                             collationId: Int,
-                             functionName: String,
-                             supportLevel: Int = SUPPORT_BINARY_ONLY
-                           ): TypeCheckResult = {
+      superCheck: => TypeCheckResult,
+      collationId: Int,
+      functionName: String,
+      collationSupportLevel: CollationSupportLevel.CollationSupportLevel)
+  : TypeCheckResult = {
     val checkResult = superCheck
     if (checkResult.isFailure) return checkResult
     // Additional check needed for collation support
     val collation = CollationFactory.fetchCollation(collationId)
-    supportLevel match {
-      case SUPPORT_BINARY_ONLY =>
+    collationSupportLevel match {
+      case CollationSupportLevel.SUPPORT_BINARY_ONLY =>
         if (!collation.isBinaryCollation) {
           throwUnsupportedCollation(functionName, collation.collationName)
         }
-      case SUPPORT_LOWERCASE =>
+      case CollationSupportLevel.SUPPORT_LOWERCASE =>
         if (!collation.isBinaryCollation && !collation.isLowercaseCollation) {
           throwUnsupportedCollation(functionName, collation.collationName)
         }
-      case SUPPORT_ALL_COLLATIONS => // No additional checks needed
+      case CollationSupportLevel.SUPPORT_ALL_COLLATIONS => // No additional checks needed
       case _ => throw new IllegalArgumentException("Invalid collation support level.")
     }
     TypeCheckResult.TypeCheckSuccess

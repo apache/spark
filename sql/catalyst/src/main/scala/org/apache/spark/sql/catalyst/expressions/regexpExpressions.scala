@@ -49,7 +49,7 @@ abstract class StringRegexExpression extends BinaryExpression
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationCompatibility(
+    CollationTypeConstraints.checkCollationCompatibility(
       super.checkInputDataTypes(), collationId, right.dataType)
   }
 
@@ -138,8 +138,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, "like", CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, "like",
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
@@ -275,10 +276,11 @@ case class ILike(
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationCompatibility(
+    CollationTypeConstraints.checkCollationCompatibility(
       super.checkInputDataTypes(), collationId, right.dataType)
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, "ilike", CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, "ilike",
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
 
   override protected def withNewChildrenInternal(
@@ -483,8 +485,9 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, "rlike", CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, "rlike",
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
 
   override def escape(v: String): String = v
@@ -575,10 +578,11 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationCompatibility(
+    CollationTypeConstraints.checkCollationCompatibility(
       super.checkInputDataTypes(), collationId, second.dataType)
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, prettyName, CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, prettyName,
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
 
   override def first: Expression = str
@@ -682,10 +686,11 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       )
     }
 
-    CollationUtils.checkCollationCompatibility(
+    CollationTypeConstraints.checkCollationCompatibility(
       super.checkInputDataTypes(), collationId, second.dataType)
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, prettyName, CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, prettyName,
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
 
   // last regex in string, we will update the pattern iff regexp value changed.
@@ -819,7 +824,7 @@ abstract class RegExpExtractBase
   final lazy val collationId: Int = subject.dataType.asInstanceOf[StringType].collationId
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationCompatibility(
+    CollationTypeConstraints.checkCollationCompatibility(
       super.checkInputDataTypes(), collationId, regexp.dataType)
   }
   override def first: Expression = subject
@@ -901,8 +906,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def dataType: DataType = StringType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, prettyName, CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, prettyName,
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
 
   override def prettyName: String = "regexp_extract"
@@ -1006,8 +1012,9 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def dataType: DataType = ArrayType(StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, prettyName, CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, prettyName,
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
   override def prettyName: String = "regexp_extract_all"
 
@@ -1086,10 +1093,11 @@ case class RegExpCount(left: Expression, right: Expression)
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationCompatibility(
+    CollationTypeConstraints.checkCollationCompatibility(
       super.checkInputDataTypes(), collationId, right.dataType)
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, prettyName, CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, prettyName,
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
 
   override protected def withNewChildrenInternal(
@@ -1134,10 +1142,11 @@ case class RegExpSubStr(left: Expression, right: Expression)
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationCompatibility(
+    CollationTypeConstraints.checkCollationCompatibility(
       super.checkInputDataTypes(), collationId, right.dataType)
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, prettyName, CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, prettyName,
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
 
   override protected def withNewChildrenInternal(
@@ -1194,8 +1203,9 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   override def dataType: DataType = IntegerType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    CollationUtils.checkCollationSupport(
-      super.checkInputDataTypes(), collationId, prettyName, CollationUtils.SUPPORT_BINARY_ONLY)
+    CollationTypeConstraints.checkCollationSupport(
+      super.checkInputDataTypes(), collationId, prettyName,
+      CollationTypeConstraints.CollationSupportLevel.SUPPORT_BINARY_ONLY)
   }
   override def prettyName: String = "regexp_instr"
 
