@@ -214,6 +214,10 @@ class ParquetFileFormat
       } else {
         ParquetFooterReader.readFooter(sharedConf, file, ParquetFooterReader.SKIP_ROW_GROUPS)
       }
+      val parquetSplit =
+        new ParquetInputSplit(filePath, file.start, file.start + file.length, file.length,
+          Array.empty[String], null)
+      parquetSplit.setFooter(fileFooter)
 
       val footerFileMetaData = fileFooter.getFileMetaData
       val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
@@ -322,7 +326,7 @@ class ParquetFileFormat
             requiredSchema)
         val iter = new RecordReaderIterator[InternalRow](readerWithRowIndexes)
         try {
-          readerWithRowIndexes.initialize(split, hadoopAttemptContext)
+          readerWithRowIndexes.initialize(parquetSplit, hadoopAttemptContext)
 
           val fullSchema = toAttributes(requiredSchema) ++ toAttributes(partitionSchema)
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
