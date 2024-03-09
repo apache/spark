@@ -1066,6 +1066,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
     REQUEST_OPTIONS_FIELD_NUMBER: builtins.int
     TAGS_FIELD_NUMBER: builtins.int
+    DEBUG_MESSAGE_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -1112,6 +1113,10 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         Tags cannot contain ',' character and cannot be empty strings.
         Used by Interrupt with interrupt.tag.
         """
+    debug_message: builtins.str
+    """(Optional) 
+    Provide a debug message which will set the job description
+    """
     def __init__(
         self,
         *,
@@ -1123,16 +1128,21 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         request_options: collections.abc.Iterable[global___ExecutePlanRequest.RequestOption]
         | None = ...,
         tags: collections.abc.Iterable[builtins.str] | None = ...,
+        debug_message: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
+            "_debug_message",
+            b"_debug_message",
             "_operation_id",
             b"_operation_id",
             "client_type",
             b"client_type",
+            "debug_message",
+            b"debug_message",
             "operation_id",
             b"operation_id",
             "plan",
@@ -1146,10 +1156,14 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
+            "_debug_message",
+            b"_debug_message",
             "_operation_id",
             b"_operation_id",
             "client_type",
             b"client_type",
+            "debug_message",
+            b"debug_message",
             "operation_id",
             b"operation_id",
             "plan",
@@ -1168,6 +1182,10 @@ class ExecutePlanRequest(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
     ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_debug_message", b"_debug_message"]
+    ) -> typing_extensions.Literal["debug_message"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_operation_id", b"_operation_id"]
