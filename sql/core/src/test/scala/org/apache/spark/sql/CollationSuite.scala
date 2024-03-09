@@ -142,14 +142,14 @@ class CollationSuite extends DatasourceV2SQLBase {
         sql(
           s"""
              |CREATE TABLE $tableName
-             |(id INT, c1 STRING COLLATE 'UNICODE', c2 string)
+             |(id INT, c1 STRING COLLATE UNICODE, c2 string)
              |USING parquet
-             |PARTITIONED BY (${bucketColumns.mkString(",")})
-             |""".stripMargin
+             |CLUSTERED BY (${bucketColumns.mkString(",")})
+             |INTO 4 BUCKETS""".stripMargin
         )
       }
     }
-      // should work fine on default collated columns
+    // should work fine on default collated columns
     createTable("id")
     createTable("c2")
     createTable("id", "c2")
@@ -160,7 +160,8 @@ class CollationSuite extends DatasourceV2SQLBase {
           createTable(bucketColumns: _*)
         },
         errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "String(UNICODE)")
+        parameters = Map("type" ->
+          StringType(CollationFactory.collationNameToId("UNICODE")).toString)
       );
     }
   }
