@@ -399,8 +399,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (prefix.numChars() > this.numChars()) {
       return false;
     }
-    return CollationFactory.getStringSearch(this.substring(0, prefix.numChars()),
-            prefix, collationId).first() == 0;
+    return CollationFactory.getStringSearch(
+      this.substring(0, prefix.numChars()), prefix, collationId).first() == 0;
   }
 
   public boolean endsWith(final UTF8String suffix) {
@@ -419,14 +419,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean collatedEndsWith(final UTF8String suffix, int collationId) {
     if (suffix.numBytes == 0 || this.numBytes == 0) {
-      return suffix.numBytes==0;
+      return suffix.numBytes == 0;
     }
     if (suffix.numChars() > this.numChars()) {
       return false;
     }
     return CollationFactory.getStringSearch(
-            this.substring(this.numChars()-suffix.numChars(), this.numChars()),
-            suffix, collationId).last()==0;
+      this.substring(this.numChars()-suffix.numChars(), this.numChars()),
+      suffix,
+      collationId).last() == 0;
   }
 
   /**
