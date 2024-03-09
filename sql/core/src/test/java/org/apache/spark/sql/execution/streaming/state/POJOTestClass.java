@@ -21,58 +21,58 @@ package org.apache.spark.sql.execution.streaming.state;
  * A POJO class used for tests of arbitrary state SQL encoder.
  */
 public class POJOTestClass {
-    // Fields
-    private String name;
-    private int id;
+  // Fields
+  private String name;
+  private int id;
 
-    // Constructors
-    public POJOTestClass() {
-        // Default constructor
-    }
+  // Constructors
+  public POJOTestClass() {
+    // Default constructor
+  }
 
-    public POJOTestClass(String name, int id) {
-        this.name = name;
-        this.id = id;
-    }
+  public POJOTestClass(String name, int id) {
+    this.name = name;
+    this.id = id;
+  }
 
-    // Getter methods
-    public String getName() {
+  // Getter methods
+  public String getName() {
         return name;
     }
 
-    public int getAge() {
+  public int getId() {
         return id;
     }
 
-    // Setter methods
-    public void setName(String name) {
+  // Setter methods
+  public void setName(String name) {
         this.name = name;
     }
 
-    public void setAge(int id) {
+  public void setId(int id) {
         this.id = id;
     }
 
-    // Additional methods if needed
-    public void incrementId() {
-        id++;
-        System.out.println(name + " is now " + id + "!");
-    }
+  // Additional methods if needed
+  public void incrementId() {
+    id++;
+    System.out.println(name + " is now " + id + "!");
+  }
 
-    // Override toString for better representation
-    @Override
-    public String toString() {
-        return "POJOTestClass{" +
-                "name='" + name + '\'' +
-                ", age=" + id +
-                '}';
-    }
+  // Override toString for better representation
+  @Override
+  public String toString() {
+    return "POJOTestClass{" +
+      "name='" + name + '\'' +
+      ", age=" + id +
+      '}';
+  }
 
-    // Override equals and hashCode for custom equality
-    @Override
-    public boolean equals(Object obj) {
-        POJOTestClass testObj = (POJOTestClass) obj;
-        return id == testObj.id && name.equals(testObj.name);
-    }
+  // Override equals and hashCode for custom equality
+  @Override
+  public boolean equals(Object obj) {
+    POJOTestClass testObj = (POJOTestClass) obj;
+    return id == testObj.id && name.equals(testObj.name);
+  }
 }
 

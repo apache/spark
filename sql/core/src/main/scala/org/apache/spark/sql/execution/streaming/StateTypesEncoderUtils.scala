@@ -44,11 +44,11 @@ object StateKeyValueRowSchema {
  * @param valEncoder - SQL encoder for value of type `S`
  * @param stateName - name of logical state partition
  * @tparam GK - grouping key type
- * @tparam S - value type
+ * @tparam V - value type
  */
-class StateTypesEncoder[GK, S](
+class StateTypesEncoder[GK, V](
     keySerializer: Serializer[GK],
-    valEncoder: Encoder[S],
+    valEncoder: Encoder[V],
     stateName: String) {
   import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema._
 
@@ -76,14 +76,14 @@ class StateTypesEncoder[GK, S](
     keyRow
   }
 
-  def encodeValue(value: S): UnsafeRow = {
+  def encodeValue(value: V): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
     val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
     val valRow = valueProjection(InternalRow(bytes))
     valRow
   }
 
-  def decodeValue(row: UnsafeRow): S = {
+  def decodeValue(row: UnsafeRow): V = {
     val bytes = row.getBinary(0)
     reuseRow.pointTo(bytes, bytes.length)
     val value = rowToObjDeserializer.apply(reuseRow)
@@ -92,10 +92,10 @@ class StateTypesEncoder[GK, S](
 }
 
 object StateTypesEncoder {
-  def apply[GK, S](
+  def apply[GK, V](
       keySerializer: Serializer[GK],
-      valEncoder: Encoder[S],
-      stateName: String): StateTypesEncoder[GK, S] = {
-    new StateTypesEncoder[GK, S](keySerializer, valEncoder, stateName)
+      valEncoder: Encoder[V],
+      stateName: String): StateTypesEncoder[GK, V] = {
+    new StateTypesEncoder[GK, V](keySerializer, valEncoder, stateName)
   }
 }

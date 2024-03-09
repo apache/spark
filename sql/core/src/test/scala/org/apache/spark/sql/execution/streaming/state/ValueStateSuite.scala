@@ -223,6 +223,58 @@ class ValueStateSuite extends SharedSparkSession
     )
   }
 
+  test("test SQL encoder - Value state operations for Primitive(Double) instances") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[Double] = handle.getValueState[Double]("testState",
+        Encoders.scalaDouble)
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(1.0)
+      assert(testState.get().equals(1.0))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(2.0)
+      assert(testState.get().equals(2.0))
+      testState.update(3.0)
+      assert(testState.get().equals(3.0))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("test SQL encoder - Value state operations for Primitive(Long) instances") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        Encoders.scalaLong)
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(1L)
+      assert(testState.get().equals(1L))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(2L)
+      assert(testState.get().equals(2L))
+      testState.update(3L)
+      assert(testState.get().equals(3L))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
   test("test SQL encoder - Value state operations for case class instances") {
     tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
       val store = provider.getStore(0)
