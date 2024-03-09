@@ -36,9 +36,7 @@ public class POJOTestClass {
   }
 
   // Getter methods
-  public String getName() {
-        return name;
-    }
+  public String getName() { return name; }
 
   public int getId() {
         return id;
