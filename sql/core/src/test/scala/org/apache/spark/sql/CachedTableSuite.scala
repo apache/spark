@@ -1781,11 +1781,23 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           |from data
           |where id between 2 and 4""".stripMargin)
       sql("cache table the_query")
-      val df = sql("SELECT * FROM the_query")
-      checkAnswer(df,
+      val df1 = sql("SELECT * FROM the_query")
+      checkAnswer(df1,
         Row(2, 20) :: Row(3, 30) :: Row(4, 40) :: Nil)
-      df.explain()
-      assert(getNumInMemoryRelations(df) == 1)
+      df1.explain()
+      assert(getNumInMemoryRelations(df1) == 1)
+      sql(
+        """create or replace temp view the_query2 as
+          |select id, count_if(val > 0) as snt
+          |from data
+          |group by id""".stripMargin)
+      sql("cache table the_query2")
+      val df2 = sql("SELECT * FROM the_query2")
+      checkAnswer(df2,
+        Row(0, 0) :: Row(1, 1) :: Row(2, 1) :: Row(3, 1) :: Row(4, 1) :: Row(5, 1) ::
+          Row(6, 1) :: Row(7, 1) :: Row(8, 1) :: Row(9, 1) :: Nil)
+      df1.explain()
+      assert(getNumInMemoryRelations(df2) == 1)
     }
   }
 }

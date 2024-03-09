@@ -599,42 +599,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   protected def doCanonicalize(): PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
-
-    /* val replaced = transformExpressions {
-      case r: RuntimeReplaceable => r.replacement
-    }
-
-    val ceIdsRaw = mutable.ArrayBuffer[Long]()
-    replaced.transformExpressions {
-      case c: CommonExpressionDef =>
-        ceIdsRaw += c.id
-        c
-    }
-
-    val ceIds2 = ceIdsRaw.zipWithIndex.map(x => (x._1, x._2.toLong)).toMap
-
-    val planCandidate = if (ceIds2.size > 0) {
-      val res = replaced.transformExpressions {
-        case d: CommonExpressionDef if ceIds2.contains(d.id) =>
-          d.copy(id = ceIds2(d.id))
-        case r: CommonExpressionRef if ceIds2.contains(r.id) =>
-          r.copy(id = ceIds2(r.id))
-      }
-      res
-    } else {
-      this
-    } */
-
     var id = -1
-    var ceId = -1
-    val ceIds = mutable.Map[Long, Long]()
-
-    def getNewCeId(oldId: Long): Long = {
-      ceIds.getOrElse(oldId, {
-        ceId += 1
-        ceId
-      })
-    }
     mapExpressions {
       case a: Alias =>
         id += 1
@@ -650,27 +615,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
         id += 1
         ar.withExprId(ExprId(id)).canonicalized
 
-      case other =>
-        // if we have common expressions, we need to replace the runtime
-        // replaceables before canonicalization. Then we can normalize
-        // the common expression ids contained within the replacements
-        var modified = false
-        val replaced = other.transform {
-          case r: RuntimeReplaceable =>
-            modified = true
-            r.replacement
-        }
-        val candidate = if (modified) {
-          replaced.transform {
-            case d: CommonExpressionDef =>
-              d.copy(id = getNewCeId(d.id))
-            case r: CommonExpressionRef =>
-              r.copy(id = getNewCeId(r.id))
-          }
-        } else {
-          other
-        }
-        QueryPlan.normalizeExpressions(candidate, allAttributes)
+      case other => QueryPlan.normalizeExpressions(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
   }
 

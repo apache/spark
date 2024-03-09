@@ -35,6 +35,20 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
       newChildren: IndexedSeq[Expression]): Expression = {
     copy(child = newChildren.head, defs = newChildren.tail.map(_.asInstanceOf[CommonExpressionDef]))
   }
+
+  override lazy val canonicalized: Expression = {
+    // we first must normalize the ids in the common expressions. We must do this before
+    // other canonicalization steps, since canonicalization might reorder commutative expressions
+    // that include common expressions as operands.
+    val ceIdMap = defs.map(_.id).zipWithIndex.map(x => (x._1, x._2.toLong)).toMap
+    val newChild = child.transform {
+      case r: CommonExpressionRef => r.copy(id = ceIdMap.getOrElse(r.id, r.id))
+    }.canonicalized
+    val newDefs = defs.map { d =>
+      d.copy(id = ceIdMap.getOrElse(d.id, d.id)).canonicalized.asInstanceOf[CommonExpressionDef]
+    }
+    With(newChild, newDefs)
+  }
 }
 
 /**
