@@ -83,15 +83,14 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
-  private def checkFromInvalidStringArithmeticException(input: String, errorMsg: String): Unit = {
+  private def checkFromInvalidStringArithmeticException(input: String): Unit = {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         stringToInterval(UTF8String.fromString(input))
       },
       errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
       parameters = Map(
-        "input" -> Option(input).map(_.toString).getOrElse("null"),
-        "e" -> errorMsg))
+        "input" -> Option(input).map(_.toString).getOrElse("null")))
     assert(safeStringToInterval(UTF8String.fromString(input)) === null)
   }
 
@@ -256,7 +255,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFromInvalidStringInvalidUnit("1 aour", "aour")
     checkFromInvalidStringInvalidValue("1a1 hour", "1a1")
     checkFromInvalidStringInvalidValue("1.1a1 seconds", "1.1a1")
-    checkFromInvalidStringArithmeticException("2234567890 days", "integer overflow")
+    checkFromInvalidStringArithmeticException("2234567890 days")
     checkFromInvalidStringInvalidValue(". seconds", ".")
   }
 

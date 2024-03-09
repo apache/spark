@@ -240,8 +240,7 @@ trait SparkIntervalUtils {
                 case e: ArithmeticException => throw new SparkIllegalArgumentException(
                   errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
                   messageParameters = Map(
-                    "input" -> Option(input).map(_.toString).getOrElse("null"),
-                    "e" -> e.getMessage))
+                    "input" -> Option(input).map(_.toString).getOrElse("null")))
               }
             case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_UNIT
             case '.' =>
@@ -343,8 +342,7 @@ trait SparkIntervalUtils {
             case e: ArithmeticException => throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null"),
-                "e" -> e.getMessage))
+                "input" -> Option(input).map(_.toString).getOrElse("null")))
           }
           state = UNIT_SUFFIX
         case UNIT_SUFFIX =>

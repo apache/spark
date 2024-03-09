@@ -32,7 +32,7 @@ This error class has the following derived error classes:
 
 ## ARITHMETIC_EXCEPTION
 
-Uncaught arithmetic exception: `<e>`.
+Uncaught arithmetic exception while parsing '`<input>`'.
 
 ## INPUT_IS_EMPTY
 

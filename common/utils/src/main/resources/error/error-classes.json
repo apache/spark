@@ -2092,7 +2092,7 @@
     "subClass" : {
       "ARITHMETIC_EXCEPTION" : {
         "message" : [
-          "Uncaught arithmetic exception: <e>."
+          "Uncaught arithmetic exception while parsing '<input>'."
         ]
       },
       "INPUT_IS_EMPTY" : {
