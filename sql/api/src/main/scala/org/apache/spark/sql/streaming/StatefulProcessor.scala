@@ -91,3 +91,21 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
     statefulProcessorHandle
   }
 }
+
+/**
+ * Similar usage as StatefulProcessor. Represents the arbitrary stateful logic that needs to
+ * be provided by the user to perform stateful manipulations on keyed streams.
+ * Accepts a user-defined type as initial state to be initialized in the first batch.
+ */
+@Experimental
+@Evolving
+trait StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K, I, O] {
+
+  /**
+   * Function that will be invoked only in the first batch for users to process initial states.
+   *
+   * @param key - grouping key
+   * @param initialState - A row in the initial state to be processed
+   */
+  def handleInitialState(key: K, initialState: S): Unit
+}
