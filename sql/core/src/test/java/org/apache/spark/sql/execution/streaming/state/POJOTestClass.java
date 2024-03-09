@@ -36,20 +36,22 @@ public class POJOTestClass {
   }
 
   // Getter methods
-  public String getName() { return name; }
+  public String getName() {
+    return name;
+  }
 
   public int getId() {
-        return id;
-    }
+    return id;
+  }
 
   // Setter methods
   public void setName(String name) {
-        this.name = name;
-    }
+    this.name = name;
+  }
 
   public void setId(int id) {
-        this.id = id;
-    }
+    this.id = id;
+  }
 
   // Additional methods if needed
   public void incrementId() {
