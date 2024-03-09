@@ -1114,7 +1114,7 @@ For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-
 
 [SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Unrecognized datetime pattern: `<pattern>`. Please provide correct datetime pattern.
+Unrecognized datetime pattern: `<pattern>`.
 
 For more details see [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
 

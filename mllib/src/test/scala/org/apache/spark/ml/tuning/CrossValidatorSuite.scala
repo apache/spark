@@ -130,8 +130,8 @@ class CrossValidatorSuite
       },
       errorClass = "FIELD_NOT_FOUND",
       parameters = Map(
-        "fieldName" -> "fold1",
-        "fields" -> "label, features, fold")
+        "fieldName" -> "`fold1`",
+        "fields" -> "`label`, `features`, `fold`")
     )
 
     // Fold column must be integer type.

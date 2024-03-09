@@ -26,7 +26,7 @@ license: |
 
 [SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
-Unrecognized datetime pattern: `<pattern>`. Please provide correct datetime pattern.
+Unrecognized datetime pattern: `<pattern>`.
 
 This error class has the following derived error classes:
 

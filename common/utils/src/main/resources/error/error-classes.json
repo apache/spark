@@ -1832,7 +1832,7 @@
   },
   "INVALID_DATETIME_PATTERN" : {
     "message" : [
-      "Unrecognized datetime pattern: <pattern>. Please provide correct datetime pattern."
+      "Unrecognized datetime pattern: <pattern>."
     ],
     "subClass" : {
       "ILLEGAL_CHARACTER" : {

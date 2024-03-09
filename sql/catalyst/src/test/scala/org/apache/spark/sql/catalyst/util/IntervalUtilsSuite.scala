@@ -37,18 +37,6 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(safeStringToInterval(UTF8String.fromString(input)) === expected)
   }
 
-  private def checkFromInvalidString(input: String, errorMsg: String): Unit = {
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        stringToInterval(UTF8String.fromString(input))
-      },
-      errorClass = "INVALID_INTERVAL_FORMAT",
-      parameters = Map(
-        "input" -> Option(input).map(_.toString).getOrElse("null"),
-        "msg" -> errorMsg))
-    assert(safeStringToInterval(UTF8String.fromString(input)) === null)
-  }
-
   private def checkFromInvalidStringNull(input: String): Unit = {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -225,7 +213,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFromInvalidStringEmpty("")
     checkFromInvalidStringEmpty("interval")
     checkFromInvalidStringUnrecognizedNumber("foo", "foo")
-//    checkFromInvalidStringUnrecognizedNumber("foo 1 day", "foo")
+    checkFromInvalidStringUnrecognizedNumber("foo 1 day", "foo")
   }
 
   test("string to interval: interval with dangling parts should not results null") {

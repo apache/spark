@@ -309,7 +309,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
         check(filters = Seq(EqualTo("invalid attr", 1)), expected = None)
       },
       errorClass = "FIELD_NOT_FOUND",
-      parameters = Map("fieldName" -> "invalid attr", "fields" -> "i"))
+      parameters = Map("fieldName" -> "`invalid attr`", "fields" -> "`i`"))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -320,7 +320,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
           expected = Some(InternalRow.empty))
       },
       errorClass = "FIELD_NOT_FOUND",
-      parameters = Map("fieldName" -> "i", "fields" -> ""))
+      parameters = Map("fieldName" -> "`i`", "fields" -> ""))
   }
 
   test("SPARK-30960: parse date/timestamp string with legacy format") {
