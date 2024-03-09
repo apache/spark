@@ -88,6 +88,7 @@ object StateTypesEncoder {
     new StateTypesEncoder[GK](keySerializer, stateName)
   }
 }
+
 class CompositeKeyStateEncoder[GK, K](
     keySerializer: Serializer[GK],
     schemaForCompositeKeyRow: StructType,
