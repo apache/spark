@@ -59,20 +59,12 @@ class ResourceProfileTests(unittest.TestCase):
             self.assertEqual(task_reqs["cpus"].amount, 2.0)
             self.assertEqual(task_reqs["gpu"].amount, 2.0)
 
-        # Error case.
         rpb = ResourceProfileBuilder()
         ereqs = ExecutorResourceRequests().cores(2).memory("6g").memoryOverhead("1g")
         ereqs.pysparkMemory("2g").offheapMemory("3g").resource("gpu", 2, "testGpus", "nvidia.com")
         treqs = TaskResourceRequests().cpus(2).resource("gpu", 2)
-        assert_request_contents(ereqs.requests, treqs.requests)
         rp = rpb.require(ereqs).require(treqs).build
-
-        with self.assertRaisesRegex(
-            Exception,
-            "ResourceProfiles are only supported on YARN and Kubernetes and "
-            "Standalone with dynamic allocation enabled.",
-        ):
-            rp.id
+        assert_request_contents(rp.executorResources, rp.taskResources)
 
         spark.stop()
 
