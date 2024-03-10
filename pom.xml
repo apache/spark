@@ -141,7 +141,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>1.9.2</orc.version>
+    <orc.version>2.0.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.20</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -2595,11 +2595,26 @@
 
       <dependency>
         <groupId>org.apache.orc</groupId>
+        <artifactId>orc-format</artifactId>
+        <version>1.0.0</version>
+        <classifier>${orc.classifier}</classifier>
+        <scope>${orc.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
         <version>${orc.version}</version>
         <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-format</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>brotli4j</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
