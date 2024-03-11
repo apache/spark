@@ -25,8 +25,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-import org.scalatest.matchers.must.Matchers
-
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
