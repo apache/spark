@@ -49,25 +49,38 @@ class KubernetesExecutorBackendSuite extends SparkFunSuite {
 
     withEnvs(
       "SPARK_LOG_URL_STDOUT" -> "https://my.custom.url/logs/stdout",
-      "SPARK_LOG_URL_STDERR" -> "https://my.custom.url/logs/stderr") {
+      "SPARK_LOG_URL_STDERR" -> "https://my.custom.url/logs/stderr",
+      "SPARK_EXECUTOR_ATTRIBUTE_ENV_1" -> "val1",
+      "SPARK_EXECUTOR_ATTRIBUTE_ENV_2" -> "val2") {
       assert(backend.extractLogUrls === Map(
         "stdout" -> "https://my.custom.url/logs/stdout",
         "stderr" -> "https://my.custom.url/logs/stderr"
       ))
-      assert(backend.extractAttributes === expectedKubernetesAttributes)
-    }
-
-    withEnvs(
-      "SPARK_EXECUTOR_ATTRIBUTE_ENV_1" -> "val1",
-      "SPARK_EXECUTOR_ATTRIBUTE_ENV_2" -> "val2") {
-      assert(backend.extractLogUrls === Map.empty)
       assert(backend.extractAttributes === Map(
         "ENV_1" -> "val1", "ENV_2" -> "val2"
       ) ++ expectedKubernetesAttributes)
     }
 
+    // env vars have precedence
+    withEnvs(
+      "SPARK_EXECUTOR_ATTRIBUTE_LOG_FILES" -> "env-log",
+      "SPARK_EXECUTOR_ATTRIBUTE_APP_ID" -> "env-app-id",
+      "SPARK_EXECUTOR_ATTRIBUTE_EXECUTOR_ID" -> "env-exec-id",
+      "SPARK_EXECUTOR_ATTRIBUTE_HOSTNAME" -> "env-hostname",
+      "SPARK_EXECUTOR_ATTRIBUTE_KUBERNETES_NAMESPACE" -> "env-namespace",
+      "SPARK_EXECUTOR_ATTRIBUTE_KUBERNETES_POD_NAME" -> "env-pod-name") {
+      assert(backend.extractAttributes === Map(
+        "LOG_FILES" -> "env-log",
+        "APP_ID" -> "env-app-id",
+        "EXECUTOR_ID" -> "env-exec-id",
+        "HOSTNAME" -> "env-hostname",
+        "KUBERNETES_NAMESPACE" -> "env-namespace",
+        "KUBERNETES_POD_NAME" -> "env-pod-name"
+      ))
+    }
+
+    // namespace 'default' above is the config default, here we set a value
     conf.set("spark.kubernetes.namespace", "my-namespace")
-    assert(backend.extractLogUrls === Map.empty)
     assert(backend.extractAttributes === expectedKubernetesAttributes ++
       Map("KUBERNETES_NAMESPACE" -> "my-namespace"))
   }
