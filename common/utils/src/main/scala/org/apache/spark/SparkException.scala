@@ -69,7 +69,7 @@ class SparkException(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
 
   override def getQueryContext: Array[QueryContext] = context
 }
@@ -179,7 +179,7 @@ private[spark] class SparkUpgradeException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
 }
 
 /**
@@ -212,7 +212,7 @@ private[spark] class SparkArithmeticException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -250,7 +250,7 @@ private[spark] class SparkUnsupportedOperationException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
 }
 
 private[spark] object SparkUnsupportedOperationException {
@@ -329,7 +329,7 @@ private[spark] class SparkDateTimeException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -379,7 +379,7 @@ private[spark] class SparkNumberFormatException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -431,7 +431,7 @@ private[spark] class SparkIllegalArgumentException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -460,7 +460,7 @@ private[spark] class SparkRuntimeException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
   override def getQueryContext: Array[QueryContext] = context
 }
 
@@ -529,7 +529,7 @@ private[spark] class SparkArrayIndexOutOfBoundsException private(
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass.getOrElse("_LEGACY_ERROR_UNKNOWN")
   override def getQueryContext: Array[QueryContext] = context
 }
 

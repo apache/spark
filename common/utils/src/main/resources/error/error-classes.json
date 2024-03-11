@@ -7902,6 +7902,11 @@
       "Doesn't support month or year interval: <interval>"
     ]
   },
+  "_LEGACY_ERROR_UNKNOWN" : {
+    "message" : [
+      "An unexpected error occurred, and no specific error classification is available. Refer to the stack trace for more details on the error."
+    ]
+  },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {
     "message" : [
       "<errorMessage>"
