@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors}
@@ -28,17 +29,20 @@ import org.apache.spark.sql.streaming.ListState
  *
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
+ * @param keyEnc - Spark SQL encoder for key
+ * @param valEncoder - Spark SQL encoder for value
  * @tparam S - data type of object that will be stored in the list
  */
 class ListStateImpl[S](
      store: StateStore,
      stateName: String,
-     keyExprEnc: ExpressionEncoder[Any])
+     keyExprEnc: ExpressionEncoder[Any],
+     valEncoder: Encoder[S])
   extends ListState[S] with Logging {
 
   private val keySerializer = keyExprEnc.createSerializer()
 
-  private val stateTypesEncoder = StateTypesEncoder(keySerializer, stateName)
+  private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
 
   store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, numColsPrefixKey = 0,
     VALUE_ROW_SCHEMA, useMultipleValuesPerKey = true)
