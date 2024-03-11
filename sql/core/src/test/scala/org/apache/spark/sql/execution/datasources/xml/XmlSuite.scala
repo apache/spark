@@ -1302,6 +1302,23 @@ class XmlSuite
     assert(result.select("decoded._corrupt_record").head().getString(0).nonEmpty)
   }
 
+  test("yhosny check schemas") {
+    val xml =
+      """
+        |<ROW>
+        |   <f><a>1</a></f>
+        |   <f><a>1</a></f>
+        |</ROW>
+  """.stripMargin
+    val input = spark.createDataset(Seq(xml))
+    val df = spark.read
+      .option("rowTag", "row")
+      .xml(input)
+    val expectedSchema =
+      ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    assert(df.schema === expectedSchema)
+  }
+
   test("from_xml with PERMISSIVE parse mode with no corrupt col schema") {
     // XML contains error
     val xmlData =
