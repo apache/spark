@@ -266,25 +266,22 @@ case class StructsToCsv(
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
       case schema: StructType if schema.map(_.dataType).forall(
-        dt => supportDataType(dt)) => TypeCheckSuccess
-      case _: StructType => DataTypeMismatch(errorSubClass = "TO_CSV_COMPLEX_TYPE")
+        dt => isSupportedDataType(dt)) => TypeCheckSuccess
       case _ => DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> ordinalNumber(0),
-          "requiredType" -> toSQLType(StructType),
-          "inputSql" -> toSQLExpr(child),
-          "inputType" -> toSQLType(child.dataType)
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(child.dataType)
         )
       )
     }
   }
 
   @tailrec
-  private def supportDataType(dataType: DataType): Boolean = dataType match {
+  private def isSupportedDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType | BinaryType => false
     case _: AtomicType | CalendarIntervalType => true
-    case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
+    case udt: UserDefinedType[_] => isSupportedDataType(udt.sqlType)
     case _ => false
   }
 

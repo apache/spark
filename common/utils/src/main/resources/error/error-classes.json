@@ -869,11 +869,6 @@
           "The data type of the column (<columnIndex>) do not have the same type: <leftType> (<leftParamIndex>) <> <rightType> (<rightParamIndex>)."
         ]
       },
-      "TO_CSV_COMPLEX_TYPE" : {
-        "message" : [
-          "Input to the function `to_csv` cannot contain the complex type [STRUCT, ARRAY, MAP]."
-        ]
-      },
       "TYPE_CHECK_FAILURE_WITH_HINT" : {
         "message" : [
           "<msg><hint>."
