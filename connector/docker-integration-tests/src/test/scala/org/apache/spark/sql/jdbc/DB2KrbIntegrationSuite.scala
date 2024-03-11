@@ -44,7 +44,7 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override protected val keytabFileName = "db2.keytab"
 
   override val db = new DB2DatabaseOnDocker {
-    override def getJdbcUrl(ip: String, port: Int): String = s"jdbc:db2://$ip:$port/db2"
+    override def getJdbcUrl(ip: String, port: Int): String = s"jdbc:db2://$ip:$port/foo"
     override def getJdbcProperties() = {
       val options = new JDBCOptions(Map[String, String](
         JDBCOptions.JDBC_URL -> getJdbcUrl(dockerIp, externalPort),
