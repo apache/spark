@@ -1048,8 +1048,10 @@ object TypeCoercion extends TypeCoercionBase {
     // Excluding these types, findWiderTypeForTwo satisfies the associative law. For instance,
     // (TimestampType, IntegerType, StringType) should have StringType as the wider common type.
     val (stringTypes, nonStringTypes) = exprs.map(_.dataType).partition(hasStringType)
-    (if (stringTypes.distinct.size > 1) Option(StringType(CollationTypeCasts
-      .getOutputCollation(exprs, failOnIndeterminate))) ++ nonStringTypes
+    (if (stringTypes.distinct.size > 1) {
+      val collationId = CollationTypeCasts.getOutputCollation(exprs, failOnIndeterminate)
+      stringTypes.distinct.map(castStringType(_, collationId)) ++ nonStringTypes
+    }
     else stringTypes.distinct ++ nonStringTypes)
       .foldLeft[Option[DataType]](Some(NullType))((r, c) =>
       r match {
@@ -1180,6 +1182,14 @@ object TypeCoercion extends TypeCoercionBase {
     case ArrayType(et, _) => hasStringType(et)
     // Add StructType if we support string promotion for struct fields in the future.
     case _ => false
+  }
+
+  /**
+   * Method to cast nested StringTypes that hasStringType filters.
+   */
+  def castStringType(fromType: DataType, collationId: Int): Option[DataType] = fromType match {
+    case ArrayType(_, n) => implicitCast(fromType, ArrayType(StringType(collationId), n))
+    case _ => implicitCast(fromType, StringType(collationId))
   }
 
   /**
