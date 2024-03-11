@@ -314,54 +314,6 @@ private[xml] trait TestXmlData {
   def complexFieldAndType2: Seq[String] =
     """
           |<ROW>
-          |  <arrayOfStruct>
-          |    <item>
-          |      <field1>true</field1>
-          |      <field2>str1</field2>
-          |    </item>
-          |    <item>
-          |      <field1>false</field1>
-          |    </item>
-          |    <item>
-          |      <field3/>
-          |    </item>
-          |  </arrayOfStruct>
-          |  <complexArrayOfStruct>
-          |    <item>
-          |      <field1>
-          |        <item>
-          |          <inner1>str1</inner1>
-          |        </item>
-          |        <item>
-          |          <inner2><item>str2</item><item>str22</item></inner2>
-          |        </item>
-          |      </field1>
-          |      <field2>
-          |        <array><item>1</item><item>2</item></array>
-          |        <array><item>3</item><item>4</item></array>
-          |      </field2>
-          |    </item>
-          |    <item>
-          |      <field1>
-          |        <item>
-          |          <inner2>
-          |            <item>str3</item><item>str33</item>
-          |          </inner2>
-          |        </item>
-          |        <item>
-          |          <inner1>str4</inner1>
-          |        </item>
-          |      </field1>
-          |      <field2>
-          |        <array>
-          |          <item>5</item><item>6</item>
-          |        </array>
-          |        <array>
-          |          <item>7</item><item>8</item>
-          |        </array>
-          |      </field2>
-          |    </item>
-          |  </complexArrayOfStruct>
           |  <arrayOfArray1>
           |  <array>
           |    <item>5</item>
