@@ -57,15 +57,15 @@ private[spark] class KubernetesExecutorBackend(
     resourceProfile) with Logging {
 
   override def extractAttributes: Map[String, String] = {
-    super.extractAttributes ++
-      Map(
-        "LOG_FILES" -> "log",
-        "APP_ID" -> appId,
-        "EXECUTOR_ID" -> executorId,
-        "HOSTNAME" -> hostname,
-        "KUBERNETES_NAMESPACE" -> env.conf.get(KUBERNETES_NAMESPACE),
-        "KUBERNETES_POD_NAME" -> podName
-      )
+    // give precedence to attributes extracted by overridden method
+    Map(
+      "LOG_FILES" -> "log",
+      "APP_ID" -> appId,
+      "EXECUTOR_ID" -> executorId,
+      "HOSTNAME" -> hostname,
+      "KUBERNETES_NAMESPACE" -> env.conf.get(KUBERNETES_NAMESPACE),
+      "KUBERNETES_POD_NAME" -> podName
+    ) ++ super.extractAttributes
   }
 
 }
