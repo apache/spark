@@ -1297,7 +1297,7 @@
   },
   "FOREACH_BATCH_USER_FUNCTION_ERROR" : {
     "message" : [
-      "An error occurred in the user provided function in foreach batch sink."
+      "An error occurred in the user provided function in foreach batch sink. Reason: <reason>"
     ],
     "sqlState" : "39000"
   },
@@ -3927,6 +3927,11 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
+      "COLLATION" : {
+        "message" : [
+          "Collation is not yet supported."
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -4137,7 +4142,7 @@
     "subClass" : {
       "MULTI_GENERATOR" : {
         "message" : [
-          "only one generator allowed per <clause> clause but found <num>: <generators>."
+          "only one generator allowed per SELECT clause but found <num>: <generators>."
         ]
       },
       "NESTED_IN_EXPRESSIONS" : {

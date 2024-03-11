@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.internal.SQLConf
@@ -32,7 +33,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   @transient private var _countState: ValueState[Long] = _
 
   override def init(outputMode: OutputMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState")
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
   }
 
   override def handleInputRows(
@@ -59,8 +60,8 @@ class RunningCountMostRecentStatefulProcessor
   @transient private var _mostRecent: ValueState[String] = _
 
   override def init(outputMode: OutputMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState")
-    _mostRecent = getHandle.getValueState[String]("mostRecent")
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
   }
   override def handleInputRows(
       key: String,
@@ -88,7 +89,7 @@ class MostRecentStatefulProcessorWithDeletion
 
   override def init(outputMode: OutputMode): Unit = {
     getHandle.deleteIfExists("countState")
-    _mostRecent = getHandle.getValueState[String]("mostRecent")
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
   }
 
   override def handleInputRows(
@@ -116,7 +117,7 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
-    _tempState = getHandle.getValueState[Long]("tempState")
+    _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong)
     Iterator.empty
   }
 }

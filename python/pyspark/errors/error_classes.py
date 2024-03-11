@@ -199,6 +199,11 @@ ERROR_CLASSES_JSON = '''
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_CREATE_ERROR": {
+    "message": [
+      "Failed to create python data source instance, error: <error>."
+    ]
+  },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
     "message": [
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."

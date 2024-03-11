@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 import java.io.Serializable
 
 import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.sql.Encoder
 
 /**
  * Represents the operation handle provided to the stateful processor used in the
@@ -33,20 +34,22 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
    * @param stateName - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
    * @tparam T - type of state variable
    * @return - instance of ValueState of type T that can be used to store state persistently
    */
-  def getValueState[T](stateName: String): ValueState[T]
+  def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T]
 
   /**
    * Creates new or returns existing list state associated with stateName.
    * The ListState persists values of type T.
    *
    * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
    * @tparam T - type of state variable
    * @return - instance of ListState of type T that can be used to store state persistently
    */
-  def getListState[T](stateName: String): ListState[T]
+  def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T]
 
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo

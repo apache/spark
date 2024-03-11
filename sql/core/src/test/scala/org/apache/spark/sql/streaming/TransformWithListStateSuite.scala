@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -30,7 +31,7 @@ class TestListStateProcessor
   @transient var _listState: ListState[String] = _
 
   override def init(outputMode: OutputMode): Unit = {
-    _listState = getHandle.getListState("testListState")
+    _listState = getHandle.getListState("testListState", Encoders.STRING)
   }
 
   override def handleInputRows(
@@ -86,8 +87,8 @@ class ToggleSaveAndEmitProcessor
   @transient var _valueState: ValueState[Boolean] = _
 
   override def init(outputMode: OutputMode): Unit = {
-    _listState = getHandle.getListState("testListState")
-    _valueState = getHandle.getValueState("testValueState")
+    _listState = getHandle.getListState("testListState", Encoders.STRING)
+    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean)
   }
 
   override def handleInputRows(

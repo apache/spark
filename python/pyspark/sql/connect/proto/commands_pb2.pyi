@@ -98,6 +98,7 @@ class Command(google.protobuf.message.Message):
     GET_RESOURCES_COMMAND_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_FIELD_NUMBER: builtins.int
     REGISTER_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
+    STREAMING_QUERY_LISTENER_BUS_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -124,6 +125,8 @@ class Command(google.protobuf.message.Message):
         self,
     ) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction: ...
     @property
+    def streaming_query_listener_bus_command(self) -> global___StreamingQueryListenerBusCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -142,6 +145,8 @@ class Command(google.protobuf.message.Message):
         get_resources_command: global___GetResourcesCommand | None = ...,
         streaming_query_manager_command: global___StreamingQueryManagerCommand | None = ...,
         register_table_function: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction
+        | None = ...,
+        streaming_query_listener_bus_command: global___StreamingQueryListenerBusCommand
         | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
@@ -164,6 +169,8 @@ class Command(google.protobuf.message.Message):
             b"sql_command",
             "streaming_query_command",
             b"streaming_query_command",
+            "streaming_query_listener_bus_command",
+            b"streaming_query_listener_bus_command",
             "streaming_query_manager_command",
             b"streaming_query_manager_command",
             "write_operation",
@@ -193,6 +200,8 @@ class Command(google.protobuf.message.Message):
             b"sql_command",
             "streaming_query_command",
             b"streaming_query_command",
+            "streaming_query_listener_bus_command",
+            b"streaming_query_listener_bus_command",
             "streaming_query_manager_command",
             b"streaming_query_manager_command",
             "write_operation",
@@ -217,6 +226,7 @@ class Command(google.protobuf.message.Message):
             "get_resources_command",
             "streaming_query_manager_command",
             "register_table_function",
+            "streaming_query_listener_bus_command",
             "extension",
         ]
         | None
@@ -1938,18 +1948,46 @@ class StreamingQueryListenerEventsResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     EVENTS_FIELD_NUMBER: builtins.int
+    LISTENER_BUS_LISTENER_ADDED_FIELD_NUMBER: builtins.int
     @property
     def events(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         global___StreamingQueryListenerEvent
     ]: ...
+    listener_bus_listener_added: builtins.bool
     def __init__(
         self,
         *,
         events: collections.abc.Iterable[global___StreamingQueryListenerEvent] | None = ...,
+        listener_bus_listener_added: builtins.bool | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["events", b"events"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_listener_bus_listener_added",
+            b"_listener_bus_listener_added",
+            "listener_bus_listener_added",
+            b"listener_bus_listener_added",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_listener_bus_listener_added",
+            b"_listener_bus_listener_added",
+            "events",
+            b"events",
+            "listener_bus_listener_added",
+            b"listener_bus_listener_added",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_listener_bus_listener_added", b"_listener_bus_listener_added"
+        ],
+    ) -> typing_extensions.Literal["listener_bus_listener_added"] | None: ...
 
 global___StreamingQueryListenerEventsResult = StreamingQueryListenerEventsResult
 

@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -36,18 +37,18 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("collate returns proper type") {
     Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
-      checkAnswer(sql(s"select 'aaa' collate '$collationName'"), Row("aaa"))
+      checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
       val collationId = CollationFactory.collationNameToId(collationName)
-      assert(sql(s"select 'aaa' collate '$collationName'").schema(0).dataType
+      assert(sql(s"select 'aaa' collate $collationName").schema(0).dataType
         == StringType(collationId))
     }
   }
 
   test("collation name is case insensitive") {
     Seq("uCs_BasIc", "uCs_baSic_Lcase", "uNicOde", "UNICODE_ci").foreach { collationName =>
-      checkAnswer(sql(s"select 'aaa' collate '$collationName'"), Row("aaa"))
+      checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
       val collationId = CollationFactory.collationNameToId(collationName)
-      assert(sql(s"select 'aaa' collate '$collationName'").schema(0).dataType
+      assert(sql(s"select 'aaa' collate $collationName").schema(0).dataType
         == StringType(collationId))
     }
   }
@@ -55,7 +56,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("collation expression returns name of collation") {
     Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
       checkAnswer(
-        sql(s"select collation('aaa' collate '$collationName')"), Row(collationName.toUpperCase()))
+        sql(s"select collation('aaa' collate $collationName)"), Row(collationName.toUpperCase()))
     }
   }
 
@@ -131,7 +132,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("invalid collation name throws exception") {
     checkError(
-      exception = intercept[SparkException] { sql("select 'aaa' collate 'UCS_BASIS'") },
+      exception = intercept[SparkException] { sql("select 'aaa' collate UCS_BASIS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
       parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
@@ -152,7 +153,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
-          sql(s"select '$left' collate '$collationName' = '$right' collate '$collationName'"),
+          sql(s"select '$left' collate $collationName = '$right' collate $collationName"),
           Row(expected))
         checkAnswer(
           sql(s"select collate('$left', '$collationName') = collate('$right', '$collationName')"),
@@ -177,7 +178,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
-          sql(s"select '$left' collate '$collationName' < '$right' collate '$collationName'"),
+          sql(s"select '$left' collate $collationName < '$right' collate $collationName"),
           Row(expected))
         checkAnswer(
           sql(s"select collate('$left', '$collationName') < collate('$right', '$collationName')"),
@@ -277,25 +278,21 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", true),
       CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", true),
       CollationTestCase("abcde", "fgh", "UCS_BASIC_LCASE", false),
-      CollationTestCase("abcde", "FGH", "UCS_BASIC_LCASE", false)
+      CollationTestCase("abcde", "FGH", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UNICODE_CI", true),
+      CollationTestCase("c", "", "UNICODE_CI", true),
+      CollationTestCase("", "c", "UNICODE_CI", false),
+      CollationTestCase("abcde", "c", "UNICODE_CI", true),
+      CollationTestCase("abcde", "C", "UNICODE_CI", true),
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", true),
+      CollationTestCase("abcde", "BCD", "UNICODE_CI", true),
+      CollationTestCase("abcde", "fgh", "UNICODE_CI", false),
+      CollationTestCase("abcde", "FGH", "UNICODE_CI", false)
     )
     checks.foreach(testCase => {
       checkAnswer(sql(s"SELECT contains(collate('${testCase.left}', '${testCase.collation}')," +
         s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
     })
-    // Unsupported collations
-    checkError(
-      exception = intercept[SparkException] {
-        sql(s"SELECT contains(collate('abcde', 'UNICODE_CI')," +
-          s"collate('BCD', 'UNICODE_CI'))")
-      },
-      errorClass = "UNSUPPORTED_COLLATION.FOR_FUNCTION",
-      sqlState = "0A000",
-      parameters = Map(
-        "functionName" -> "contains",
-        "collationName" -> "UNICODE_CI"
-      )
-    )
   }
 
   test("Support startsWith string expression with Collation") {
@@ -423,9 +420,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     val tableNameBinary = "T_BINARY"
     withTable(tableNameNonBinary) {
       withTable(tableNameBinary) {
-        sql(s"CREATE TABLE $tableNameNonBinary (c STRING COLLATE 'UCS_BASIC_LCASE') USING PARQUET")
+        sql(s"CREATE TABLE $tableNameNonBinary (c STRING COLLATE UCS_BASIC_LCASE) USING PARQUET")
         sql(s"INSERT INTO $tableNameNonBinary VALUES ('aaa')")
-        sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE 'UCS_BASIC') USING PARQUET")
+        sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE UCS_BASIC) USING PARQUET")
         sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
 
         val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
@@ -439,7 +436,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         }.nonEmpty)
       }
     }
+  }
 
+  test("text writing to parquet with collation enclosed with backticks") {
+    withTempPath{ path =>
+      sql(s"select 'a' COLLATE `UNICODE`").write.parquet(path.getAbsolutePath)
+
+      checkAnswer(
+        spark.read.parquet(path.getAbsolutePath),
+        Row("a"))
+    }
   }
 
   test("create table with collation") {
@@ -450,7 +456,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withTable(tableName) {
       sql(
         s"""
-           |CREATE TABLE $tableName (c1 STRING COLLATE '$collationName')
+           |CREATE TABLE $tableName (c1 STRING COLLATE $collationName)
            |USING PARQUET
            |""".stripMargin)
 
@@ -471,7 +477,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(
         s"""
            |CREATE TABLE $tableName
-           |(c1 STRUCT<name: STRING COLLATE '$collationName', age: INT>)
+           |(c1 STRUCT<name: STRING COLLATE $collationName, age: INT>)
            |USING PARQUET
            |""".stripMargin)
 
@@ -506,7 +512,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(
         s"""
            |ALTER TABLE $tableName
-           |ADD COLUMN c2 STRING COLLATE '$collationName'
+           |ADD COLUMN c2 STRING COLLATE $collationName
            |""".stripMargin)
 
       sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
@@ -526,7 +532,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withTable(tableName) {
       sql(
         s"""
-           |CREATE TABLE $tableName (c1 string COLLATE '$collationName')
+           |CREATE TABLE $tableName (c1 string COLLATE $collationName)
            |USING $v2Source
            |""".stripMargin)
 
@@ -556,7 +562,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(
           s"""
              |CREATE TABLE $tableName
-             |(id INT, c1 STRING COLLATE 'UNICODE', c2 string)
+             |(id INT, c1 STRING COLLATE UNICODE, c2 string)
              |USING parquet
              |PARTITIONED BY (${partitionColumns.mkString(",")})
              |""".stripMargin)
@@ -574,7 +580,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           createTable(partitionColumns: _*)
         },
         errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
-        parameters = Map("type" -> "\"STRING COLLATE 'UNICODE'\"")
+        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
       );
     }
   }
@@ -596,5 +602,36 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           assert(partitionData.contains(s.toUpperCase()))
         })
     })
+  }
+
+  test("hash based joins not allowed for non-binary collated strings") {
+    val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(e => Row.apply(e, e))
+
+    val schema = StructType(StructField(
+      "col_non_binary",
+      StringType(CollationFactory.collationNameToId("UCS_BASIC_LCASE"))) ::
+      StructField("col_binary", StringType) :: Nil)
+    val df1 = spark.createDataFrame(sparkContext.parallelize(in), schema)
+
+    // Binary collations are allowed to use hash join.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_binary") === df1("col_binary"))
+        .queryExecution.executedPlan) {
+      case _: BroadcastHashJoinExec => ()
+    }.nonEmpty)
+
+    // Even with hint broadcast, hash join is not used for non-binary collated strings.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
+        .queryExecution.executedPlan) {
+      case _: BroadcastHashJoinExec => ()
+    }.isEmpty)
+
+    // Instead they will default to sort merge join.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
+        .queryExecution.executedPlan) {
+      case _: SortMergeJoinExec => ()
+    }.nonEmpty)
   }
 }

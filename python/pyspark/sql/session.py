@@ -908,6 +908,18 @@ class SparkSession(SparkConversionMixin):
 
     @property
     def profile(self) -> Profile:
+        """Returns a :class:`Profile` for performance/memory profiling.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Profile`
+
+        Notes
+        -----
+        Supports Spark Connect.
+        """
         return Profile(self._profiler_collector)
 
     def range(
@@ -1687,7 +1699,7 @@ class SparkSession(SparkConversionMixin):
             else:
                 raise PySparkTypeError(
                     error_class="INVALID_TYPE",
-                    message_parameters={"arg_name": "args", "arg_type": str(type(args))},
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
