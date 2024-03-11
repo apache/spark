@@ -22,7 +22,7 @@ import java.io.Serializable
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
- * Class used to provide access to expired timer's expiry time and timeout mode. These values
+ * Class used to provide access to expired timer's expiry time. These values
  * are only relevant if the ExpiredTimerInfo is valid.
  */
 @Experimental

@@ -134,7 +134,7 @@ class StatefulProcessorHandleImpl(
       throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
     }
 
-    if (!(currState == INITIALIZED || currState == DATA_PROCESSED)) {
+    if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
       throw StateStoreErrors.cannotUseTimersWithInvalidHandleState(currState.toString)
     }
 
@@ -151,7 +151,7 @@ class StatefulProcessorHandleImpl(
       throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
     }
 
-    if (!(currState == INITIALIZED || currState == DATA_PROCESSED)) {
+    if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
       throw StateStoreErrors.cannotUseTimersWithInvalidHandleState(currState.toString)
     }
 

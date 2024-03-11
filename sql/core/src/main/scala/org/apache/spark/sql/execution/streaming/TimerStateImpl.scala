@@ -98,13 +98,17 @@ class TimerStateImpl[S](
     schemaForValueRow, useMultipleValuesPerKey = false,
     isInternal = true)
 
-  private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
+  private def getGroupingKey(cfName: String): Any = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (!keyOption.isDefined) {
-      throw StateStoreErrors.implicitKeyNotFound(keyToTsCFName)
+      throw StateStoreErrors.implicitKeyNotFound(cfName)
     }
+    keyOption.get
+  }
 
-    val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
+  private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
+    val keyByteArr = keySerializer.apply(getGroupingKey(keyToTsCFName))
+      .asInstanceOf[UnsafeRow].getBytes()
     val keyRow = keyEncoder(InternalRow(keyByteArr, expiryTimestampMs))
     keyRow
   }
@@ -116,12 +120,8 @@ class TimerStateImpl[S](
   //  determine sorted order of keys. This is used to read expired timers at any given
   //  processing time/event time timestamp threshold by performing a range scan.
   private def encodeSecIndexKey(expiryTimestampMs: Long): UnsafeRow = {
-    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
-    if (!keyOption.isDefined) {
-      throw StateStoreErrors.implicitKeyNotFound(tsToKeyCFName)
-    }
-
-    val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
+    val keyByteArr = keySerializer.apply(getGroupingKey(tsToKeyCFName))
+      .asInstanceOf[UnsafeRow].getBytes()
     val bbuf = ByteBuffer.allocate(8)
     bbuf.order(ByteOrder.BIG_ENDIAN)
     bbuf.putLong(expiryTimestampMs)
@@ -162,12 +162,8 @@ class TimerStateImpl[S](
   }
 
   def listTimers(): Iterator[Long] = {
-    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
-    if (!keyOption.isDefined) {
-      throw StateStoreErrors.implicitKeyNotFound(keyToTsCFName)
-    }
-
-    val keyByteArr = keySerializer.apply(keyOption.get).asInstanceOf[UnsafeRow].getBytes()
+    val keyByteArr = keySerializer.apply(getGroupingKey(keyToTsCFName))
+      .asInstanceOf[UnsafeRow].getBytes()
     val keyRow = prefixKeyEncoder(InternalRow(keyByteArr))
     val iter = store.prefixScan(keyRow, keyToTsCFName)
     iter.map { kv =>
@@ -181,8 +177,8 @@ class TimerStateImpl[S](
     val keyBytes = keyRow.getBinary(1)
     val retUnsafeRow = new UnsafeRow(1)
     retUnsafeRow.pointTo(keyBytes, keyBytes.length)
-    val keyObj = keyExprEnc.resolveAndBind().
-    createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
+    val keyObj = keyExprEnc.resolveAndBind()
+      .createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
 
     // Decode the expiry timestamp from the UnsafeRow encoded as BIG_ENDIAN
     val bytes = keyRow.getBinary(0)

@@ -20,7 +20,7 @@ import org.apache.spark.sql.streaming.{ExpiredTimerInfo, TimeoutMode}
 
 /**
  * Class that provides a concrete implementation that can be used to provide access to expired
- * timer's expiry time and timeout mode. These values are only relevant if the ExpiredTimerInfo
+ * timer's expiry time. These values are only relevant if the ExpiredTimerInfo
  * is valid.
  * @param isValid - boolean to check if the provided ExpiredTimerInfo is valid
  * @param expiryTimeInMsOpt - option to expired timer's expiry time as milliseconds in epoch time

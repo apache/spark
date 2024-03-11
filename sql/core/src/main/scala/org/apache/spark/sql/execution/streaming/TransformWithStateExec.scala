@@ -119,9 +119,8 @@ case class TransformWithStateExec(
     val mappedIterator = statefulProcessor.handleInputRows(
       keyObj,
       valueObjIter,
-      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents),
-      new ExpiredTimerInfoImpl(false)
-      ).map { obj =>
+      new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForEviction),
+      new ExpiredTimerInfoImpl(isValid = false)).map { obj =>
       getOutputRow(obj)
     }
     ImplicitGroupingKeyTracker.removeImplicitKey()
@@ -146,8 +145,7 @@ case class TransformWithStateExec(
       keyObj,
       Iterator.empty,
       new TimerValuesImpl(batchTimestampMs, eventTimeWatermarkForLateEvents),
-      new ExpiredTimerInfoImpl(true, Some(expiryTimestampMs))
-    ).map { obj =>
+      new ExpiredTimerInfoImpl(isValid = true, Some(expiryTimestampMs))).map { obj =>
       getOutputRow(obj)
     }
     processorHandle.removeExpiredTimer(expiryTimestampMs)
