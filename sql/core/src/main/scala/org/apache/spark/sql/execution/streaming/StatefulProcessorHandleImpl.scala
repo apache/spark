@@ -124,14 +124,13 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  private def getTimerState[T](): TimerStateImpl[T] = {
+  private def getTimerState[T](): TimerStateImpl[T] =
     new TimerStateImpl[T](store, timeoutMode, keyEncoder)
-  }
 
   private val timerState = getTimerState[Boolean]()
 
   override def registerTimer(expiryTimestampMs: Long): Unit = {
-    if (!(timeoutMode == ProcessingTime || timeoutMode == EventTime)) {
+    if (timeoutMode == NoTimeouts) {
       throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
     }
 
@@ -148,7 +147,7 @@ class StatefulProcessorHandleImpl(
   }
 
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
-    if (!(timeoutMode == ProcessingTime || timeoutMode == EventTime)) {
+    if (timeoutMode == NoTimeouts) {
       throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
     }
 

@@ -80,19 +80,19 @@ class TimerStateImpl[S](
 
   private val secIndexKeyEncoder = UnsafeProjection.create(keySchemaForSecIndex)
 
-  val timerCfName = if (timeoutMode == TimeoutMode.ProcessingTime) {
+  val timerCFName = if (timeoutMode == TimeoutMode.ProcessingTime) {
     TimerStateUtils.PROC_TIMERS_STATE_NAME
   } else {
     TimerStateUtils.EVENT_TIMERS_STATE_NAME
   }
 
-  val keyToTsCFName = timerCfName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
+  val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
   store.createColFamilyIfAbsent(keyToTsCFName,
     schemaForKeyRow, numColsPrefixKey = 1,
     schemaForValueRow, useMultipleValuesPerKey = false,
     isInternal = true)
 
-  val tsToKeyCFName = timerCfName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
+  val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
   store.createColFamilyIfAbsent(tsToKeyCFName,
     keySchemaForSecIndex, numColsPrefixKey = 0,
     schemaForValueRow, useMultipleValuesPerKey = false,
