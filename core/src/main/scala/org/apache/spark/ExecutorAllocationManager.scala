@@ -206,10 +206,16 @@ private[spark] class ExecutorAllocationManager(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
     if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) && !reliableShuffleStorage) {
+      val shuffleDecommissionEnabled = decommissionEnabled &&
+        conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
       if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
         logInfo("Dynamic allocation is enabled without a shuffle service.")
-      } else if (decommissionEnabled &&
-          conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+        if (shuffleDecommissionEnabled) {
+          logWarning("You are enabling both shuffle tracking and shuffle decommission features, " +
+            "which will cause idle executors not to be released in a timely, " +
+            "please check the configurations.")
+        }
+      } else if (shuffleDecommissionEnabled) {
         logInfo("Shuffle data decommission is enabled without a shuffle service.")
       } else if (!testing) {
         throw new SparkException("Dynamic allocation of executors requires one of the " +
