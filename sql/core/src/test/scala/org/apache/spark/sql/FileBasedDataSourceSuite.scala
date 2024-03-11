@@ -1250,7 +1250,7 @@ class FileBasedDataSourceSuite extends QueryTest
   test("disable filter pushdown for collated strings") {
     Seq("parquet").foreach { format =>
       withTempPath { path =>
-        val collation = "'UCS_BASIC_LCASE'"
+        val collation = "'UTF8_BINARY_LCASE'"
         val df = sql(
           s"""SELECT
              |  COLLATE(c, $collation) as c1,

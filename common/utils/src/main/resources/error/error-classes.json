@@ -1297,7 +1297,7 @@
   },
   "FOREACH_BATCH_USER_FUNCTION_ERROR" : {
     "message" : [
-      "An error occurred in the user provided function in foreach batch sink."
+      "An error occurred in the user provided function in foreach batch sink. Reason: <reason>"
     ],
     "sqlState" : "39000"
   },

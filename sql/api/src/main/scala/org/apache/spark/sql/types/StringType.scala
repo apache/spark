@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 @Stable
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
   /**
-   * Returns whether assigned collation is the default spark collation (UCS_BASIC).
+   * Returns whether assigned collation is the default spark collation (UTF8_BINARY).
    */
   def isDefaultCollation: Boolean = collationId == CollationFactory.DEFAULT_COLLATION_ID
 
@@ -43,7 +43,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 
   /**
    * Type name that is shown to the customer.
-   * If this is an UCS_BASIC collation output is `string` due to backwards compatibility.
+   * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
    */
   override def typeName: String =
     if (isDefaultCollation) "string"
