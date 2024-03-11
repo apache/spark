@@ -40,6 +40,7 @@ class ResourceProfileTests(unittest.TestCase):
         spark = SparkSession.builder.remote("local-cluster[1, 2, 1024]").getOrCreate()
         # Still can access taskResources, similar to executorResources.
         self.assertEqual(rp.taskResources["cpus"].amount, 2.0)
+        rp.id
         df = spark.range(10)
         df.mapInPandas(lambda x: x, df.schema, False, rp).collect()
         df.mapInArrow(lambda x: x, df.schema, False, rp).collect()

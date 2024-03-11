@@ -62,7 +62,7 @@ class ResourceProfile:
             executor_resources=self._exec_req, task_resources=self._task_req
         )
 
-        self._id = session.client.build_resource_profile(self._remote_profile)
+        self._id = session.client._create_profile(self._remote_profile)
 
     @property
     def id(self) -> int:

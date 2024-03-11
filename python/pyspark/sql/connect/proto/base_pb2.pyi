@@ -1411,6 +1411,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     GET_RESOURCES_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     RESULT_COMPLETE_FIELD_NUMBER: builtins.int
+    CREATE_RESOURCE_PROFILE_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1459,6 +1460,11 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def result_complete(self) -> global___ExecutePlanResponse.ResultComplete:
         """Response type informing if the stream is complete in reattachable execution."""
     @property
+    def create_resource_profile_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult:
+        """Response for command that creates ResourceProfile."""
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
     @property
@@ -1494,6 +1500,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         streaming_query_manager_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult
         | None = ...,
         result_complete: global___ExecutePlanResponse.ResultComplete | None = ...,
+        create_resource_profile_command_result: pyspark.sql.connect.proto.commands_pb2.CreateResourceProfileCommandResult
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1505,6 +1513,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
+            "create_resource_profile_command_result",
+            b"create_resource_profile_command_result",
             "extension",
             b"extension",
             "get_resources_command_result",
@@ -1532,6 +1542,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
+            "create_resource_profile_command_result",
+            b"create_resource_profile_command_result",
             "extension",
             b"extension",
             "get_resources_command_result",
@@ -1575,6 +1587,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "get_resources_command_result",
             "streaming_query_manager_command_result",
             "result_complete",
+            "create_resource_profile_command_result",
             "extension",
         ]
         | None
@@ -3384,81 +3397,3 @@ class FetchErrorDetailsResponse(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["root_error_idx"] | None: ...
 
 global___FetchErrorDetailsResponse = FetchErrorDetailsResponse
-
-class BuildResourceProfileRequest(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    SESSION_ID_FIELD_NUMBER: builtins.int
-    USER_CONTEXT_FIELD_NUMBER: builtins.int
-    PROFILE_FIELD_NUMBER: builtins.int
-    session_id: builtins.str
-    """(Required)
-
-    The session_id specifies a spark session for a user id (which is specified
-    by user_context.user_id). The session_id is set by the client to be able to
-    collate streaming responses from different queries within the dedicated session.
-    The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
-    """
-    @property
-    def user_context(self) -> global___UserContext:
-        """(Required) User context"""
-    @property
-    def profile(self) -> pyspark.sql.connect.proto.common_pb2.ResourceProfile:
-        """(Required) The ResourceProfile to be built on the server-side."""
-    def __init__(
-        self,
-        *,
-        session_id: builtins.str = ...,
-        user_context: global___UserContext | None = ...,
-        profile: pyspark.sql.connect.proto.common_pb2.ResourceProfile | None = ...,
-    ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "profile", b"profile", "user_context", b"user_context"
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "profile", b"profile", "session_id", b"session_id", "user_context", b"user_context"
-        ],
-    ) -> None: ...
-
-global___BuildResourceProfileRequest = BuildResourceProfileRequest
-
-class BuildResourceProfileResponse(google.protobuf.message.Message):
-    """Response to building resource profile."""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    SESSION_ID_FIELD_NUMBER: builtins.int
-    SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
-    PROFILE_ID_FIELD_NUMBER: builtins.int
-    session_id: builtins.str
-    server_side_session_id: builtins.str
-    """Server-side generated idempotency key that the client can use to assert that the server side
-    session has not changed.
-    """
-    profile_id: builtins.int
-    """(Required) Server-side generated resource profile id."""
-    def __init__(
-        self,
-        *,
-        session_id: builtins.str = ...,
-        server_side_session_id: builtins.str = ...,
-        profile_id: builtins.int = ...,
-    ) -> None: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "profile_id",
-            b"profile_id",
-            "server_side_session_id",
-            b"server_side_session_id",
-            "session_id",
-            b"session_id",
-        ],
-    ) -> None: ...
-
-global___BuildResourceProfileResponse = BuildResourceProfileResponse

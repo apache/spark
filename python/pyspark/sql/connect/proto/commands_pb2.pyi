@@ -70,6 +70,7 @@ class Command(google.protobuf.message.Message):
     GET_RESOURCES_COMMAND_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_FIELD_NUMBER: builtins.int
     REGISTER_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
+    CREATE_RESOURCE_PROFILE_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -96,6 +97,8 @@ class Command(google.protobuf.message.Message):
         self,
     ) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction: ...
     @property
+    def create_resource_profile_command(self) -> global___CreateResourceProfileCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -115,6 +118,7 @@ class Command(google.protobuf.message.Message):
         streaming_query_manager_command: global___StreamingQueryManagerCommand | None = ...,
         register_table_function: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction
         | None = ...,
+        create_resource_profile_command: global___CreateResourceProfileCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -124,6 +128,8 @@ class Command(google.protobuf.message.Message):
             b"command_type",
             "create_dataframe_view",
             b"create_dataframe_view",
+            "create_resource_profile_command",
+            b"create_resource_profile_command",
             "extension",
             b"extension",
             "get_resources_command",
@@ -153,6 +159,8 @@ class Command(google.protobuf.message.Message):
             b"command_type",
             "create_dataframe_view",
             b"create_dataframe_view",
+            "create_resource_profile_command",
+            b"create_resource_profile_command",
             "extension",
             b"extension",
             "get_resources_command",
@@ -189,6 +197,7 @@ class Command(google.protobuf.message.Message):
             "get_resources_command",
             "streaming_query_manager_command",
             "register_table_function",
+            "create_resource_profile_command",
             "extension",
         ]
         | None
@@ -1858,3 +1867,43 @@ class GetResourcesCommandResult(google.protobuf.message.Message):
     ) -> None: ...
 
 global___GetResourcesCommandResult = GetResourcesCommandResult
+
+class CreateResourceProfileCommand(google.protobuf.message.Message):
+    """Command to create ResourceProfile"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PROFILE_FIELD_NUMBER: builtins.int
+    @property
+    def profile(self) -> pyspark.sql.connect.proto.common_pb2.ResourceProfile:
+        """(Required) The ResourceProfile to be built on the server-side."""
+    def __init__(
+        self,
+        *,
+        profile: pyspark.sql.connect.proto.common_pb2.ResourceProfile | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["profile", b"profile"]
+    ) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["profile", b"profile"]) -> None: ...
+
+global___CreateResourceProfileCommand = CreateResourceProfileCommand
+
+class CreateResourceProfileCommandResult(google.protobuf.message.Message):
+    """Response for command 'CreateResourceProfileCommand'."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PROFILE_ID_FIELD_NUMBER: builtins.int
+    profile_id: builtins.int
+    """(Required) Server-side generated resource profile id."""
+    def __init__(
+        self,
+        *,
+        profile_id: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["profile_id", b"profile_id"]
+    ) -> None: ...
+
+global___CreateResourceProfileCommandResult = CreateResourceProfileCommandResult
