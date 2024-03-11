@@ -142,7 +142,7 @@ class SparkEnv (
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean = conf.get(Python.PYTHON_USE_DAEMON)): (PythonWorker, Option[Long]) = {
+      useDaemon: Boolean): (PythonWorker, Option[Long]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
@@ -157,6 +157,19 @@ class SparkEnv (
       useDaemon: Boolean): (PythonWorker, Option[Long]) = {
     createPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
+  }
+
+  private[spark] def createPythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
+    synchronized {
+      val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
+      val useDaemon = conf.get(Python.PYTHON_USE_DAEMON)
+      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
+        pythonExec, workerModule, daemonModule, envVars, useDaemon)).create()
+    }
   }
 
   private[spark] def destroyPythonWorker(

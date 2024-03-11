@@ -31,7 +31,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -48,14 +47,16 @@ private[spark] class PythonWorkerFactory(
     workerModule: String,
     daemonModule: String,
     envVars: Map[String, String],
-    useDaemonEnabled: Boolean = SparkEnv.get.conf.get(PYTHON_USE_DAEMON))
+    useDaemonEnabled: Boolean)
   extends Logging { self =>
 
   def this(
       pythonExec: String,
       workerModule: String,
-      envVars: Map[String, String]) =
-    this(pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
+      envVars: Map[String, String],
+      useDaemonEnabled: Boolean) =
+    this(pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule,
+      envVars, useDaemonEnabled)
 
   import PythonWorkerFactory._
 
