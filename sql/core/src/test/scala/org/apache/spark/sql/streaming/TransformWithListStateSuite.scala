@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -27,12 +28,10 @@ case class InputRow(key: String, action: String, value: String)
 class TestListStateProcessor
   extends StatefulProcessor[String, InputRow, (String, String)] {
 
-  @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _listState: ListState[String] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
-    _processorHandle = handle
-    _listState = handle.getListState("testListState")
+  override def init(outputMode: OutputMode): Unit = {
+    _listState = getHandle.getListState("testListState", Encoders.STRING)
   }
 
   override def handleInputRows(
@@ -84,14 +83,12 @@ class TestListStateProcessor
 class ToggleSaveAndEmitProcessor
   extends StatefulProcessor[String, String, String] {
 
-  @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _listState: ListState[String] = _
   @transient var _valueState: ValueState[Boolean] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
-    _processorHandle = handle
-    _listState = handle.getListState("testListState")
-    _valueState = handle.getValueState("testValueState")
+  override def init(outputMode: OutputMode): Unit = {
+    _listState = getHandle.getListState("testListState", Encoders.STRING)
+    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean)
   }
 
   override def handleInputRows(

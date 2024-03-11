@@ -119,7 +119,7 @@
     <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.6</asm.version>
-    <slf4j.version>2.0.11</slf4j.version>
+    <slf4j.version>2.0.12</slf4j.version>
     <log4j.version>2.22.1</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.6</hadoop.version>
@@ -141,9 +141,9 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>1.9.2</orc.version>
+    <orc.version>2.0.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.19</jetty.version>
+    <jetty.version>11.0.20</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -185,7 +185,7 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.16.1</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.16.1</fasterxml.jackson.databind.version>
-    <ws.xmlschema.version>2.3.0</ws.xmlschema.version>
+    <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <org.glassfish.jaxb.txw2.version>3.0.2</org.glassfish.jaxb.txw2.version>
     <snappy.version>1.1.10.5</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -684,7 +684,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>8.8.1</version>
+        <version>8.11.3</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1250,13 +1250,13 @@
       <dependency>
         <groupId>com.mysql</groupId>
         <artifactId>mysql-connector-j</artifactId>
-        <version>8.2.0</version>
+        <version>8.3.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mariadb.jdbc</groupId>
         <artifactId>mariadb-java-client</artifactId>
-        <version>2.7.11</version>
+        <version>2.7.12</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2595,11 +2595,26 @@
 
       <dependency>
         <groupId>org.apache.orc</groupId>
+        <artifactId>orc-format</artifactId>
+        <version>1.0.0</version>
+        <classifier>${orc.classifier}</classifier>
+        <scope>${orc.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
         <version>${orc.version}</version>
         <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-format</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>brotli4j</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>

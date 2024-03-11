@@ -531,6 +531,33 @@ class SparkSessionProfileTests(unittest.TestCase, PySparkErrorTestUtils):
             },
         )
 
+    def test_clear_memory_type(self):
+        self.profile.clear(type="memory")
+        self.profiler_collector_mock.clear_memory_profiles.assert_called_once()
+        self.profiler_collector_mock.clear_perf_profiles.assert_not_called()
+
+    def test_clear_perf_type(self):
+        self.profile.clear(type="perf")
+        self.profiler_collector_mock.clear_perf_profiles.assert_called_once()
+        self.profiler_collector_mock.clear_memory_profiles.assert_not_called()
+
+    def test_clear_no_type(self):
+        self.profile.clear()
+        self.profiler_collector_mock.clear_perf_profiles.assert_called_once()
+        self.profiler_collector_mock.clear_memory_profiles.assert_called_once()
+
+    def test_clear_invalid_type(self):
+        with self.assertRaises(PySparkValueError) as e:
+            self.profile.clear(type="invalid")
+        self.check_error(
+            exception=e.exception,
+            error_class="VALUE_NOT_ALLOWED",
+            message_parameters={
+                "arg_name": "type",
+                "allowed_values": str(["perf", "memory"]),
+            },
+        )
+
 
 class SparkExtensionsTest(unittest.TestCase):
     # These tests are separate because it uses 'spark.sql.extensions' which is

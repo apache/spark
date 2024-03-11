@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
@@ -85,6 +85,11 @@ class V2SessionCatalog(catalog: SessionCatalog)
     try {
       val table = catalog.getTableMetadata(ident.asTableIdentifier)
       if (table.provider.isDefined) {
+        val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+        // Check if the table is in the v1 table cache to skip the v2 table lookup.
+        if (catalog.getCachedTable(qualifiedTableName) != null) {
+          return V1Table(table)
+        }
         DataSourceV2Utils.getTableProvider(table.provider.get, conf) match {
           case Some(provider) =>
             // Get the table properties during creation and append the path option
@@ -151,15 +156,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
       columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
-  }
-
-  // TODO: remove it when no tests calling this deprecated method.
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val provider = properties.getOrDefault(TableCatalog.PROP_PROVIDER, conf.defaultDataSourceName)
     val tableProperties = properties.asScala.toMap
@@ -173,6 +169,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       CatalogTableType.MANAGED
     }
 
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     val (newSchema, newPartitions) = DataSourceV2Utils.getTableProvider(provider, conf) match {
       // If the provider does not support external metadata, users should not be allowed to
       // specify custom schema when creating the data source table, since the schema will not
@@ -242,6 +239,14 @@ class V2SessionCatalog(catalog: SessionCatalog)
     }
 
     null // Return null to save the `loadTable` call for CREATE TABLE without AS SELECT.
+  }
+
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    throw QueryCompilationErrors.createTableDeprecatedError()
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {
