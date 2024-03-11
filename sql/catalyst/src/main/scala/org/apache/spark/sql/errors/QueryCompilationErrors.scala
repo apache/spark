@@ -3954,10 +3954,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("varType" -> toSQLType(dataType)))
   }
 
-  def nullSQLStringExecuteImmediate(): Throwable = {
+  def nullSQLStringExecuteImmediate(varName: String): Throwable = {
     throw new AnalysisException(
       errorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
-      messageParameters = Map.empty)
+      messageParameters = Map("varName" -> varName))
   }
 
   def invalidStatementForExecuteInto(queryString: String): Throwable = {

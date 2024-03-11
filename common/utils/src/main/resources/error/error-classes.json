@@ -3006,7 +3006,7 @@
   },
   "NULL_QUERY_STRING_EXECUTE_IMMEDIATE" : {
     "message" : [
-      "SQLQuery string should not be null."
+      "Execute immediate requires non-null value for sqlString variable, but provided <varName> is null."
     ],
     "sqlState" : "42K09"
   },

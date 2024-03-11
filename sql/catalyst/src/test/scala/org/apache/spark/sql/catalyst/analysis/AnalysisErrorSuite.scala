@@ -872,7 +872,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     assertAnalysisErrorClass(
       inputPlan = execImmediatePlan,
       expectedErrorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
-      expectedMessageParameters = Map.empty)
+      expectedMessageParameters = Map("varName" -> "testVarNull"))
   }
 
 
