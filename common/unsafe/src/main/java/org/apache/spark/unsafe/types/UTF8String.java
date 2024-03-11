@@ -394,7 +394,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean collatedStartsWith(final UTF8String prefix, int collationId) {
     if (prefix.numBytes == 0 || this.numBytes == 0) {
-      return prefix.numBytes==0;
+      return prefix.numBytes == 0;
     }
     if (prefix.numChars() > this.numChars()) {
       return false;
@@ -425,7 +425,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return false;
     }
     return CollationFactory.getStringSearch(
-      this.substring(this.numChars()-suffix.numChars(), this.numChars()),
+      this.substring(this.numChars() - suffix.numChars(), this.numChars()),
       suffix,
       collationId).last() == 0;
   }
