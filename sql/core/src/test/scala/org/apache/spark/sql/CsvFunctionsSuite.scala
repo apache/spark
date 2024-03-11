@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
-import java.nio.charset.StandardCharsets
 
 import scala.jdk.CollectionConverters._
 
