@@ -100,7 +100,7 @@ public class DataTypes {
   public static final DataType NullType = NullType$.MODULE$;
 
   /**
-   * Gets the NullType object.
+   * Gets the VariantType object.
    */
   public static final DataType VariantType = VariantType$.MODULE$;
 
