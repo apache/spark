@@ -31,13 +31,13 @@ class TestMapStateProcessor
   @transient var _mapState: MapState[String, String] = _
 
   override def init(outputMode: OutputMode): Unit = {
-    _mapState = getHandle.getMapState("sessionState", Encoders.STRING)
+    _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING)
   }
 
   override def handleInputRows(
-    key: String,
-    inputRows: Iterator[InputMapRow],
-    timerValues: TimerValues): Iterator[(String, String, String)] = {
+      key: String,
+      inputRows: Iterator[InputMapRow],
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
 
     var output = List[(String, String, String)]()
 
@@ -52,8 +52,7 @@ class TestMapStateProcessor
       } else if (row.action == "updateValue") {
         _mapState.updateValue(row.value._1, row.value._2)
       } else if (row.action == "getMap") {
-        val res = _mapState.getMap()
-        res.foreach { pair =>
+        _mapState.getMap().foreach { pair =>
           output = (key, pair._1, pair._2) :: output
         }
       } else if (row.action == "getKeys") {
@@ -94,11 +93,17 @@ class TransformWithMapStateSuite extends StreamTest {
           TimeoutMode.NoTimeouts(),
           OutputMode.Update())
 
+
       testStream(result, OutputMode.Update())(
         AddData(inputData, inputMapRow),
-        ExpectFailure[SparkIllegalArgumentException](e => {
-          assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
-        })
+        ExpectFailure[SparkIllegalArgumentException] { e => {
+          checkError(
+            exception = e.asInstanceOf[SparkIllegalArgumentException],
+            errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+            sqlState = Some("42601"),
+            parameters = Map("stateName" -> "sessionState")
+          )
+        }}
       )
     }
   }
@@ -140,9 +145,13 @@ class TransformWithMapStateSuite extends StreamTest {
 
       testStream(result, OutputMode.Update())(
         AddData(inputData, InputMapRow("k1", "updateValue", ("k1", null))),
-        ExpectFailure[SparkIllegalArgumentException](e => {
-          assert(e.getMessage.contains("ILLEGAL_STATE_STORE_VALUE.NULL_VALUE"))
-        })
+        ExpectFailure[SparkIllegalArgumentException] { e => {
+          checkError(
+            exception = e.asInstanceOf[SparkIllegalArgumentException],
+            errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+            sqlState = Some("42601"),
+            parameters = Map("stateName" -> "sessionState"))
+        }}
       )
     }
   }

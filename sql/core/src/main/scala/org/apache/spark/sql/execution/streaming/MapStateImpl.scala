@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.{BinaryType, StructType}
 
@@ -27,7 +27,8 @@ class MapStateImpl[K, V](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    userKeyExprEnc: Encoder[K]) extends MapState[K, V] with Logging {
+    userKeyEnc: Encoder[K],
+    valEncoder: Encoder[V]) extends MapState[K, V] with Logging {
 
   // Pack grouping key and user key together as a prefixed composite key
   private val schemaForCompositeKeyRow: StructType =
@@ -36,8 +37,8 @@ class MapStateImpl[K, V](
     .add("userKey", BinaryType)
   private val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
   private val keySerializer = keyExprEnc.createSerializer()
-  private val stateTypesEncoder = CompositeKeyStateEncoder(
-    keySerializer, schemaForCompositeKeyRow, stateName, userKeyExprEnc)
+  private val stateTypesEncoder = new CompositeKeyStateEncoder(
+    keySerializer, userKeyEnc, valEncoder, schemaForCompositeKeyRow, stateName)
 
   store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, numColsPrefixKey = 1,
     schemaForValueRow)
@@ -73,24 +74,31 @@ class MapStateImpl[K, V](
   }
 
   /** Get the map associated with grouping key */
-  override def getMap(): Map[K, V] = {
+  override def getMap(): Iterator[(K, V)] = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    store.prefixScan(encodedGroupingKey, stateName)
-      .map {
-        case iter: UnsafeRowPair =>
-          (stateTypesEncoder.decodeCompositeKey(iter.key),
-            stateTypesEncoder.decodeValue(iter.value))
-      }.toMap
+    val pairsIterator = store.prefixScan(encodedGroupingKey, stateName)
+
+    new Iterator[(K, V)] {
+      override def hasNext: Boolean = {
+        pairsIterator.hasNext
+      }
+
+      override def next(): (K, V) = {
+        val iter = pairsIterator.next()
+        (stateTypesEncoder.decodeCompositeKey(iter.key),
+          stateTypesEncoder.decodeValue(iter.value))
+      }
+    }
   }
 
   /** Get the list of keys present in map associated with grouping key */
   override def getKeys(): Iterator[K] = {
-    getMap().keys.iterator
+    getMap().map(_._1)
   }
 
   /** Get the list of values present in map associated with grouping key */
   override def getValues(): Iterator[V] = {
-    getMap().values.iterator
+    getMap().map(_._2)
   }
 
   /** Remove user key from map state */

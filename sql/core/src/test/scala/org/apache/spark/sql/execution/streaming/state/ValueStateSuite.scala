@@ -179,7 +179,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test SQL encoder - Value state operations for Primitive(Double) instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -205,7 +205,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test SQL encoder - Value state operations for Primitive(Long) instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -231,7 +231,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test SQL encoder - Value state operations for case class instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -257,7 +257,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   }
 
   test("test SQL encoder - Value state operations for POJO instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])

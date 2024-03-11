@@ -140,10 +140,13 @@ class StatefulProcessorHandleImpl(
     resultState
   }
 
-  override def getMapState[K, V](stateName: String, userKeyEnc: Encoder[K]): MapState[K, V] = {
+  override def getMapState[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V]): MapState[K, V] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
-    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc)
+    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
   }
 }

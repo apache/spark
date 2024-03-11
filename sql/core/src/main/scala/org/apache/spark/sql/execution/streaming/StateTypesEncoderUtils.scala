@@ -60,7 +60,7 @@ class StateTypesEncoder[GK, V](
   private val valExpressionEnc = encoderFor(valEncoder)
   private val objToRowSerializer = valExpressionEnc.createSerializer()
   private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
-  private val reuseRow = new UnsafeRow(valEncoder.schema.fields.length)
+  private val reusedValRow = new UnsafeRow(valEncoder.schema.fields.length)
 
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
@@ -85,8 +85,8 @@ class StateTypesEncoder[GK, V](
 
   def decodeValue(row: UnsafeRow): V = {
     val bytes = row.getBinary(0)
-    reuseRow.pointTo(bytes, bytes.length)
-    val value = rowToObjDeserializer.apply(reuseRow)
+    reusedValRow.pointTo(bytes, bytes.length)
+    val value = rowToObjDeserializer.apply(reusedValRow)
     value
   }
 }
@@ -100,15 +100,16 @@ object StateTypesEncoder {
   }
 }
 
-class CompositeKeyStateEncoder[GK, K](
+class CompositeKeyStateEncoder[GK, K, V](
     keySerializer: Serializer[GK],
+    userKeyEnc: Encoder[K],
+    valEncoder: Encoder[V],
     schemaForCompositeKeyRow: StructType,
-    stateName: String,
-    userKeyEnc: Encoder[K])
-  extends StateTypesEncoder[GK](keySerializer: Serializer[GK], stateName: String) {
+    stateName: String)
+  extends StateTypesEncoder[GK, V](keySerializer, valEncoder, stateName) {
 
   private val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
-  private val reuseRow = new UnsafeRow(userKeyEnc.schema.fields.length)
+  private val reusedKeyRow = new UnsafeRow(userKeyEnc.schema.fields.length)
   private val userKeyExpressionEnc = encoderFor(userKeyEnc)
 
   private val userKeyRowToObjDeserializer =
@@ -140,19 +141,8 @@ class CompositeKeyStateEncoder[GK, K](
    */
   def decodeCompositeKey(row: UnsafeRow): K = {
     val bytes = row.getBinary(1)
-    reuseRow.pointTo(bytes, bytes.length)
-    val userKey = userKeyRowToObjDeserializer.apply(reuseRow)
+    reusedKeyRow.pointTo(bytes, bytes.length)
+    val userKey = userKeyRowToObjDeserializer.apply(reusedKeyRow)
     userKey
-  }
-}
-
-object CompositeKeyStateEncoder {
-  def apply[GK, K](
-      keySerializer: Serializer[GK],
-      schemaForCompositeKeyRow: StructType,
-      stateName: String,
-      userKeyEnc: Encoder[K]): CompositeKeyStateEncoder[GK, K] = {
-    new CompositeKeyStateEncoder[GK, K](
-      keySerializer, schemaForCompositeKeyRow, stateName, userKeyEnc)
   }
 }

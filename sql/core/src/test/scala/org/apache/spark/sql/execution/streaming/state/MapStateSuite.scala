@@ -42,7 +42,7 @@ class MapStateSuite extends StateVariableSuiteBase {
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val testState: MapState[String, Double] =
-        handle.getMapState[String, Double]("testState", Encoders.STRING)
+        handle.getMapState[String, Double]("testState", Encoders.STRING, Encoders.scalaDouble)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial value
       testState.updateValue("k1", 1.0)
@@ -65,7 +65,7 @@ class MapStateSuite extends StateVariableSuiteBase {
 
       testState.clear()
       assert(!testState.exists())
-      assert(testState.getMap() === Map.empty)
+      assert(testState.getMap().hasNext === false)
     }
   }
 
@@ -76,9 +76,9 @@ class MapStateSuite extends StateVariableSuiteBase {
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val testState1: MapState[Long, Double] =
-        handle.getMapState[Long, Double]("testState1", Encoders.scalaLong)
+        handle.getMapState[Long, Double]("testState1", Encoders.scalaLong, Encoders.scalaDouble)
       val testState2: MapState[Long, Int] =
-        handle.getMapState[Long, Int]("testState2", Encoders.scalaLong)
+        handle.getMapState[Long, Int]("testState2", Encoders.scalaLong, Encoders.scalaInt)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial value
       testState1.updateValue(1L, 1.0)
@@ -103,8 +103,8 @@ class MapStateSuite extends StateVariableSuiteBase {
       testState2.clear()
       assert(!testState1.exists())
       assert(!testState2.exists())
-      assert(testState1.getMap() === Map.empty)
-      assert(testState2.getMap() === Map.empty)
+      assert(testState1.getMap().hasNext === false)
+      assert(testState2.getMap().hasNext === false)
     }
   }
 
@@ -115,13 +115,13 @@ class MapStateSuite extends StateVariableSuiteBase {
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val mapTestState1: MapState[String, Int] =
-        handle.getMapState[String, Int]("mapTestState1", Encoders.STRING)
+        handle.getMapState[String, Int]("mapTestState1", Encoders.STRING, Encoders.scalaInt)
       val mapTestState2: MapState[String, Int] =
-        handle.getMapState[String, Int]("mapTestState2", Encoders.STRING)
+        handle.getMapState[String, Int]("mapTestState2", Encoders.STRING, Encoders.scalaInt)
       val valueTestState: ValueState[String] =
-        handle.getValueState[String]("valueTestState")
+        handle.getValueState[String]("valueTestState", Encoders.STRING)
       val listTestState: ListState[String] =
-        handle.getListState[String]("listTestState")
+        handle.getListState[String]("listTestState", Encoders.STRING)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial values
@@ -164,7 +164,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(!listTestState.exists())
       assert(!mapTestState1.exists())
       assert(mapTestState2.exists())
-      assert(mapTestState2.getMap() === Map("k2" -> 4))
+      assert(mapTestState2.getMap().toList === List(("k2", 4)))
     }
   }
 }
