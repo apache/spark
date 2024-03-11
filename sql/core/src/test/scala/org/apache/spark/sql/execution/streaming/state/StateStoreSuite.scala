@@ -134,11 +134,34 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  private def verifyStoreOperationUnsupported()(testFn: => Unit): Unit = {
-    val ex = intercept[UnsupportedOperationException] {
-      testFn
+  private def verifyStoreOperationUnsupported(operationName: String)(testFn: => Unit): Unit = {
+    if (operationName != "merge") {
+      val ex = intercept[SparkUnsupportedOperationException] {
+        testFn
+      }
+      checkError(
+        ex,
+        errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+        parameters = Map(
+          "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+    } else {
+      val ex = intercept[SparkUnsupportedOperationException] {
+        testFn
+      }
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+        parameters = Map(
+          "operationType" -> operationName,
+          "entity" -> "HDFSBackedStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+
     }
-    assert(ex.getMessage.contains("not supported"))
   }
 
   test("get, put, remove etc operations on non-default col family should fail") {
@@ -148,27 +171,27 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       val keyRow = dataToKeyRow("a", 0)
       val valueRow = dataToValueRow(1)
       val colFamilyName = "test"
-      verifyStoreOperationUnsupported() {
+      verifyStoreOperationUnsupported("put") {
         store.put(keyRow, valueRow, colFamilyName)
       }
 
-      verifyStoreOperationUnsupported() {
+      verifyStoreOperationUnsupported("remove") {
         store.remove(keyRow, colFamilyName)
       }
 
-      verifyStoreOperationUnsupported() {
+      verifyStoreOperationUnsupported("get") {
         store.get(keyRow, colFamilyName)
       }
 
-      verifyStoreOperationUnsupported() {
+      verifyStoreOperationUnsupported("merge") {
         store.merge(keyRow, valueRow, colFamilyName)
       }
 
-      verifyStoreOperationUnsupported() {
+      verifyStoreOperationUnsupported("iterator") {
         store.iterator(colFamilyName)
       }
 
-      verifyStoreOperationUnsupported() {
+      verifyStoreOperationUnsupported("prefixScan") {
         store.prefixScan(keyRow, colFamilyName)
       }
     }

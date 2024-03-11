@@ -116,6 +116,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     private lazy val deltaFileStream = fm.createAtomic(finalDeltaFile, overwriteIfPossible = true)
     private lazy val compressedStream = compressStream(deltaFileStream)
 
+    private val providerName = "HDFSBackedStateStoreProvider"
+
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
     override def createColFamilyIfAbsent(
@@ -124,14 +126,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         numColsPrefixKey: Int,
         valueSchema: StructType,
         useMultipleValuesPerKey: Boolean = false): Unit = {
-      throw StateStoreErrors.multipleColumnFamiliesNotSupported("HDFSStateStoreProvider")
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
 
     // Multiple col families are not supported with HDFSBackedStateStoreProvider. Throw an exception
     // if the user tries to use a non-default col family.
     private def assertUseOfDefaultColFamily(colFamilyName: String): Unit = {
       if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
-        throw StateStoreErrors.multipleColumnFamiliesNotSupported("HDFSStateStoreProvider")
+
+        throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
       }
     }
 
@@ -231,13 +234,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
-      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
     }
 
     override def merge(key: UnsafeRow,
         value: UnsafeRow,
         colFamilyName: String): Unit = {
-      throw StateStoreErrors.unsupportedOperationException("merge", "HDFSStateStore")
+      throw StateStoreErrors.unsupportedOperationException("merge", providerName)
     }
   }
 

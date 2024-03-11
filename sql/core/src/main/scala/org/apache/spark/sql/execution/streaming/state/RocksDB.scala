@@ -251,6 +251,9 @@ class RocksDB(
     colFamilyNameToHandleMap.contains(colFamilyName)
   }
 
+  private val multColFamiliesDisabledStr = "multiple column families disabled in " +
+    "RocksDBStateStoreProvider"
+
   /**
    * Function to verify invariants for column family based operations such as get, put, remove etc.
    * @param operationName - name of the store operation
@@ -263,7 +266,7 @@ class RocksDB(
       // if the state store instance does not support multiple column families, throw an exception
       if (!useColumnFamilies) {
         throw StateStoreErrors.unsupportedOperationException(operationName,
-          "multiple column families disabled in RocksDBStateStoreProvider")
+          multColFamiliesDisabledStr)
       }
 
       // if the column family name is empty or contains leading/trailing whitespaces, throw an
@@ -291,7 +294,7 @@ class RocksDB(
     // if the state store instance does not support multiple column families, throw an exception
     if (!useColumnFamilies) {
       throw StateStoreErrors.unsupportedOperationException(operationName,
-        "multiple column families disabled in RocksDBStateStoreProvider")
+        multColFamiliesDisabledStr)
     }
 
     // if the column family name is empty or contains leading/trailing whitespaces
@@ -381,7 +384,7 @@ class RocksDB(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (!useColumnFamilies) {
       throw StateStoreErrors.unsupportedOperationException("merge",
-        "RocksDBStateStoreProvider and multiple column families disabled")
+        multColFamiliesDisabledStr)
     }
     verifyColFamilyOperations("merge", colFamilyName)
 
