@@ -380,7 +380,7 @@ trait Row extends Serializable {
    * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
-    throw DataTypeErrors.fieldIndexOnRowWithoutSchemaError()
+    throw DataTypeErrors.fieldIndexOnRowWithoutSchemaError(fieldName = name)
   }
 
   /**

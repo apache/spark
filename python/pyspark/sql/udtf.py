@@ -62,11 +62,18 @@ class AnalyzeArgument:
         The calculated value if the argument is foldable; otherwise None
     isTable : bool
         If True, the argument is a table argument.
+    isConstantExpression : bool
+        If True, the argument is a constant-foldable scalar expression. Then the 'value' field
+        contains None if the argument is a NULL literal, or a non-None value if the argument is a
+        non-NULL literal. In this way, we can distinguish between a literal NULL argument and other
+        types of arguments such as complex expression trees or table arguments where the 'value'
+        field is always None.
     """
 
     dataType: DataType
     value: Optional[Any]
     isTable: bool
+    isConstantExpression: bool
 
 
 @dataclass(frozen=True)

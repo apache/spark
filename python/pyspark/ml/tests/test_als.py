@@ -39,7 +39,7 @@ class ALSTest(ReusedSQLTestCase):
             seed=42,
         ).fit(data)
 
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_ambiguous_column") as d:
             model.write().overwrite().save(d)
             loaded_model = ALSModel().load(d)
 

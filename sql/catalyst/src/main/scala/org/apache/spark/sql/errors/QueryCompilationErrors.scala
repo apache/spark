@@ -266,11 +266,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expression" -> toSQLExpr(trimmedNestedGenerator)))
   }
 
-  def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
+  def moreThanOneGeneratorError(generators: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
       messageParameters = Map(
-        "clause" -> clause,
         "num" -> generators.size.toString,
         "generators" -> generators.map(toSQLExpr).mkString(", ")))
   }
@@ -295,6 +294,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "functionName" -> toSQLId(functionName),
         "argument" -> toSQLId(argumentName))
     )
+  }
+
+  def collationNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.COLLATION",
+      messageParameters = Map.empty)
   }
 
   def unresolvedUsingColForJoinError(
@@ -1740,10 +1745,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("outputPath" -> outputPath.toString))
   }
 
-  def cannotUseDataTypeForPartitionColumnError(field: StructField): Throwable = {
+  def invalidPartitionColumnDataTypeError(field: StructField): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1153",
-      messageParameters = Map("field" -> field.dataType.toString))
+      errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+      messageParameters = Map("type" -> toSQLType(field.dataType)))
   }
 
   def cannotUseAllColumnsForPartitionColumnsError(): Throwable = {
@@ -3995,5 +4000,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("name" -> toSQLExpr(e)),
       origin = e.origin
     )
+  }
+
+  private def callDeprecatedMethodError(oldMethod: String, newMethod: String): Throwable = {
+    SparkException.internalError(s"The method `$oldMethod` is deprecated, " +
+      s"please use `$newMethod` instead.")
+  }
+
+  def createTableDeprecatedError(): Throwable = {
+    callDeprecatedMethodError("createTable(..., StructType, ...)",
+      "createTable(..., Array[Column], ...)")
   }
 }

@@ -27,25 +27,28 @@ import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCu
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class CollationSuite extends DatasourceV2SQLBase {
+class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
 
   test("collate returns proper type") {
     Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
-      checkAnswer(sql(s"select 'aaa' collate '$collationName'"), Row("aaa"))
+      checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
       val collationId = CollationFactory.collationNameToId(collationName)
-      assert(sql(s"select 'aaa' collate '$collationName'").schema(0).dataType
+      assert(sql(s"select 'aaa' collate $collationName").schema(0).dataType
         == StringType(collationId))
     }
   }
 
   test("collation name is case insensitive") {
     Seq("uCs_BasIc", "uCs_baSic_Lcase", "uNicOde", "UNICODE_ci").foreach { collationName =>
-      checkAnswer(sql(s"select 'aaa' collate '$collationName'"), Row("aaa"))
+      checkAnswer(sql(s"select 'aaa' collate $collationName"), Row("aaa"))
       val collationId = CollationFactory.collationNameToId(collationName)
-      assert(sql(s"select 'aaa' collate '$collationName'").schema(0).dataType
+      assert(sql(s"select 'aaa' collate $collationName").schema(0).dataType
         == StringType(collationId))
     }
   }
@@ -53,7 +56,7 @@ class CollationSuite extends DatasourceV2SQLBase {
   test("collation expression returns name of collation") {
     Seq("ucs_basic", "ucs_basic_lcase", "unicode", "unicode_ci").foreach { collationName =>
       checkAnswer(
-        sql(s"select collation('aaa' collate '$collationName')"), Row(collationName.toUpperCase()))
+        sql(s"select collation('aaa' collate $collationName)"), Row(collationName.toUpperCase()))
     }
   }
 
@@ -129,7 +132,7 @@ class CollationSuite extends DatasourceV2SQLBase {
 
   test("invalid collation name throws exception") {
     checkError(
-      exception = intercept[SparkException] { sql("select 'aaa' collate 'UCS_BASIS'") },
+      exception = intercept[SparkException] { sql("select 'aaa' collate UCS_BASIS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
       parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
@@ -181,7 +184,7 @@ class CollationSuite extends DatasourceV2SQLBase {
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
-          sql(s"select '$left' collate '$collationName' = '$right' collate '$collationName'"),
+          sql(s"select '$left' collate $collationName = '$right' collate $collationName"),
           Row(expected))
         checkAnswer(
           sql(s"select collate('$left', '$collationName') = collate('$right', '$collationName')"),
@@ -206,11 +209,273 @@ class CollationSuite extends DatasourceV2SQLBase {
     ).foreach {
       case (collationName, left, right, expected) =>
         checkAnswer(
-          sql(s"select '$left' collate '$collationName' < '$right' collate '$collationName'"),
+          sql(s"select '$left' collate $collationName < '$right' collate $collationName"),
           Row(expected))
         checkAnswer(
           sql(s"select collate('$left', '$collationName') < collate('$right', '$collationName')"),
           Row(expected))
+    }
+  }
+
+  test("checkCollation throws exception for incompatible collationIds") {
+    val left: String = "abc" // collate with 'UNICODE_CI'
+    val leftCollationName: String = "UNICODE_CI";
+    var right: String = null // collate with 'UNICODE'
+    val rightCollationName: String = "UNICODE";
+    // contains
+    right = left.substring(1, 2);
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        spark.sql(s"SELECT contains(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))")
+      },
+      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName",
+        "sqlExpr" -> "\"contains(collate(abc), collate(b))\""
+      ),
+      context = ExpectedContext(fragment =
+        s"contains(collate('abc', 'UNICODE_CI'),collate('b', 'UNICODE'))",
+        start = 7, stop = 68)
+    )
+    // startsWith
+    right = left.substring(0, 1);
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        spark.sql(s"SELECT startsWith(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))")
+      },
+      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName",
+        "sqlExpr" -> "\"startswith(collate(abc), collate(a))\""
+      ),
+      context = ExpectedContext(fragment =
+        s"startsWith(collate('abc', 'UNICODE_CI'),collate('a', 'UNICODE'))",
+        start = 7, stop = 70)
+    )
+    // endsWith
+    right = left.substring(2, 3);
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
+        spark.sql(s"SELECT endsWith(collate('$left', '$leftCollationName')," +
+          s"collate('$right', '$rightCollationName'))")
+      },
+      errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
+      sqlState = "42K09",
+      parameters = Map(
+        "collationNameLeft" -> s"$leftCollationName",
+        "collationNameRight" -> s"$rightCollationName",
+        "sqlExpr" -> "\"endswith(collate(abc), collate(c))\""
+      ),
+      context = ExpectedContext(fragment =
+        s"endsWith(collate('abc', 'UNICODE_CI'),collate('c', 'UNICODE'))",
+        start = 7, stop = 68)
+    )
+  }
+
+  case class CollationTestCase[R](left: String, right: String, collation: String, expectedResult: R)
+
+  test("Support contains string expression with Collation") {
+    // Supported collations
+    val checks = Seq(
+      CollationTestCase("", "", "UCS_BASIC", true),
+      CollationTestCase("c", "", "UCS_BASIC", true),
+      CollationTestCase("", "c", "UCS_BASIC", false),
+      CollationTestCase("abcde", "c", "UCS_BASIC", true),
+      CollationTestCase("abcde", "C", "UCS_BASIC", false),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC", true),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
+      CollationTestCase("abcde", "fgh", "UCS_BASIC", false),
+      CollationTestCase("abcde", "FGH", "UCS_BASIC", false),
+      CollationTestCase("", "", "UNICODE", true),
+      CollationTestCase("c", "", "UNICODE", true),
+      CollationTestCase("", "c", "UNICODE", false),
+      CollationTestCase("abcde", "c", "UNICODE", true),
+      CollationTestCase("abcde", "C", "UNICODE", false),
+      CollationTestCase("abcde", "bcd", "UNICODE", true),
+      CollationTestCase("abcde", "BCD", "UNICODE", false),
+      CollationTestCase("abcde", "fgh", "UNICODE", false),
+      CollationTestCase("abcde", "FGH", "UNICODE", false),
+      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "c", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "C", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "fgh", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "FGH", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UNICODE_CI", true),
+      CollationTestCase("c", "", "UNICODE_CI", true),
+      CollationTestCase("", "c", "UNICODE_CI", false),
+      CollationTestCase("abcde", "c", "UNICODE_CI", true),
+      CollationTestCase("abcde", "C", "UNICODE_CI", true),
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", true),
+      CollationTestCase("abcde", "BCD", "UNICODE_CI", true),
+      CollationTestCase("abcde", "fgh", "UNICODE_CI", false),
+      CollationTestCase("abcde", "FGH", "UNICODE_CI", false)
+    )
+    checks.foreach(testCase => {
+      checkAnswer(sql(s"SELECT contains(collate('${testCase.left}', '${testCase.collation}')," +
+        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
+    })
+  }
+
+  test("Support startsWith string expression with Collation") {
+    // Supported collations
+    val checks = Seq(
+      CollationTestCase("", "", "UCS_BASIC", true),
+      CollationTestCase("c", "", "UCS_BASIC", true),
+      CollationTestCase("", "c", "UCS_BASIC", false),
+      CollationTestCase("abcde", "a", "UCS_BASIC", true),
+      CollationTestCase("abcde", "A", "UCS_BASIC", false),
+      CollationTestCase("abcde", "abc", "UCS_BASIC", true),
+      CollationTestCase("abcde", "ABC", "UCS_BASIC", false),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC", false),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
+      CollationTestCase("", "", "UNICODE", true),
+      CollationTestCase("c", "", "UNICODE", true),
+      CollationTestCase("", "c", "UNICODE", false),
+      CollationTestCase("abcde", "a", "UNICODE", true),
+      CollationTestCase("abcde", "A", "UNICODE", false),
+      CollationTestCase("abcde", "abc", "UNICODE", true),
+      CollationTestCase("abcde", "ABC", "UNICODE", false),
+      CollationTestCase("abcde", "bcd", "UNICODE", false),
+      CollationTestCase("abcde", "BCD", "UNICODE", false),
+      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "a", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "A", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "abc", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "ABC", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UNICODE_CI", true),
+      CollationTestCase("c", "", "UNICODE_CI", true),
+      CollationTestCase("", "c", "UNICODE_CI", false),
+      CollationTestCase("abcde", "a", "UNICODE_CI", true),
+      CollationTestCase("abcde", "A", "UNICODE_CI", true),
+      CollationTestCase("abcde", "abc", "UNICODE_CI", true),
+      CollationTestCase("abcde", "ABC", "UNICODE_CI", true),
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", false),
+      CollationTestCase("abcde", "BCD", "UNICODE_CI", false)
+    )
+    checks.foreach(testCase => {
+      checkAnswer(sql(s"SELECT startswith(collate('${testCase.left}', '${testCase.collation}')," +
+        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
+    })
+  }
+
+  test("Support endsWith string expression with Collation") {
+    // Supported collations
+    val checks = Seq(
+      CollationTestCase("", "", "UCS_BASIC", true),
+      CollationTestCase("c", "", "UCS_BASIC", true),
+      CollationTestCase("", "c", "UCS_BASIC", false),
+      CollationTestCase("abcde", "e", "UCS_BASIC", true),
+      CollationTestCase("abcde", "E", "UCS_BASIC", false),
+      CollationTestCase("abcde", "cde", "UCS_BASIC", true),
+      CollationTestCase("abcde", "CDE", "UCS_BASIC", false),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC", false),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC", false),
+      CollationTestCase("", "", "UNICODE", true),
+      CollationTestCase("c", "", "UNICODE", true),
+      CollationTestCase("", "c", "UNICODE", false),
+      CollationTestCase("abcde", "e", "UNICODE", true),
+      CollationTestCase("abcde", "E", "UNICODE", false),
+      CollationTestCase("abcde", "cde", "UNICODE", true),
+      CollationTestCase("abcde", "CDE", "UNICODE", false),
+      CollationTestCase("abcde", "bcd", "UNICODE", false),
+      CollationTestCase("abcde", "BCD", "UNICODE", false),
+      CollationTestCase("", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("c", "", "UCS_BASIC_LCASE", true),
+      CollationTestCase("", "c", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "e", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "E", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "cde", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "CDE", "UCS_BASIC_LCASE", true),
+      CollationTestCase("abcde", "bcd", "UCS_BASIC_LCASE", false),
+      CollationTestCase("abcde", "BCD", "UCS_BASIC_LCASE", false),
+      CollationTestCase("", "", "UNICODE_CI", true),
+      CollationTestCase("c", "", "UNICODE_CI", true),
+      CollationTestCase("", "c", "UNICODE_CI", false),
+      CollationTestCase("abcde", "e", "UNICODE_CI", true),
+      CollationTestCase("abcde", "E", "UNICODE_CI", true),
+      CollationTestCase("abcde", "cde", "UNICODE_CI", true),
+      CollationTestCase("abcde", "CDE", "UNICODE_CI", true),
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", false),
+      CollationTestCase("abcde", "BCD", "UNICODE_CI", false)
+    )
+    checks.foreach(testCase => {
+      checkAnswer(sql(s"SELECT endswith(collate('${testCase.left}', '${testCase.collation}')," +
+        s"collate('${testCase.right}', '${testCase.collation}'))"), Row(testCase.expectedResult))
+    })
+  }
+
+  test("aggregates count respects collation") {
+    Seq(
+      ("ucs_basic", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("ucs_basic", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("ucs_basic", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("ucs_basic_lcase", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("ucs_basic_lcase", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("ucs_basic_lcase", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode", Seq("AAA", "aaa"), Seq(Row(1, "AAA"), Row(1, "aaa"))),
+      ("unicode", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("unicode", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb"))),
+      ("unicode_CI", Seq("aaa", "aaa"), Seq(Row(2, "aaa"))),
+      ("unicode_CI", Seq("AAA", "aaa"), Seq(Row(2, "AAA"))),
+      ("unicode_CI", Seq("aaa", "bbb"), Seq(Row(1, "aaa"), Row(1, "bbb")))
+    ).foreach {
+      case (collationName: String, input: Seq[String], expected: Seq[Row]) =>
+        checkAnswer(sql(
+          s"""
+          with t as (
+          select collate(col1, '$collationName') as c
+          from
+          values ${input.map(s => s"('$s')").mkString(", ")}
+        )
+        SELECT COUNT(*), c FROM t GROUP BY c
+        """), expected)
+    }
+  }
+
+  test("hash agg is not used for non binary collations") {
+    val tableNameNonBinary = "T_NON_BINARY"
+    val tableNameBinary = "T_BINARY"
+    withTable(tableNameNonBinary) {
+      withTable(tableNameBinary) {
+        sql(s"CREATE TABLE $tableNameNonBinary (c STRING COLLATE UCS_BASIC_LCASE) USING PARQUET")
+        sql(s"INSERT INTO $tableNameNonBinary VALUES ('aaa')")
+        sql(s"CREATE TABLE $tableNameBinary (c STRING COLLATE UCS_BASIC) USING PARQUET")
+        sql(s"INSERT INTO $tableNameBinary VALUES ('aaa')")
+
+        val dfNonBinary = sql(s"SELECT COUNT(*), c FROM $tableNameNonBinary GROUP BY c")
+        assert(collectFirst(dfNonBinary.queryExecution.executedPlan) {
+          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
+        }.isEmpty)
+
+        val dfBinary = sql(s"SELECT COUNT(*), c FROM $tableNameBinary GROUP BY c")
+        assert(collectFirst(dfBinary.queryExecution.executedPlan) {
+          case _: HashAggregateExec | _: ObjectHashAggregateExec => ()
+        }.nonEmpty)
+      }
+    }
+  }
+
+  test("text writing to parquet with collation enclosed with backticks") {
+    withTempPath{ path =>
+      sql(s"select 'a' COLLATE `UNICODE`").write.parquet(path.getAbsolutePath)
+
+      checkAnswer(
+        spark.read.parquet(path.getAbsolutePath),
+        Row("a"))
     }
   }
 
@@ -222,7 +487,7 @@ class CollationSuite extends DatasourceV2SQLBase {
     withTable(tableName) {
       sql(
         s"""
-           |CREATE TABLE $tableName (c1 STRING COLLATE '$collationName')
+           |CREATE TABLE $tableName (c1 STRING COLLATE $collationName)
            |USING PARQUET
            |""".stripMargin)
 
@@ -243,7 +508,7 @@ class CollationSuite extends DatasourceV2SQLBase {
       sql(
         s"""
            |CREATE TABLE $tableName
-           |(c1 STRUCT<name: STRING COLLATE '$collationName', age: INT>)
+           |(c1 STRUCT<name: STRING COLLATE $collationName, age: INT>)
            |USING PARQUET
            |""".stripMargin)
 
@@ -273,13 +538,13 @@ class CollationSuite extends DatasourceV2SQLBase {
       sql(s"INSERT INTO $tableName VALUES ('AAA')")
 
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"),
-          Seq(Row(defaultCollation)))
+        Seq(Row(defaultCollation)))
 
       sql(
-      s"""
-         |ALTER TABLE $tableName
-         |ADD COLUMN c2 STRING COLLATE '$collationName'
-         |""".stripMargin)
+        s"""
+           |ALTER TABLE $tableName
+           |ADD COLUMN c2 STRING COLLATE $collationName
+           |""".stripMargin)
 
       sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
       sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
@@ -298,7 +563,7 @@ class CollationSuite extends DatasourceV2SQLBase {
     withTable(tableName) {
       sql(
         s"""
-           |CREATE TABLE $tableName (c1 string COLLATE '$collationName')
+           |CREATE TABLE $tableName (c1 string COLLATE $collationName)
            |USING $v2Source
            |""".stripMargin)
 
@@ -319,5 +584,85 @@ class CollationSuite extends DatasourceV2SQLBase {
         Seq(Row(collationName)))
       assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
     }
+  }
+
+  test("disable partition on collated string column") {
+    def createTable(partitionColumns: String*): Unit = {
+      val tableName = "test_partition_tbl"
+      withTable(tableName) {
+        sql(
+          s"""
+             |CREATE TABLE $tableName
+             |(id INT, c1 STRING COLLATE UNICODE, c2 string)
+             |USING parquet
+             |PARTITIONED BY (${partitionColumns.mkString(",")})
+             |""".stripMargin)
+      }
+    }
+
+    // should work fine on non collated columns
+    createTable("id")
+    createTable("c2")
+    createTable("id", "c2")
+
+    Seq(Seq("c1"), Seq("c1", "id"), Seq("c1", "c2")).foreach { partitionColumns =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          createTable(partitionColumns: _*)
+        },
+        errorClass = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
+      );
+    }
+  }
+
+  test("shuffle respects collation") {
+    val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(Row.apply(_))
+
+    val schema = StructType(StructField(
+      "col",
+      StringType(CollationFactory.collationNameToId("UCS_BASIC_LCASE"))) :: Nil)
+    val df = spark.createDataFrame(sparkContext.parallelize(in), schema)
+
+    df.repartition(10, df.col("col")).foreachPartition(
+      (rowIterator: Iterator[Row]) => {
+        val partitionData = rowIterator.map(r => r.getString(0)).toArray
+        partitionData.foreach(s => {
+          // assert that both lower and upper case of the string are present in the same partition.
+          assert(partitionData.contains(s.toLowerCase()))
+          assert(partitionData.contains(s.toUpperCase()))
+        })
+    })
+  }
+
+  test("hash based joins not allowed for non-binary collated strings") {
+    val in = (('a' to 'z') ++ ('A' to 'Z')).map(_.toString * 3).map(e => Row.apply(e, e))
+
+    val schema = StructType(StructField(
+      "col_non_binary",
+      StringType(CollationFactory.collationNameToId("UCS_BASIC_LCASE"))) ::
+      StructField("col_binary", StringType) :: Nil)
+    val df1 = spark.createDataFrame(sparkContext.parallelize(in), schema)
+
+    // Binary collations are allowed to use hash join.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_binary") === df1("col_binary"))
+        .queryExecution.executedPlan) {
+      case _: BroadcastHashJoinExec => ()
+    }.nonEmpty)
+
+    // Even with hint broadcast, hash join is not used for non-binary collated strings.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
+        .queryExecution.executedPlan) {
+      case _: BroadcastHashJoinExec => ()
+    }.isEmpty)
+
+    // Instead they will default to sort merge join.
+    assert(collectFirst(
+      df1.hint("broadcast").join(df1, df1("col_non_binary") === df1("col_non_binary"))
+        .queryExecution.executedPlan) {
+      case _: SortMergeJoinExec => ()
+    }.nonEmpty)
   }
 }

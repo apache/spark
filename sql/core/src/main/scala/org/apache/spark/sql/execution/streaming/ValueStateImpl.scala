@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
@@ -29,16 +30,18 @@ import org.apache.spark.sql.streaming.ValueState
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
  * @param keyEnc - Spark SQL encoder for key
+ * @param valEncoder - Spark SQL encoder for value
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
-    keyExprEnc: ExpressionEncoder[Any]) extends ValueState[S] with Logging {
+    keyExprEnc: ExpressionEncoder[Any],
+    valEncoder: Encoder[S]) extends ValueState[S] with Logging {
 
   private val keySerializer = keyExprEnc.createSerializer()
 
-  private val stateTypesEncoder = StateTypesEncoder(keySerializer, stateName)
+  private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
 
   store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, numColsPrefixKey = 0,
     VALUE_ROW_SCHEMA)
@@ -57,7 +60,7 @@ class ValueStateImpl[S](
   override def get(): S = {
     val retRow = getImpl()
     if (retRow != null) {
-      stateTypesEncoder.decodeValue[S](retRow)
+      stateTypesEncoder.decodeValue(retRow)
     } else {
       null.asInstanceOf[S]
     }

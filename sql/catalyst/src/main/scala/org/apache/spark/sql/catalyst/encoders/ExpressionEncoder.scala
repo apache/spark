@@ -408,7 +408,7 @@ case class ExpressionEncoder[T](
    * has not been done already in places where we plan to do later composition of encoders.
    */
   def assertUnresolved(): Unit = {
-    (deserializer +:  serializer).foreach(_.foreach {
+    (deserializer +: serializer).foreach(_.foreach {
       case a: AttributeReference if a.name != "loopVar" =>
         throw QueryExecutionErrors.notExpectedUnresolvedEncoderError(a)
       case _ =>

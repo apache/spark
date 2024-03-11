@@ -433,6 +433,12 @@
     ],
     "sqlState" : "56000"
   },
+  "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
+    "message" : [
+      "<className> must override either <method1> or <method2>."
+    ],
+    "sqlState" : "38000"
+  },
   "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
     "message" : [
       "`MapObjects` does not support the class <cls> as resulting collection."
@@ -492,15 +498,15 @@
     },
     "sqlState" : "54000"
   },
-  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+  "COLUMN_ALIASES_NOT_ALLOWED" : {
     "message" : [
-      "Columns aliases are not allowed in <op>."
+      "Column aliases are not allowed in <op>."
     ],
     "sqlState" : "42601"
   },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
-      "The column <columnName> already exists. Consider to choose another name or rename the existing column."
+      "The column <columnName> already exists. Choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
   },
@@ -688,6 +694,11 @@
         "message" : [
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
+        ]
+      },
+      "COLLATION_MISMATCH" : {
+        "message" : [
+          "Collations <collationNameLeft> and <collationNameRight> are not compatible. Please use the same collation for both strings."
         ]
       },
       "CREATE_MAP_KEY_DIFF_TYPES" : {
@@ -1283,6 +1294,12 @@
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
     ],
     "sqlState" : "42809"
+  },
+  "FOREACH_BATCH_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in foreach batch sink. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
   },
   "FOUND_MULTIPLE_DATA_SOURCES" : {
     "message" : [
@@ -2310,6 +2327,12 @@
     },
     "sqlState" : "22023"
   },
+  "INVALID_PARTITION_COLUMN_DATA_TYPE" : {
+    "message" : [
+      "Cannot use <type> for partition column."
+    ],
+    "sqlState" : "0A000"
+  },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
       "The partition command is invalid."
@@ -2508,6 +2531,12 @@
       "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: <sqlString>."
     ],
     "sqlState" : "07501"
+  },
+  "INVALID_STATEMENT_OR_CLAUSE" : {
+    "message" : [
+      "The statement or clause: <operation> is not valid."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
@@ -2944,6 +2973,12 @@
     },
     "sqlState" : "0A000"
   },
+  "NOT_UNRESOLVED_ENCODER" : {
+    "message" : [
+      "Unresolved encoder expected, but <attr> was found."
+    ],
+    "sqlState" : "42601"
+  },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [
       "Can't determine the default value for <colName> since it is not nullable and it has no default value."
@@ -3305,6 +3340,13 @@
   "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
     "message" : [
       "Failed to remove default column family with reserved name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
+    "message" : [
+      "The handle has not been initialized for this StatefulProcessor.",
+      "Please only use the StatefulProcessor within the transformWithState operator."
     ],
     "sqlState" : "42802"
   },
@@ -3723,6 +3765,18 @@
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
     ],
+    "subClass" : {
+      "FIELD_INDEX" : {
+        "message" : [
+          "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
@@ -3730,6 +3784,19 @@
       "The char/varchar type can't be used in the table schema.",
       "If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set \"spark.sql.legacy.charVarcharAsString\" to \"true\"."
     ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_COLLATION" : {
+    "message" : [
+      "Collation <collationName> is not supported for:"
+    ],
+    "subClass" : {
+      "FOR_FUNCTION" : {
+        "message" : [
+          "function <functionName>. Please try to use a different collation."
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
@@ -3858,6 +3925,11 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "COLLATION" : {
+        "message" : [
+          "Collation is not yet supported."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
@@ -4070,7 +4142,7 @@
     "subClass" : {
       "MULTI_GENERATOR" : {
         "message" : [
-          "only one generator allowed per <clause> clause but found <num>: <generators>."
+          "only one generator allowed per SELECT clause but found <num>: <generators>."
         ]
       },
       "NESTED_IN_EXPRESSIONS" : {
@@ -5034,11 +5106,6 @@
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1153" : {
-    "message" : [
-      "Cannot use <field> for partition column."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1155" : {
     "message" : [
       "Partition column `<col>` not found in schema <schemaCatalog>."
@@ -5142,7 +5209,7 @@
   },
   "_LEGACY_ERROR_TEMP_1183" : {
     "message" : [
-      "Cannot use interval type in the table schema."
+      "Cannot use \"INTERVAL\" type in the table schema."
     ]
   },
   "_LEGACY_ERROR_TEMP_1184" : {
@@ -5711,26 +5778,6 @@
       "not resolved."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2020" : {
-    "message" : [
-      "Couldn't find a valid constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2021" : {
-    "message" : [
-      "Couldn't find a primary constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2023" : {
-    "message" : [
-      "Unresolved encoder expected, but <attr> was found."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2025" : {
-    "message" : [
-      "<className> must override either <m1> or <m2>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2026" : {
     "message" : [
       "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
@@ -6175,11 +6222,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2134" : {
-    "message" : [
-      "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2138" : {
     "message" : [
       "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
@@ -6518,11 +6560,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2231" : {
-    "message" : [
-      "fieldIndex on a Row without schema is undefined."
     ]
   },
   "_LEGACY_ERROR_TEMP_2232" : {
