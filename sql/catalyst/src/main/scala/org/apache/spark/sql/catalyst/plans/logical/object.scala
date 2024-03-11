@@ -589,12 +589,13 @@ object TransformWithState {
       keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
       CatalystSerde.generateObjAttr[U],
       child,
-      false,
+      hasInitialState = false,
       // the following parameters will not be used in physical plan if hasInitialState = false
-      AttributeSet.empty.toSeq,
-      AttributeSet.empty.toSeq,
-      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
-      LocalRelation(encoderFor[K].schema)
+      initialStateGroupingAttrs = groupingAttributes,
+      initialStateDataAttrs = dataAttributes,
+      initialStateDeserializer =
+        UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      initialState = child
     )
     CatalystSerde.serialize[U](mapped)
   }

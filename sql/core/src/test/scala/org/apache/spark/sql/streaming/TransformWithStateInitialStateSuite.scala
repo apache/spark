@@ -22,15 +22,15 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.internal.SQLConf
 
-case class InputRow(key: String, action: String, value: Double)
+case class InitInputRow(key: String, action: String, value: Double)
 
-class StatefulProcessorWithInitialStateTestClass
-  extends StatefulProcessorWithInitialState[String,
-    InputRow, (String, String, Double), (String, Double)] {
+class StatefulProcessorWithInitialStateTestClass extends StatefulProcessorWithInitialState[
+    String, InitInputRow, (String, String, Double), (String, Double)] {
   @transient var _valState: ValueState[Double] = _
 
-  override def handleInitialState(key: String,
-                                  initialState: (String, Double)): Unit = {
+  override def handleInitialState(
+      key: String,
+      initialState: (String, Double)): Unit = {
     _valState.update(initialState._2)
   }
 
@@ -40,9 +40,10 @@ class StatefulProcessorWithInitialStateTestClass
 
   override def close(): Unit = {}
 
-  override def handleInputRows(key: String,
-                               inputRows: Iterator[InputRow],
-                               timerValues: TimerValues): Iterator[(String, String, Double)] = {
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InitInputRow],
+      timerValues: TimerValues): Iterator[(String, String, Double)] = {
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
@@ -58,9 +59,10 @@ class StatefulProcessorWithInitialStateTestClass
 }
 
 class AccumulateStatefulProcessorWithInitState extends StatefulProcessorWithInitialStateTestClass {
-  override def handleInputRows(key: String,
-                               inputRows: Iterator[InputRow],
-                               timerValues: TimerValues): Iterator[(String, String, Double)] = {
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[InitInputRow],
+      timerValues: TimerValues): Iterator[(String, String, Double)] = {
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
@@ -90,7 +92,7 @@ class TransformWithStateInitialStateSuite extends StreamTest {
       withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBStateStoreProvider].getName) {
         val initStateDf = createInitialDfForTest
-        val inputData = MemoryStream[InputRow]
+        val inputData = MemoryStream[InitInputRow]
         val query = inputData.toDS()
           .groupByKey(x => x.key)
           .transformWithState(new
@@ -99,24 +101,24 @@ class TransformWithStateInitialStateSuite extends StreamTest {
           )
         testStream(query, OutputMode.Update())(
           // Operations in the base class will work
-          AddData(inputData, InputRow("k1", "update", 37.0)),
-          AddData(inputData, InputRow("k2", "update", 40.0)),
-          AddData(inputData, InputRow("non-exist", "getOption", -1.0)),
+          AddData(inputData, InitInputRow("k1", "update", 37.0)),
+          AddData(inputData, InitInputRow("k2", "update", 40.0)),
+          AddData(inputData, InitInputRow("non-exist", "getOption", -1.0)),
           CheckNewAnswer(("non-exist", "getOption", -1.0)),
-          AddData(inputData, InputRow("k1", "remove", -1.0)),
-          AddData(inputData, InputRow("k1", "getOption", -1.0)),
+          AddData(inputData, InitInputRow("k1", "remove", -1.0)),
+          AddData(inputData, InitInputRow("k1", "getOption", -1.0)),
           CheckNewAnswer(("k1", "getOption", -1.0)),
           // Every row in initial State is processed
-          AddData(inputData, InputRow("init_1", "getOption", -1.0)),
+          AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
           CheckNewAnswer(("init_1", "getOption", 40.0)),
-          AddData(inputData, InputRow("init_2", "getOption", -1.0)),
+          AddData(inputData, InitInputRow("init_2", "getOption", -1.0)),
           CheckNewAnswer(("init_2", "getOption", 100.0)),
           // Update row with key in initial row will work
-          AddData(inputData, InputRow("init_1", "update", 50.0)),
-          AddData(inputData, InputRow("init_1", "getOption", -1.0)),
+          AddData(inputData, InitInputRow("init_1", "update", 50.0)),
+          AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
           CheckNewAnswer(("init_1", "getOption", 50.0)),
-          AddData(inputData, InputRow("init_1", "remove", -1.0)),
-          AddData(inputData, InputRow("init_1", "getOption", -1.0)),
+          AddData(inputData, InitInputRow("init_1", "remove", -1.0)),
+          AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
           CheckNewAnswer(("init_1", "getOption", -1.0))
         )
       }
@@ -125,7 +127,7 @@ class TransformWithStateInitialStateSuite extends StreamTest {
       withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
         classOf[RocksDBStateStoreProvider].getName) {
         val initStateDf = createInitialDfForTest
-        val inputData = MemoryStream[InputRow]
+        val inputData = MemoryStream[InitInputRow]
         val query = inputData.toDS()
           .groupByKey(x => x.key)
           .transformWithState(new
@@ -133,19 +135,19 @@ class TransformWithStateInitialStateSuite extends StreamTest {
             TimeoutMode.NoTimeouts(), OutputMode.Append(), initStateDf
           )
         testStream(query, OutputMode.Update())(
-          AddData(inputData, InputRow("init_1", "add", 50.0)),
-          AddData(inputData, InputRow("init_2", "add", 60.0)),
-          AddData(inputData, InputRow("init_1", "add", 50.0)),
+          AddData(inputData, InitInputRow("init_1", "add", 50.0)),
+          AddData(inputData, InitInputRow("init_2", "add", 60.0)),
+          AddData(inputData, InitInputRow("init_1", "add", 50.0)),
           // If processInitialState was processed multiple times,
           // following checks will fail
           AddData(inputData,
-            InputRow("init_1", "getOption", -1.0), InputRow("init_2", "getOption", -1.0)),
+            InitInputRow("init_1", "getOption", -1.0), InitInputRow("init_2", "getOption", -1.0)),
           CheckNewAnswer(("init_2", "getOption", 160.0), ("init_1", "getOption", 140.0))
         )
       }
     }
     test("transformWithStateWithInitialState - streaming with hdfsStateStoreProvider should fail") {
-      val inputData = MemoryStream[InputRow]
+      val inputData = MemoryStream[InitInputRow]
       val result = inputData.toDS()
         .groupByKey(x => x.key)
         .transformWithState(new
@@ -153,7 +155,7 @@ class TransformWithStateInitialStateSuite extends StreamTest {
           TimeoutMode.NoTimeouts(), OutputMode.Append(), createInitialDfForTest
         )
       testStream(result, OutputMode.Update())(
-        AddData(inputData, InputRow("a", "update", -1.0)),
+        AddData(inputData, InitInputRow("a", "update", -1.0)),
         ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
           (t: Throwable) => {
             assert(t.getMessage.contains("not supported"))

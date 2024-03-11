@@ -65,8 +65,13 @@ case class TransformWithStateExec(
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
     child: SparkPlan,
-    isStreaming: Boolean = true)
-  extends UnaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
+    isStreaming: Boolean = true,
+    hasInitialState: Boolean = false,
+    initialStateGroupingAttrs: Seq[Attribute],
+    initialStateDataAttrs: Seq[Attribute],
+    initialStateDeserializer: Expression,
+    initialState: SparkPlan)
+  extends BinaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"
 
@@ -85,8 +90,13 @@ case class TransformWithStateExec(
     }
   }
 
-  override protected def withNewChildInternal(
-    newChild: SparkPlan): TransformWithStateExec = copy(child = newChild)
+  override def left: SparkPlan = child
+
+  override def right: SparkPlan = initialState
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
+    copy(child = newLeft, initialState = newRight)
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
@@ -95,13 +105,16 @@ case class TransformWithStateExec(
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    StatefulOperatorPartitioning.getCompatibleDistribution(groupingAttributes,
-      getStateInfo, conf) ::
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      groupingAttributes, getStateInfo, conf) ::
+      StatefulOperatorPartitioning.getCompatibleDistribution(
+        initialStateGroupingAttrs, getStateInfo, conf) ::
       Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
-    groupingAttributes.map(SortOrder(_, Ascending)))
+    groupingAttributes.map(SortOrder(_, Ascending)),
+    initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
@@ -343,6 +356,7 @@ case class TransformWithStateExec(
   }
 }
 
+// scalastyle:off
 object TransformWithStateExec {
 
   // Plan logical transformWithState for batch queries
@@ -356,7 +370,12 @@ object TransformWithStateExec {
       outputMode: OutputMode,
       keyEncoder: ExpressionEncoder[Any],
       outputObjAttr: Attribute,
-      child: SparkPlan): SparkPlan = {
+      child: SparkPlan,
+      hasInitialState: Boolean = false,
+      initialStateGroupingAttrs: Seq[Attribute],
+      initialStateDataAttrs: Seq[Attribute],
+      initialStateDeserializer: Expression,
+      initialState: SparkPlan): SparkPlan = {
     val shufflePartitions = child.session.sessionState.conf.numShufflePartitions
     val statefulOperatorStateInfo = StatefulOperatorStateInfo(
       checkpointLocation = "", // empty checkpointLocation will be populated in doExecute
@@ -381,6 +400,12 @@ object TransformWithStateExec {
       None,
       None,
       child,
-      isStreaming = false)
+      isStreaming = false,
+      hasInitialState,
+      initialStateGroupingAttrs,
+      initialStateDataAttrs,
+      initialStateDeserializer,
+      initialState)
   }
 }
+// scalastyle:on
