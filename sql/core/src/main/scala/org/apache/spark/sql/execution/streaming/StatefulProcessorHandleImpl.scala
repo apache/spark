@@ -20,6 +20,7 @@ import java.util.UUID
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.streaming.state._
@@ -114,10 +115,10 @@ class StatefulProcessorHandleImpl(
 
   def getHandleState: StatefulProcessorHandleState = currState
 
-  override def getValueState[T](stateName: String): ValueState[T] = {
+  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder)
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
 
@@ -199,10 +200,10 @@ class StatefulProcessorHandleImpl(
     timerState.remove(expiryTimestampMs)
   }
 
-  override def getListState[T](stateName: String): ListState[T] = {
+  override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
-    val resultState = new ListStateImpl[T](store, stateName, keyEncoder)
+    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
 }

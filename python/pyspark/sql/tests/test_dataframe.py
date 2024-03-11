@@ -27,7 +27,7 @@ import io
 from contextlib import redirect_stdout
 
 from pyspark.sql import SparkSession, Row, functions
-from pyspark.sql.functions import col, lit, count, sum, mean, struct
+from pyspark.sql.functions import col, lit, count, sum, mean, struct, spark_partition_id
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -229,6 +229,28 @@ class DataFrameTestsMixin:
             exception=pe.exception,
             error_class="NOT_DICT",
             message_parameters={"arg_name": "colsMap", "arg_type": "tuple"},
+        )
+
+    def test_with_columns_renamed_with_duplicated_names(self):
+        df1 = self.spark.createDataFrame([(1, "v1")], ["id", "value"])
+        df2 = self.spark.createDataFrame([(1, "x", "v2")], ["id", "a", "value"])
+        join = df2.join(df1, on=["id"], how="left")
+
+        self.assertEqual(
+            join.withColumnRenamed("id", "value").columns,
+            join.withColumnsRenamed({"id": "value"}).columns,
+        )
+        self.assertEqual(
+            join.withColumnRenamed("a", "b").columns,
+            join.withColumnsRenamed({"a": "b"}).columns,
+        )
+        self.assertEqual(
+            join.withColumnRenamed("value", "new_value").columns,
+            join.withColumnsRenamed({"value": "new_value"}).columns,
+        )
+        self.assertEqual(
+            join.withColumnRenamed("x", "y").columns,
+            join.withColumnsRenamed({"x": "y"}).columns,
         )
 
     def test_ordering_of_with_columns_renamed(self):
@@ -483,20 +505,21 @@ class DataFrameTestsMixin:
 
         # test repartitionByRange(numPartitions, *cols)
         df3 = df1.repartitionByRange(2, "name", "age")
-        self.assertEqual(df3.rdd.getNumPartitions(), 2)
-        self.assertEqual(df3.rdd.first(), df2.rdd.first())
-        self.assertEqual(df3.rdd.take(3), df2.rdd.take(3))
+
+        self.assertEqual(df3.select(spark_partition_id()).distinct().count(), 2)
+        self.assertEqual(df3.first(), df2.first())
+        self.assertEqual(df3.take(3), df2.take(3))
 
         # test repartitionByRange(numPartitions, *cols)
         df4 = df1.repartitionByRange(3, "name", "age")
-        self.assertEqual(df4.rdd.getNumPartitions(), 3)
-        self.assertEqual(df4.rdd.first(), df2.rdd.first())
-        self.assertEqual(df4.rdd.take(3), df2.rdd.take(3))
+        self.assertEqual(df4.select(spark_partition_id()).distinct().count(), 3)
+        self.assertEqual(df4.first(), df2.first())
+        self.assertEqual(df4.take(3), df2.take(3))
 
         # test repartitionByRange(*cols)
         df5 = df1.repartitionByRange(5, "name", "age")
-        self.assertEqual(df5.rdd.first(), df2.rdd.first())
-        self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
+        self.assertEqual(df5.first(), df2.first())
+        self.assertEqual(df5.take(3), df2.take(3))
 
         with self.assertRaises(PySparkTypeError) as pe:
             df1.repartitionByRange([10], "name", "age")
@@ -1842,15 +1865,14 @@ class DataFrameTestsMixin:
         self.assertEqual(df.take(8), result)
 
     def test_same_semantics_error(self):
-        with QuietTest(self.sc):
-            with self.assertRaises(PySparkTypeError) as pe:
-                self.spark.range(10).sameSemantics(1)
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(10).sameSemantics(1)
 
-            self.check_error(
-                exception=pe.exception,
-                error_class="NOT_STR",
-                message_parameters={"arg_name": "other", "arg_type": "int"},
-            )
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_DATAFRAME",
+            message_parameters={"arg_name": "other", "arg_type": "int"},
+        )
 
     def test_input_files(self):
         tpath = tempfile.mkdtemp()

@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -31,16 +32,12 @@ object TransformWithStateSuiteUtils {
 
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
-  @transient var _countState: ValueState[Long] = _
-  @transient var _processorHandle: StatefulProcessorHandle = _
+  @transient protected var _countState: ValueState[Long] = _
 
   override def init(
-      handle: StatefulProcessorHandle,
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode) : Unit = {
-    _processorHandle = handle
-    assert(handle.getQueryInfo().getBatchId >= 0)
-    _countState = _processorHandle.getValueState[Long]("countState")
+      timeoutMode: TimeoutMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
   }
 
   override def handleInputRows(
@@ -79,7 +76,7 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
     } else {
       val currCount = _countState.getOption().getOrElse(0L)
       if (currCount == 0 && (key == "a" || key == "c")) {
-        _processorHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
           + 5000)
       }
 
@@ -101,11 +98,10 @@ class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
   @transient private var _timerState: ValueState[Long] = _
 
   override def init(
-      handle: StatefulProcessorHandle,
       outputMode: OutputMode,
       timeoutMode: TimeoutMode) : Unit = {
-    super.init(handle, outputMode, timeoutMode)
-    _timerState = _processorHandle.getValueState[Long]("timerState")
+    super.init(outputMode, timeoutMode)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
   }
 
   private def handleProcessingTimeBasedTimers(
@@ -130,12 +126,12 @@ class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
         var nextTimerTs: Long = 0L
         if (currCount == 0) {
           nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 5000
-          _processorHandle.registerTimer(nextTimerTs)
+          getHandle.registerTimer(nextTimerTs)
           _timerState.update(nextTimerTs)
         } else if (currCount == 1) {
-          _processorHandle.deleteTimer(_timerState.get())
+          getHandle.deleteTimer(_timerState.get())
           nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 7500
-          _processorHandle.registerTimer(nextTimerTs)
+          getHandle.registerTimer(nextTimerTs)
           _timerState.update(nextTimerTs)
         }
       }
@@ -148,16 +144,14 @@ class MaxEventTimeStatefulProcessor
   extends StatefulProcessor[String, (String, Long), (String, Int)]
   with Logging {
   @transient var _maxEventTimeState: ValueState[Long] = _
-  @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _timerState: ValueState[Long] = _
 
   override def init(
-      handle: StatefulProcessorHandle,
       outputMode: OutputMode,
       timeoutMode: TimeoutMode): Unit = {
-    _processorHandle = handle
-    _maxEventTimeState = _processorHandle.getValueState[Long]("maxEventTimeState")
-    _timerState = _processorHandle.getValueState[Long]("timerState")
+    _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
+      Encoders.scalaLong)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
   }
 
   override def handleInputRows(
@@ -178,8 +172,8 @@ class MaxEventTimeStatefulProcessor
 
       val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
       if (registeredTimerMs < timeoutTimestampMs) {
-        _processorHandle.deleteTimer(registeredTimerMs)
-        _processorHandle.registerTimer(timeoutTimestampMs)
+        getHandle.deleteTimer(registeredTimerMs)
+        getHandle.registerTimer(timeoutTimestampMs)
         _timerState.update(timeoutTimestampMs)
       }
       Iterator((key, maxEventTimeSec.toInt))
@@ -192,18 +186,13 @@ class RunningCountMostRecentStatefulProcessor
   with Logging {
   @transient private var _countState: ValueState[Long] = _
   @transient private var _mostRecent: ValueState[String] = _
-  @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(
-      handle: StatefulProcessorHandle,
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode) : Unit = {
-    _processorHandle = handle
-    assert(handle.getQueryInfo().getBatchId >= 0)
-    _countState = _processorHandle.getValueState[Long]("countState")
-    _mostRecent = _processorHandle.getValueState[String]("mostRecent")
+      timeoutMode: TimeoutMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
   }
-
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
@@ -226,16 +215,12 @@ class MostRecentStatefulProcessorWithDeletion
   extends StatefulProcessor[String, (String, String), (String, String)]
   with Logging {
   @transient private var _mostRecent: ValueState[String] = _
-  @transient var _processorHandle: StatefulProcessorHandle = _
 
   override def init(
-       handle: StatefulProcessorHandle,
-       outputMode: OutputMode,
-       timeoutMode: TimeoutMode) : Unit = {
-    _processorHandle = handle
-    assert(handle.getQueryInfo().getBatchId >= 0)
-    _processorHandle.deleteIfExists("countState")
-    _mostRecent = _processorHandle.getValueState[String]("mostRecent")
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit = {
+    getHandle.deleteIfExists("countState")
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
   }
 
   override def handleInputRows(
@@ -264,7 +249,7 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     // Trying to create value state here should fail
-    _tempState = _processorHandle.getValueState[Long]("tempState")
+    _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong)
     Iterator.empty
   }
 }
@@ -420,19 +405,31 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
       AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
       // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
-      CheckNewAnswer(("a", 15)),  // Output = max event time of a
+      CheckNewAnswer(("a", 15)), // Output = max event time of a
 
-      AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
-      CheckNewAnswer(),                   // No output as data should get filtered by watermark
+      AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
+      CheckNewAnswer(), // No output as data should get filtered by watermark
 
-      AddData(inputData, ("a", 10)),      // Add data newer than watermark for "a"
-      CheckNewAnswer(("a", 15)),          // Max event time is still the same
+      AddData(inputData, ("a", 10)), // Add data newer than watermark for "a"
+      CheckNewAnswer(("a", 15)), // Max event time is still the same
       // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
       // Watermark is still 5 as max event time for all data is still 15.
 
-      AddData(inputData, ("b", 31)),      // Add data newer than watermark for "b", not "a"
+      AddData(inputData, ("b", 31)), // Add data newer than watermark for "b", not "a"
       // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
-      CheckNewAnswer(("a", -1), ("b", 31))           // State for "a" should timeout and emit -1
+      CheckNewAnswer(("a", -1), ("b", 31)) // State for "a" should timeout and emit -1
+    )
+  }
+
+  test("Use statefulProcessor without transformWithState - handle should be absent") {
+    val processor = new RunningCountStatefulProcessor()
+    val ex = intercept[Exception] {
+      processor.getHandle
+    }
+    checkError(
+      ex.asInstanceOf[SparkRuntimeException],
+      errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",
+      parameters = Map.empty
     )
   }
 

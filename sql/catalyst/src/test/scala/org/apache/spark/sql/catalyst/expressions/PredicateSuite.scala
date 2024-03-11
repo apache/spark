@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -541,7 +542,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       case TypeCheckResult.DataTypeMismatch(errorSubClass, messageParameters) =>
         assert(errorSubClass === "UNEXPECTED_INPUT_TYPE")
         assert(messageParameters === Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> "\"BOOLEAN\"",
           "inputSql" -> "\"NULL\"",
           "inputType" -> "\"INT\""))

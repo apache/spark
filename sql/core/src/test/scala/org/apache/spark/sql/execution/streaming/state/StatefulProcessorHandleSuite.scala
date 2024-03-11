@@ -104,7 +104,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
         assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
-        handle.getValueState[Long]("testState")
+        handle.getValueState[Long]("testState", Encoders.scalaLong)
       }
     }
   }
@@ -122,7 +122,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   private def createValueStateInstance(handle: StatefulProcessorHandleImpl): Unit = {
-    handle.getValueState[Long]("testState")
+    handle.getValueState[Long]("testState", Encoders.scalaLong)
   }
 
   private def registerTimer(handle: StatefulProcessorHandleImpl): Unit = {

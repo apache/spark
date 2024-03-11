@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.config.SCHEDULER_MODE
 import org.apache.spark.internal.config.UI.UI_THREAD_DUMPS_ENABLED

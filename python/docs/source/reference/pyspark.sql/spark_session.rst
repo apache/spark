@@ -49,6 +49,7 @@ See also :class:`SparkSession`.
     SparkSession.createDataFrame
     SparkSession.getActiveSession
     SparkSession.newSession
+    SparkSession.profile
     SparkSession.range
     SparkSession.read
     SparkSession.readStream

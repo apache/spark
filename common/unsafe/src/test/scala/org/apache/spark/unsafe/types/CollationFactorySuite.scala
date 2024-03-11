@@ -113,4 +113,29 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       assert(Integer.signum(result) == testCase.expectedResult)
     })
   }
+
+  test("collation aware string search") {
+    val checks = Seq(
+      CollationTestCase("UNICODE_CI", "abcde", "", 0),
+      CollationTestCase("UNICODE_CI", "abcde", "abc", 3),
+      CollationTestCase("UNICODE_CI", "abcde", "C", 1),
+      CollationTestCase("UNICODE_CI", "abcde", "dE", 2),
+      CollationTestCase("UNICODE_CI", "abcde", "abcde", 5),
+      CollationTestCase("UNICODE_CI", "abcde", "ABCDE", 5),
+      CollationTestCase("UNICODE_CI", "abcde", "fgh", 0),
+      CollationTestCase("UNICODE_CI", "abcde", "FGH", 0)
+    )
+
+    checks.foreach(testCase => {
+      val collationId = collationNameToId(testCase.collationName)
+      val stringSearch = getStringSearch(toUTF8(testCase.s1), toUTF8(testCase.s2), collationId)
+      var result = 0
+      while (stringSearch.next() != -1 && result == 0) {
+        if (stringSearch.getMatchLength == stringSearch.getPattern.length()) {
+          result = stringSearch.getMatchLength
+        }
+      }
+      assert(result == testCase.expectedResult)
+    })
+  }
 }

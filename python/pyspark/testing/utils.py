@@ -933,11 +933,21 @@ def assertDataFrameEqual(
             )
 
     if not isinstance(actual, list):
+        if actual.isStreaming:
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
+            )
         actual_list = actual.collect()
     else:
         actual_list = actual
 
     if not isinstance(expected, list):
+        if expected.isStreaming:
+            raise PySparkAssertionError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"operation": "assertDataFrameEqual on streaming DataFrame"},
+            )
         expected_list = expected.collect()
     else:
         expected_list = expected

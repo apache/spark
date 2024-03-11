@@ -335,6 +335,23 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     testUnsetProperties(isDatasourceTable = true)
   }
 
+  test("ALTER TABLE UNSET nonexistent property should throw an exception") {
+    val tableName = "test_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName UNSET TBLPROPERTIES ('test_prop1', 'test_prop2', 'comment')")
+        },
+        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
+        parameters = Map(
+          "properties" -> "`test_prop1`, `test_prop2`",
+          "table" -> "`spark_catalog`.`default`.`test_table`")
+      )
+    }
+  }
+
   test("alter table: change column (datasource table)") {
     testChangeColumn(isDatasourceTable = true)
   }
@@ -964,32 +981,32 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[ParseException] {
         sql(sql1)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE CLUSTERED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER TABLE CLUSTERED BY"),
       context = ExpectedContext(fragment = sql1, start = 0, stop = 70))
     val sql2 = "ALTER TABLE dbx.tab1 CLUSTERED BY (fuji) SORTED BY (grape) INTO 5 BUCKETS"
     checkError(
       exception = intercept[ParseException] {
         sql(sql2)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE CLUSTERED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER TABLE CLUSTERED BY"),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 72))
     val sql3 = "ALTER TABLE dbx.tab1 NOT CLUSTERED"
     checkError(
       exception = intercept[ParseException] {
         sql(sql3)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE NOT CLUSTERED"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER TABLE NOT CLUSTERED"),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 33))
     val sql4 = "ALTER TABLE dbx.tab1 NOT SORTED"
     checkError(
       exception = intercept[ParseException] {
         sql(sql4)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE NOT SORTED"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER TABLE NOT SORTED"),
       context = ExpectedContext(fragment = sql4, start = 0, stop = 30))
   }
 
@@ -1004,8 +1021,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[ParseException] {
         sql(sql1)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE SKEWED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER TABLE SKEWED BY"),
       context = ExpectedContext(fragment = sql1, start = 0, stop = 113)
     )
     val sql2 = "ALTER TABLE dbx.tab1 SKEWED BY (dt, country) ON " +
@@ -1014,8 +1031,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[ParseException] {
         sql(sql2)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE SKEWED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER TABLE SKEWED BY"),
       context = ExpectedContext(fragment = sql2, start = 0, stop = 113)
     )
     val sql3 = "ALTER TABLE dbx.tab1 NOT SKEWED"
@@ -1023,8 +1040,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[ParseException] {
         sql(sql3)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE NOT SKEWED"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER TABLE NOT SKEWED"),
       context = ExpectedContext(fragment = sql3, start = 0, stop = 30)
     )
     val sql4 = "ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES"
@@ -1032,8 +1049,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[ParseException] {
         sql(sql4)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER TABLE NOT STORED AS DIRECTORIES"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER TABLE NOT STORED AS DIRECTORIES"),
       context = ExpectedContext(fragment = sql4, start = 0, stop = 45)
     )
   }
@@ -1044,8 +1061,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[ParseException] {
         sql(sql1)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER VIEW ... ADD PARTITION"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER VIEW ... ADD PARTITION"),
       context = ExpectedContext(fragment = sql1, start = 0, stop = 54)
     )
   }
@@ -1056,8 +1073,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[ParseException] {
         sql(sql1)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "ALTER VIEW ... DROP PARTITION"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER VIEW ... DROP PARTITION"),
       context = ExpectedContext(fragment = sql1, start = 0, stop = 51)
     )
   }
