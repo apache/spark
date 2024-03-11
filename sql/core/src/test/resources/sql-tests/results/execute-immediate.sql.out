@@ -701,6 +701,37 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+DECLARE p = 10
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p
+-- !query schema
+struct<id:int>
+-- !query output
+10
+
+
+-- !query
+EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p, 'p'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "sqlState" : "07001",
+  "messageParameters" : {
+    "exprs" : "\"p\""
+  }
+}
+
+
+-- !query
 EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, res_id
 -- !query schema
 struct<>

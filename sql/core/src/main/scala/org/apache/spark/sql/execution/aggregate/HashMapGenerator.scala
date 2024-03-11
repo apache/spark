@@ -173,7 +173,10 @@ abstract class HashMapGenerator(
             ${hashBytes(bytes)}
           """
         }
-      case _: StringType => hashBytes(s"$input.getBytes()")
+      case st: StringType if st.isBinaryCollation => hashBytes(s"$input.getBytes()")
+      case st: StringType if !st.isBinaryCollation =>
+        hashLong(s"CollationFactory.fetchCollation(${st.collationId})" +
+          s".hashFunction.applyAsLong($input)")
       case CalendarIntervalType => hashInt(s"$input.hashCode()")
     }
   }

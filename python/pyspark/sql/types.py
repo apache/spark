@@ -254,14 +254,14 @@ class StringType(AtomicType):
         the collation id number.
     """
 
-    collationNames = ["UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI"]
+    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
 
     def __init__(self, collationId: int = 0):
         self.collationId = collationId
 
     def collationIdToName(self) -> str:
         return (
-            " COLLATE '%s'" % StringType.collationNames[self.collationId]
+            " COLLATE %s" % StringType.collationNames[self.collationId]
             if self.collationId != 0
             else ""
         )
@@ -443,21 +443,21 @@ class FloatType(FractionalType, metaclass=DataTypeSingleton):
 
 
 class ByteType(IntegralType):
-    """Byte data type, i.e. a signed integer in a single byte."""
+    """Byte data type, representing signed 8-bit integers."""
 
     def simpleString(self) -> str:
         return "tinyint"
 
 
 class IntegerType(IntegralType):
-    """Int data type, i.e. a signed 32-bit integer."""
+    """Int data type, representing signed 32-bit integers."""
 
     def simpleString(self) -> str:
         return "int"
 
 
 class LongType(IntegralType):
-    """Long data type, i.e. a signed 64-bit integer.
+    """Long data type, representing signed 64-bit integers.
 
     If the values are beyond the range of [-9223372036854775808, 9223372036854775807],
     please use :class:`DecimalType`.
@@ -468,7 +468,7 @@ class LongType(IntegralType):
 
 
 class ShortType(IntegralType):
-    """Short data type, i.e. a signed 16-bit integer."""
+    """Short data type, representing signed 16-bit integers."""
 
     def simpleString(self) -> str:
         return "smallint"
@@ -1486,7 +1486,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-_COLLATED_STRING = re.compile(r"string\s+COLLATE\s+'([\w_]+)'")
+_COLLATED_STRING = re.compile(r"string\s+COLLATE\s+([\w_]+|`[\w_]`)")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
