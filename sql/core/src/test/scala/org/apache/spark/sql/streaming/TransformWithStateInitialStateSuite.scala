@@ -163,9 +163,9 @@ class TransformWithStateInitialStateSuite extends StreamTest {
         }
       )
     }
- /*
+
   test("transformWithStateWithInitialState - batch should succeed") {
-    val inputData = Seq(InputRow("k1", "update", 37.0), InputRow("k1", "getOption", -1.0))
+    val inputData = Seq(InitInputRow("k1", "update", 37.0), InitInputRow("k1", "getOption", -1.0))
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new
@@ -174,6 +174,6 @@ class TransformWithStateInitialStateSuite extends StreamTest {
         OutputMode.Append(), createInitialDfForTest)
 
     val df = result.toDF()
-    checkAnswer(df, Seq(("k1", "getOption", -1.0)).toDF())
-  } */
+    checkAnswer(df, Seq(("k1", "getOption", 37.0)).toDF())
+  }
 }
