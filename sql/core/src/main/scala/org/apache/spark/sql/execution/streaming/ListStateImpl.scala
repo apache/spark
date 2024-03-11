@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.plans.logical.{NoTTL, ProcessingTimeTTL}
 import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors}
-import org.apache.spark.sql.streaming.ListState
+import org.apache.spark.sql.streaming.{ListState, TTLMode}
 
 /**
  * Provides concrete implementation for list of values associated with a state variable
@@ -33,7 +36,9 @@ import org.apache.spark.sql.streaming.ListState
 class ListStateImpl[S](
      store: StateStore,
      stateName: String,
-     keyExprEnc: ExpressionEncoder[Any])
+     keyExprEnc: ExpressionEncoder[Any],
+     ttlMode: TTLMode = TTLMode.NoTTL(),
+     ttl: Duration = Duration.Zero)
   extends ListState[S] with Logging {
 
   private val keySerializer = keyExprEnc.createSerializer()
@@ -71,13 +76,17 @@ class ListStateImpl[S](
 
    /** Update the value of the list. */
    override def put(newState: Array[S]): Unit = {
+     val expirationTimestamp = ttlMode match {
+       case NoTTL => -1L
+       case ProcessingTimeTTL => System.currentTimeMillis() + ttl.toMillis
+     }
      validateNewState(newState)
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      var isFirst = true
 
      newState.foreach { v =>
-       val encodedValue = stateTypesEncoder.encodeValue(v)
+       val encodedValue = stateTypesEncoder.encodeValue(v, expirationTimestamp)
        if (isFirst) {
          store.put(encodedKey, encodedValue, stateName)
          isFirst = false
@@ -89,18 +98,26 @@ class ListStateImpl[S](
 
    /** Append an entry to the list. */
    override def appendValue(newState: S): Unit = {
+     val expirationTimestamp = ttlMode match {
+       case NoTTL => -1L
+       case ProcessingTimeTTL => System.currentTimeMillis() + ttl.toMillis
+     }
      StateStoreErrors.requireNonNullStateValue(newState, stateName)
      store.merge(stateTypesEncoder.encodeGroupingKey(),
-         stateTypesEncoder.encodeValue(newState), stateName)
+         stateTypesEncoder.encodeValue(newState, expirationTimestamp), stateName)
    }
 
    /** Append an entire list to the existing value. */
    override def appendList(newState: Array[S]): Unit = {
+     val expirationTimestamp = ttlMode match {
+       case NoTTL => -1L
+       case ProcessingTimeTTL => System.currentTimeMillis() + ttl.toMillis
+     }
      validateNewState(newState)
 
      val encodedKey = stateTypesEncoder.encodeGroupingKey()
      newState.foreach { v =>
-       val encodedValue = stateTypesEncoder.encodeValue(v)
+       val encodedValue = stateTypesEncoder.encodeValue(v, expirationTimestamp)
        store.merge(encodedKey, encodedValue, stateName)
      }
    }

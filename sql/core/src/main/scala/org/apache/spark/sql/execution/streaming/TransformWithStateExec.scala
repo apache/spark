@@ -17,7 +17,12 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util.UUID
+import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.TimeUnit.NANOSECONDS
+
+import scala.util.control.NonFatal
+
+import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -80,12 +85,62 @@ case class TransformWithStateExec(
   protected val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
 
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+    .add("ttl", LongType)
+
+  private var ttlBackgroundThread: ForkJoinPool = _
 
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(groupingAttributes,
       getStateInfo, conf) ::
       Nil
   }
+
+  def startTTLThread(store: StateStore): ForkJoinPool = {
+    // get state name from the statefulProcessor
+    val ttlColFamilies = store.listColumnFamilies().filter(_.startsWith("ttl_"))
+    val threadPool = new ForkJoinPool(ttlColFamilies.size)
+    @volatile var exception: Option[Throwable] = None
+    // start thread in fork join pool for each ttl column family
+    ttlColFamilies.foreach { ttlColFamily =>
+      threadPool.execute(() => {
+        try {
+          ttlFunc(store, ttlColFamily)
+        } catch {
+          case NonFatal(e) =>
+            exception = Some(e)
+            logError(s"Error in TTL thread for stateName=$ttlColFamily", e)
+        }
+      })
+    }
+    threadPool
+  }
+
+  def ttlFunc(store: StateStore, ttlColFamily: String): Unit = {
+    val expiredKeyStateNames =
+      store.iterator(ttlColFamily).flatMap { kv =>
+        val ttl = kv.key.getLong(0)
+        if (ttl <= System.currentTimeMillis()) {
+          Some(kv.key)
+        } else {
+          None
+        }
+      }
+    expiredKeyStateNames.foreach { keyStateName =>
+      store.remove(keyStateName, ttlColFamily)
+      val stateName = SerializationUtils.deserialize(
+        keyStateName.getBinary(1)).asInstanceOf[String]
+      val groupingKey = keyStateName.getBinary(2)
+      val keyRow = StateKeyValueRowSchema.encodeGroupingKeyBytes(groupingKey)
+      val row = store.get(keyRow, stateName)
+      if (row != null) {
+        val ttl = row.getLong(1)
+        if (ttl != -1 && ttl <= System.currentTimeMillis()) {
+          store.remove(keyRow, stateName)
+        }
+      }
+    }
+  }
+
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
     groupingAttributes.map(SortOrder(_, Ascending)))
@@ -124,6 +179,7 @@ case class TransformWithStateExec(
       store: StateStore,
       processorHandle: StatefulProcessorHandleImpl):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    ttlBackgroundThread = startTTLThread(store)
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
 
@@ -148,6 +204,8 @@ case class TransformWithStateExec(
       allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
       commitTimeMs += timeTakenMs {
         if (isStreaming) {
+          // join ttlBackgroundThread forkjoinpool
+          ttlBackgroundThread.shutdown()
           store.commit()
         } else {
           store.abort()

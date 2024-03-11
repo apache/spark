@@ -246,6 +246,11 @@ class RocksDB(
     colFamilyNameToHandleMap.contains(colFamilyName)
   }
 
+  /** Return a list of column family names */
+  def listColumnFamilies(): Seq[String] = {
+    colFamilyNameToHandleMap.keys.toSeq
+  }
+
   private def verifyColFamilyExists(colFamilyName: String): Unit = {
     if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
       throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
