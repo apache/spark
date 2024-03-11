@@ -28,7 +28,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
+abstract class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
 
   protected val simpleDataSourceReaderScript: String =
     """

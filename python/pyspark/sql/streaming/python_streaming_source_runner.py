@@ -21,7 +21,7 @@ import json
 from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
+from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
@@ -129,6 +129,11 @@ def main(infile: IO, outfile: IO) -> None:
                     partitions_func(reader, infile, outfile)
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
+                else:
+                    raise IllegalArgumentException(
+                        error_class="UNSUPPORTED_OPERATION",
+                        message_parameters={"operation": "Function call id not recognized by stream reader"},
+                    )
                 outfile.flush()
         except Exception as e:
             error_msg = "data source {} throw exception: {}".format(data_source.name, e)

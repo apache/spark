@@ -426,6 +426,10 @@ class DataSourceStreamReader(ABC):
             in the final DataFrame.
         """
         ...
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "read"},
+        )
 
     def commit(self, end: dict) -> None:
         """
