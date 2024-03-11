@@ -560,7 +560,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK_47217: deduplication of project causes ambiguity in resolution") {
+  test("SPARK-47217: deduplication of project causes ambiguity in resolution") {
     val df = Seq((1, 2)).toDF("a", "b")
     val df2 = df.select(df("a").as("aa"), df("b").as("bb"))
     val df3 = df2.join(df, df2("bb") === df("b")).select(df2("aa"), df("a"))
@@ -569,7 +569,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Row(1, 1) :: Nil)
   }
 
-  test("SPARK-47217. deduplication in nested joins with join attribute aliased") {
+  test("SPARK-47217: deduplication in nested joins with join attribute aliased") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((1, 2)).toDF("aa", "bb")
     val df1Joindf2 = df1.join(df2, df1("a") === df2("aa")).select(df1("a").as("aaa"),
@@ -594,7 +594,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     assert(proj2.projectList(1).references.subsetOf(join2.left.outputSet))
   }
 
-  test("SPARK-47217. deduplication in nested joins without join attribute aliased") {
+  test("SPARK-47217: deduplication in nested joins without join attribute aliased") {
     val df1 = Seq((1, 2)).toDF("a", "b")
     val df2 = Seq((1, 2)).toDF("aa", "bb")
     val df1Joindf2 = df1.join(df2, df1("a") === df2("aa")).select(df1("a"), df2("aa"), df1("b"))

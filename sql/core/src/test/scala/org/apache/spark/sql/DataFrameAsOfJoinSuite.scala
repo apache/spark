@@ -175,7 +175,7 @@ class DataFrameAsOfJoinSuite extends QueryTest
     )
   }
 
-  test("SPARK_47217: Dedup of relations can impact projected columns resolution") {
+  test("SPARK-47217: Dedup of relations can impact projected columns resolution") {
     val (df1, df2) = prepareForAsOfJoin()
     val join1 = df1.join(df2, df1.col("a") === df2.col("a")).select(df2.col("a"), df1.col("b"),
       df2.col("b"), df1.col("a").as("aa"))
