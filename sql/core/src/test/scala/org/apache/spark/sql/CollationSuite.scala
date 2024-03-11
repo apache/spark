@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
+import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParallelizable
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
@@ -436,6 +437,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         }.nonEmpty)
       }
     }
+  }
+
+  test("test concurrently generating collation keys") {
+    // generating ICU sort keys is not thread-safe by default so this should fail
+    // if we don't handle the concurrency properly on Collator level
+
+    (0 to 10).foreach(_ => {
+      val collator = CollationFactory.fetchCollation("UNICODE").collator
+
+      (0 to 100).par.foreach { _ =>
+        collator.getCollationKey("aaa")
+      }
+    })
   }
 
   test("text writing to parquet with collation enclosed with backticks") {

@@ -138,11 +138,13 @@ public final class CollationFactory {
     collationTable[2] = new Collation(
       "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true);
     collationTable[2].collator.setStrength(Collator.TERTIARY);
+    collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
       "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
     collationTable[3].collator.setStrength(Collator.SECONDARY);
+    collationTable[3].collator.freeze();
 
     for (int i = 0; i < collationTable.length; i++) {
       collationNameToIdMap.put(collationTable[i].collationName, i);
