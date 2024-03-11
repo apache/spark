@@ -135,7 +135,7 @@ trait SparkIntervalUtils {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
         messageParameters = Map(
-          "input" -> Option(input).map(_.toString).getOrElse("null")))
+          "input" -> "null"))
     }
     // scalastyle:off caselocale .toLowerCase
     val s = input.trimAll().toLowerCase
@@ -145,7 +145,7 @@ trait SparkIntervalUtils {
       throw new SparkIllegalArgumentException(
         errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
         messageParameters = Map(
-          "input" -> Option(input).map(_.toString).getOrElse("null")))
+          "input" -> input.toString))
     }
     var state = PREFIX
     var i = 0
@@ -183,12 +183,12 @@ trait SparkIntervalUtils {
               throw new SparkIllegalArgumentException(
                 errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
                 messageParameters = Map(
-                  "input" -> Option(input).map(_.toString).getOrElse("null")))
+                  "input" -> input.toString))
             } else if (!Character.isWhitespace(bytes(i + intervalStr.numBytes()))) {
               throw new SparkIllegalArgumentException(
                 errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
                 messageParameters = Map(
-                  "input" -> Option(input).map(_.toString).getOrElse("null"),
+                  "input" -> input.toString,
                   "prefix" -> currentWord))
             } else {
               i += intervalStr.numBytes() + 1
@@ -227,7 +227,7 @@ trait SparkIntervalUtils {
             case _ => throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null"),
+                "input" -> input.toString,
                 "number" -> currentWord))
           }
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
@@ -240,7 +240,7 @@ trait SparkIntervalUtils {
                 case e: ArithmeticException => throw new SparkIllegalArgumentException(
                   errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
                   messageParameters = Map(
-                    "input" -> Option(input).map(_.toString).getOrElse("null")))
+                    "input" -> input.toString))
               }
             case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_UNIT
             case '.' =>
@@ -249,7 +249,7 @@ trait SparkIntervalUtils {
             case _ => throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null"),
+                "input" -> input.toString,
                 "value" -> currentWord))
           }
           i += 1
@@ -265,13 +265,13 @@ trait SparkIntervalUtils {
             throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null"),
+                "input" -> input.toString,
                 "value" -> currentWord))
           } else {
             throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null"),
+                "input" -> input.toString,
                 "value" -> currentWord))
           }
           i += 1
@@ -282,7 +282,7 @@ trait SparkIntervalUtils {
             throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null"),
+                "input" -> input.toString,
                 "unit" -> currentWord))
           }
           if (isNegative) {
@@ -329,20 +329,20 @@ trait SparkIntervalUtils {
                   throw new SparkIllegalArgumentException(
                     errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
                     messageParameters = Map(
-                      "input" -> Option(input).map(_.toString).getOrElse("null"),
+                      "input" -> input.toString,
                       "unit" -> currentWord))
                 }
               case _ => throw new SparkIllegalArgumentException(
                 errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
                 messageParameters = Map(
-                  "input" -> Option(input).map(_.toString).getOrElse("null"),
+                  "input" -> input.toString,
                   "unit" -> currentWord))
             }
           } catch {
             case e: ArithmeticException => throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null")))
+                "input" -> input.toString))
           }
           state = UNIT_SUFFIX
         case UNIT_SUFFIX =>
@@ -352,7 +352,7 @@ trait SparkIntervalUtils {
             case _ => throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null"),
+                "input" -> input.toString,
                 "unit" -> currentWord))
           }
           i += 1
@@ -364,7 +364,7 @@ trait SparkIntervalUtils {
             throw new SparkIllegalArgumentException(
               errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
               messageParameters = Map(
-                "input" -> Option(input).map(_.toString).getOrElse("null"),
+                "input" -> input.toString,
                 "unit" -> currentWord))
           }
       }
@@ -376,18 +376,18 @@ trait SparkIntervalUtils {
       case TRIM_BEFORE_VALUE => throw new SparkIllegalArgumentException(
         errorClass = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
         messageParameters = Map(
-          "input" -> Option(input).map(_.toString).getOrElse("null"),
+          "input" -> input.toString,
           "word" -> currentWord))
       case VALUE | VALUE_FRACTIONAL_PART =>
         throw new SparkIllegalArgumentException(
           errorClass = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
           messageParameters = Map(
-            "input" -> Option(input).map(_.toString).getOrElse("null"),
+            "input" -> input.toString,
             "word" -> currentWord))
       case _ => throw new SparkIllegalArgumentException(
         errorClass = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
         messageParameters = Map(
-          "input" -> Option(input).map(_.toString).getOrElse("null"),
+          "input" -> input.toString,
           "word" -> currentWord))
     }
 
