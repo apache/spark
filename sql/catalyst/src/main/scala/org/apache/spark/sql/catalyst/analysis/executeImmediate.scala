@@ -88,6 +88,10 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.invalidExecuteImmediateVariableType(varReference.dataType)
         }
 
+        if (varReference.eval(null) == null) {
+          throw QueryCompilationErrors.nullSQLStringExecuteImmediate()
+        }
+
         // Call eval with null value passed instead of a row.
         // This is ok as this is variable and invoking eval should
         // be independent of row value.

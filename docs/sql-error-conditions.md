@@ -1763,6 +1763,12 @@ Row ID attributes cannot be nullable: `<nullableRowIdAttrs>`.
 
 Cannot use null as map key.
 
+### NULL_QUERY_STRING_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+SQLQuery string should not be null.
+
 ### NUMERIC_OUT_OF_SUPPORTED_RANGE
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)

@@ -3004,6 +3004,12 @@
     ],
     "sqlState" : "2200E"
   },
+  "NULL_QUERY_STRING_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "SQLQuery string should not be null."
+    ],
+    "sqlState" : "42K09"
+  },
   "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
     "message" : [
       "The value <value> cannot be interpreted as a numeric since it has more than 38 digits."
