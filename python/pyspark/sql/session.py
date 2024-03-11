@@ -908,6 +908,18 @@ class SparkSession(SparkConversionMixin):
 
     @property
     def profile(self) -> Profile:
+        """Returns a :class:`Profile` for performance/memory profiling.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Profile`
+
+        Notes
+        -----
+        Supports Spark Connect.
+        """
         return Profile(self._profiler_collector)
 
     def range(
@@ -1299,7 +1311,7 @@ class SparkSession(SparkConversionMixin):
         ----------
         data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
-            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
+            :class:`tuple`, ``int``, ``boolean``, ``dict``, etc.), or :class:`list`,
             :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
@@ -1325,6 +1337,9 @@ class SparkSession(SparkConversionMixin):
             if ``samplingRatio`` is ``None``.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
+            When the input is :class:`pandas.DataFrame` and
+            `spark.sql.execution.arrow.pyspark.enabled` is enabled, this option is not
+            effective. It follows Arrow type coercion.
 
             .. versionadded:: 2.1.0
 
@@ -1676,10 +1691,15 @@ class SparkSession(SparkConversionMixin):
         try:
             if isinstance(args, Dict):
                 litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
-            else:
+            elif args is None or isinstance(args, List):
                 assert self._jvm is not None
                 litArgs = self._jvm.PythonUtils.toArray(
                     [_to_java_column(lit(v)) for v in (args or [])]
+                )
+            else:
+                raise PySparkTypeError(
+                    error_class="INVALID_TYPE",
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
@@ -1748,7 +1768,7 @@ class SparkSession(SparkConversionMixin):
         Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="read") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]

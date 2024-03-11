@@ -106,7 +106,7 @@ class SparkConnectPlanner(
 
   private[connect] def sessionId: String = sessionHolder.sessionId
 
-  lazy val executeHolder = executeHolderOpt.getOrElse {
+  private lazy val executeHolder = executeHolderOpt.getOrElse {
     throw new IllegalArgumentException("executeHolder is not set")
   }
 
@@ -2527,7 +2527,7 @@ class SparkConnectPlanner(
     }
   }
 
-  def handleSqlCommand(
+  private def handleSqlCommand(
       getSqlCommand: SqlCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
@@ -2837,7 +2837,7 @@ class SparkConnectPlanner(
    *
    * @param writeOperation
    */
-  def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+  private def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
@@ -2896,7 +2896,7 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  def handleWriteStreamOperationStart(
+  private def handleWriteStreamOperationStart(
       writeOp: WriteStreamOperationStart,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
@@ -3022,7 +3022,7 @@ class SparkConnectPlanner(
         .build())
   }
 
-  def handleStreamingQueryCommand(
+  private def handleStreamingQueryCommand(
       command: StreamingQueryCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
@@ -3200,7 +3200,7 @@ class SparkConnectPlanner(
     builder.build()
   }
 
-  def handleStreamingQueryManagerCommand(
+  private def handleStreamingQueryManagerCommand(
       command: StreamingQueryManagerCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
@@ -3281,7 +3281,7 @@ class SparkConnectPlanner(
         .build())
   }
 
-  def handleGetResourcesCommand(
+  private def handleGetResourcesCommand(
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

@@ -33,6 +33,9 @@ import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
+/** A case class for SQL encoder test purpose */
+case class TestClass(var id: Long, var name: String)
+
 /**
  * Class that adds tests for single value ValueState types used in arbitrary stateful
  * operators such as transformWithState
@@ -93,7 +96,7 @@ class ValueStateSuite extends SharedSparkSession
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val stateName = "testState"
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -136,7 +139,7 @@ class ValueStateSuite extends SharedSparkSession
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -162,8 +165,10 @@ class ValueStateSuite extends SharedSparkSession
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
-      val testState1: ValueState[Long] = handle.getValueState[Long]("testState1")
-      val testState2: ValueState[Long] = handle.getValueState[Long]("testState2")
+      val testState1: ValueState[Long] = handle.getValueState[Long](
+        "testState1", Encoders.scalaLong)
+      val testState2: ValueState[Long] = handle.getValueState[Long](
+        "testState2", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)
@@ -216,5 +221,109 @@ class ValueStateSuite extends SharedSparkSession
       ),
       matchPVals = true
     )
+  }
+
+  test("test SQL encoder - Value state operations for Primitive(Double) instances") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[Double] = handle.getValueState[Double]("testState",
+        Encoders.scalaDouble)
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(1.0)
+      assert(testState.get().equals(1.0))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(2.0)
+      assert(testState.get().equals(2.0))
+      testState.update(3.0)
+      assert(testState.get().equals(3.0))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("test SQL encoder - Value state operations for Primitive(Long) instances") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        Encoders.scalaLong)
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(1L)
+      assert(testState.get().equals(1L))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(2L)
+      assert(testState.get().equals(2L))
+      testState.update(3L)
+      assert(testState.get().equals(3L))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("test SQL encoder - Value state operations for case class instances") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
+        Encoders.product[TestClass])
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(TestClass(1, "testcase1"))
+      assert(testState.get().equals(TestClass(1, "testcase1")))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(TestClass(2, "testcase2"))
+      assert(testState.get() === TestClass(2, "testcase2"))
+      testState.update(TestClass(3, "testcase3"))
+      assert(testState.get() === TestClass(3, "testcase3"))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("test SQL encoder - Value state operations for POJO instances") {
+    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass]("testState",
+        Encoders.bean(classOf[POJOTestClass]))
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(new POJOTestClass("testcase1", 1))
+      assert(testState.get().equals(new POJOTestClass("testcase1", 1)))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(new POJOTestClass("testcase2", 2))
+      assert(testState.get().equals(new POJOTestClass("testcase2", 2)))
+      testState.update(new POJOTestClass("testcase3", 3))
+      assert(testState.get().equals(new POJOTestClass("testcase3", 3)))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
   }
 }

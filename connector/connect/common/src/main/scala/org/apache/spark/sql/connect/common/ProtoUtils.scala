@@ -29,11 +29,11 @@ private[connect] object ProtoUtils {
   private val MAX_BYTES_SIZE = 8
   private val MAX_STRING_SIZE = 1024
 
-  def abbreviate(message: Message, maxStringSize: Int = MAX_STRING_SIZE): Message = {
-    abbreviate(message, Map(STRING -> maxStringSize))
+  def abbreviate[T <: Message](message: T, maxStringSize: Int = MAX_STRING_SIZE): T = {
+    abbreviate[T](message, Map(STRING -> maxStringSize))
   }
 
-  def abbreviate(message: Message, thresholds: Map[String, Int]): Message = {
+  def abbreviate[T <: Message](message: T, thresholds: Map[String, Int]): T = {
     val builder = message.toBuilder
 
     message.getAllFields.asScala.iterator.foreach {
@@ -79,7 +79,6 @@ private[connect] object ProtoUtils {
               .concat(createTruncatedByteString(size)))
         }
 
-      // TODO(SPARK-46988): should support map<xxx, msg>
       case (field: FieldDescriptor, msg: Message)
           if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && !field.isRepeated
             && msg != null =>
@@ -97,7 +96,7 @@ private[connect] object ProtoUtils {
       case _ =>
     }
 
-    builder.build()
+    builder.build().asInstanceOf[T]
   }
 
   private def truncateString(string: String, threshold: Int): String = {

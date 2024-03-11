@@ -45,6 +45,9 @@ private[spark] object SparkExitCode {
       OutOfMemoryError. */
   val OOM = 52
 
+  /** Exit because the driver is running over the given threshold. */
+  val DRIVER_TIMEOUT = 124
+
   /** Exception indicate command not found. */
   val ERROR_COMMAND_NOT_FOUND = 127
 }

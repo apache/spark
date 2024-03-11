@@ -30,6 +30,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import com.ibm.icu.text.StringSearch;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -341,6 +342,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
+  public boolean contains(final UTF8String substring, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.contains(substring);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return this.toLowerCase().contains(substring.toLowerCase());
+    }
+    return collatedContains(substring, collationId);
+  }
+
+  private boolean collatedContains(final UTF8String substring, int collationId) {
+    if (substring.numBytes == 0) return true;
+    if (this.numBytes == 0) return false;
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
+    while (stringSearch.next() != StringSearch.DONE) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /**
    * Returns the byte at position `i`.
    */
@@ -355,12 +378,39 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
+  private boolean matchAt(final UTF8String s, int pos, int collationId) {
+    if (s.numBytes + pos > numBytes || pos < 0) {
+      return false;
+    }
+    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
+  }
+
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
 
+  public boolean startsWith(final UTF8String prefix, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.startsWith(prefix);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return this.toLowerCase().startsWith(prefix.toLowerCase());
+    }
+    return matchAt(prefix, 0, collationId);
+  }
+
   public boolean endsWith(final UTF8String suffix) {
     return matchAt(suffix, numBytes - suffix.numBytes);
+  }
+
+  public boolean endsWith(final UTF8String suffix, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.endsWith(suffix);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return this.toLowerCase().endsWith(suffix.toLowerCase());
+    }
+    return matchAt(suffix, numBytes - suffix.numBytes, collationId);
   }
 
   /**

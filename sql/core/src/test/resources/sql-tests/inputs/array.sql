@@ -177,3 +177,7 @@ select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String));
 select array_prepend(array(), 1);
 select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
 select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String));
+
+-- SPARK-45599: Confirm 0.0, -0.0, and NaN are handled appropriately.
+select array_union(array(0.0, -0.0, DOUBLE("NaN")), array(0.0, -0.0, DOUBLE("NaN")));
+select array_distinct(array(0.0, -0.0, -0.0, DOUBLE("NaN"), DOUBLE("NaN")));

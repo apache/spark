@@ -752,7 +752,7 @@ class RocksDB(
     assert(db == null)
     val colFamilies = NativeRocksDB.listColumnFamilies(dbOptions, workingDir.toString)
 
-    var colFamilyDescriptors = new ArrayBuffer[ColumnFamilyDescriptor]
+    val colFamilyDescriptors = new ArrayBuffer[ColumnFamilyDescriptor]
     // populate the list of available col family descriptors
     colFamilies.asScala.toList.foreach { family =>
       val descriptor = new ColumnFamilyDescriptor(family, columnFamilyOptions)

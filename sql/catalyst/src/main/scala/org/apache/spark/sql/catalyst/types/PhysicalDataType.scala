@@ -40,8 +40,8 @@ object PhysicalDataType {
     case ShortType => PhysicalShortType
     case IntegerType => PhysicalIntegerType
     case LongType => PhysicalLongType
-    case VarcharType(_) => PhysicalStringType(StringType.DEFAULT_COLLATION_ID)
-    case CharType(_) => PhysicalStringType(StringType.DEFAULT_COLLATION_ID)
+    case VarcharType(_) => PhysicalStringType(CollationFactory.DEFAULT_COLLATION_ID)
+    case CharType(_) => PhysicalStringType(CollationFactory.DEFAULT_COLLATION_ID)
     case s: StringType => PhysicalStringType(s.collationId)
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType
