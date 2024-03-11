@@ -360,4 +360,22 @@ private[xml] trait TestXmlData {
           |</arrayOfArray2>
           |</ROW>
           |""".stripMargin :: Nil
+
+  def emptyRecords: Seq[String] =
+    """<ROW>
+          <a><struct></struct></a>
+        </ROW>""" ::
+    """<ROW>
+          <a>
+            <struct><b><c/></b></struct>
+          </a>
+        </ROW>""" ::
+    """<ROW>
+          <b>
+            <item>
+              <c><struct></struct></c>
+            </item>
+            <item/>
+          </b>
+        </ROW>""" :: Nil
 }
