@@ -132,7 +132,9 @@ def main(infile: IO, outfile: IO) -> None:
                 else:
                     raise IllegalArgumentException(
                         error_class="UNSUPPORTED_OPERATION",
-                        message_parameters={"operation": "Function call id not recognized by stream reader"},
+                        message_parameters={
+                            "operation": "Function call id not recognized by stream reader"
+                        },
                     )
                 outfile.flush()
         except Exception as e:
