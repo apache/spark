@@ -378,6 +378,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
+  private boolean matchAt(final UTF8String s, int pos, int collationId) {
+    if (s.numChars() + pos > this.numChars() || pos < 0) {
+      return false;
+    }
+    if (s.numBytes == 0 || this.numBytes == 0) {
+      return s.numBytes == 0;
+    }
+    return CollationFactory.getStringSearch(this.substring(pos, pos + s.numChars()),
+      s, collationId).last() == 0;
+  }
+
   public boolean startsWith(final UTF8String prefix) {
     return matchAt(prefix, 0);
   }
@@ -389,18 +400,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
-    return collatedStartsWith(prefix, collationId);
-  }
-
-  private boolean collatedStartsWith(final UTF8String prefix, int collationId) {
-    if (prefix.numBytes == 0 || this.numBytes == 0) {
-      return prefix.numBytes == 0;
-    }
-    if (prefix.numChars() > this.numChars()) {
-      return false;
-    }
-    return CollationFactory.getStringSearch(
-      this.substring(0, prefix.numChars()), prefix, collationId).first() == 0;
+    return matchAt(prefix, 0, collationId);
   }
 
   public boolean endsWith(final UTF8String suffix) {
@@ -414,20 +414,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
-    return collatedEndsWith(suffix, collationId);
-  }
-
-  private boolean collatedEndsWith(final UTF8String suffix, int collationId) {
-    if (suffix.numBytes == 0 || this.numBytes == 0) {
-      return suffix.numBytes == 0;
-    }
-    if (suffix.numChars() > this.numChars()) {
-      return false;
-    }
-    return CollationFactory.getStringSearch(
-      this.substring(this.numChars() - suffix.numChars(), this.numChars()),
-      suffix,
-      collationId).last() == 0;
+    return matchAt(suffix, numBytes - suffix.numBytes, collationId);
   }
 
   /**
