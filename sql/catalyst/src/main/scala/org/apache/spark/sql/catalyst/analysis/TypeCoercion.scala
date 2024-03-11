@@ -1187,9 +1187,9 @@ object TypeCoercion extends TypeCoercionBase {
   /**
    * Method to cast nested StringTypes that hasStringType filters.
    */
-  def castStringType(fromType: DataType, collationId: Int): Option[DataType] = fromType match {
-    case ArrayType(_, n) => implicitCast(fromType, ArrayType(StringType(collationId), n))
-    case _ => implicitCast(fromType, StringType(collationId))
+  def castStringType(fromType: DataType, collationId: Int): DataType = fromType match {
+    case ArrayType(_, n) => implicitCast(fromType, ArrayType(StringType(collationId), n)).get
+    case _ => implicitCast(fromType, StringType(collationId)).get
   }
 
   /**
