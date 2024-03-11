@@ -17,8 +17,9 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.when
 
-import org.apache.spark.{SparkEnv, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 
@@ -26,6 +27,8 @@ class KubernetesExecutorBackendSuite extends SparkFunSuite {
   test("extract log urls and attributes") {
     val mockRpcEnv = mock(classOf[RpcEnv])
     val mockSparkEnv = mock(classOf[SparkEnv])
+    val conf = new SparkConf()
+    when(mockSparkEnv.conf).thenReturn(conf)
     val mockResourceProfile = mock(classOf[ResourceProfile])
 
     val backend = new KubernetesExecutorBackend(
@@ -37,7 +40,8 @@ class KubernetesExecutorBackendSuite extends SparkFunSuite {
       "APP_ID" -> "app-id",
       "EXECUTOR_ID" -> "executor-id",
       "HOSTNAME" -> "hostname",
-      "POD_NAME" -> "pod-name"
+      "KUBERNETES_NAMESPACE" -> "default",
+      "KUBERNETES_POD_NAME" -> "pod-name"
     )
 
     assert(backend.extractLogUrls === Map.empty)
@@ -61,6 +65,11 @@ class KubernetesExecutorBackendSuite extends SparkFunSuite {
         "ENV_1" -> "val1", "ENV_2" -> "val2"
       ) ++ expectedKubernetesAttributes)
     }
+
+    conf.set("spark.kubernetes.namespace", "my-namespace")
+    assert(backend.extractLogUrls === Map.empty)
+    assert(backend.extractAttributes === expectedKubernetesAttributes ++
+      Map("KUBERNETES_NAMESPACE" -> "my-namespace"))
   }
 
   private def withEnvs(pairs: (String, String)*)(f: => Unit): Unit = {

@@ -1673,7 +1673,8 @@ See the [configuration page](configuration.html) for information on Spark config
       <li><code>APP_ID</code>: The unique application id</li>
       <li><code>EXECUTOR_ID</code>: The executor id (a positive integer larger than zero)</li>
       <li><code>HOSTNAME</code>: The name of the host where the executor runs</li>
-      <li><code>POD_NAME</code>: The name of the pod that contains the executor</li>
+      <li><code>KUBERNETES_NAMESPACE</code>: The namespace where the executor pods run</li>
+      <li><code>KUBERNETES_POD_NAME</code>: The name of the pod that contains the executor</li>
       <li><code>FILE_NAME</code>: The name of the log, which is always <code>"log"</code></li>
     </ul>
     Please note that this configuration also replaces original log urls in event log,

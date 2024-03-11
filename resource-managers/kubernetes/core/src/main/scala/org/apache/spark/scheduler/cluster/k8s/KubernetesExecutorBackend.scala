@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_NAMESPACE
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.executor.CoarseGrainedExecutorBackend
 import org.apache.spark.internal.Logging
@@ -62,7 +63,8 @@ private[spark] class KubernetesExecutorBackend(
         "APP_ID" -> appId,
         "EXECUTOR_ID" -> executorId,
         "HOSTNAME" -> hostname,
-        "POD_NAME" -> podName
+        "KUBERNETES_NAMESPACE" -> env.conf.get(KUBERNETES_NAMESPACE),
+        "KUBERNETES_POD_NAME" -> podName
       )
   }
 
