@@ -774,8 +774,13 @@ abstract class TypeCoercionBase {
   }
 
   object CollationTypeCasts extends TypeCoercionRule {
-    override def transform: PartialFunction[Expression, Expression] = {
+    override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
+
+      case s : SortOrder if s.dataType.isInstanceOf[StringType] &&
+        hasIndeterminate(s.children.map(_.dataType.asInstanceOf[StringType])) =>
+        val newChildren = collateToSingleType(s.children)
+        s.withNewChildren(newChildren)
 
       case b @ BinaryComparison(left, right) if shouldCast(Seq(left.dataType, right.dataType)) =>
         val newChildren = collateToSingleType(Seq(left, right))
@@ -783,7 +788,8 @@ abstract class TypeCoercionBase {
     }
 
     def shouldCast(types: Seq[DataType]): Boolean = {
-      types.forall(_.isInstanceOf[StringType]) && types.distinct.length > 1
+      types.forall(_.isInstanceOf[StringType]) &&
+        types.map(t => t.asInstanceOf[StringType].collationId).distinct.length > 1
     }
 
     /**
@@ -807,16 +813,17 @@ abstract class TypeCoercionBase {
      * a collation type which the output will have.
      */
     def getOutputCollation(exprs: Seq[Expression], failOnIndeterminate: Boolean = true): Int = {
-      val explicitTypes = exprs.filter(hasExplicitCollation).map(_.dataType).distinct
+      val explicitTypes = exprs.filter(hasExplicitCollation)
+        .map(_.dataType.asInstanceOf[StringType].collationId).distinct
 
       explicitTypes.size match {
-        case 1 => explicitTypes.head.asInstanceOf[StringType].collationId
+        case 1 => explicitTypes.head
         case size if size > 1 =>
           throw QueryCompilationErrors
             .explicitCollationMismatchError(
-              explicitTypes.map(t => t.asInstanceOf[StringType].typeName)
+              explicitTypes.map(t => StringType(t).typeName)
             )
-        case _ =>
+        case 0 =>
           val dataTypes = exprs.map(_.dataType.asInstanceOf[StringType])
 
           if (hasIndeterminate(dataTypes)) {
@@ -934,6 +941,7 @@ object TypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
+      CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -947,7 +955,6 @@ object TypeCoercion extends TypeCoercionBase {
       StackCoercion ::
       Division ::
       IntegralDivision ::
-      CollationTypeCasts ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::

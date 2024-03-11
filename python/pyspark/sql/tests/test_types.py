@@ -863,6 +863,7 @@ class TypesTestsMixin:
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
         self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UCS_BASIC"))
+        self.assertEqual(StringType(-1), _parse_datatype_string("string COLLATE INDETERMINATE_COLLATION"))
         self.assertEqual(StringType(0), _parse_datatype_string("string"))
         self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE UCS_BASIC"))
         self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE   UCS_BASIC"))
@@ -1215,6 +1216,7 @@ class TypesTestsMixin:
         instances = [
             NullType(),
             StringType(),
+            StringType(-1),
             StringType(0),
             StringType(1),
             StringType(2),

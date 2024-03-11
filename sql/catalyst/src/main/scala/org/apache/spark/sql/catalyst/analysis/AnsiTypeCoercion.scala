@@ -78,6 +78,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new AnsiCombinedTypeCoercionRule(
+      CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -91,7 +92,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       Division ::
       IntegralDivision ::
       ImplicitTypeCasts ::
-      CollationTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
       GetDateFieldOperations:: Nil) :: Nil

@@ -202,7 +202,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string COLLATE '$leftCollationName'`.`string COLLATE '$rightCollationName'`"
+          s"`string COLLATE $leftCollationName`.`string COLLATE $rightCollationName`"
       )
     )
     // startsWith
@@ -216,7 +216,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string COLLATE '$leftCollationName'`.`string COLLATE '$rightCollationName'`"
+          s"`string COLLATE $leftCollationName`.`string COLLATE $rightCollationName`"
       )
     )
     // endsWith
@@ -230,7 +230,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string COLLATE '$leftCollationName'`.`string COLLATE '$rightCollationName'`"
+          s"`string COLLATE $leftCollationName`.`string COLLATE $rightCollationName`"
       )
     )
   }
@@ -517,8 +517,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withTable(tableName) {
       spark.sql(
         s"""
-           | CREATE TABLE $tableName(c1 STRING COLLATE 'UCS_BASIC_LCASE',
-           | c2 STRING COLLATE 'UNICODE', c3 STRING COLLATE 'UNICODE_CI', c4 STRING)
+           | CREATE TABLE $tableName(c1 STRING COLLATE UCS_BASIC_LCASE,
+           | c2 STRING COLLATE UNICODE, c3 STRING COLLATE UNICODE_CI, c4 STRING)
            | USING PARQUET
            |""".stripMargin)
       sql(s"INSERT INTO $tableName VALUES ('a', 'a', 'a', 'a')")
@@ -578,7 +578,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string`.`string COLLATE 'UNICODE'`"
+          "explicitTypes" -> "`string`.`string COLLATE UNICODE`"
         )
       )
 
@@ -590,7 +590,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string`.`string COLLATE 'UNICODE'`"
+          "explicitTypes" -> "`string`.`string COLLATE UNICODE`"
         )
       )
       checkError(
@@ -600,7 +600,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string COLLATE 'UNICODE'`.`string`"
+          "explicitTypes" -> "`string COLLATE UNICODE`.`string`"
         )
       )
 
@@ -608,6 +608,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE c1 || c3 = 'aa'")
+        },
+        errorClass = "INDETERMINATE_COLLATION"
+      )
+
+      // concat should fail on indeterminate collation
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT c1 FROM $tableName ORDER BY c1 || c3")
         },
         errorClass = "INDETERMINATE_COLLATION"
       )
@@ -620,7 +628,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string`.`string COLLATE 'UNICODE'`"
+          "explicitTypes" -> "`string`.`string COLLATE UNICODE`"
         )
       )
     }
@@ -631,8 +639,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withTable(tableName) {
       spark.sql(
         s"""
-           | CREATE TABLE $tableName(ucs_basic STRING COLLATE 'UCS_BASIC',
-           | ucs_basic_lcase STRING COLLATE 'UCS_BASIC_LCASE')
+           | CREATE TABLE $tableName(ucs_basic STRING COLLATE UCS_BASIC,
+           | ucs_basic_lcase STRING COLLATE UCS_BASIC_LCASE)
            | USING PARQUET
            |""".stripMargin)
       sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
@@ -642,10 +650,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       checkAnswer(sql(s"SELECT * FROM $tableName " +
         s"WHERE ucs_basic_lcase IN " +
-        s"('aaa' COLLATE 'UCS_BASIC_LCASE', 'bbb' collate 'UCS_BASIC_LCASE')"),
+        s"('aaa' COLLATE UCS_BASIC_LCASE, 'bbb' COLLATE UCS_BASIC_LCASE)"),
         Seq(Row("aaa", "aaa"), Row("AAA", "AAA"), Row("bbb", "bbb"), Row("BBB", "BBB")))
       checkAnswer(sql(s"SELECT * FROM $tableName " +
-        s"WHERE ucs_basic_lcase IN ('aaa' COLLATE 'UCS_BASIC_LCASE', 'bbb')"),
+        s"WHERE ucs_basic_lcase IN ('aaa' COLLATE UCS_BASIC_LCASE, 'bbb')"),
         Seq(Row("aaa", "aaa"), Row("AAA", "AAA"), Row("bbb", "bbb"), Row("BBB", "BBB")))
     }
   }
