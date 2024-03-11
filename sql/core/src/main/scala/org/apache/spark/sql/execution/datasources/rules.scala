@@ -365,7 +365,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         schema.filter(f => normalizedBucketSpec.bucketColumnNames.contains(f.name))
           .foreach { field =>
           if (!BucketingUtils.canBucketOn(field.dataType)) {
-            throw QueryCompilationErrors.invalidBucketColumnDataTypeError(field.dataType.toString)
+            throw QueryCompilationErrors.invalidBucketColumnDataTypeError(field.dataType)
           }
         }
 

@@ -1868,10 +1868,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
   }
 
-  def invalidBucketColumnDataTypeError(dataType: String): Throwable = {
+  def invalidBucketColumnDataTypeError(dataType: DataType): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
-      messageParameters = Map("type" -> dataType))
+      messageParameters = Map("type" -> toSQLType(dataType)))
   }
 
   def requestedPartitionsMismatchTablePartitionsError(

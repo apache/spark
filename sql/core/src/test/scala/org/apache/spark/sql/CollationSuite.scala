@@ -163,8 +163,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           createTable(bucketColumns: _*)
         },
         errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
-        parameters = Map("type" ->
-          StringType(CollationFactory.collationNameToId("UNICODE")).toString)
+        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
       );
     }
   }
