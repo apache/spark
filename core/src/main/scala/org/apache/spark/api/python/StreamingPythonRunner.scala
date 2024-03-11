@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
-import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
+import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 
 
 private[spark] object StreamingPythonRunner {
