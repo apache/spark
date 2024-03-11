@@ -124,15 +124,18 @@ class ResampleFrameMixin:
                 getattr(p_resample, func)().sort_index(),
                 getattr(ps_resample, func)().sort_index(),
                 almost=True,
+                check_exact=False,
             )
 
     def test_dataframe_resample(self):
-        self._test_resample(self.pdf1, self.psdf1, ["3Y", "9M", "17D"], None, None, "min")
-        self._test_resample(self.pdf2, self.psdf2, ["3A", "11M", "D"], None, "left", "max")
-        self._test_resample(self.pdf3, self.psdf3, ["20D", "1M"], None, "right", "sum")
         self._test_resample(self.pdf4, self.psdf4, ["11H", "21D"], "left", None, "mean")
         self._test_resample(self.pdf5, self.psdf5, ["55MIN", "2H", "D"], "left", "left", "std")
         self._test_resample(self.pdf6, self.psdf6, ["29S", "10MIN", "3H"], "left", "right", "var")
+
+        with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
+            self._test_resample(self.pdf2, self.psdf2, ["3A", "11M", "D"], None, "left", "max")
+        with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
+            self._test_resample(self.pdf1, self.psdf1, ["3Y", "9M", "17D"], None, None, "min")
 
 
 class ResampleFrameTests(ResampleFrameMixin, PandasOnSparkTestCase, TestUtils):

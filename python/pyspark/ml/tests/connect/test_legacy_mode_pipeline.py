@@ -91,7 +91,7 @@ class PipelineTestsMixin:
         pd.testing.assert_frame_equal(local_eval_dataset, local_eval_dataset_copy)
         self._check_result(local_transform_result2, expected_predictions, expected_probabilities)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_pipeline") as tmp_dir:
             pipeline_local_path = os.path.join(tmp_dir, "pipeline")
             pipeline.saveToLocal(pipeline_local_path)
             loaded_pipeline = Pipeline.loadFromLocal(pipeline_local_path)

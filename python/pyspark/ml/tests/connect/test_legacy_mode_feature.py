@@ -69,7 +69,7 @@ class FeatureTestsMixin:
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_max_abs_scaler") as tmp_dir:
             estimator_path = os.path.join(tmp_dir, "estimator")
             scaler.saveToLocal(estimator_path)
             loaded_scaler = MaxAbsScaler.loadFromLocal(estimator_path)
@@ -124,7 +124,7 @@ class FeatureTestsMixin:
 
         np.testing.assert_allclose(list(local_transform_result.scaled_features), expected_result)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_standard_scaler") as tmp_dir:
             estimator_path = os.path.join(tmp_dir, "estimator")
             scaler.saveToLocal(estimator_path)
             loaded_scaler = StandardScaler.loadFromLocal(estimator_path)
@@ -176,7 +176,7 @@ class FeatureTestsMixin:
             result2[1][1] = np.nan
         np.testing.assert_allclose(result2, expected_result)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_array_assembler") as tmp_dir:
             save_path = os.path.join(tmp_dir, "assembler")
             assembler1.saveToLocal(save_path)
             loaded_assembler = ArrayAssembler.loadFromLocal(save_path)

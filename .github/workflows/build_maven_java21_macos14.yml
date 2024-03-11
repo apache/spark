@@ -33,3 +33,7 @@ jobs:
     with:
       java: 21
       os: macos-14
+      envs: >-
+        {
+          "OBJC_DISABLE_INITIALIZE_FORK_SAFETY": "YES"
+        }

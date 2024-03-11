@@ -20,13 +20,13 @@ import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipInputStream
-import javax.servlet._
-import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.{ByteStreams, Files}
+import jakarta.servlet._
+import jakarta.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.JsonAST._

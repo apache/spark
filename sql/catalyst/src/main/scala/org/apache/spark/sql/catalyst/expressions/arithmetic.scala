@@ -265,12 +265,12 @@ abstract class BinaryArithmetic extends BinaryOperator
 
   /** Name of the function for this expression on a [[Decimal]] type. */
   def decimalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "decimalMethod", "genCode")
 
   /** Name of the function for this expression on a [[CalendarInterval]] type. */
   def calendarIntervalMethod: String =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("BinaryArithmetics",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "calendarIntervalMethod", "genCode")
 
   protected def isAnsiInterval: Boolean = dataType.isInstanceOf[AnsiIntervalType]

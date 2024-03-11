@@ -236,12 +236,6 @@ object SparkBuild extends PomBuild {
         "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:e",
         // SPARK-45610 Convert "Auto-application to `()` is deprecated" to compile error, as it will become a compile error in Scala 3.
         "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated:e",
-        // TODO(SPARK-45615): The issue described by https://github.com/scalatest/scalatest/issues/2297 can cause false positives.
-        //  So SPARK-45610 added the following 4 suppression rules, which can be removed after upgrading scalatest to 3.2.18.
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.rdd.RDDSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.scheduler.TaskSetManagerSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.ReceiverInputDStreamSuite:s",
-        "-Wconf:cat=deprecation&msg=Auto-application to \\`\\(\\)\\` is deprecated&site=org.apache.spark.streaming.kafka010.KafkaRDDSuite:s",
         // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
         "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e",
         // SPARK-45627 Symbol literals are deprecated in Scala 2.13 and it's a compile error in Scala 3.
@@ -249,7 +243,9 @@ object SparkBuild extends PomBuild {
         // SPARK-45627 `enum`, `export` and `given` will become keywords in Scala 3,
         // so they are prohibited from being used as variable names in Scala 2.13 to
         // reduce the cost of migration in subsequent versions.
-        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e"
+        "-Wconf:cat=deprecation&msg=it will become a keyword in Scala 3:e",
+        // SPARK-46938 to prevent enum scan on pmml-model, under spark-mllib module.
+        "-Wconf:cat=other&site=org.dmg.pmml.*:w"
       )
     }
   )
@@ -1081,7 +1077,6 @@ object ExcludedDependencies {
     // purpose only. Here we exclude them from the whole project scope and add them w/ yarn only.
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"),
       ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }

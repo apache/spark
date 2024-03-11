@@ -17,10 +17,10 @@
 
 package org.apache.spark.ui.storage
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.collection.SortedMap
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.status.{AppStatusStore, StreamBlockData}
 import org.apache.spark.status.api.v1

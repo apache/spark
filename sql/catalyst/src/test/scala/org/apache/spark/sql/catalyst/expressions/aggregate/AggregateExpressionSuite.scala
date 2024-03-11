@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeSet, Literal}
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 
 class AggregateExpressionSuite extends SparkFunSuite {
 
@@ -37,7 +38,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"a\"",
           "inputType" -> "\"STRING\""
@@ -48,7 +49,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"b\"",
           "inputType" -> "\"STRING\""
@@ -59,7 +60,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"ARRAY(0)\"",
           "inputType" -> "\"ARRAY<INT>\""
@@ -75,7 +76,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"a\"",
           "inputType" -> "\"STRING\""
@@ -86,7 +87,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"b\"",
           "inputType" -> "\"STRING\""
@@ -97,7 +98,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"ARRAY(0)\"",
           "inputType" -> "\"ARRAY<INT>\""
@@ -113,7 +114,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"a\"",
           "inputType" -> "\"STRING\""
@@ -124,7 +125,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"b\"",
           "inputType" -> "\"STRING\""
@@ -135,7 +136,7 @@ class AggregateExpressionSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"DOUBLE\"",
           "inputSql" -> "\"ARRAY(0)\"",
           "inputType" -> "\"ARRAY<INT>\""

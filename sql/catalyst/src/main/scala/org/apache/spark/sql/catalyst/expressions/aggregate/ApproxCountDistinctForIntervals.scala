@@ -104,7 +104,7 @@ case class ApproxCountDistinctForIntervals(
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> "2",
+              "paramIndex" -> ordinalNumber(1),
               "requiredType" -> s"ARRAY OF $requiredElemTypes",
               "inputSql" -> toSQLExpr(endpointsExpression),
               "inputType" -> toSQLType(inputType)))

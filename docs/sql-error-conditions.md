@@ -366,6 +366,12 @@ Checkpoint block `<rddBlockId>` not found!
 Either the executor that originally checkpointed this partition is no longer alive, or the original RDD is unpersisted.
 If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant.
 
+### CLASS_NOT_OVERRIDE_EXPECTED_METHOD
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+`<className>` must override either `<method1>` or `<method2>`.
+
 ### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
@@ -400,17 +406,17 @@ Can't create array with `<numberOfElements>` elements which exceeding the array 
 
 For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
-### COLUMN_ALIASES_IS_NOT_ALLOWED
+### COLUMN_ALIASES_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Columns aliases are not allowed in `<op>`.
+Column aliases are not allowed in `<op>`.
 
 ### COLUMN_ALREADY_EXISTS
 
 [SQLSTATE: 42711](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The column `<columnName>` already exists. Consider to choose another name or rename the existing column.
+The column `<columnName>` already exists. Choose another name or rename the existing column.
 
 ### COLUMN_NOT_DEFINED_IN_TABLE
 
@@ -750,6 +756,12 @@ SQLSTATE: 58030
 
 Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename returned false.
 
+### FAILED_ROW_TO_JSON
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the row value `<value>` of the class `<class>` to the target SQL type `<sqlType>` in the JSON format.
+
 ### FIELDS_ALREADY_EXISTS
 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -767,6 +779,12 @@ No such struct field `<fieldName>` in `<fields>`.
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
+
+### FOREACH_BATCH_USER_FUNCTION_ERROR
+
+[SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
+
+An error occurred in the user provided function in foreach batch sink. Reason: `<reason>`
 
 ### FOUND_MULTIPLE_DATA_SOURCES
 
@@ -863,6 +881,14 @@ Sketches have different `lgConfigK` values: `<left>` and `<right>`. Set the `all
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 `<identifier>` is not a valid identifier as it has more than 2 name parts.
+
+### [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Illegal value provided to the State Store
+
+For more details see [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
 
 ### INCOMPARABLE_PIVOT_COLUMN
 
@@ -1104,6 +1130,14 @@ Failed to execute `<statement>` command because the destination column or variab
 
 For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
+### [INVALID_DELIMITER_VALUE](sql-error-conditions-invalid-delimiter-value-error-class.html)
+
+[SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid value for delimiter.
+
+For more details see [INVALID_DELIMITER_VALUE](sql-error-conditions-invalid-delimiter-value-error-class.html)
+
 ### INVALID_DRIVER_MEMORY
 
 SQLSTATE: F0000
@@ -1135,6 +1169,12 @@ SQLSTATE: F0000
 
 Executor memory `<executorMemory>` must be at least `<minSystemMemory>`.
 Please increase executor memory using the --executor-memory option or "`<config>`" in Spark configuration.
+
+### INVALID_EXPRESSION_ENCODER
+
+[SQLSTATE: 42001](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
 
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
@@ -1181,12 +1221,6 @@ The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ans
 The handle `<handle>` is invalid.
 
 For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
-
-### INVALID_HIVE_COLUMN_NAME
-
-[SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
 
 ### INVALID_IDENTIFIER
 
@@ -1298,6 +1332,12 @@ The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
 
 For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-parameter-value-error-class.html)
 
+### INVALID_PARTITION_COLUMN_DATA_TYPE
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot use `<type>` for partition column.
+
 ### [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-partition-operation-error-class.html)
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1369,6 +1409,12 @@ For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-synta
 SQLSTATE: 07501
 
 The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: `<sqlString>`.
+
+### INVALID_STATEMENT_OR_CLAUSE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The statement or clause: `<operation>` is not valid.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
@@ -1688,6 +1734,12 @@ ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing `<table>`'s column
 Not supported command in JDBC catalog:
 
 For more details see [NOT_SUPPORTED_IN_JDBC_CATALOG](sql-error-conditions-not-supported-in-jdbc-catalog-error-class.html)
+
+### NOT_UNRESOLVED_ENCODER
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unresolved encoder expected, but `<attr>` was found.
 
 ### NO_DEFAULT_COLUMN_VALUE_AVAILABLE
 
@@ -2053,6 +2105,13 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 
 Failed to remove default column family with reserved name=`<colFamilyName>`.
 
+### STATE_STORE_HANDLE_NOT_INITIALIZED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The handle has not been initialized for this StatefulProcessor.
+Please only use the StatefulProcessor within the transformWithState operator.
+
 ### STATE_STORE_MULTIPLE_VALUES_PER_KEY
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2130,6 +2189,13 @@ The checkpoint seems to be only run with older Spark version(s). Run the streami
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 '`<optionName>`' must be specified.
+
+### STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.
+Stateful operators in the metadata: [`<OpsInMetadataSeq>`]; Stateful operators in current batch: [`<OpsInCurBatchSeq>`].
 
 ### STREAM_FAILED
 
@@ -2402,11 +2468,13 @@ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add
 
 Unsupported arrow type `<typeName>`.
 
-### UNSUPPORTED_CALL
+### [UNSUPPORTED_CALL](sql-error-conditions-unsupported-call-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot call the method "`<methodName>`" of the class "`<className>`".
+
+For more details see [UNSUPPORTED_CALL](sql-error-conditions-unsupported-call-error-class.html)
 
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 
@@ -2414,6 +2482,14 @@ Cannot call the method "`<methodName>`" of the class "`<className>`".
 
 The char/varchar type can't be used in the table schema.
 If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
+
+### [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Collation `<collationName>` is not supported for:
+
+For more details see [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
 
 ### UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY
 

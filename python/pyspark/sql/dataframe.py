@@ -586,7 +586,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> type(df.writeStream)
         <class '...streaming.readwriter.DataStreamWriter'>
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="writeStream") as d:
         ...     # Create a table with Rate source.
         ...     df.writeStream.toTable(
         ...         "my_table", checkpointLocation=d)
@@ -1139,7 +1139,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> import tempfile
         >>> df = spark.createDataFrame([
         ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="checkpoint") as d:
         ...     spark.sparkContext.setCheckpointDir("/tmp/bb")
         ...     df.checkpoint(False)
         DataFrame[age: bigint, name: string]
@@ -3526,8 +3526,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Returns
         -------
-        If n is greater than 1, return a list of :class:`Row`.
-        If n is 1, return a single Row.
+        If n is supplied, return a list of :class:`Row` of length n
+        or less if the DataFrame has fewer elements.
+        If n is missing, return a single Row.
 
         Examples
         --------
@@ -3537,6 +3538,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Row(age=2, name='Alice')
         >>> df.head(1)
         [Row(age=2, name='Alice')]
+        >>> df.head(0)
+        []
         """
         if n is None:
             rs = self.head(1)
@@ -6708,7 +6711,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(other, DataFrame):
             raise PySparkTypeError(
-                error_class="NOT_STR",
+                error_class="NOT_DATAFRAME",
                 message_parameters={"arg_name": "other", "arg_type": type(other).__name__},
             )
         return self._jdf.sameSemantics(other._jdf)
@@ -6763,7 +6766,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="inputFiles") as d:
         ...     # Write a single-row DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]

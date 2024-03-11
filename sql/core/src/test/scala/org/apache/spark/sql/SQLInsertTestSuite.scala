@@ -383,7 +383,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
       }.getMessage
-      assert(e.contains("Cannot use interval"))
+      assert(e.contains("Cannot use \"INTERVAL\""))
     }
   }
 

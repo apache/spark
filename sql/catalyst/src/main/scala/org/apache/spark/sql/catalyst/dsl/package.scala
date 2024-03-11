@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -301,8 +302,12 @@ package object dsl {
       /** Creates a new AttributeReference of type double */
       def double: AttributeReference = attrRef(DoubleType)
 
-      /** Creates a new AttributeReference of type string */
+      /** Creates a new AttributeReference of type string with default collation */
       def string: AttributeReference = attrRef(StringType)
+
+      /** Creates a new AttributeReference of type string with specified collation */
+      def string(collation: String): AttributeReference =
+        attrRef(StringType(CollationFactory.collationNameToId(collation)))
 
       /** Creates a new AttributeReference of type date */
       def date: AttributeReference = attrRef(DateType)

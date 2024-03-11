@@ -198,7 +198,7 @@ public class ParquetVectorUpdaterFactory {
         }
       }
       case BINARY -> {
-        if (sparkType == DataTypes.StringType || sparkType == DataTypes.BinaryType ||
+        if (sparkType instanceof  StringType || sparkType == DataTypes.BinaryType ||
           canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new BinaryUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
