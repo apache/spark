@@ -225,6 +225,52 @@ class PandasConversionMixin:
         else:
             return pdf
 
+    def _toArrow(self) -> "pa.Table":
+        """
+        Returns the contents of this :class:`DataFrame` as PyArrow ``pyarrow.Table``.
+
+        This is only available if PyArrow is installed and available.
+
+        Notes
+        -----
+        This method should only be used if the resulting PyArrow ``pyarrow.Table`` is
+        expected to be small, as all the data is loaded into the driver's memory.
+
+        Examples
+        --------
+        >>> df.toArrow()  # doctest: +SKIP
+        pyarrow.Table
+        age: int64
+        name: string
+        ----
+        age: [[2,5]]
+        name: [["Alice","Bob"]]
+
+        .. note:: Experimental.
+        """
+        from pyspark.sql.dataframe import DataFrame
+
+        assert isinstance(self, DataFrame)
+
+        jconf = self.sparkSession._jconf
+
+        try:
+            from pyspark.sql.pandas.types import to_arrow_schema
+            from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+            require_minimum_pyarrow_version()
+            schema = to_arrow_schema(self.schema)
+
+            import pyarrow as pa
+
+            self_destruct = jconf.arrowPySparkSelfDestructEnabled()
+            batches = self._collect_as_arrow(split_batches=self_destruct)
+            table = pa.Table.from_batches(batches, schema=schema)
+            # Ensure only the table has a reference to the batches, so that
+            # self_destruct (if enabled) is effective
+            del batches
+            return table
+
     def _collect_as_arrow(self, split_batches: bool = False) -> List["pa.RecordBatch"]:
         """
         Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
