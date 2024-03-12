@@ -212,8 +212,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.SQLXML => StringType
     case java.sql.Types.STRUCT => StringType
     case java.sql.Types.TIME => TimestampType
-    case java.sql.Types.TIMESTAMP if isTimestampNTZ => TimestampNTZType
-    case java.sql.Types.TIMESTAMP => TimestampType
+    case java.sql.Types.TIMESTAMP => getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
     case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
@@ -227,6 +226,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
         .map(_.getName)
         .getOrElse(sqlType.toString)
       throw QueryExecutionErrors.unrecognizedSqlTypeError(jdbcType, typeName)
+  }
+
+  /**
+   * Return TimestampNTZType if isTimestampNT; otherwise TimestampType.
+   */
+  def getTimestampType(isTimestampNTZ: Boolean): DataType = {
+    if (isTimestampNTZ) TimestampNTZType else TimestampType
   }
 
   /**
