@@ -52,7 +52,8 @@ class PythonMicroBatchStream(
   private lazy val readInfo: PythonDataSourceReadInfo = {
     ds.source.createReadInfoInPython(
       ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
-      outputSchema, true)
+      outputSchema,
+      isStreaming = true)
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {

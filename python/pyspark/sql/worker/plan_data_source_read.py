@@ -243,7 +243,7 @@ def main(infile: IO, outfile: IO) -> None:
         pickleSer._write_with_length(command, outfile)
 
         if not is_streaming:
-            # Get the partitions if any.
+            # The partitioning of python batch source read is determined before query execution.
             try:
                 partitions = reader.partitions()
                 if not isinstance(partitions, list):
@@ -273,7 +273,8 @@ def main(infile: IO, outfile: IO) -> None:
             for partition in partitions:
                 pickleSer._write_with_length(partition, outfile)
         else:
-            # send an empty list of partition for stream reader because partitions are planned in each microbatch.
+            # Send an empty list of partition for stream reader because partitions are planned in each microbatch
+            # during query execution.
             write_int(0, outfile)
     except BaseException as e:
         handle_worker_exception(e, outfile)

@@ -90,14 +90,14 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val stream = new PythonMicroBatchStream(
       pythonDs, dataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
 
-    var prevOffset = stream.initialOffset()
-    assert(prevOffset.json == "{\"offset\": {\"partition-1\": 0}}")
+    var startOffset = stream.initialOffset()
+    assert(startOffset.json == "{\"offset\": {\"partition-1\": 0}}")
     for (i <- 1 to 50) {
-      val offset = stream.latestOffset()
-      assert(offset.json == s"""{"offset": {"partition-1": ${2 * i}}}""")
-      assert(stream.planInputPartitions(prevOffset, offset).size == 2)
-      stream.commit(offset)
-      prevOffset = offset
+      val endOffset = stream.latestOffset()
+      assert(endOffset.json == s"""{"offset": {"partition-1": ${2 * i}}}""")
+      assert(stream.planInputPartitions(startOffset, endOffset).size == 2)
+      stream.commit(endOffset)
+      startOffset = endOffset
     }
     stream.stop()
   }
