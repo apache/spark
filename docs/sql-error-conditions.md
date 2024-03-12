@@ -2145,7 +2145,6 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
-<<<<<<< HEAD
 ### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2158,22 +2157,13 @@ Failed to perform stateful processor operation=`<operationType>` with invalid ha
 
 Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
 
-### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Failed to create column family with invalid name=`<colFamilyName>`. Empty names or one with reserved value default are not supported.
-
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to create column family with unsupported starting character and name=`<colFamilyName>`.
 
-### STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY
-=======
 ### STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME
->>>>>>> master
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 

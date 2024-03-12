@@ -59,11 +59,6 @@ object StateStoreErrors {
       new StateStoreCannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
   }
 
-  def cannotCreateColumnFamilyWithInvalidName(colFamilyName: String):
-    StateStoreCannotCreateColumnFamilyWithInvalidName = {
-      new StateStoreCannotCreateColumnFamilyWithInvalidName(colFamilyName)
-  }
-
   def unsupportedOperationException(operationName: String, entity: String):
     StateStoreUnsupportedOperationException = {
     new StateStoreUnsupportedOperationException(operationName, entity)
@@ -117,12 +112,6 @@ class StateStoreCannotUseColumnFamilyWithInvalidName(operationName: String, colF
 class StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
-    messageParameters = Map("colFamilyName" -> colFamilyName)
-  )
-
-class StateStoreCannotCreateColumnFamilyWithInvalidName(colFamilyName: String)
-  extends SparkUnsupportedOperationException(
-    errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_INVALID_NAME",
     messageParameters = Map("colFamilyName" -> colFamilyName)
   )
 
