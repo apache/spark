@@ -1078,9 +1078,9 @@ For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary-er
 
 ### INVALID_BUCKET_COLUMN_DATA_TYPE
 
-SQLSTATE: HV004
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Cannot use `<type>` for bucket column.
+Cannot use `<type>` for bucket column. Collated data types are not supported for bucketing.
 
 ### INVALID_BUCKET_FILE
 
