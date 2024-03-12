@@ -1199,6 +1199,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var appEndInfo: Option[String] = None
     var appId = info.appId
     var attemptId = info.attemptId
+    val xattrsValuesList = getXAttrs(reader.rootPath, EventLoggingListener.XATTRS_LIST)
 
     pendingReplayTasksCount.incrementAndGet()
     /**
@@ -1207,10 +1208,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
      * change the status to APP_STARTED
     */
     if (xAttrStatus == LogXAttrStatus.XATTR_ENABLED) {
-      appStartInfo = getXAttrs(reader.rootPath, EventLoggingListener.XATTRS_APPLICATION_START_LIST)
-      if(appStartInfo.isDefined) {
-        appId = Some(appStartInfo.get(EventLoggingListener.USER_APP_ID))
-        attemptId = Some(appStartInfo.get(EventLoggingListener.USER_ATTEMPT_ID))
+      if(xattrsValuesList.exists(_.contains(EventLoggingListener.USER_APP_ID)
+        && _.contains(EventLoggingListener.USER_ATTEMPT_ID))) {
+        appId = appStartInfo.get.get(EventLoggingListener.USER_APP_ID)
+        attemptId = appStartInfo.get.get(EventLoggingListener.USER_ATTEMPT_ID)
         xAttrStatus = LogXAttrStatus.APP_STARTED
       }
     }
@@ -1220,8 +1221,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
      * If we are able to successfully get them, change the status to APP_ENV_UPDATED
      */
     if(xAttrStatus == LogXAttrStatus.APP_STARTED) {
-      envUpdateInfo = getXAttr(reader.rootPath, EventLoggingListener.USER_ATTEMPT_ACLS)
-      if(envUpdateInfo.isDefined) {
+      if(xattrsValuesList.exists(_.contains(EventLoggingListener.USER_ATTEMPT_ACLS)) {
         xAttrStatus = LogXAttrStatus.APP_ENV_UPDATED
       }
     }
@@ -1231,8 +1231,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
      * If we are able to successfully get them, change the status to APP_END
      */
     if (xAttrStatus == LogXAttrStatus.APP_ENV_UPDATED) {
-      appEndInfo = getXAttr(reader.rootPath, EventLoggingListener.USER_ATTEMPT_ENDTIME)
-      if (appEndInfo.isDefined) {
+      if (xattrsValuesList.exists(_.contains(EventLoggingListener.USER_ATTEMPT_ENDTIME)) {
         xAttrStatus = LogXAttrStatus.APP_END
       }
     }
@@ -1336,12 +1335,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * @return Value of extended attribute
    */
   private def getXAttr(path: Path, name: String): Option[String] = {
-      val valueMap = getXAttrs(path, List(name))
-      if (!valueMap.isEmpty) {
-        Some(valueMap.get(name))
-      } else {
-        None
-      }
+    getXAttrs(path, List(name)).flatMap(_.get(name))
   }
 
   /**
@@ -1356,8 +1350,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var xAttrStatus = LogXAttrStatus.XATTR_DISABLED
     if(HISTORY_LOG_USE_XATTR) {
       val xAttrEnabled = getXAttr(reader.rootPath, EventLoggingListener.USER_XATTR_ENABLED)
-      if (xAttrEnabled.exists(data =>
-        new String(data.getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8) == "true")) {
+      if (xAttrEnabled == Some("true")) {
         xAttrStatus = LogXAttrStatus.XATTR_ENABLED
       }
     }

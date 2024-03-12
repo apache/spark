@@ -253,7 +253,7 @@ package object config {
 
   private[spark] val EVENT_LOG_USEXATTR =
     ConfigBuilder("spark.eventLog.usexattr")
-      .version("3.5.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 

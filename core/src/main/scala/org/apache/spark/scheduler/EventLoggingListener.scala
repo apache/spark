@@ -78,7 +78,7 @@ private[spark] class EventLoggingListener(
   private val liveStageExecutorMetrics =
     mutable.HashMap.empty[(Int, Int), mutable.HashMap[String, ExecutorMetrics]]
 
-  private var envUpdateXAttrFlushed = false
+  private var envXAttrUpdated = false
 
   /**
    * Creates the log file in the configured log directory.
@@ -86,7 +86,16 @@ private[spark] class EventLoggingListener(
   def start(): Unit = {
     logWriter.start()
     initEventLog()
-    if (shouldUseXAttr) logWriter.writeToXAttr(USER_XATTR_ENABLED, "true")
+    if (shouldUseXAttr) writeToXattr(USER_XATTR_ENABLED, "true")
+  }
+
+  private def writeToXattr(String attr, String value): Unit = {
+    try {
+      logWriter.writeToXAttr(attr, value)
+    } catch {
+      case e: UnsupportedOperationException =>
+        shouldUseXAttr = false
+    }
   }
 
   private def initEventLog(): Unit = {
@@ -135,15 +144,15 @@ private[spark] class EventLoggingListener(
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     logEvent(redactEvent(sparkConf, event))
-    if (shouldUseXAttr && !envUpdateXAttrFlushed) {
-      envUpdateXAttrFlushed = true
+    if (shouldUseXAttr && !envXAttrUpdated) {
+      envXAttrUpdated = true
       val allProperties = event.environmentDetails("Spark Properties").toMap
       val aclsValueList = List(allProperties.get("spark.ui.view.acls").getOrElse("None"),
         allProperties.get("spark.admin.acls").getOrElse("None"),
         allProperties.get("spark.ui.view.acls.groups").getOrElse("None"),
         allProperties.get("spark.admin.acls.groups").getOrElse("None"))
         .mkString("|")
-      logWriter.writeToXAttr(USER_ATTEMPT_ACLS, aclsValueList)
+      writeToXAttr(USER_ATTEMPT_ACLS, aclsValueList)
     }
   }
 
@@ -193,19 +202,19 @@ private[spark] class EventLoggingListener(
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     logEvent(event, flushLogger = true)
     if (shouldUseXAttr) {
-      logWriter.writeToXAttr(USER_APP_ID, event.appId.getOrElse("None"))
-      logWriter.writeToXAttr(USER_APP_NAME, event.appName)
-      logWriter.writeToXAttr(USER_ATTEMPT_ID, event.appAttemptId.getOrElse("None"))
-      logWriter.writeToXAttr(USER_ATTEMPT_STARTTIME, new Date(event.time).getTime.toString)
-      logWriter.writeToXAttr(USER_ATTEMPT_SPARKUSER, event.sparkUser)
-      logWriter.writeToXAttr(USER_ATTEMPT_APPSPARKVERSION, SPARK_VERSION)
+      writeToXAttr(USER_APP_ID, event.appId.getOrElse("None"))
+      writeToXAttr(USER_APP_NAME, event.appName)
+      writeToXAttr(USER_ATTEMPT_ID, event.appAttemptId.getOrElse("None"))
+      writeToXAttr(USER_ATTEMPT_STARTTIME, new Date(event.time).getTime.toString)
+      writeToXAttr(USER_ATTEMPT_SPARKUSER, event.sparkUser)
+      writeToXAttr(USER_ATTEMPT_APPSPARKVERSION, SPARK_VERSION)
     }
   }
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     logEvent(event, flushLogger = true)
     if (shouldUseXAttr) {
-      logWriter.writeToXAttr(USER_ATTEMPT_ENDTIME, new Date(event.time).getTime.toString)
+      writeToXAttr(USER_ATTEMPT_ENDTIME, new Date(event.time).getTime.toString)
     }
   }
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
@@ -338,6 +347,9 @@ private[spark] object EventLoggingListener extends Logging {
   val USER_ATTEMPT_ACLS = "user.attempt.acls"
   val XATTRS_APPLICATION_START_LIST = List(USER_APP_ID, USER_APP_NAME, USER_ATTEMPT_ID,
     USER_ATTEMPT_STARTTIME, USER_ATTEMPT_SPARKUSER, USER_ATTEMPT_APPSPARKVERSION)
+  val XATTRS_LIST = List(USER_APP_ID, USER_APP_NAME, USER_ATTEMPT_ID,
+    USER_ATTEMPT_STARTTIME, USER_ATTEMPT_SPARKUSER, USER_ATTEMPT_APPSPARKVERSION, USER_ATTEMPT_ACLS,
+    USER_ATTEMPT_ENDTIME)
   // Dummy stage key used by driver in executor metrics updates
   val DRIVER_STAGE_KEY = (-1, -1)
 

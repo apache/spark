@@ -241,6 +241,7 @@ class SingleEventLogFileWriter(
         logInfo(s"Failed to set extended attribute ${attrName}")
       case _: UnsupportedOperationException =>
         logInfo("setXAttr not supported by filesystem")
+        throw _ // rethrow the exception
     }
   }
 
