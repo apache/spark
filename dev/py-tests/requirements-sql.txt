@@ -1,0 +1,11 @@
+# PySpark dependencies for SQL tests
+
+numpy==1.26.2
+pyarrow==14.0.2
+pandas==2.1.4
+scipy==1.11.4
+unittest-xml-reporting==3.2.0
+lxml==4.9.4
+grpcio==1.59.3
+grpcio-status==1.59.3
+protobuf==4.25.1
