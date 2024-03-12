@@ -510,8 +510,13 @@ BIGDECIMAL_LITERAL
     | DECIMAL_DIGITS EXPONENT? 'BD' {isValidDecimal()}?
     ;
 
+// Over define the identifier to give a sensible INVALID_IDENTIFIER error message:
+// Unicode letters for any non a-z
+// URI paths for table references using paths
+// We catch all invalid identifiers with exitUnquotedIdentifier() in the parser.
 IDENTIFIER
     : ( UNICODE_LETTER | DIGIT | '_')+
+    | UNICODE_LETTER+ '://' (UNICODE_LETTER | DIGIT | '_' | '/' | '-' | '.' | '?' | '=' | '&' | '#' | '%')+
     ;
 
 BACKQUOTED_IDENTIFIER
