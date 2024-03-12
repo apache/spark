@@ -47,7 +47,7 @@ private[spark] class PythonWorkerFactory(
     workerModule: String,
     daemonModule: String,
     envVars: Map[String, String],
-    useDaemonEnabled: Boolean)
+    val useDaemonEnabled: Boolean)
   extends Logging { self =>
 
   def this(
