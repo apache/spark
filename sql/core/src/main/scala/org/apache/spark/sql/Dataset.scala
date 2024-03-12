@@ -271,13 +271,7 @@ class Dataset[T] private[sql](
   private[sql] def getRows(
       numRows: Int,
       truncate: Int): Seq[Seq[String]] = {
-    val newDf = logicalPlan match {
-      case c: CommandResult =>
-        // Convert to `LocalRelation` and let `ConvertToLocalRelation` do the casting locally to
-        // avoid triggering a job
-        Dataset.ofRows(sparkSession, LocalRelation(c.output, c.rows))
-      case _ => toDF()
-    }
+    val newDf = commandResultOptimized.toDF()
     val castCols = newDf.logicalPlan.output.map { col =>
       Column(ToPrettyString(col))
     }
@@ -655,7 +649,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.4.0
    */
-  def isEmpty: Boolean = withAction("isEmpty", select().limit(1).queryExecution) { plan =>
+  def isEmpty: Boolean = withAction("isEmpty",
+      commandResultOptimized.select().limit(1).queryExecution) { plan =>
     plan.executeTake(1).isEmpty
   }
 
@@ -4468,6 +4463,17 @@ class Dataset[T] private[sql](
       Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
     } else {
       Dataset(sparkSession, logicalPlan)
+    }
+  }
+
+  /** Returns a optimized plan for CommandResult, convert to `LocalRelation`. */
+  private def commandResultOptimized: Dataset[T] = {
+    logicalPlan match {
+      case c: CommandResult =>
+        // Convert to `LocalRelation` and let `ConvertToLocalRelation` do the casting locally to
+        // avoid triggering a job
+        Dataset(sparkSession, LocalRelation(c.output, c.rows))
+      case _ => this
     }
   }
 

@@ -254,7 +254,7 @@ class StringType(AtomicType):
         the collation id number.
     """
 
-    collationNames = ["UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI"]
+    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
 
     def __init__(self, collationId: int = 0):
         self.collationId = collationId

@@ -1456,7 +1456,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Binary comparison of two UTF8String. Can only be used for default UCS_BASIC collation.
+   * Binary comparison of two UTF8String. Can only be used for default UTF8_BINARY collation.
    */
   public int binaryCompare(final UTF8String other) {
     return ByteArray.compareBinary(
