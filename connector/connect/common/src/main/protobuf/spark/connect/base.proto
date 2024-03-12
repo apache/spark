@@ -357,6 +357,9 @@ message ExecutePlanResponse {
     // Response for commands on the streaming query manager.
     StreamingQueryManagerCommandResult streaming_query_manager_command_result = 11;
 
+    // Response for commands on the client side streaming query listener.
+    StreamingQueryListenerEventsResult streaming_query_listener_events_result = 16;
+
     // Response type informing if the stream is complete in reattachable execution.
     ResultComplete result_complete = 14;
 

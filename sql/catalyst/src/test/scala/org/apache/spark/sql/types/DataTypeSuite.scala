@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import com.fasterxml.jackson.core.JsonParseException
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -97,7 +97,7 @@ class DataTypeSuite extends SparkFunSuite {
 
     assert(StructField("b", LongType, false) === struct("b"))
 
-    intercept[IllegalArgumentException] {
+    intercept[SparkIllegalArgumentException] {
       struct("e")
     }
 
@@ -106,7 +106,7 @@ class DataTypeSuite extends SparkFunSuite {
       StructField("d", FloatType, true) :: Nil)
 
     assert(expectedStruct === struct(Set("b", "d")))
-    intercept[IllegalArgumentException] {
+    intercept[SparkIllegalArgumentException] {
       struct(Set("b", "d", "e", "f"))
     }
   }
@@ -119,7 +119,7 @@ class DataTypeSuite extends SparkFunSuite {
     assert(struct.fieldIndex("a") === 0)
     assert(struct.fieldIndex("b") === 1)
 
-    intercept[IllegalArgumentException] {
+    intercept[SparkIllegalArgumentException] {
       struct.fieldIndex("non_existent")
     }
   }
@@ -292,26 +292,29 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromDDL(structType)
 
   test("fromJson throws an exception when given type string is invalid") {
-    var message = intercept[IllegalArgumentException] {
-      DataType.fromJson(""""abcd"""")
-    }.getMessage
-    assert(message.contains(
-      "Failed to convert the JSON string 'abcd' to a data type."))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson(""""abcd"""")
+      },
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> "abcd"))
 
-    message = intercept[IllegalArgumentException] {
-      DataType.fromJson("""{"abcd":"a"}""")
-    }.getMessage
-    assert(message.contains(
-      """Failed to convert the JSON string '{"abcd":"a"}' to a data type"""))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson("""{"abcd":"a"}""")
+      },
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> """{"abcd":"a"}"""))
 
-    message = intercept[IllegalArgumentException] {
-      DataType.fromJson("""{"fields": [{"a":123}], "type": "struct"}""")
-    }.getMessage
-    assert(message.contains(
-      """Failed to convert the JSON string '{"a":123}' to a field."""))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson("""{"fields": [{"a":123}], "type": "struct"}""")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_3250",
+      parameters = Map("other" -> """{"a":123}"""))
 
     // Malformed JSON string
-    message = intercept[JsonParseException] {
+    val message = intercept[JsonParseException] {
       DataType.fromJson("abcd")
     }.getMessage
     assert(message.contains("Unrecognized token 'abcd'"))

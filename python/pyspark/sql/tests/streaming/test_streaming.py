@@ -294,6 +294,12 @@ class StreamingTestsMixin:
         self.assertIsInstance(exception, StreamingQueryException)
         self._assert_exception_tree_contains_msg(exception, "ZeroDivisionError")
 
+    def test_query_manager_no_recreation(self):
+        # SPARK-46873: There should not be a new StreamingQueryManager created every time
+        # spark.streams is called.
+        for i in range(5):
+            self.assertTrue(self.spark.streams == self.spark.streams)
+
     def test_query_manager_get(self):
         df = self.spark.readStream.format("rate").load()
         for q in self.spark.streams.active:
@@ -352,7 +358,7 @@ class StreamingTestsMixin:
             )
 
     def test_streaming_write_to_table(self):
-        with self.table("output_table"), tempfile.TemporaryDirectory() as tmpdir:
+        with self.table("output_table"), tempfile.TemporaryDirectory(prefix="to_table") as tmpdir:
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
             q = df.writeStream.toTable("output_table", format="parquet", checkpointLocation=tmpdir)
             self.assertTrue(q.isActive)

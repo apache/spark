@@ -34,13 +34,29 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
    * @param stateName - name of the state variable
-   * @param keyEncoder - Spark SQL Encoder for key
-   * @tparam K - type of key
+   * @param valEncoder - SQL encoder for state variable
    * @tparam T - type of state variable
    * @return - instance of ValueState of type T that can be used to store state persistently
    */
-  def getValueState[K, T](stateName: String, keyEncoder: Encoder[K]): ValueState[T]
+  def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T]
+
+  /**
+   * Creates new or returns existing list state associated with stateName.
+   * The ListState persists values of type T.
+   *
+   * @param stateName  - name of the state variable
+   * @param valEncoder - SQL encoder for state variable
+   * @tparam T - type of state variable
+   * @return - instance of ListState of type T that can be used to store state persistently
+   */
+  def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T]
 
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo
+
+  /**
+   * Function to delete and purge state variable if defined previously
+   * @param stateName - name of the state variable
+   */
+  def deleteIfExists(stateName: String): Unit
 }

@@ -30,6 +30,7 @@ import scala.util.control.Exception._
 import scala.util.control.NonFatal
 import scala.xml.SAXException
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
@@ -194,7 +195,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
 
   private def inferField(parser: XMLEventReader): DataType = {
     parser.peek match {
-      case _: EndElement => NullType
+      case _: EndElement =>
+        parser.nextEvent()
+        NullType
       case _: StartElement => inferObject(parser)
       case _: Characters =>
         val structType = inferObject(parser).asInstanceOf[StructType]
@@ -209,7 +212,9 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
           case _ => structType
         }
       case e: XMLEvent =>
-        throw new IllegalArgumentException(s"Failed to parse data with unexpected event $e")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3239",
+          messageParameters = Map("e" -> e.toString))
     }
   }
 
@@ -447,7 +452,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     oldTypeOpt match {
       // If the field name already exists,
       // merge the type and infer the combined field as an array type if necessary
-      case Some(oldType) if !oldType.isInstanceOf[ArrayType] && !newType.isInstanceOf[NullType] =>
+      case Some(oldType) if !oldType.isInstanceOf[ArrayType] =>
         ArrayType(compatibleType(caseSensitive, options.valueTag)(oldType, newType))
       case Some(oldType) =>
         compatibleType(caseSensitive, options.valueTag)(oldType, newType)

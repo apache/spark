@@ -200,7 +200,7 @@ You can optionally configure the cluster further by setting environment variable
 
 SPARK_MASTER_OPTS supports the following system properties:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.master.ui.port</code></td>
@@ -403,9 +403,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     Path to resources file which is used to find various resources while worker starting up.
     The content of resources file should be formatted like
-    <code>[{"id":{"componentName":</code>
-    <code>"spark.worker", "resourceName":"gpu"},</code>
-    <code>"addresses":["0","1","2"]}]</code>.
+    <code>[{"id":{"componentName": "spark.worker", "resourceName":"gpu"}, "addresses":["0","1","2"]}]</code>.
     If a particular resource is not found in the resources file, the discovery script would be used to
     find that resource. If the discovery script also does not find the resources, the worker will fail
     to start up.
@@ -416,7 +414,7 @@ SPARK_MASTER_OPTS supports the following system properties:
 
 SPARK_WORKER_OPTS supports the following system properties:
 
-<table>
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.worker.initialRegistrationRetries</code></td>
@@ -438,7 +436,7 @@ SPARK_WORKER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.worker.cleanup.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
@@ -549,8 +547,8 @@ You can also pass an option `--total-executor-cores <numCores>` to control the n
 
 Spark applications supports the following configuration properties specific to standalone mode:
 
-<table>
-  <thead><tr><th style="width:21%">Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
   <td><code>spark.standalone.submit.waitAppCompletion</code></td>
   <td><code>false</code></td>
@@ -599,8 +597,8 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
 <code>version</code> is a protocol version, <code>v1</code> as of today, and
 <code>action</code> is one of the following supported actions.
 
-<table>
-  <thead><tr><th style="width:21%">Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>create</code></td>
     <td>Create a Spark driver via <code>cluster</code> mode.</td>
@@ -753,8 +751,7 @@ Learn more about getting started with ZooKeeper [here](https://zookeeper.apache.
 
 **Configuration**
 
-In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the [configuration doc](configuration.html#deploy)
+In order to enable this recovery mode, you can set `SPARK_DAEMON_JAVA_OPTS` in spark-env by configuring `spark.deploy.recoveryMode` and related `spark.deploy.zookeeper.*` configurations.
 
 Possible gotcha: If you have multiple Masters in your cluster but fail to correctly configure the Masters to use ZooKeeper, the Masters will fail to discover each other and think they're all leaders. This will not lead to a healthy cluster state (as all Masters will schedule independently).
 
@@ -778,8 +775,8 @@ ZooKeeper is the best way to go for production-level high availability, but if y
 
 In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
 
-<table>
-  <thead><tr><th style="width:21%">System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<table class="spark-config">
+  <thead><tr><th>System property</th><th>Default Value</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>NONE</td>

@@ -45,7 +45,7 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.testing.sqlutils import have_pandas
+from pyspark.testing.sqlutils import have_pandas, have_pyarrow
 
 
 class UtilsTestsMixin:
@@ -745,7 +745,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_equal_exact_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -760,7 +763,10 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_approx_equal_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -776,7 +782,10 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_approx_equal_fail_exact_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -817,7 +826,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_unequal_pandas_df(self):
         import pandas as pd
         import numpy as np
@@ -857,7 +869,10 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas or not have_numpy, "no pandas or numpy dependency")
+    @unittest.skipIf(
+        not have_pandas or not have_numpy or not have_pyarrow,
+        "no pandas or numpy or pyarrow dependency",
+    )
     def test_assert_type_error_pandas_df(self):
         import pyspark.pandas as ps
         import pandas as pd
@@ -896,7 +911,7 @@ class UtilsTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_exact_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -906,7 +921,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_exact_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -915,7 +930,7 @@ class UtilsTestsMixin:
 
         assertDataFrameEqual(df1, df2)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_equal_approx_pandas_on_spark_df(self):
         import pyspark.pandas as ps
 
@@ -925,7 +940,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=False)
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
-    @unittest.skipIf(not have_pandas, "no pandas dependency")
+    @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
     def test_assert_error_pandas_pyspark_df(self):
         import pyspark.pandas as ps
         import pandas as pd
@@ -1773,6 +1788,18 @@ class UtilsTestsMixin:
             self.assertIsNone(e.getSqlState())
             self.assertEqual(e.getMessageParameters(), {})
             self.assertEqual(e.getMessage(), "")
+
+    def test_assert_data_frame_equal_not_support_streaming(self):
+        df1 = self.spark.readStream.format("rate").load()
+        df2 = self.spark.readStream.format("rate").load()
+        exception_thrown = False
+        try:
+            assertDataFrameEqual(df1, df2)
+        except PySparkAssertionError as e:
+            self.assertEqual(e.getErrorClass(), "UNSUPPORTED_OPERATION")
+            exception_thrown = True
+
+        self.assertTrue(exception_thrown)
 
 
 class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):

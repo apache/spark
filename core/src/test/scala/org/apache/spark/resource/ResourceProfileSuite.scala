@@ -354,7 +354,7 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     assert(rprof.taskResources.get("fpga").get.amount === 4.0,
       "Task resources should have 4.0 gpu")
 
-    var taskError = intercept[AssertionError] {
+    val taskError = intercept[AssertionError] {
       rprof.require(new TaskResourceRequests().resource("gpu", 1.5))
     }.getMessage()
     assert(taskError.contains("The resource amount 1.5 must be either <= 1.0, or a whole number."))

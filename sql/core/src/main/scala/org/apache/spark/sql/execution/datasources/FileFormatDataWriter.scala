@@ -79,11 +79,18 @@ abstract class FileFormatDataWriter(
   /** Writes a record. */
   def write(record: InternalRow): Unit
 
-  def writeWithMetrics(record: InternalRow, count: Long): Unit = {
+  final def writeWithMetrics(record: InternalRow, count: Long): Unit = {
     if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
       CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
-    write(record)
+    try {
+      write(record)
+    } catch {
+      // Unwrap the Avro `AppendWriteException` which is only used to work around the Java API
+      // signature (DataFileWriter#write) that only allows to throw `IOException`.
+      case e: org.apache.avro.file.DataFileWriter.AppendWriteException =>
+        throw e.getCause
+    }
   }
 
   /** Write an iterator of records. */

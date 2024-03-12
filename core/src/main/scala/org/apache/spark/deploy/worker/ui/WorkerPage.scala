@@ -17,10 +17,9 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
@@ -78,11 +77,15 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
 
+    val workerUrlRef = UIUtils.makeHref(parent.worker.reverseProxy, workerState.workerId,
+      parent.webUrl)
     val content =
       <div class="row"> <!-- Worker Details -->
         <div class="col-12">
           <ul class="list-unstyled">
-            <li><strong>ID:</strong> {workerState.workerId}</li>
+            <li><strong>ID:</strong>
+              <a href={s"$workerUrlRef/logPage/?self&logType=out"}>{workerState.workerId}</a>
+            </li>
             <li><strong>
               Master URL:</strong> {workerState.masterUrl}
             </li>

@@ -28,9 +28,9 @@ import org.apache.spark.tags.DockerTest
 
 /**
  * This suite is used to generate subqueries, and test Spark against Postgres.
- * To run this test suite for a specific version (e.g., postgres:15.1):
+ * To run this test suite for a specific version (e.g., postgres:16.2):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:15.1
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.2
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.GeneratedSubquerySuite"
  * }}}
@@ -39,7 +39,7 @@ import org.apache.spark.tags.DockerTest
 class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGeneratorHelper {
 
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:15.1-alpine")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.2-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -418,7 +418,7 @@ class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGenera
         // Enable ANSI so that { NULL IN { <empty> } } behavior is correct in Spark.
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
 
-        val generatedQueries = generatedQuerySpecs.map(_.query).toSeq
+        val generatedQueries = querySpec.map(_.query).toSeq
         // Randomize query order because we are taking a subset of queries.
         val shuffledQueries = scala.util.Random.shuffle(generatedQueries)
 

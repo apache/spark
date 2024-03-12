@@ -68,7 +68,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   // Track the last time in ns that at least one task is running. If no task is running and all
   // shuffle/RDD data migration are done, the decommissioned executor should exit.
-  private var lastTaskFinishTime = new AtomicLong(System.nanoTime())
+  private val lastTaskFinishTime = new AtomicLong(System.nanoTime())
 
   override def onStart(): Unit = {
     if (env.conf.get(DECOMMISSION_ENABLED)) {

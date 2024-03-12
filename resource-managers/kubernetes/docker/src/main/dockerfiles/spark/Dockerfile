@@ -30,7 +30,7 @@ ARG spark_uid=185
 RUN set -ex && \
     apt-get update && \
     ln -s /lib /lib64 && \
-    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools && \
+    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools logrotate && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \
@@ -42,6 +42,8 @@ RUN set -ex && \
     rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY jars /opt/spark/jars
+# Copy hive-jackson directory if exists
+COPY hive-jackso[n] /opt/spark/hive-jackson
 # Copy RELEASE file if exists
 COPY RELEAS[E] /opt/spark/RELEASE
 COPY bin /opt/spark/bin
