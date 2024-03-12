@@ -217,7 +217,7 @@ class ValueStateSuite extends SharedSparkSession
       ex,
       errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
       parameters = Map(
-        "stateStoreProvider" -> "HDFSStateStoreProvider"
+        "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
       ),
       matchPVals = true
     )

@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 __all__ = [
     "DataSource",
     "DataSourceReader",
+    "DataSourceStreamReader",
     "DataSourceWriter",
     "DataSourceRegistration",
     "InputPartition",
@@ -157,6 +158,27 @@ class DataSource(ABC):
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "writer"},
+        )
+
+    def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
+        """
+        Returns a ``DataSourceStreamReader`` instance for reading streaming data.
+
+        The implementation is required for readable streaming data sources.
+
+        Parameters
+        ----------
+        schema : StructType
+            The schema of the data to be read.
+
+        Returns
+        -------
+        reader : DataSourceStreamReader
+            A reader instance for this streaming data source.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "streamReader"},
         )
 
 
@@ -294,6 +316,137 @@ class DataSourceReader(ABC):
         >>> def read(self, partition: InputPartition):
         ...     yield Row(partition=partition.value, value=0)
         ...     yield Row(partition=partition.value, value=1)
+        """
+        ...
+
+
+class DataSourceStreamReader(ABC):
+    """
+    A base class for streaming data source readers. Data source stream readers are responsible
+    for outputting data from a streaming data source.
+
+    .. versionadded: 4.0.0
+    """
+
+    def initialOffset(self) -> dict:
+        """
+        Return the initial offset of the streaming data source.
+        A new streaming query starts reading data from the initial offset.
+        If Spark is restarting an existing query, it will restart from the check-pointed offset
+        rather than the initial one.
+
+        Returns
+        -------
+        dict
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
+
+        Examples
+        --------
+        >>> def initialOffset(self):
+        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+        """
+
+        ...
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "initialOffset"},
+        )
+
+    def latestOffset(self) -> dict:
+        """
+        Returns the most recent offset available.
+
+        Returns
+        -------
+        dict
+            A dict or recursive dict whose key and value are primitive types, which includes
+            Integer, String and Boolean.
+
+        Examples
+        --------
+        >>> def latestOffset(self):
+        ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
+        """
+        ...
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "latestOffset"},
+        )
+
+    def partitions(self, start: dict, end: dict) -> Sequence[InputPartition]:
+        """
+        Returns a list of InputPartition  given the start and end offsets. Each InputPartition
+        represents a data split that can be processed by one Spark task.
+
+        Parameters
+        ----------
+        start : dict
+            The start offset of the microbatch to plan partitioning.
+        end : dict
+            The end offset of the microbatch to plan partitioning.
+
+        Returns
+        -------
+        Sequence[InputPartition]
+            A sequence of partitions for this data source. Each partition value
+            must be an instance of `InputPartition` or a subclass of it.
+        """
+        ...
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "partitions"},
+        )
+
+    @abstractmethod
+    def read(self, partition: InputPartition) -> Iterator[Union[Tuple, Row]]:
+        """
+        Generates data for a given partition and returns an iterator of tuples or rows.
+
+        This method is invoked once per partition to read the data. Implementing
+        this method is required for stream reader. You can initialize any
+        non-serializable resources required for reading data from the data source
+        within this method.
+
+        Notes
+        -----
+        This method is static and stateless. You shouldn't access mutable class member
+        or keep in memory state between different invocations of read().
+
+        Parameters
+        ----------
+        partition : InputPartition
+            The partition to read. It must be one of the partition values returned by
+            ``partitions()``.
+
+        Returns
+        -------
+        Iterator[Tuple] or Iterator[Row]
+            An iterator of tuples or rows. Each tuple or row will be converted to a row
+            in the final DataFrame.
+        """
+        ...
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "read"},
+        )
+
+    def commit(self, end: dict) -> None:
+        """
+        Informs the source that Spark has completed processing all data for offsets less than or
+        equal to `end` and will only request offsets greater than `end` in the future.
+
+        Parameters
+        ----------
+        end : dict
+            The latest offset that the streaming query has processed for this source.
+        """
+        ...
+
+    def stop(self) -> None:
+        """
+        Stop this source and free any resources it has allocated.
+        Invoked when the streaming query terminated.
         """
         ...
 
