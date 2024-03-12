@@ -511,7 +511,7 @@ BIGDECIMAL_LITERAL
     ;
 
 IDENTIFIER
-    : (LETTER | DIGIT | '_')+
+    : ( UNICODE_LETTER | DIGIT | '_')+
     ;
 
 BACKQUOTED_IDENTIFIER
@@ -533,6 +533,10 @@ fragment DIGIT
 
 fragment LETTER
     : [A-Z]
+    ;
+
+fragment UNICODE_LETTER
+    : [\p{L}]
     ;
 
 SIMPLE_COMMENT
