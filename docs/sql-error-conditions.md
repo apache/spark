@@ -71,7 +71,7 @@ Column or field `<name>` is ambiguous and has `<n>` matches.
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
-This column points to one of the DataFrame but Spark is unable to figure out which one.
+This column points to one of the DataFrames but Spark is unable to figure out which one.
 Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
 and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
 
