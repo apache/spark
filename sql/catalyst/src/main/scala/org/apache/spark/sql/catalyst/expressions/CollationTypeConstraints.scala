@@ -17,29 +17,48 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.types.{DataType, StringType}
 
 object CollationTypeConstraints {
-  def checkCollationCompatibility(
-      superCheck: => TypeCheckResult,
+  def checkCollationCompatibilityAndSupport(
+      checkResult: TypeCheckResult,
       collationId: Int,
-      rightDataType: DataType): TypeCheckResult = {
-    val checkResult = superCheck
-    if (checkResult.isFailure) return checkResult
+      dataTypes: Seq[DataType],
+      functionName: String,
+      collationSupportLevel: CollationSupportLevel.CollationSupportLevel): TypeCheckResult = {
+    val resultCompatibility = checkCollationCompatibility(checkResult, collationId, dataTypes)
+    checkCollationSupport(resultCompatibility, collationId, functionName, collationSupportLevel)
+  }
+
+  def checkCollationCompatibility(
+      checkResult: TypeCheckResult,
+      collationId: Int,
+      dataTypes: Seq[DataType]): TypeCheckResult = {
+    if (checkResult.isFailure) {
+      return checkResult
+    }
+    val collationName = CollationFactory.fetchCollation(collationId).collationName
     // Additional check needed for collation compatibility
-    val rightCollationId: Int = rightDataType.asInstanceOf[StringType].collationId
-    if (collationId != rightCollationId) {
-      return DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> CollationFactory.fetchCollation(collationId).collationName,
-          "collationNameRight" -> CollationFactory.fetchCollation(rightCollationId).collationName
-        )
-      )
+    for (dataType <- dataTypes) {
+      dataType match {
+        case stringType: StringType =>
+          if (stringType.collationId != collationId) {
+            val collation = CollationFactory.fetchCollation(stringType.collationId)
+            return DataTypeMismatch(
+              errorSubClass = "COLLATION_MISMATCH",
+              messageParameters = Map(
+                "collationNameLeft" -> collationName,
+                "collationNameRight" -> collation.collationName
+              )
+            )
+          }
+        case _ =>
+      }
     }
     TypeCheckResult.TypeCheckSuccess
   }
@@ -53,13 +72,14 @@ object CollationTypeConstraints {
   }
 
   def checkCollationSupport(
-      superCheck: => TypeCheckResult,
+      checkResult: TypeCheckResult,
       collationId: Int,
       functionName: String,
       collationSupportLevel: CollationSupportLevel.CollationSupportLevel)
   : TypeCheckResult = {
-    val checkResult = superCheck
-    if (checkResult.isFailure) return checkResult
+    if (checkResult.isFailure) {
+      return checkResult
+    }
     // Additional check needed for collation support
     val collation = CollationFactory.fetchCollation(collationId)
     collationSupportLevel match {
@@ -72,7 +92,7 @@ object CollationTypeConstraints {
           throwUnsupportedCollation(functionName, collation.collationName)
         }
       case CollationSupportLevel.SUPPORT_ALL_COLLATIONS => // No additional checks needed
-      case _ => throw new IllegalArgumentException("Invalid collation support level.")
+      case _ => throw new SparkIllegalArgumentException("Invalid collation support level.")
     }
     TypeCheckResult.TypeCheckSuccess
   }
@@ -81,7 +101,7 @@ object CollationTypeConstraints {
     throw new SparkException(
       errorClass = "UNSUPPORTED_COLLATION.FOR_FUNCTION",
       messageParameters = Map(
-        "functionName" -> functionName,
+        "functionName" -> toSQLId(functionName),
         "collationName" -> collationName),
       cause = null
     )
