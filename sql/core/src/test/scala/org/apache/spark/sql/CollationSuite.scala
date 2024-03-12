@@ -531,7 +531,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withTable(tableName) {
       spark.sql(
         s"""
-           | CREATE TABLE $tableName(c1 STRING COLLATE UCS_BASIC_LCASE,
+           | CREATE TABLE $tableName(c1 STRING COLLATE UTF8_BINARY_LCASE,
            | c2 STRING COLLATE UNICODE, c3 STRING COLLATE UNICODE_CI, c4 STRING)
            | USING PARQUET
            |""".stripMargin)
@@ -544,23 +544,25 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE 'a' = c1"),
         Seq(Row("a"), Row("A")))
 
-      // collate c1 to UCS_BASIC because it is explicitly set
-      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 = COLLATE('a', 'UCS_BASIC')"),
+      // collate c1 to UTF8_BINARY because it is explicitly set
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 = COLLATE('a', 'UTF8_BINARY')"),
         Seq(Row("a")))
-      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 = SUBSTR(COLLATE('a', 'UCS_BASIC'), 0)"),
+      checkAnswer(
+        sql(s"SELECT c1 FROM $tableName " +
+          s"WHERE c1 = SUBSTR(COLLATE('a', 'UTF8_BINARY'), 0)"),
         Seq(Row("a")))
 
       // in operator
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('a')"),
         Seq(Row("a"), Row("A")))
       // explicitly set collation inside IN operator
-      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('b', COLLATE('a', 'UCS_BASIC'))"),
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('b', COLLATE('a', 'UTF8_BINARY'))"),
         Seq(Row("a")))
 
       // concat should not change collation
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || 'a' || 'a' = 'aaa'"),
         Seq(Row("a"), Row("A")))
-      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE(c2, 'UCS_BASIC') = 'aa'"),
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE(c2, 'UTF8_BINARY') = 'aa'"),
         Seq(Row("a")))
 
       // concat of columns of different collations is allowed
@@ -569,9 +571,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       // concat + in
       checkAnswer(sql(s"SELECT c1 FROM $tableName where c1 || 'a' " +
-        s"IN (COLLATE('aa', 'UCS_BASIC_LCASE'))"), Seq(Row("a"), Row("A")))
+        s"IN (COLLATE('aa', 'UTF8_BINARY_LCASE'))"), Seq(Row("a"), Row("A")))
       checkAnswer(sql(s"SELECT c1 FROM $tableName where (c1 || 'a') " +
-        s"IN (COLLATE('aa', 'UCS_BASIC'))"), Seq(Row("a")))
+        s"IN (COLLATE('aa', 'UTF8_BINARY'))"), Seq(Row("a")))
 
       // columns have different collation
       checkError(
@@ -587,7 +589,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           sql(
             s"""
                |SELECT c1 FROM $tableName
-               |WHERE COLLATE('a', 'UCS_BASIC') = COLLATE('a', 'UNICODE')"""
+               |WHERE COLLATE('a', 'UTF8_BINARY') = COLLATE('a', 'UNICODE')"""
               .stripMargin)
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
@@ -600,7 +602,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE c1 IN " +
-            "(COLLATE('a', 'UCS_BASIC'), COLLATE('b', 'UNICODE'))")
+            "(COLLATE('a', 'UTF8_BINARY'), COLLATE('b', 'UNICODE'))")
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
@@ -610,7 +612,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE COLLATE(c1, 'UNICODE') IN " +
-            "(COLLATE('a', 'UCS_BASIC'))")
+            "(COLLATE('a', 'UTF8_BINARY'))")
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
@@ -637,7 +639,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       // concat + in
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE('a', 'UCS_BASIC') IN " +
+          sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE('a', 'UTF8_BINARY') IN " +
             s"(COLLATE('a', 'UNICODE'))")
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
@@ -653,8 +655,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     withTable(tableName) {
       spark.sql(
         s"""
-           | CREATE TABLE $tableName(ucs_basic STRING COLLATE UCS_BASIC,
-           | ucs_basic_lcase STRING COLLATE UCS_BASIC_LCASE)
+           | CREATE TABLE $tableName(utf8_binary STRING COLLATE UTF8_BINARY,
+           | utf8_binary_lcase STRING COLLATE UTF8_BINARY_LCASE)
            | USING PARQUET
            |""".stripMargin)
       sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
@@ -663,11 +665,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"INSERT INTO $tableName VALUES ('BBB', 'BBB')")
 
       checkAnswer(sql(s"SELECT * FROM $tableName " +
-        s"WHERE ucs_basic_lcase IN " +
-        s"('aaa' COLLATE UCS_BASIC_LCASE, 'bbb' COLLATE UCS_BASIC_LCASE)"),
+        s"WHERE utf8_binary_lcase IN " +
+        s"('aaa' COLLATE UTF8_BINARY_LCASE, 'bbb' COLLATE UTF8_BINARY_LCASE)"),
         Seq(Row("aaa", "aaa"), Row("AAA", "AAA"), Row("bbb", "bbb"), Row("BBB", "BBB")))
       checkAnswer(sql(s"SELECT * FROM $tableName " +
-        s"WHERE ucs_basic_lcase IN ('aaa' COLLATE UCS_BASIC_LCASE, 'bbb')"),
+        s"WHERE utf8_binary_lcase IN ('aaa' COLLATE UTF8_BINARY_LCASE, 'bbb')"),
         Seq(Row("aaa", "aaa"), Row("AAA", "AAA"), Row("bbb", "bbb"), Row("BBB", "BBB")))
     }
   }

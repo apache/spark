@@ -156,7 +156,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
   override def findWiderCommonType(exprs: Seq[Expression],
                                    failOnIndeterminate: Boolean = false): Option[DataType] = {
-    (if (exprs.map(_.dataType).partition(hasStringType)._1.distinct.size > 1) {
+    (if (exprs.map(_.dataType).filter(hasStringType).distinct.size > 1) {
       val collationId = CollationTypeCasts.getOutputCollation(exprs, failOnIndeterminate)
       exprs.map(e =>
         if (hasStringType(e.dataType)) {
