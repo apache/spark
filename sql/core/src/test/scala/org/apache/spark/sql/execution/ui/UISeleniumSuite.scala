@@ -102,7 +102,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
   test("SPARK-44801: Analyzer failure shall show the query in failed table") {
     spark = creatSparkSessionWithUI
 
-    intercept[Exception](spark.sql("SELECT * FROM I_AM_A_INVISIBLE_TABLE").isEmpty)
+    intercept[Exception](spark.sql("SELECT * FROM I_AM_AN_INVISIBLE_TABLE").isEmpty)
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
       val sd = findErrorMessageOnSQLUI()
       assert(sd.size === 1, "Analyze fail shall show the query in failed table")

@@ -379,10 +379,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private boolean matchAt(final UTF8String s, int pos, int collationId) {
-    if (s.numBytes + pos > numBytes || pos < 0) {
+    if (s.numChars() + pos > this.numChars() || pos < 0) {
       return false;
     }
-    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
+    if (s.numBytes == 0 || this.numBytes == 0) {
+      return s.numBytes == 0;
+    }
+    return CollationFactory.getStringSearch(this.substring(pos, pos + s.numChars()),
+      s, collationId).last() == 0;
   }
 
   public boolean startsWith(final UTF8String prefix) {

@@ -903,6 +903,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("DB2Dialect type mapping") {
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val metadata = new MetadataBuilder().putBoolean("isTimestampNTZ", false)
+
     assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
     assert(db2Dialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -912,8 +914,11 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "DECFLOAT", 1, null) ==
       Option(DecimalType(38, 18)))
     assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "XML", 1, null) == Option(StringType))
-    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, null) ==
-      Option(TimestampType))
+    assert(db2Dialect.getCatalystType(
+      java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, metadata) === Option(TimestampType))
+    metadata.putBoolean("isTimestampNTZ", true)
+    assert(db2Dialect.getCatalystType(
+      java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, metadata) === Option(TimestampNTZType))
   }
 
   test("MySQLDialect catalyst type mapping") {

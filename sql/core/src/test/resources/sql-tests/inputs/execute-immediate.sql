@@ -142,4 +142,8 @@ EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, 
 -- nested execute immediate
 EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USING 10\'';
 
+-- sqlString is null
+SET VAR sql_string = null;
+EXECUTE IMMEDIATE sql_string;
+
 DROP TABLE x;
