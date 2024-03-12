@@ -24,6 +24,7 @@ import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JLong, JNull, JObje
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
 import org.apache.spark.sql.types._
 
 /**
@@ -135,10 +136,12 @@ class RowJsonSuite extends SparkFunSuite {
           new StructType().add("a", ObjectType(classOf[(Int, Int)])))
         row.jsonValue
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3249",
+      errorClass = "FAILED_ROW_TO_JSON",
       parameters = Map(
-        "value" -> "(1,2)",
-        "valueClass" -> "class scala.Tuple2$mcII$sp",
-        "dataType" -> "ObjectType(class scala.Tuple2)"))
+        "value" -> toSQLValue("(1,2)"),
+        "class" -> "class scala.Tuple2$mcII$sp",
+        "sqlType" -> toSQLType("ObjectType(class scala.Tuple2)")
+      )
+    )
   }
 }

@@ -809,6 +809,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SET VAR sql_string = null
+-- !query analysis
+SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view where name = :first or id = :second')]
++- Project [cast(sql_string#x as string) AS sql_string#x]
+   +- Project [null AS sql_string#x]
+      +- OneRowRelation
+
+
+-- !query
+EXECUTE IMMEDIATE sql_string
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+  "sqlState" : "22004",
+  "messageParameters" : {
+    "varName" : "`sql_string`"
+  }
+}
+
+
+-- !query
 DROP TABLE x
 -- !query analysis
 DropTable false, false
