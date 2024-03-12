@@ -6531,6 +6531,29 @@ object functions {
 
   // scalastyle:off line.size.limit
   /**
+   * (Scala-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
+   * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
+   *
+   * @group json_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_json(e: Column, schema: Column, options: Map[String, String]): Column = {
+    from_json(e, schema, options.iterator)
+  }
+
+  // scalastyle:off line.size.limit
+  /**
    * (Java-specific) Parses a column containing a JSON string into a `MapType` with `StringType`
    * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema.
    * Returns `null`, in the case of an unparseable string.
@@ -6600,7 +6623,27 @@ object functions {
 
   // scalastyle:off line.size.limit
   /**
-   * Parses a JSON string and infers its schema in DDL format using options.
+   * (Scala-specific) Parses a JSON string and infers its schema in DDL format using options.
+   *
+   * @param json a foldable string column containing JSON data.
+   * @param options options to control how the json is parsed. accepts the same options and the
+   *                json data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
+   * @return a column with string literal containing schema in DDL format.
+   *
+   * @group json_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def schema_of_json(json: Column, options: Map[String, String]): Column =
+    fnWithOptions("schema_of_json", options.iterator, json)
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a JSON string and infers its schema in DDL format using options.
    *
    * @param json a foldable string column containing JSON data.
    * @param options options to control how the json is parsed. accepts the same options and the
@@ -6986,8 +7029,8 @@ object functions {
 
   // scalastyle:off line.size.limit
   /**
-   * Parses a column containing a CSV string into a `StructType` with the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * (Scala-specific) Parses a column containing a CSV string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e a string column containing CSV data.
    * @param schema the schema to use when parsing the CSV string
@@ -7004,6 +7047,48 @@ object functions {
   // scalastyle:on line.size.limit
   def from_csv(e: Column, schema: StructType, options: Map[String, String]): Column =
     from_csv(e, lit(schema.toDDL), options.iterator)
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a column containing a CSV string into a `StructType`
+   *  with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing CSV data.
+   * @param schema the schema to use when parsing the CSV string
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
+   *
+   * @group csv_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_csv(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
+    from_csv(e, lit(schema.toDDL), options.asScala.iterator)
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Scala-specific) Parses a column containing a CSV string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e a string column containing CSV data.
+   * @param schema the schema to use when parsing the CSV string
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
+   *
+   * @group csv_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_csv(e: Column, schema: Column, options: Map[String, String]): Column =
+    from_csv(e, schema, options.iterator)
 
   // scalastyle:off line.size.limit
   /**
@@ -7051,7 +7136,27 @@ object functions {
 
   // scalastyle:off line.size.limit
   /**
-   * Parses a CSV string and infers its schema in DDL format using options.
+   * (Scala-specific) Parses a CSV string and infers its schema in DDL format using options.
+   *
+   * @param csv a foldable string column containing a CSV string.
+   * @param options options to control how the CSV is parsed. accepts the same options and the
+   *                CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
+   * @return a column with string literal containing schema in DDL format.
+   *
+   * @group csv_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def schema_of_csv(csv: Column, options: Map[String, String]): Column =
+    fnWithOptions("schema_of_csv", options.iterator, csv)
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a CSV string and infers its schema in DDL format using options.
    *
    * @param csv a foldable string column containing a CSV string.
    * @param options options to control how the CSV is parsed. accepts the same options and the
@@ -7068,6 +7173,25 @@ object functions {
   // scalastyle:on line.size.limit
   def schema_of_csv(csv: Column, options: java.util.Map[String, String]): Column =
     fnWithOptions("schema_of_csv", options.asScala.iterator, csv)
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Scala-specific) Converts a column containing a `StructType` into a CSV string with
+   * the specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e a column containing a struct.
+   * @param options options to control how the struct column is converted into a CSV string.
+   *                It accepts the same options and the CSV data source.
+   *                See
+   *                <a href=
+   *                  "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   *                  Data Source Option</a> in the version you use.
+   *
+   * @group csv_funcs
+   * @since 4.0.0
+   */
+  def to_csv(e: Column, options: Map[String, String]): Column =
+    fnWithOptions("to_csv", options.iterator, e)
 
   // scalastyle:off line.size.limit
   /**
@@ -7102,8 +7226,28 @@ object functions {
 
   // scalastyle:off line.size.limit
   /**
-   * Parses a column containing a XML string into the data type corresponding to the specified schema.
-   * Returns `null`, in the case of an unparseable string.
+   * (Scala-specific) Parses a column containing a XML string into the data type corresponding to
+   * the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema to use when parsing the XML string
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: StructType, options: Map[String, String]): Column =
+    from_xml(e, lit(CharVarcharUtils.failIfHasCharVarchar(schema).sql), options.iterator)
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a column containing a XML string into the data type corresponding to
+   * the specified schema. Returns `null`, in the case of an unparseable string.
    *
    * @param e       a string column containing XML data.
    * @param schema  the schema to use when parsing the XML string
@@ -7119,6 +7263,34 @@ object functions {
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
     from_xml(e, lit(CharVarcharUtils.failIfHasCharVarchar(schema).sql), options.asScala.iterator)
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Scala-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema.
+   * Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema as a DDL-formatted string.
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                xml data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: String, options: Map[String, String]): Column = {
+    val dataType =
+      parseTypeWithFallback(schema, DataType.fromJson, fallbackParser = DataType.fromDDL)
+    val structType = dataType match {
+      case t: StructType => t
+      case _ => throw DataTypeErrors.failedParsingStructTypeError(schema)
+    }
+    from_xml(e, structType, options)
+  }
 
   // scalastyle:off line.size.limit
   /**
@@ -7162,6 +7334,26 @@ object functions {
   def from_xml(e: Column, schema: Column): Column = {
     from_xml(e, schema, Iterator.empty)
   }
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Scala-specific) Parses a column containing a XML string into a `StructType`
+   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   *
+   * @param e       a string column containing XML data.
+   * @param schema  the schema to use when parsing the XML string
+   * @param options options to control how the XML is parsed. accepts the same options and the
+   *                XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def from_xml(e: Column, schema: Column, options: Map[String, String]): Column =
+    from_xml(e, schema, options.iterator)
 
   // scalastyle:off line.size.limit
   /**
@@ -7220,9 +7412,28 @@ object functions {
   def schema_of_xml(xml: Column): Column = withExpr(new SchemaOfXml(xml.expr))
 
   // scalastyle:off line.size.limit
-
   /**
-   * Parses a XML string and infers its schema in DDL format using options.
+   * (Scala-specific) Parses a XML string and infers its schema in DDL format using options.
+   *
+   * @param xml    a foldable string column containing XML data.
+   * @param options options to control how the xml is parsed. accepts the same options and the
+   *                XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @return a column with string literal containing schema in DDL format.
+   * @group xml_funcs
+   * @since 4.0.0
+   */
+  // scalastyle:on line.size.limit
+  def schema_of_xml(xml: Column, options: Map[String, String]): Column = {
+    withExpr(SchemaOfXml(xml.expr, options))
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * (Java-specific) Parses a XML string and infers its schema in DDL format using options.
    *
    * @param xml    a foldable string column containing XML data.
    * @param options options to control how the xml is parsed. accepts the same options and the
@@ -7241,7 +7452,25 @@ object functions {
   }
 
   // scalastyle:off line.size.limit
+  /**
+   * (Scala-specific) Converts a column containing a `StructType` into a XML string with
+   * the specified schema. Throws an exception, in the case of an unsupported type.
+   *
+   * @param e       a column containing a struct.
+   * @param options options to control how the struct column is converted into a XML string.
+   *                It accepts the same options as the XML data source.
+   *                See
+   *                <a href=
+   *                "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option">
+   *                Data Source Option</a> in the version you use.
+   * @group xml_funcs
+   * @since 4.0.0 (Done)
+   */
+  // scalastyle:on line.size.limit
+  def to_xml(e: Column, options: Map[String, String]): Column =
+    fnWithOptions("to_xml", options.iterator, e)
 
+  // scalastyle:off line.size.limit
   /**
    * (Java-specific) Converts a column containing a `StructType` into a XML string with
    * the specified schema. Throws an exception, in the case of an unsupported type.
