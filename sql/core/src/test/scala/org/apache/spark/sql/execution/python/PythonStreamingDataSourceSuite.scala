@@ -70,7 +70,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
   private val errorDataSourceName = "ErrorDataSource"
 
-  test("simple data stream source") {
+  test("Test PythonMicroBatchStream") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
@@ -124,10 +124,68 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val stopSignal = new CountDownLatch(1)
 
     val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
+      // checkAnswer may materialize the dataframe more than once
+      // Cache here to make sure the numInputRows metrics is consistent.
+      df.cache()
       checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
       if (batchId > 30) stopSignal.countDown()
     }).start()
     stopSignal.await()
+    assert(q.recentProgress.forall(_.numInputRows == 2))
+    q.stop()
+    q.awaitTermination()
+  }
+
+  test("Streaming data source read with custom partitions") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+         |class RangePartition(InputPartition):
+         |    def __init__(self, start, end):
+         |        self.start = start
+         |        self.end = end
+         |
+         |class SimpleDataStreamReader(DataSourceStreamReader):
+         |    current = 0
+         |    def initialOffset(self):
+         |        return {"offset": 0}
+         |    def latestOffset(self):
+         |        self.current += 2
+         |        return {"offset": self.current}
+         |    def partitions(self, start: dict, end: dict):
+         |        return [RangePartition(start["offset"], end["offset"])]
+         |    def commit(self, end: dict):
+         |        1 + 2
+         |    def read(self, partition: RangePartition):
+         |        start, end = partition.start, partition.end
+         |        for i in range(start, end):
+         |            yield (i, )
+         |
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |
+         |    def streamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    val df = spark.readStream.format(dataSourceName).load()
+
+    val stopSignal = new CountDownLatch(1)
+
+    val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
+      // checkAnswer may materialize the dataframe more than once
+      // Cache here to make sure the numInputRows metrics is consistent.
+      df.cache()
+      checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+      if (batchId > 30) stopSignal.countDown()
+    }).start()
+    stopSignal.await()
+    assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
     q.awaitTermination()
   }
@@ -276,7 +334,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     spark.dataSource.registerPython(errorDataSourceName, dataSource)
     val pythonDs = new PythonDataSourceV2
     pythonDs.setShortName("ErrorDataSource")
-    val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
+    val offset = PythonStreamingSourceOffset("{\"offset\": 2}")
 
     def testMicroBatchStreamError(action: String, msg: String)
                                  (func: PythonMicroBatchStream => Unit): Unit = {
