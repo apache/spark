@@ -56,7 +56,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       + "3.4028234663852886e+38, 4.2999, DECFLOAT('9.999999999999999E19', 16), "
       + "DECFLOAT('1234567891234567.123456789123456789', 34))").executeUpdate()
 
-    conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, ts TIMESTAMP) ").executeUpdate()
+    conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, ts TIMESTAMP )").executeUpdate()
     conn.prepareStatement("INSERT INTO dates VALUES ('1991-11-09', '13:31:24', "
       + "'2009-02-13 23:31:30')").executeUpdate()
 
