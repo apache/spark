@@ -7132,7 +7132,8 @@ object functions {
    * @group csv_funcs
    * @since 3.0.0
    */
-  def schema_of_csv(csv: Column): Column = schema_of_csv(csv, Collections.emptyMap())
+  def schema_of_csv(csv: Column): Column =
+    schema_of_csv(csv, Collections.emptyMap[String, String]())
 
   // scalastyle:off line.size.limit
   /**
