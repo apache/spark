@@ -75,10 +75,6 @@ private sealed abstract class MessageLoop(dispatcher: Dispatcher) extends Loggin
           inbox.process(dispatcher)
         } catch {
           case NonFatal(e) => logError(e.getMessage, e)
-          case fatal: Throwable =>
-            logError("fatal exception, exit.")
-            logError(fatal.getMessage, fatal)
-            sys.exit(1)
         }
       }
     } catch {
