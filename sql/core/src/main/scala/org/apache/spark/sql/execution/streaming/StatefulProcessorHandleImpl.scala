@@ -116,8 +116,7 @@ class StatefulProcessorHandleImpl(
   def getHandleState: StatefulProcessorHandleState = currState
 
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
-    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
-      "initialization is complete")
+    verifyStateVarOperations("get_value_state")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
@@ -126,13 +125,22 @@ class StatefulProcessorHandleImpl(
 
   private lazy val timerState = new TimerStateImpl(store, timeoutMode, keyEncoder)
 
-  private def verifyTimerOperations(): Unit = {
+  private def verifyStateVarOperations(operationType: String): Unit = {
+    if (currState != CREATED) {
+      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
+        currState.toString)
+    }
+  }
+
+  private def verifyTimerOperations(operationType: String): Unit = {
     if (timeoutMode == NoTimeouts) {
-      throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
+      throw StateStoreErrors.cannotPerformOperationWithInvalidTimeoutMode(operationType,
+        timeoutMode.toString)
     }
 
     if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
-      throw StateStoreErrors.cannotUseTimersWithInvalidHandleState(currState.toString)
+      throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
+        currState.toString)
     }
   }
 
@@ -141,7 +149,7 @@ class StatefulProcessorHandleImpl(
    * @param expiryTimestampMs - timestamp in milliseconds for the timer to expire
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
-    verifyTimerOperations()
+    verifyTimerOperations("register_timer")
     timerState.registerTimer(expiryTimestampMs)
   }
 
@@ -150,7 +158,7 @@ class StatefulProcessorHandleImpl(
    * @param expiryTimestampMs - timestamp in milliseconds for the timer to delete
    */
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
-    verifyTimerOperations()
+    verifyTimerOperations("delete_timer")
     timerState.deleteTimer(expiryTimestampMs)
   }
 
@@ -160,7 +168,7 @@ class StatefulProcessorHandleImpl(
    * @return - iterator of expired timers
    */
   def getExpiredTimers(expiryTimestampThreshold: Long): Iterator[(Any, Long)] = {
-    verifyTimerOperations()
+    verifyTimerOperations("get_expired_timers")
     timerState.getExpiredTimers(expiryTimestampThreshold)
   }
 
@@ -169,7 +177,7 @@ class StatefulProcessorHandleImpl(
    * @return - iterator of all the registered timers for given implicit key
    */
   def listTimers(): Iterator[Long] = {
-    verifyTimerOperations()
+    verifyTimerOperations("list_timers")
     timerState.listTimers()
   }
 
@@ -179,14 +187,12 @@ class StatefulProcessorHandleImpl(
    * @param stateName - name of the state variable
    */
   override def deleteIfExists(stateName: String): Unit = {
-    verify(currState == CREATED, s"Cannot delete state variable with name=$stateName after " +
-      "initialization is complete")
+    verifyStateVarOperations("delete_if_exists")
     store.removeColFamilyIfExists(stateName)
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
-    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
-      "initialization is complete")
+    verifyStateVarOperations("get_list_state")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }

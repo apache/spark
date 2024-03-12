@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
@@ -211,11 +211,18 @@ class ValueStateSuite extends SharedSparkSession
         UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
         TimeoutMode.NoTimeouts())
 
-      val ex = intercept[Exception] {
-        handle.getValueState[Long]("_testState", Encoders.scalaLong)
+      val cfName = "_testState"
+      val ex = intercept[SparkUnsupportedOperationException] {
+        handle.getValueState[Long](cfName, Encoders.scalaLong)
       }
-      assert(ex.isInstanceOf[UnsupportedOperationException])
-      assert(ex.getMessage.contains("unsupported starting character"))
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+        parameters = Map(
+          "colFamilyName" -> cfName
+        ),
+        matchPVals = true
+      )
     }
   }
 

@@ -24,6 +24,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
@@ -66,11 +67,11 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   private def newStoreProviderWithHandle(
-    storeId: StateStoreId,
-    numColsPrefixKey: Int,
-    sqlConf: Option[SQLConf] = None,
-    conf: Configuration = new Configuration,
-    useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
+      storeId: StateStoreId,
+      numColsPrefixKey: Int,
+      sqlConf: Option[SQLConf] = None,
+      conf: Configuration = new Configuration,
+      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
@@ -80,7 +81,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   private def tryWithProviderResource[T](
-    provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
+      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
     try {
       f(provider)
     } finally {
@@ -112,13 +113,21 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   private def verifyInvalidOperation(
       handle: StatefulProcessorHandleImpl,
       handleState: StatefulProcessorHandleState.Value,
-      errorMsg: String)(fn: StatefulProcessorHandleImpl => Unit): Unit = {
+      operationType: String)(fn: StatefulProcessorHandleImpl => Unit): Unit = {
     handle.setHandleState(handleState)
     assert(handle.getHandleState === handleState)
-    val ex = intercept[Exception] {
+    val ex = intercept[SparkUnsupportedOperationException] {
       fn(handle)
     }
-    assert(ex.getMessage.contains(errorMsg))
+    checkError(
+      ex,
+      errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
+      parameters = Map(
+        "operationType" -> operationType,
+        "handleState" -> handleState.toString
+      ),
+      matchPVals = true
+    )
   }
 
   private def createValueStateInstance(handle: StatefulProcessorHandleImpl): Unit = {
@@ -137,24 +146,13 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
 
-        verifyInvalidOperation(handle, StatefulProcessorHandleState.INITIALIZED,
-          "Cannot create state variable") { handle =>
-          createValueStateInstance(handle)
-        }
-
-        verifyInvalidOperation(handle, StatefulProcessorHandleState.DATA_PROCESSED,
-          "Cannot create state variable") { handle =>
-          createValueStateInstance(handle)
-        }
-
-        verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
-          "Cannot create state variable") { handle =>
-          createValueStateInstance(handle)
-        }
-
-        verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
-          "Cannot create state variable") { handle =>
-          createValueStateInstance(handle)
+        Seq(StatefulProcessorHandleState.INITIALIZED,
+          StatefulProcessorHandleState.DATA_PROCESSED,
+          StatefulProcessorHandleState.TIMER_PROCESSED,
+          StatefulProcessorHandleState.CLOSED).foreach { state =>
+          verifyInvalidOperation(handle, state, "get_value_state") { handle =>
+            createValueStateInstance(handle)
+          }
         }
       }
     }
@@ -165,15 +163,33 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), keyExprEncoder, TimeoutMode.NoTimeouts())
-      val ex = intercept[Exception] {
+      val ex = intercept[SparkUnsupportedOperationException] {
         handle.registerTimer(10000L)
       }
-      assert(ex.getMessage.contains("Cannot use timers"))
 
-      val ex2 = intercept[Exception] {
+      checkError(
+        ex,
+        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE",
+        parameters = Map(
+          "operationType" -> "register_timer",
+          "timeoutMode" -> TimeoutMode.NoTimeouts().toString
+        ),
+        matchPVals = true
+      )
+
+      val ex2 = intercept[SparkUnsupportedOperationException] {
         handle.deleteTimer(10000L)
       }
-      assert(ex2.getMessage.contains("Cannot use timers"))
+
+      checkError(
+        ex2,
+        errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE",
+        parameters = Map(
+          "operationType" -> "delete_timer",
+          "timeoutMode" -> TimeoutMode.NoTimeouts().toString
+        ),
+        matchPVals = true
+      )
     }
   }
 
@@ -279,19 +295,12 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
 
-        verifyInvalidOperation(handle, StatefulProcessorHandleState.CREATED,
-          "Cannot use timers") { handle =>
-          registerTimer(handle)
-        }
-
-        verifyInvalidOperation(handle, StatefulProcessorHandleState.TIMER_PROCESSED,
-          "Cannot use timers") { handle =>
-          registerTimer(handle)
-        }
-
-        verifyInvalidOperation(handle, StatefulProcessorHandleState.CLOSED,
-          "Cannot use timers") { handle =>
-          registerTimer(handle)
+        Seq(StatefulProcessorHandleState.CREATED,
+          StatefulProcessorHandleState.TIMER_PROCESSED,
+          StatefulProcessorHandleState.CLOSED).foreach { state =>
+          verifyInvalidOperation(handle, state, "register_timer") { handle =>
+            registerTimer(handle)
+          }
         }
       }
     }

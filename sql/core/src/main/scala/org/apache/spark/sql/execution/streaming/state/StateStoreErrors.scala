@@ -81,14 +81,16 @@ object StateStoreErrors {
       new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
   }
 
-  def cannotUseTimersWithInvalidTimeoutMode(timeoutMode: String):
-    StatefulProcessorCannotUseTimersWithInvalidTimeoutMode = {
-      new StatefulProcessorCannotUseTimersWithInvalidTimeoutMode(timeoutMode)
+  def cannotPerformOperationWithInvalidTimeoutMode(
+      operationType: String,
+      timeoutMode: String): StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode = {
+    new StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode(operationType, timeoutMode)
   }
 
-  def cannotUseTimersWithInvalidHandleState(handleState: String):
-    StatefulProcessorCannotUseTimersWithInvalidHandleState = {
-    new StatefulProcessorCannotUseTimersWithInvalidHandleState(handleState)
+  def cannotPerformOperationWithInvalidHandleState(
+      operationType: String,
+      handleState: String): StatefulProcessorCannotPerformOperationWithInvalidHandleState = {
+    new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
   }
 }
 
@@ -128,14 +130,18 @@ class StateStoreUnsupportedOperationException(operationType: String, entity: Str
     messageParameters = Map("operationType" -> operationType, "entity" -> entity)
   )
 
-class StatefulProcessorCannotUseTimersWithInvalidTimeoutMode(timeoutMode: String)
+class StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode(
+    operationType: String,
+    timeoutMode: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATEFUL_PROCESSOR_CANNOT_USE_TIMERS_WITH_INVALID_TIMEOUT_MODE",
-    messageParameters = Map("timeoutMode" -> timeoutMode)
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE",
+    messageParameters = Map("operationType" -> operationType, "timeoutMode" -> timeoutMode)
   )
 
-class StatefulProcessorCannotUseTimersWithInvalidHandleState(handleState: String)
+class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
+    operationType: String,
+    handleState: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATEFUL_PROCESSOR_CANNOT_USE_TIMERS_WITH_INVALID_HANDLE_STATE",
-    messageParameters = Map("handleState" -> handleState)
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
+    messageParameters = Map("operationType" -> operationType, "handleState" -> handleState)
   )
