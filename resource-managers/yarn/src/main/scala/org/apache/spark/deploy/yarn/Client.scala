@@ -75,8 +75,7 @@ private[spark] class Client(
   private val yarnClient = YarnClient.createYarnClient
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
-      private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
-
+  private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private val statCachePreloadEnabled = sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOAD_ENABLED)
   private val statCachePreloadDirectoryCountThreshold: Int =
@@ -98,8 +97,8 @@ private[spark] class Client(
   }
 
   private val driverMinimumMemoryOverhead =
-    if (isClusterMode && sparkConf.contains(DRIVER_MIN_MEMORY_OVERHEAD)) {
-      sparkConf.get(DRIVER_MIN_MEMORY_OVERHEAD).get
+    if (isClusterMode) {
+      sparkConf.get(DRIVER_MIN_MEMORY_OVERHEAD)
     } else {
       ResourceProfile.MEMORY_OVERHEAD_MIN_MIB
     }
@@ -123,9 +122,10 @@ private[spark] class Client(
   protected val executorOffHeapMemory = Utils.executorOffHeapMemorySizeAsMb(sparkConf)
 
   private val executorMemoryOvereadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
+  private val minMemoryOverhead = sparkConf.get(EXECUTOR_MIN_MEMORY_OVERHEAD)
   private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((executorMemoryOvereadFactor * executorMemory).toLong,
-      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
+      minMemoryOverhead)).toInt
 
   private val isPython = sparkConf.get(IS_PYTHON_APP)
   private val pysparkWorkerMemory: Int = if (isPython) {

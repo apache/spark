@@ -119,11 +119,11 @@ package object config {
 
   private[spark] val DRIVER_MIN_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.minMemoryOverhead")
     .doc("The minimum amount of non-heap memory to be allocated per driver in cluster mode, " +
-      "in MiB unless otherwise specified. Overrides the default value of 384Mib." +
-      " This value is ignored if spark.driver.memoryOverhead is set directly.")
-    .version("3.5.2")
+      "in MiB unless otherwise specified. This value is ignored if " +
+      "spark.driver.memoryOverhead is set directly.")
+    .version("4.0.0")
     .bytesConf(ByteUnit.MiB)
-    .createOptional
+    .createWithDefaultString("384m")
 
   private[spark] val DRIVER_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.driver.memoryOverheadFactor")
@@ -369,11 +369,11 @@ package object config {
   private[spark] val EXECUTOR_MIN_MEMORY_OVERHEAD =
     ConfigBuilder("spark.executor.minMemoryOverhead")
     .doc("The minimum amount of non-heap memory to be allocated per executor " +
-      "in MiB unless otherwise specified. Overrides the default value of 384Mib." +
-      " This value is ignored if spark.executor.memoryOverhead is set directly.")
-    .version("3.5.2")
+      "in MiB unless otherwise specified. This value is ignored if " +
+      "spark.executor.memoryOverhead is set directly.")
+    .version("4.0.0")
     .bytesConf(ByteUnit.MiB)
-    .createOptional
+    .createWithDefaultString("384m")
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.executor.memoryOverheadFactor")
