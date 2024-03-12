@@ -3957,7 +3957,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def nullSQLStringExecuteImmediate(varName: String): Throwable = {
     throw new AnalysisException(
       errorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
-      messageParameters = Map("varName" -> varName))
+      messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
   def invalidStatementForExecuteInto(queryString: String): Throwable = {

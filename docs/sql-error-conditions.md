@@ -1767,7 +1767,7 @@ Cannot use null as map key.
 
 [SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Execute immediate requires non-null value for sqlString variable, but provided `<varName>` is null.
+Execute immediate requires a non-null variable as the query string, but the provided variable `<varName>` is null.
 
 ### NUMERIC_OUT_OF_SUPPORTED_RANGE
 

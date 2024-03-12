@@ -748,7 +748,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "varName" : "sql_string"
+    "varName" : "`sql_string`"
   }
 }
 
