@@ -160,7 +160,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-36182: writing and reading TimestampNTZType column") {
+  test("SPARK-36182, SPARK-47368: writing and reading TimestampNTZType column") {
     Seq("true", "false").foreach { inferNTZ =>
       // The SQL Conf PARQUET_INFER_TIMESTAMP_NTZ_ENABLED should not affect the file written
       // by Spark.
