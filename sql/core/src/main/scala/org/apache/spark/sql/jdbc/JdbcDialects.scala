@@ -97,7 +97,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    *         or null if the default type mapping should be used.
    */
   def getCatalystType(
-    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
 
   /**
    * Retrieve the jdbc / sql type for a given datatype.
@@ -289,6 +289,10 @@ abstract class JdbcDialect extends Serializable with Logging {
   def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case timestampValue: LocalDateTime =>
+      val timestampFormatter = TimestampFormatter.getFractionFormatter(
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"'${timestampFormatter.format(timestampValue)}'"
     case timestampValue: Instant =>
       val timestampFormatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))

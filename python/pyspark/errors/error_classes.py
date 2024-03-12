@@ -199,6 +199,11 @@ ERROR_CLASSES_JSON = '''
       "Remote client cannot create a SparkContext. Create SparkSession instead."
     ]
   },
+  "DATA_SOURCE_CREATE_ERROR": {
+    "message": [
+      "Failed to create python data source instance, error: <error>."
+    ]
+  },
   "DATA_SOURCE_INVALID_RETURN_TYPE": {
     "message": [
       "Unsupported return type ('<type>') from Python data source '<name>'. Expected types: <supported_types>."
@@ -284,6 +289,46 @@ ERROR_CLASSES_JSON = '''
   "ERROR_OCCURRED_WHILE_CALLING": {
     "message": [
       "An error occurred while calling <func_name>: <error_msg>."
+    ]
+  },
+  "FIELD_DATA_TYPE_UNACCEPTABLE": {
+    "message": [
+      "<data_type> can not accept object <obj> in type <obj_type>."
+    ]
+  },
+  "FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME": {
+    "message": [
+      "<field_name>: <data_type> can not accept object <obj> in type <obj_type>."
+    ]
+  },
+  "FIELD_NOT_NULLABLE": {
+    "message": [
+      "Field is not nullable, but got None."
+    ]
+  },
+  "FIELD_NOT_NULLABLE_WITH_NAME": {
+    "message": [
+      "<field_name>: This field is not nullable, but got None."
+    ]
+  },
+  "FIELD_STRUCT_LENGTH_MISMATCH": {
+    "message": [
+      "Length of object (<object_length>) does not match with length of fields (<field_length>)."
+    ]
+  },
+  "FIELD_STRUCT_LENGTH_MISMATCH_WITH_NAME": {
+    "message": [
+      "<field_name>: Length of object (<object_length>) does not match with length of fields (<field_length>)."
+    ]
+  },
+  "FIELD_TYPE_MISMATCH": {
+    "message": [
+      "<obj> is not an instance of type <data_type>."
+    ]
+  },
+  "FIELD_TYPE_MISMATCH_WITH_NAME": {
+    "message": [
+      "<field_name>: <obj> is not an instance of type <data_type>."
     ]
   },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN": {
@@ -610,11 +655,6 @@ ERROR_CLASSES_JSON = '''
   "NOT_IMPLEMENTED": {
     "message": [
       "<feature> is not implemented."
-    ]
-  },
-  "NOT_INSTANCE_OF": {
-    "message": [
-      "<value> is not an instance of type <type>."
     ]
   },
   "NOT_INT": {

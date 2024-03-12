@@ -2933,6 +2933,12 @@
         "standard": "Y",
         "usedBy": ["SQL/Foundation", "PostgreSQL", "Redshift", "Oracle", "SQL Server"]
     },
+    "42001": {
+        "description": "Invalid encoder error",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42501": {
         "description": "The authorization ID does not have the privilege to perform the specified operation on the identified object.",
         "origin": "DB2",

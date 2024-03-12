@@ -433,6 +433,12 @@
     ],
     "sqlState" : "56000"
   },
+  "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
+    "message" : [
+      "<className> must override either <method1> or <method2>."
+    ],
+    "sqlState" : "38000"
+  },
   "CLASS_UNSUPPORTED_BY_MAP_OBJECTS" : {
     "message" : [
       "`MapObjects` does not support the class <cls> as resulting collection."
@@ -492,15 +498,15 @@
     },
     "sqlState" : "54000"
   },
-  "COLUMN_ALIASES_IS_NOT_ALLOWED" : {
+  "COLUMN_ALIASES_NOT_ALLOWED" : {
     "message" : [
-      "Columns aliases are not allowed in <op>."
+      "Column aliases are not allowed in <op>."
     ],
     "sqlState" : "42601"
   },
   "COLUMN_ALREADY_EXISTS" : {
     "message" : [
-      "The column <columnName> already exists. Consider to choose another name or rename the existing column."
+      "The column <columnName> already exists. Choose another name or rename the existing column."
     ],
     "sqlState" : "42711"
   },
@@ -690,6 +696,11 @@
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
         ]
       },
+      "COLLATION_MISMATCH" : {
+        "message" : [
+          "Collations <collationNameLeft> and <collationNameRight> are not compatible. Please use the same collation for both strings."
+        ]
+      },
       "CREATE_MAP_KEY_DIFF_TYPES" : {
         "message" : [
           "The given keys of function <functionName> should all be the same type, but they are <dataType>."
@@ -870,7 +881,7 @@
       },
       "UNEXPECTED_INPUT_TYPE" : {
         "message" : [
-          "Parameter <paramIndex> requires the <requiredType> type, however <inputSql> has the type <inputType>."
+          "The <paramIndex> parameter requires the <requiredType> type, however <inputSql> has the type <inputType>."
         ]
       },
       "UNEXPECTED_NULL" : {
@@ -1266,6 +1277,12 @@
     ],
     "sqlState" : "58030"
   },
+  "FAILED_ROW_TO_JSON" : {
+    "message" : [
+      "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
+    ],
+    "sqlState" : "2203G"
+  },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
@@ -1283,6 +1300,12 @@
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
     ],
     "sqlState" : "42809"
+  },
+  "FOREACH_BATCH_USER_FUNCTION_ERROR" : {
+    "message" : [
+      "An error occurred in the user provided function in foreach batch sink. Reason: <reason>"
+    ],
+    "sqlState" : "39000"
   },
   "FOUND_MULTIPLE_DATA_SOURCES" : {
     "message" : [
@@ -1378,6 +1401,24 @@
     "message" : [
       "<identifier> is not a valid identifier as it has more than 2 name parts."
     ],
+    "sqlState" : "42601"
+  },
+  "ILLEGAL_STATE_STORE_VALUE" : {
+    "message" : [
+      "Illegal value provided to the State Store"
+    ],
+    "subClass" : {
+      "EMPTY_LIST_VALUE" : {
+        "message" : [
+          "Cannot write empty list values to State Store for StateName <stateName>."
+        ]
+      },
+      "NULL_VALUE" : {
+        "message" : [
+          "Cannot write null values to State Store for StateName <stateName>."
+        ]
+      }
+    },
     "sqlState" : "42601"
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
@@ -1827,6 +1868,34 @@
     },
     "sqlState" : "42623"
   },
+  "INVALID_DELIMITER_VALUE" : {
+    "message" : [
+      "Invalid value for delimiter."
+    ],
+    "subClass" : {
+      "DELIMITER_LONGER_THAN_EXPECTED" : {
+        "message" : [
+          "Delimiter cannot be more than one character: <str>."
+        ]
+      },
+      "EMPTY_STRING" : {
+        "message" : [
+          "Delimiter cannot be empty string."
+        ]
+      },
+      "SINGLE_BACKSLASH" : {
+        "message" : [
+          "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
+        ]
+      },
+      "UNSUPPORTED_SPECIAL_CHARACTER" : {
+        "message" : [
+          "Unsupported special character for delimiter: <str>."
+        ]
+      }
+    },
+    "sqlState" : "42602"
+  },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
       "System memory <systemMemory> must be at least <minSystemMemory>.",
@@ -1858,6 +1927,12 @@
       "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
     ],
     "sqlState" : "F0000"
+  },
+  "INVALID_EXPRESSION_ENCODER" : {
+    "message" : [
+      "Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
+    ],
+    "sqlState" : "42001"
   },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
@@ -1989,12 +2064,6 @@
       }
     },
     "sqlState" : "HY000"
-  },
-  "INVALID_HIVE_COLUMN_NAME" : {
-    "message" : [
-      "Cannot create the table <tableName> having the column <columnName> whose name contains invalid characters <invalidChars> in Hive metastore."
-    ],
-    "sqlState" : "42K05"
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
@@ -2286,6 +2355,12 @@
     },
     "sqlState" : "22023"
   },
+  "INVALID_PARTITION_COLUMN_DATA_TYPE" : {
+    "message" : [
+      "Cannot use <type> for partition column."
+    ],
+    "sqlState" : "0A000"
+  },
   "INVALID_PARTITION_OPERATION" : {
     "message" : [
       "The partition command is invalid."
@@ -2484,6 +2559,12 @@
       "The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: <sqlString>."
     ],
     "sqlState" : "07501"
+  },
+  "INVALID_STATEMENT_OR_CLAUSE" : {
+    "message" : [
+      "The statement or clause: <operation> is not valid."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_SUBQUERY_EXPRESSION" : {
     "message" : [
@@ -2920,6 +3001,12 @@
     },
     "sqlState" : "0A000"
   },
+  "NOT_UNRESOLVED_ENCODER" : {
+    "message" : [
+      "Unresolved encoder expected, but <attr> was found."
+    ],
+    "sqlState" : "42601"
+  },
   "NO_DEFAULT_COLUMN_VALUE_AVAILABLE" : {
     "message" : [
       "Can't determine the default value for <colName> since it is not nullable and it has no default value."
@@ -3284,6 +3371,13 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_HANDLE_NOT_INITIALIZED" : {
+    "message" : [
+      "The handle has not been initialized for this StatefulProcessor.",
+      "Please only use the StatefulProcessor within the transformWithState operator."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
     "message" : [
       "Store does not support multiple values per key"
@@ -3376,6 +3470,13 @@
       "'<optionName>' must be specified."
     ],
     "sqlState" : "42601"
+  },
+  "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
+    "message" : [
+      "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.",
+      "Stateful operators in the metadata: [<OpsInMetadataSeq>]; Stateful operators in current batch: [<OpsInCurBatchSeq>]."
+    ],
+    "sqlState" : "42K03"
   },
   "STREAM_FAILED" : {
     "message" : [
@@ -3692,6 +3793,18 @@
     "message" : [
       "Cannot call the method \"<methodName>\" of the class \"<className>\"."
     ],
+    "subClass" : {
+      "FIELD_INDEX" : {
+        "message" : [
+          "The row shall have a schema to get an index of the field <fieldName>."
+        ]
+      },
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING" : {
@@ -3699,6 +3812,19 @@
       "The char/varchar type can't be used in the table schema.",
       "If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set \"spark.sql.legacy.charVarcharAsString\" to \"true\"."
     ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_COLLATION" : {
+    "message" : [
+      "Collation <collationName> is not supported for:"
+    ],
+    "subClass" : {
+      "FOR_FUNCTION" : {
+        "message" : [
+          "function <functionName>. Please try to use a different collation."
+        ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
@@ -3827,6 +3953,11 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "COLLATION" : {
+        "message" : [
+          "Collation is not yet supported."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
@@ -4039,7 +4170,7 @@
     "subClass" : {
       "MULTI_GENERATOR" : {
         "message" : [
-          "only one generator allowed per <clause> clause but found <num>: <generators>."
+          "only one generator allowed per SELECT clause but found <num>: <generators>."
         ]
       },
       "NESTED_IN_EXPRESSIONS" : {
@@ -5003,11 +5134,6 @@
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1153" : {
-    "message" : [
-      "Cannot use <field> for partition column."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1155" : {
     "message" : [
       "Partition column `<col>` not found in schema <schemaCatalog>."
@@ -5099,11 +5225,6 @@
       "Unrecognized Parquet type: <field>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1175" : {
-    "message" : [
-      "Unsupported data type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
       "Stream-stream join without equality predicate is not supported."
@@ -5116,7 +5237,7 @@
   },
   "_LEGACY_ERROR_TEMP_1183" : {
     "message" : [
-      "Cannot use interval type in the table schema."
+      "Cannot use \"INTERVAL\" type in the table schema."
     ]
   },
   "_LEGACY_ERROR_TEMP_1184" : {
@@ -5685,31 +5806,6 @@
       "not resolved."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2020" : {
-    "message" : [
-      "Couldn't find a valid constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2021" : {
-    "message" : [
-      "Couldn't find a primary constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2023" : {
-    "message" : [
-      "Unresolved encoder expected, but <attr> was found."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2024" : {
-    "message" : [
-      "Only expression encoders are supported for now."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2025" : {
-    "message" : [
-      "<className> must override either <m1> or <m2>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2026" : {
     "message" : [
       "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
@@ -6154,11 +6250,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2134" : {
-    "message" : [
-      "Cannot parse field value <value> for pattern <pattern> as target spark data type [<dataType>]."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2138" : {
     "message" : [
       "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
@@ -6497,11 +6588,6 @@
   "_LEGACY_ERROR_TEMP_2230" : {
     "message" : [
       "Primitive types are not supported."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2231" : {
-    "message" : [
-      "fieldIndex on a Row without schema is undefined."
     ]
   },
   "_LEGACY_ERROR_TEMP_2232" : {
@@ -7705,19 +7791,14 @@
       "cannot generate code for unsupported type: <dataType>"
     ]
   },
+  "_LEGACY_ERROR_TEMP_3234" : {
+    "message" : [
+      "Unsupported input type <other>"
+    ]
+  },
   "_LEGACY_ERROR_TEMP_3235" : {
     "message" : [
       "The numbers of zipped arrays and field names should be the same"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3236" : {
-    "message" : [
-      "Unsupported special character for delimiter: <str>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3237" : {
-    "message" : [
-      "Delimiter cannot be more than one character: <str>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3238" : {
@@ -7763,21 +7844,6 @@
   "_LEGACY_ERROR_TEMP_3246" : {
     "message" : [
       "Failed to parse a value for data type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3247" : {
-    "message" : [
-      "Delimiter cannot be empty string"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3248" : {
-    "message" : [
-      "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3249" : {
-    "message" : [
-      "Failed to convert value <value> (class of <valueClass>}) with the type of <dataType> to JSON."
     ]
   },
   "_LEGACY_ERROR_TEMP_3250" : {

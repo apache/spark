@@ -51,7 +51,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
     val executor = ProcessingTimeExecutor(ProcessingTimeTrigger("1000 milliseconds"), clock)
     val executorThread = new Thread() {
       override def run(): Unit = {
-        executor.execute(() => {
+        executor.execute((_) => {
           // Record the trigger time, increment clock if needed and
           triggerTimes.add(clock.getTimeMillis().toInt)
           clock.advance(clockIncrementInTrigger)
@@ -111,7 +111,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
   private def testBatchTermination(intervalMs: Long): Unit = {
     var batchCounts = 0
     val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTimeTrigger(intervalMs))
-    processingTimeExecutor.execute(() => {
+    processingTimeExecutor.execute((_) => {
       batchCounts += 1
       // If the batch termination works correctly, batchCounts should be 3 after `execute`
       batchCounts < 3
@@ -134,7 +134,7 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite with TimeLimits {
             batchFallingBehindCalled = true
           }
         }
-        processingTimeExecutor.execute(() => {
+        processingTimeExecutor.execute((_) => {
           clock.waitTillTime(200)
           false
         })

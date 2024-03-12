@@ -132,8 +132,8 @@ def main(infile: IO, outfile: IO) -> None:
             data_source = data_source_cls(options=options)  # type: ignore
         except Exception as e:
             raise PySparkRuntimeError(
-                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
-                message_parameters={"type": "instance", "error": str(e)},
+                error_class="DATA_SOURCE_CREATE_ERROR",
+                message_parameters={"error": str(e)},
             )
 
         # Get the schema of the data source.
@@ -150,8 +150,8 @@ def main(infile: IO, outfile: IO) -> None:
                     is_ddl_string = True
             except NotImplementedError:
                 raise PySparkRuntimeError(
-                    error_class="PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED",
-                    message_parameters={"type": "instance", "method": "schema"},
+                    error_class="NOT_IMPLEMENTED",
+                    message_parameters={"feature": "DataSource.schema"},
                 )
         else:
             schema = user_specified_schema  # type: ignore

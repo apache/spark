@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.FakeV2Provider
+import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -1161,6 +1161,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Row(4, 44L, 43L) ::
           Row(5, 44L, 43L) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-47164: Make Default Value From Wider Type Narrow Literal pass v2") {
+    withTable("t") {
+      val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+      sql("CREATE TABLE t (" +
+        "key int, " +
+        s"d timestamp DEFAULT '2018-11-17 13:33:33') USING $v2Source")
     }
   }
 

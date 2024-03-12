@@ -52,14 +52,15 @@ private[sql] class RocksDBStateStoreProvider
         colFamilyName: String,
         keySchema: StructType,
         numColsPrefixKey: Int,
-        valueSchema: StructType): Unit = {
+        valueSchema: StructType,
+        useMultipleValuesPerKey: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
         s"Failed to create column family with reserved_name=$colFamilyName")
       verify(useColumnFamilies, "Column families are not supported in this store")
       rocksDB.createColFamilyIfAbsent(colFamilyName)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
-         RocksDBStateEncoder.getValueEncoder(valueSchema)))
+         RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -73,6 +74,42 @@ private[sql] class RocksDBStateStoreProvider
         isValidated = true
       }
       value
+    }
+
+    /**
+     * Provides an iterator containing all values of a non-null key.
+     *
+     * Inside RocksDB, the values are merged together and stored as a byte Array.
+     * This operation relies on state store value encoder to be able to split the
+     * single array into multiple values.
+     *
+     * Also see [[MultiValuedStateEncoder]] which supports encoding/decoding multiple
+     * values per key.
+     */
+    override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      verify(key != null, "Key cannot be null")
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val valueEncoder = kvEncoder._2
+      val keyEncoder = kvEncoder._1
+
+      verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
+      "that supports multiple values for a single key.")
+      val encodedKey = rocksDB.get(keyEncoder.encodeKey(key), colFamilyName)
+      valueEncoder.decodeValues(encodedKey)
+    }
+
+    override def merge(key: UnsafeRow, value: UnsafeRow,
+        colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val keyEncoder = kvEncoder._1
+      val valueEncoder = kvEncoder._2
+      verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
+        " which supports multiple values for a single key")
+      verify(key != null, "Key cannot be null")
+      require(value != null, "Cannot put a null value")
+      rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
@@ -228,7 +265,8 @@ private[sql] class RocksDBStateStoreProvider
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -240,9 +278,16 @@ private[sql] class RocksDBStateStoreProvider
       (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
       "greater than the number of columns for prefix key!")
 
+    if (useMultipleValuesPerKey) {
+      require(numColsPrefixKey == 0, "Both multiple values per key, and prefix key are not " +
+        "supported simultaneously.")
+      require(useColumnFamilies, "Multiple values per key support requires column families to be" +
+        " enabled in RocksDBStateStore.")
+    }
+
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
-       RocksDBStateEncoder.getValueEncoder(valueSchema)))
+       RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
 
     rocksDB // lazy initialization
   }

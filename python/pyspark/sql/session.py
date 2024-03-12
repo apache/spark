@@ -47,7 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
-from pyspark.sql.profiler import AccumulatorProfilerCollector, ProfilerCollector
+from pyspark.sql.profiler import AccumulatorProfilerCollector, Profile
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
@@ -906,6 +906,22 @@ class SparkSession(SparkConversionMixin):
 
         return DataSourceRegistration(self)
 
+    @property
+    def profile(self) -> Profile:
+        """Returns a :class:`Profile` for performance/memory profiling.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Profile`
+
+        Notes
+        -----
+        Supports Spark Connect.
+        """
+        return Profile(self._profiler_collector)
+
     def range(
         self,
         start: int,
@@ -1295,7 +1311,7 @@ class SparkSession(SparkConversionMixin):
         ----------
         data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
-            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
+            :class:`tuple`, ``int``, ``boolean``, ``dict``, etc.), or :class:`list`,
             :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
@@ -1321,6 +1337,9 @@ class SparkSession(SparkConversionMixin):
             if ``samplingRatio`` is ``None``.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
+            When the input is :class:`pandas.DataFrame` and
+            `spark.sql.execution.arrow.pyspark.enabled` is enabled, this option is not
+            effective. It follows Arrow type coercion.
 
             .. versionadded:: 2.1.0
 
@@ -1672,10 +1691,15 @@ class SparkSession(SparkConversionMixin):
         try:
             if isinstance(args, Dict):
                 litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
-            else:
+            elif args is None or isinstance(args, List):
                 assert self._jvm is not None
                 litArgs = self._jvm.PythonUtils.toArray(
                     [_to_java_column(lit(v)) for v in (args or [])]
+                )
+            else:
+                raise PySparkTypeError(
+                    error_class="INVALID_TYPE",
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
@@ -1744,7 +1768,7 @@ class SparkSession(SparkConversionMixin):
         Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="read") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -2127,33 +2151,6 @@ class SparkSession(SparkConversionMixin):
             error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
             message_parameters={"feature": "SparkSession.clearTags"},
         )
-
-    def showPerfProfiles(self, id: Optional[int] = None) -> None:
-        self._profiler_collector.show_perf_profiles(id)
-
-    showPerfProfiles.__doc__ = ProfilerCollector.show_perf_profiles.__doc__
-
-    def showMemoryProfiles(self, id: Optional[int] = None) -> None:
-        if has_memory_profiler:
-            self._profiler_collector.show_memory_profiles(id)
-        else:
-            warnings.warn(
-                "Memory profiling is disabled. To enable it, install 'memory-profiler',"
-                " e.g., from PyPI (https://pypi.org/project/memory-profiler/).",
-                UserWarning,
-            )
-
-    showMemoryProfiles.__doc__ = ProfilerCollector.show_memory_profiles.__doc__
-
-    def dumpPerfProfiles(self, path: str, id: Optional[int] = None) -> None:
-        self._profiler_collector.dump_perf_profiles(path, id)
-
-    dumpPerfProfiles.__doc__ = ProfilerCollector.dump_perf_profiles.__doc__
-
-    def dumpMemoryProfiles(self, path: str, id: Optional[int] = None) -> None:
-        self._profiler_collector.dump_memory_profiles(path, id)
-
-    dumpMemoryProfiles.__doc__ = ProfilerCollector.dump_memory_profiles.__doc__
 
 
 def _test() -> None:

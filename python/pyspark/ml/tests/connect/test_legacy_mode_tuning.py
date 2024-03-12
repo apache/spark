@@ -229,7 +229,7 @@ class CrossValidatorTestsMixin:
             assert instance.getEstimatorParamMaps() == loaded_instance.getEstimatorParamMaps()
 
         # Test save / load
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_crossvalidator_on_pipeline") as tmp_dir:
             cv.saveToLocal(f"{tmp_dir}/cv")
             loaded_cv = CrossValidator.loadFromLocal(f"{tmp_dir}/cv")
 

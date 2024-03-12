@@ -46,5 +46,5 @@ private[sql] trait ValueState[S] extends Serializable {
   def update(newState: S): Unit
 
   /** Remove this state. */
-  def remove(): Unit
+  def clear(): Unit
 }

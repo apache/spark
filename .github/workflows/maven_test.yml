@@ -73,13 +73,19 @@ jobs:
             connector#kafka-0-10,connector#kafka-0-10-sql,connector#kafka-0-10-token-provider,connector#spark-ganglia-lgpl,connector#protobuf,connector#avro
           - >-
             sql#api,sql#catalyst,resource-managers#yarn,resource-managers#kubernetes#core
-          - >-
-            connect
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [ "" ]
         excluded-tags: [ "" ]
         comment: [ "" ]
         include:
+          # Connect tests
+          - modules: connect
+            java: ${{ inputs.java }}
+            hadoop: ${{ inputs.hadoop }}
+            hive: hive2.3
+            # TODO(SPARK-47110): Reenble AmmoniteTest tests in Maven builds
+            excluded-tags: org.apache.spark.tags.AmmoniteTest
+            comment: ""
           # Hive tests
           - modules: sql#hive
             java: ${{ inputs.java }}
@@ -178,13 +184,7 @@ jobs:
       # Run the tests.
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
-        # The command script takes different options ubuntu vs macos-14, see also SPARK-47095.
-        shell: '[[ "${{ inputs.os }}" == *"ubuntu"* ]] && script -q -e -c "bash {0}" || script -q -e "bash {0}"'
         run: |
-          # Fix for TTY related issues when launching the Ammonite REPL in tests.
-          export TERM=vt100
-          # `set -e` to make the exit status as expected due to use `script -q -e -c` to run the commands
-          set -e
           export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
           export MAVEN_CLI_OPTS="--no-transfer-progress"
           export JAVA_VERSION=${{ matrix.java }}
@@ -193,10 +193,10 @@ jobs:
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} clean install
           if [[ "$INCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
+          elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
+            ./build/mvn $MAVEN_CLI_OPTS -Dtest.exclude.tags="$EXCLUDED_TAGS" -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm,connector/connect/common,connector/connect/server test -fae
           elif [[ "$EXCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} -Dtest.exclude.tags="$EXCLUDED_TAGS" test -fae
-          elif [[ "$MODULES_TO_TEST" == "connect" ]]; then
-            ./build/mvn $MAVEN_CLI_OPTS -Djava.version=${JAVA_VERSION/-ea} -pl connector/connect/client/jvm,connector/connect/common,connector/connect/server test -fae
           elif [[ "$MODULES_TO_TEST" == *"sql#hive-thriftserver"* ]]; then
             # To avoid a compilation loop, for the `sql/hive-thriftserver` module, run `clean install` instead
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pspark-ganglia-lgpl -Djava.version=${JAVA_VERSION/-ea} clean install -fae
