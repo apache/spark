@@ -489,13 +489,11 @@ object ResourceProfile extends Logging {
 
   private[spark] def calculateOverHeadMemory(
       overHeadMemFromConf: Option[Long],
-      minimumOverHeadMemoryFromConf: Option[Long],
+      minimumOverHeadMemoryFromConf: Long,
       executorMemoryMiB: Long,
       overheadFactor: Double): Long = {
-    val minMemoryOverhead =
-      minimumOverHeadMemoryFromConf.getOrElse(ResourceProfile.MEMORY_OVERHEAD_MIN_MIB);
     overHeadMemFromConf.getOrElse(math.max((overheadFactor * executorMemoryMiB).toInt,
-      minMemoryOverhead))
+      minimumOverHeadMemoryFromConf))
   }
 
   /**
@@ -507,7 +505,7 @@ object ResourceProfile extends Logging {
   private[spark] def getResourcesForClusterManager(
       rpId: Int,
       execResources: Map[String, ExecutorResourceRequest],
-      minimumOverheadMemory: Option[Long],
+      minimumOverheadMemory: Long,
       overheadFactor: Double,
       conf: SparkConf,
       isPythonApp: Boolean,

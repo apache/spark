@@ -128,9 +128,6 @@ class YarnAllocatorSuite extends SparkFunSuite
       .set(EXECUTOR_CORES, 5)
       .set(EXECUTOR_MEMORY, 2048L)
 
-    // scalastyle:off println
-    sparkConfClone.getAll.foreach(println)
-
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
     }
@@ -807,6 +804,8 @@ class YarnAllocatorSuite extends SparkFunSuite
       val memory = defaultResource.getMemorySize
       assert(memory == (executorMemory + 100))
     } finally {
+      sparkConf
+        .remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
       sparkConf
         .remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
     }

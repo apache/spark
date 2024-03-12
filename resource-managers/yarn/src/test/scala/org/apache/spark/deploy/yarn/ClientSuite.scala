@@ -733,7 +733,7 @@ class ClientSuite extends SparkFunSuite
           appContext.getResource should be(Resource.newInstance(1524L, 1))
         } else {
           // 512 driver default (non-cluster) + 384 overhead default
-          //  that can't be changed in non cluster mode.
+          // that can't be changed in non cluster mode.
           appContext.getResource should be(Resource.newInstance(896L, 1))
         }
       }
