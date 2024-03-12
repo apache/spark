@@ -595,7 +595,7 @@ object TransformWithState {
       initialStateDataAttrs = dataAttributes,
       initialStateDeserializer =
         UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
-      initialState = child
+      initialState = LocalRelation(encoderFor[S].schema) // empty data set
     )
     CatalystSerde.serialize[U](mapped)
   }

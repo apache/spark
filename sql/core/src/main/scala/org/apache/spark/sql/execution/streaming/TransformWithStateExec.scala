@@ -369,7 +369,7 @@ case class TransformWithStateExec(
         }
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
-        // a temp directory on the executors in mapPartitionsWithIndex.
+        // a temp directory on the executors in zipPartitionsWithIndex.
         val broadcastedHadoopConf =
           new SerializableConfiguration(session.sessionState.newHadoopConf())
         child.execute().zipPartitionsWithIndex(
@@ -505,6 +505,7 @@ case class TransformWithStateExec(
     processDataWithPartition(childDataIterator, store, processorHandle, Option(initStateIterator))
   }
 
+  /** This class zip two RDDs together into the same partition, and returns partition id*/
   class ZipPartitionsWithIndexRDD[A: ClassTag, B: ClassTag, V: ClassTag](
       sc: SparkContext,
       var f: (Int, Iterator[A], Iterator[B]) => Iterator[V],
