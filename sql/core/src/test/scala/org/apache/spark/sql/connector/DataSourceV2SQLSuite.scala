@@ -3005,6 +3005,19 @@ class DataSourceV2SQLSuiteV1Filter
 
       checkError(
         exception = intercept[AnalysisException] {
+          // `current_date()` is a valid expression for time travel timestamp, but the test uses
+          // a fake time travel implementation that only supports two hardcoded timestamp values.
+          sql("SELECT * FROM t TIMESTAMP AS OF current_date()")
+        },
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`t`"),
+        context = ExpectedContext(
+          fragment = "t",
+          start = 14,
+          stop = 14))
+
+      checkError(
+        exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
         },
         errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
