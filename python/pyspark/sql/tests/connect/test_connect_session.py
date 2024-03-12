@@ -21,13 +21,11 @@ from collections import defaultdict
 
 
 from pyspark.errors import (
-    PySparkAttributeError,
-    PySparkTypeError,
     PySparkException,
     PySparkValueError,
     RetriesExceeded,
 )
-from pyspark.sql import SparkSession as PySparkSession, Row
+from pyspark.sql import SparkSession as PySparkSession
 from pyspark.sql.connect.client.retries import RetryPolicy
 
 from pyspark.testing.connectutils import (
@@ -37,7 +35,6 @@ from pyspark.testing.connectutils import (
 )
 from pyspark.errors.exceptions.connect import (
     AnalysisException,
-    ParseException,
     SparkConnectException,
     SparkUpgradeException,
 )

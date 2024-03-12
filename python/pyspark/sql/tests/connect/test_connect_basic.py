@@ -27,9 +27,7 @@ import tempfile
 from pyspark.errors import (
     PySparkAttributeError,
     PySparkTypeError,
-    PySparkException,
     PySparkValueError,
-    RetriesExceeded,
 )
 from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql import SparkSession as PySparkSession, Row
@@ -54,14 +52,12 @@ from pyspark.testing.sqlutils import (
 from pyspark.testing.connectutils import (
     should_test_connect,
     ReusedConnectTestCase,
-    connect_requirement_message,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.errors.exceptions.connect import (
     AnalysisException,
     ParseException,
     SparkConnectException,
-    SparkUpgradeException,
 )
 
 if should_test_connect:
