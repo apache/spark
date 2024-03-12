@@ -510,10 +510,10 @@ BIGDECIMAL_LITERAL
     | DECIMAL_DIGITS EXPONENT? 'BD' {isValidDecimal()}?
     ;
 
-// Over define the identifier to give a sensible INVALID_IDENTIFIER error message:
-// Unicode letters for any non a-z
-// URI paths for table references using paths
-// We catch all invalid identifiers with exitUnquotedIdentifier() in the parser.
+// Generalize the identifier to give a sensible INVALID_IDENTIFIER error message:
+// * Unicode letters rather than a-z and A-Z only
+// * URI paths for table references using paths
+// We then narrow down to ANSI rules in exitUnquotedIdentifier() in the parser.
 IDENTIFIER
     : ( UNICODE_LETTER | DIGIT | '_')+
     | UNICODE_LETTER+ '://' (UNICODE_LETTER | DIGIT | '_' | '/' | '-' | '.' | '?' | '=' | '&' | '#' | '%')+
