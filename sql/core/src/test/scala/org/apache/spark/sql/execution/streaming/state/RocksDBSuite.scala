@@ -544,10 +544,98 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val conf = RocksDBConf().copy()
     withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
       Seq("default", "", " ", "    ", " default", " default ").foreach { colFamilyName =>
-        val ex = intercept[Exception] {
+        val ex = intercept[SparkUnsupportedOperationException] {
           db.createColFamilyIfAbsent(colFamilyName)
         }
-        ex.getCause.isInstanceOf[UnsupportedOperationException]
+
+        if (!colFamiliesEnabled) {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+            parameters = Map(
+              "operationType" -> "create_col_family",
+              "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+            ),
+            matchPVals = true
+          )
+        } else {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME",
+            parameters = Map(
+              "operationName" -> "create_col_family",
+              "colFamilyName" -> colFamilyName
+            ),
+            matchPVals = true
+          )
+        }
+      }
+    }
+  }
+
+  private def verifyStoreOperationUnsupported(
+      operationName: String,
+      colFamiliesEnabled: Boolean,
+      colFamilyName: String)
+      (testFn: => Unit): Unit = {
+    val ex = intercept[SparkUnsupportedOperationException] {
+      testFn
+    }
+
+    if (!colFamiliesEnabled) {
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+        parameters = Map(
+          "operationType" -> operationName,
+          "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+    } else {
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        parameters = Map(
+          "operationType" -> operationName,
+          "colFamilyName" -> colFamilyName
+        ),
+        matchPVals = true
+      )
+    }
+  }
+
+  testWithColumnFamilies(s"RocksDB: operations on absent column family",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      db.load(0)
+      val colFamilyName = "test"
+      verifyStoreOperationUnsupported("put", colFamiliesEnabled, colFamilyName) {
+        db.put("a", "1", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("remove", colFamiliesEnabled, colFamilyName) {
+        db.remove("a", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("get", colFamiliesEnabled, colFamilyName) {
+        db.get("a", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("iterator", colFamiliesEnabled, colFamilyName) {
+        db.iterator(colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("merge", colFamiliesEnabled, colFamilyName) {
+        db.merge("a", "1", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("prefixScan", colFamiliesEnabled, colFamilyName) {
+        db.prefixScan("a", colFamilyName)
       }
     }
   }
@@ -581,7 +669,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     withDB(remoteDir, conf = conf, version = 0, useColumnFamilies = true) { db =>
-      val ex = intercept[Exception] {
+      val ex = intercept[SparkUnsupportedOperationException] {
         // version 0 can be loaded again
         assert(toStr(db.get("a", colFamily1)) === null)
         assert(iterator(db, colFamily1).isEmpty)
@@ -590,8 +678,15 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         assert(toStr(db.get("a", colFamily2)) === null)
         assert(iterator(db, colFamily2).isEmpty)
       }
-      assert(ex.isInstanceOf[RuntimeException])
-      assert(ex.getMessage.contains("does not exist"))
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        parameters = Map(
+          "operationType" -> "get",
+          "colFamilyName" -> colFamily1
+        ),
+        matchPVals = true
+      )
     }
 
     withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>

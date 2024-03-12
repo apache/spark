@@ -862,11 +862,11 @@ class TypesTestsMixin:
             if k != "varchar" and k != "char":
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
-        self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UCS_BASIC"))
+        self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UTF8_BINARY"))
         self.assertEqual(StringType(0), _parse_datatype_string("string"))
-        self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE UCS_BASIC"))
-        self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE   UCS_BASIC"))
-        self.assertEqual(StringType(1), _parse_datatype_string("string COLLATE UCS_BASIC_LCASE"))
+        self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE UTF8_BINARY"))
+        self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE   UTF8_BINARY"))
+        self.assertEqual(StringType(1), _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"))
         self.assertEqual(StringType(2), _parse_datatype_string("string COLLATE UNICODE"))
         self.assertEqual(StringType(2), _parse_datatype_string("string COLLATE `UNICODE`"))
         self.assertEqual(StringType(3), _parse_datatype_string("string COLLATE UNICODE_CI"))
@@ -1410,7 +1410,7 @@ class TypesTestsMixin:
 
     def test_collated_string(self):
         dfs = [
-            self.spark.sql("SELECT 'abc' collate UCS_BASIC_LCASE"),
+            self.spark.sql("SELECT 'abc' collate UTF8_BINARY_LCASE"),
             self.spark.createDataFrame([], StructType([StructField("id", StringType(1))])),
         ]
         for df in dfs:

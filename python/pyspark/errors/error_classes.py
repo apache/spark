@@ -812,6 +812,11 @@ ERROR_CLASSES_JSON = '''
       "Randomness of hash of string should be disabled via PYTHONHASHSEED."
     ]
   },
+  "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR": {
+    "message": [
+      "Failed when running Python streaming data source: <msg>"
+    ]
+  },
   "PYTHON_VERSION_MISMATCH": {
     "message": [
       "Python in worker has different version: <worker_version> than that in driver: <driver_version>, PySpark cannot run with different minor versions.",

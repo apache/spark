@@ -1277,6 +1277,12 @@
     ],
     "sqlState" : "58030"
   },
+  "FAILED_ROW_TO_JSON" : {
+    "message" : [
+      "Failed to convert the row value <value> of the class <class> to the target SQL type <sqlType> in the JSON format."
+    ],
+    "sqlState" : "2203G"
+  },
   "FIELDS_ALREADY_EXISTS" : {
     "message" : [
       "Cannot <op> column, because <fieldNames> already exists in <struct>."
@@ -1861,6 +1867,34 @@
       }
     },
     "sqlState" : "42623"
+  },
+  "INVALID_DELIMITER_VALUE" : {
+    "message" : [
+      "Invalid value for delimiter."
+    ],
+    "subClass" : {
+      "DELIMITER_LONGER_THAN_EXPECTED" : {
+        "message" : [
+          "Delimiter cannot be more than one character: <str>."
+        ]
+      },
+      "EMPTY_STRING" : {
+        "message" : [
+          "Delimiter cannot be empty string."
+        ]
+      },
+      "SINGLE_BACKSLASH" : {
+        "message" : [
+          "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
+        ]
+      },
+      "UNSUPPORTED_SPECIAL_CHARACTER" : {
+        "message" : [
+          "Unsupported special character for delimiter: <str>."
+        ]
+      }
+    },
+    "sqlState" : "42602"
   },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
@@ -3163,6 +3197,12 @@
     ],
     "sqlState" : "38000"
   },
+  "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR" : {
+    "message" : [
+      "Failed when Python streaming data source perform <action>: <msg>"
+    ],
+    "sqlState" : "38000"
+  },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
@@ -3355,9 +3395,9 @@
     ],
     "sqlState" : "42802"
   },
-  "STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY" : {
+  "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
-      "Failed to remove default column family with reserved name=<colFamilyName>."
+      "Failed to perform column family operation=<operationName> with invalid name=<colFamilyName>. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default"
     ],
     "sqlState" : "42802"
   },
@@ -3379,6 +3419,12 @@
       "<operationType> operation not supported with <entity>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
+    "message" : [
+      "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
   },
   "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST" : {
     "message" : [
@@ -7791,16 +7837,6 @@
       "The numbers of zipped arrays and field names should be the same"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3236" : {
-    "message" : [
-      "Unsupported special character for delimiter: <str>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3237" : {
-    "message" : [
-      "Delimiter cannot be more than one character: <str>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3238" : {
     "message" : [
       "Failed to convert value <v> (class of <class>) in type <dt> to XML."
@@ -7844,21 +7880,6 @@
   "_LEGACY_ERROR_TEMP_3246" : {
     "message" : [
       "Failed to parse a value for data type <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3247" : {
-    "message" : [
-      "Delimiter cannot be empty string"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3248" : {
-    "message" : [
-      "Single backslash is prohibited. It has special meaning as beginning of an escape sequence. To get the backslash character, pass a string with two backslashes as the delimiter."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3249" : {
-    "message" : [
-      "Failed to convert value <value> (class of <valueClass>}) with the type of <dataType> to JSON."
     ]
   },
   "_LEGACY_ERROR_TEMP_3250" : {
