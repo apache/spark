@@ -254,6 +254,7 @@ try:
             "pyspark.streaming",
             "pyspark.bin",
             "pyspark.sbin",
+            "pyspark.k8s",
             "pyspark.jars",
             "pyspark.pandas",
             "pyspark.pandas.data_type_ops",

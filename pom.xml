@@ -447,7 +447,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.iceberg</groupId>
-      <artifactId>iceberg-spark-runtime-3.3_2.12</artifactId>
+      <artifactId>iceberg-spark-runtime-3.4_2.12</artifactId>
       <version>1.5.0</version>
       <scope>runtime</scope>
     </dependency>
@@ -459,7 +459,7 @@
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-aws-bundle</artifactId>
-      <version>1.4.2</version>
+      <version>1.5.0</version>
     </dependency>
   </dependencies>
   <dependencyManagement>
