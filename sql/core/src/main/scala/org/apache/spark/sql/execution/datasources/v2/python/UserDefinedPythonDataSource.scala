@@ -74,6 +74,15 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       outputSchema).runInPython()
   }
 
+  def createStreamingReadInfoInPython(
+      pythonResult: PythonDataSourceCreationResult,
+      outputSchema: StructType): PythonDataSourceReadInfo = {
+    new UserDefinedPythonStreamingSourceReadRunner(
+      createPythonFunction(pythonResult.dataSource),
+      UserDefinedPythonDataSource.readInputSchema,
+      outputSchema).runInPython()
+  }
+
   /**
    * (Driver-side) Run Python process and get pickled write function.
    */
@@ -150,7 +159,7 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
     taskMetrics.map { case (k, v) => new PythonCustomTaskMetric(k, v)}.toArray
   }
 
-  private def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {
+  def createPythonFunction(pickledFunc: Array[Byte]): PythonFunction = {
     SimplePythonFunction(
       command = pickledFunc.toImmutableArraySeq,
       envVars = dataSourceCls.envVars,
@@ -352,6 +361,32 @@ private class UserDefinedPythonDataSourceReadRunner(
     PythonDataSourceReadInfo(
       func = pickledFunction,
       partitions = pickledPartitions.toSeq)
+  }
+}
+
+private class UserDefinedPythonStreamingSourceReadRunner(
+     func: PythonFunction,
+     inputSchema: StructType,
+     outputSchema: StructType
+  ) extends UserDefinedPythonDataSourceReadRunner(func, inputSchema, outputSchema) {
+
+  // See the logic in `pyspark.sql.worker.plan_data_source_read.py`.
+  override val workerModule = "pyspark.sql.worker.plan_streaming_source_read"
+
+  override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceReadInfo = {
+    // Receive the picked reader or an exception raised in Python worker.
+    val length = dataIn.readInt()
+    if (length == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "plan", tpe = "read", msg = msg)
+    }
+    // Receive the pickled 'read' function.
+    val pickledFunction: Array[Byte] = PythonWorkerUtils.readBytes(length, dataIn)
+
+    PythonDataSourceReadInfo(
+      func = pickledFunction,
+      Seq.empty)
   }
 }
 
