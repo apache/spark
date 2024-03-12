@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.KeyValueGroupedDataset
+import org.apache.spark.sql.{Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.internal.SQLConf
@@ -35,7 +35,7 @@ class StatefulProcessorWithInitialStateTestClass extends StatefulProcessorWithIn
   }
 
   override def init(operatorOutputMode: OutputMode): Unit = {
-    _valState = getHandle.getValueState[Double]("testInit")
+    _valState = getHandle.getValueState[Double]("testInit", Encoders.scalaDouble)
   }
 
   override def close(): Unit = {}
