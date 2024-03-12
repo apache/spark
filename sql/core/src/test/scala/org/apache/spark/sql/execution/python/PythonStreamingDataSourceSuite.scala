@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.execution.python
 
+import java.util.concurrent.CountDownLatch
+
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -30,10 +33,12 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |from pyspark.sql.datasource import DataSourceStreamReader, InputPartition
       |
       |class SimpleDataStreamReader(DataSourceStreamReader):
+      |    current = 0
       |    def initialOffset(self):
       |        return {"offset": {"partition-1": 0}}
       |    def latestOffset(self):
-      |        return {"offset": {"partition-1": 2}}
+      |        self.current += 2
+      |        return {"offset": {"partition-1": self.current}}
       |    def partitions(self, start: dict, end: dict):
       |        start_index = start["offset"]["partition-1"]
       |        end_index = end["offset"]["partition-1"]
@@ -41,9 +46,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       |    def commit(self, end: dict):
       |        1 + 2
       |    def read(self, partition):
-      |        yield (0, partition.value)
-      |        yield (1, partition.value)
-      |        yield (2, partition.value)
+      |        yield (partition.value,)
       |""".stripMargin
 
   protected def errorDataStreamReaderScript: String =
@@ -87,15 +90,46 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     val stream = new PythonMicroBatchStream(
       pythonDs, dataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
 
-    val initialOffset = stream.initialOffset()
-    assert(initialOffset.json == "{\"offset\": {\"partition-1\": 0}}")
-    for (_ <- 1 to 50) {
+    var prevOffset = stream.initialOffset()
+    assert(prevOffset.json == "{\"offset\": {\"partition-1\": 0}}")
+    for (i <- 1 to 50) {
       val offset = stream.latestOffset()
-      assert(offset.json == "{\"offset\": {\"partition-1\": 2}}")
-      assert(stream.planInputPartitions(initialOffset, offset).size == 2)
+      assert(offset.json == s"""{"offset": {"partition-1": ${2 * i}}}""")
+      assert(stream.planInputPartitions(prevOffset, offset).size == 2)
       stream.commit(offset)
+      prevOffset = offset
     }
     stream.stop()
+  }
+
+  test("Read from simple data stream source") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$simpleDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    val df = spark.readStream.format(dataSourceName).load()
+
+    val stopSignal = new CountDownLatch(1)
+
+    val q = df.writeStream.foreachBatch((df: DataFrame, batchId: Long) => {
+      checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
+      if (batchId > 30) stopSignal.countDown()
+    }).start()
+    stopSignal.await()
+    q.stop()
+    q.awaitTermination()
   }
 
   test("Error creating stream reader") {
@@ -120,6 +154,54 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("error creating stream reader"))
   }
+
+  test("Streaming data source read error") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, DataSourceStreamReader, InputPartition
+         |class RangePartition(InputPartition):
+         |    def __init__(self, start, end):
+         |        self.start = start
+         |        self.end = end
+         |
+         |class SimpleDataStreamReader(DataSourceStreamReader):
+         |    current = 0
+         |    def initialOffset(self):
+         |        return {"offset": "0"}
+         |    def latestOffset(self):
+         |        self.current += 2
+         |        return {"offset": str(self.current)}
+         |    def partitions(self, start: dict, end: dict):
+         |        return [RangePartition(int(start["offset"]), int(end["offset"]))]
+         |    def commit(self, end: dict):
+         |        1 + 2
+         |    def read(self, partition: RangePartition):
+         |        raise Exception("error reading data")
+         |
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |
+         |    def streamReader(self, schema):
+         |        return SimpleDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+    val df = spark.readStream.format(dataSourceName).load()
+
+    val err = intercept[StreamingQueryException] {
+      val q = df.writeStream.foreachBatch((df: DataFrame, _: Long) => {
+        df.count()
+        ()
+      }).start()
+      q.awaitTermination()
+    }
+    assert(err.getMessage.contains("error reading data"))
+  }
+
 
   test("Method not implemented in stream reader") {
     assume(shouldTestPandasUDFs)
