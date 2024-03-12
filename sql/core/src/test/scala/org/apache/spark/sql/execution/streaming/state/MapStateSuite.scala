@@ -55,8 +55,8 @@ class MapStateSuite extends StateVariableSuiteBase {
       testState.updateValue("k1", 3.0)
       assert(testState.getValue("k1") === 3.0)
 
-      assert(testState.getKeys().toSeq === Seq("k1", "k2"))
-      assert(testState.getValues().toSeq === Seq(3.0, 2.0))
+      assert(testState.keys().toSeq === Seq("k1", "k2"))
+      assert(testState.values().toSeq === Seq(3.0, 2.0))
 
       // test remove
       testState.removeKey("k1")
@@ -65,7 +65,7 @@ class MapStateSuite extends StateVariableSuiteBase {
 
       testState.clear()
       assert(!testState.exists())
-      assert(testState.getMap().hasNext === false)
+      assert(testState.iterator().hasNext === false)
     }
   }
 
@@ -90,10 +90,10 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(testState1.getValue(1L) === 2.0)
       assert(testState2.getValue(2L) === 3)
 
-      assert(testState1.getKeys().toSeq === Seq(1L))
-      assert(testState2.getKeys().toSeq === Seq(2L))
-      assert(testState1.getValues().toSeq === Seq(2.0))
-      assert(testState2.getValues().toSeq === Seq(3))
+      assert(testState1.keys().toSeq === Seq(1L))
+      assert(testState2.keys().toSeq === Seq(2L))
+      assert(testState1.values().toSeq === Seq(2.0))
+      assert(testState2.values().toSeq === Seq(3))
 
       // test remove
       testState1.removeKey(1L)
@@ -103,8 +103,8 @@ class MapStateSuite extends StateVariableSuiteBase {
       testState2.clear()
       assert(!testState1.exists())
       assert(!testState2.exists())
-      assert(testState1.getMap().hasNext === false)
-      assert(testState2.getMap().hasNext === false)
+      assert(testState1.iterator().hasNext === false)
+      assert(testState2.iterator().hasNext === false)
     }
   }
 
@@ -151,8 +151,8 @@ class MapStateSuite extends StateVariableSuiteBase {
 
       assert(valueTestState.get() === "v2")
       assert(listTestState.get().toSeq === Seq("v1", "v3", "v4"))
-      assert(mapTestState1.getKeys().toSeq === Seq("k1", "k3"))
-      assert(mapTestState2.getValues().toSeq === Seq(4, 6))
+      assert(mapTestState1.keys().toSeq === Seq("k1", "k3"))
+      assert(mapTestState2.values().toSeq === Seq(4, 6))
 
       // test remove
       valueTestState.clear()
@@ -164,7 +164,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(!listTestState.exists())
       assert(!mapTestState1.exists())
       assert(mapTestState2.exists())
-      assert(mapTestState2.getMap().toList === List(("k2", 4)))
+      assert(mapTestState2.iterator().toList === List(("k2", 4)))
     }
   }
 }

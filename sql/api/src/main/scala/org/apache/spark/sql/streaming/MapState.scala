@@ -38,13 +38,13 @@ trait MapState[K, V] extends Serializable {
   def updateValue(key: K, value: V) : Unit
 
   /** Get the map associated with grouping key */
-  def getMap(): Iterator[(K, V)]
+  def iterator(): Iterator[(K, V)]
 
   /** Get the list of keys present in map associated with grouping key */
-  def getKeys(): Iterator[K]
+  def keys(): Iterator[K]
 
   /** Get the list of values present in map associated with grouping key */
-  def getValues(): Iterator[V]
+  def values(): Iterator[V]
 
   /** Remove user key from map state */
   def removeKey(key: K): Unit

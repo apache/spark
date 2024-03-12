@@ -51,16 +51,16 @@ class TestMapStateProcessor
           if (_mapState.containsKey(row.value._1)) "true" else "false") :: output
       } else if (row.action == "updateValue") {
         _mapState.updateValue(row.value._1, row.value._2)
-      } else if (row.action == "getMap") {
-        _mapState.getMap().foreach { pair =>
+      } else if (row.action == "iterator") {
+        _mapState.iterator().foreach { pair =>
           output = (key, pair._1, pair._2) :: output
         }
-      } else if (row.action == "getKeys") {
-        _mapState.getKeys().foreach { key =>
+      } else if (row.action == "keys") {
+        _mapState.keys().foreach { key =>
           output = (row.key, key, row.value._2) :: output
         }
-      } else if (row.action == "getValues") {
-        _mapState.getValues().foreach { value =>
+      } else if (row.action == "values") {
+        _mapState.values().foreach { value =>
           output = (row.key, row.value._1, value) :: output
         }
       } else if (row.action == "removeKey") {
@@ -187,13 +187,13 @@ class TransformWithMapStateSuite extends StreamTest {
         CheckNewAnswer(("k2", "v2", "12")),
 
         // Test get full map for a given grouping key - prefixScan
-        AddData(inputData, InputMapRow("k2", "getMap", ("", ""))),
+        AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(("k2", "v2", "12"), ("k2", "v4", "1")),
 
-        AddData(inputData, InputMapRow("k2", "getKeys", ("", ""))),
+        AddData(inputData, InputMapRow("k2", "keys", ("", ""))),
         CheckNewAnswer(("k2", "v2", ""), ("k2", "v4", "")),
 
-        AddData(inputData, InputMapRow("k2", "getValues", ("", ""))),
+        AddData(inputData, InputMapRow("k2", "values", ("", ""))),
         CheckNewAnswer(("k2", "", "12"), ("k2", "", "1")),
 
         // Test remove functionalities
@@ -202,7 +202,7 @@ class TransformWithMapStateSuite extends StreamTest {
         CheckNewAnswer(("k1", "v2", "false")),
 
         AddData(inputData, InputMapRow("k2", "clear", ("", ""))),
-        AddData(inputData, InputMapRow("k2", "getMap", ("", ""))),
+        AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
         CheckNewAnswer(("k2", "exists", "false"))

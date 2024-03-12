@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.{BinaryType, StructType}
 
@@ -74,31 +74,24 @@ class MapStateImpl[K, V](
   }
 
   /** Get the map associated with grouping key */
-  override def getMap(): Iterator[(K, V)] = {
+  override def iterator(): Iterator[(K, V)] = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    val pairsIterator = store.prefixScan(encodedGroupingKey, stateName)
-
-    new Iterator[(K, V)] {
-      override def hasNext: Boolean = {
-        pairsIterator.hasNext
+    store.prefixScan(encodedGroupingKey, stateName)
+      .map {
+        case iter: UnsafeRowPair =>
+          (stateTypesEncoder.decodeCompositeKey(iter.key),
+            stateTypesEncoder.decodeValue(iter.value))
       }
-
-      override def next(): (K, V) = {
-        val iter = pairsIterator.next()
-        (stateTypesEncoder.decodeCompositeKey(iter.key),
-          stateTypesEncoder.decodeValue(iter.value))
-      }
-    }
   }
 
   /** Get the list of keys present in map associated with grouping key */
-  override def getKeys(): Iterator[K] = {
-    getMap().map(_._1)
+  override def keys(): Iterator[K] = {
+    iterator().map(_._1)
   }
 
   /** Get the list of values present in map associated with grouping key */
-  override def getValues(): Iterator[V] = {
-    getMap().map(_._2)
+  override def values(): Iterator[V] = {
+    iterator().map(_._2)
   }
 
   /** Remove user key from map state */
@@ -110,7 +103,7 @@ class MapStateImpl[K, V](
 
   /** Remove this state. */
   override def clear(): Unit = {
-    getKeys().foreach { itr =>
+    keys().foreach { itr =>
       removeKey(itr)
     }
   }
