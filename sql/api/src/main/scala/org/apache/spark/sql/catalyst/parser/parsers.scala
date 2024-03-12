@@ -303,12 +303,14 @@ case object PostProcessor extends SqlBaseParserBaseListener {
     throw QueryParsingErrors.invalidIdentifierError(ident, ctx)
   }
 
-  /** Throws error message when unquoted identifier contains characters outside a-z, A-Z */
+  /** Throws error message when unquoted identifier contains characters outside a-z, A-Z, 0-9, _ */
   override def exitUnquotedIdentifier(ctx: SqlBaseParser.UnquotedIdentifierContext): Unit = {
     val ident = ctx.getText
-    if (ident.exists(c => (c.isLetter && (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z'))) ||
-      c == ':' || c == '/' || c == '.' || c == '-' || c == '&' || c == '?' ||
-      c == '#' || c == '%')) {
+    if (ident.exists(c =>
+      !(c >= 'a' && c <= 'z') &&
+      !(c >= 'A' && c <= 'Z') &&
+      !(c >= '0' && c <= '9') &&
+      c != '_')) {
       throw QueryParsingErrors.invalidIdentifierError(ident, ctx)
     }
   }
