@@ -296,6 +296,8 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   }
 
   after {
+    ImplicitGroupingKeyTracker.removeImplicitKey()
+    require(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
   }

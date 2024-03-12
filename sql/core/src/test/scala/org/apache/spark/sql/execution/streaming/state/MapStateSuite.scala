@@ -67,7 +67,6 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(!testState.exists())
       assert(testState.getMap().hasNext === false)
     }
-    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
   test("Map state operations for multiple map instances") {
@@ -107,7 +106,6 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(testState1.getMap().hasNext === false)
       assert(testState2.getMap().hasNext === false)
     }
-    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
   test("Map state operations with list, value, another map instances") {
@@ -168,6 +166,5 @@ class MapStateSuite extends StateVariableSuiteBase {
       assert(mapTestState2.exists())
       assert(mapTestState2.getMap().toList === List(("k2", 4)))
     }
-    ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 }
