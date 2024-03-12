@@ -48,9 +48,8 @@ object TimerStateUtils {
  * @param store - state store to be used for storing timer data
  * @param timeoutMode - mode of timeout (event time or processing time)
  * @param keyExprEnc - encoder for key expression
- * @tparam S - type of timer value
  */
-class TimerStateImpl[S](
+class TimerStateImpl(
     store: StateStore,
     timeoutMode: TimeoutMode,
     keyExprEnc: ExpressionEncoder[Any]) extends Logging {
@@ -106,9 +105,8 @@ class TimerStateImpl[S](
     keyOption.get
   }
 
-  private def encodeKey(expiryTimestampMs: Long): UnsafeRow = {
-    val keyByteArr = keySerializer.apply(getGroupingKey(keyToTsCFName))
-      .asInstanceOf[UnsafeRow].getBytes()
+  private def encodeKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
+    val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
     val keyRow = keyEncoder(InternalRow(keyByteArr, expiryTimestampMs))
     keyRow
   }
@@ -119,9 +117,8 @@ class TimerStateImpl[S](
   //  This is because RocksDB uses byte-wise comparison using the default comparator to
   //  determine sorted order of keys. This is used to read expired timers at any given
   //  processing time/event time timestamp threshold by performing a range scan.
-  private def encodeSecIndexKey(expiryTimestampMs: Long): UnsafeRow = {
-    val keyByteArr = keySerializer.apply(getGroupingKey(tsToKeyCFName))
-      .asInstanceOf[UnsafeRow].getBytes()
+  private def encodeSecIndexKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
+    val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
     val bbuf = ByteBuffer.allocate(8)
     bbuf.order(ByteOrder.BIG_ENDIAN)
     bbuf.putLong(expiryTimestampMs)
@@ -134,31 +131,45 @@ class TimerStateImpl[S](
    * @param expiryTimestampMs - expiry timestamp of the timer
    * @return - true if the timer is already registered, false otherwise
    */
-  def exists(expiryTimestampMs: Long): Boolean = {
-    getImpl(expiryTimestampMs) != null
+  private def exists(groupingKey: Any, expiryTimestampMs: Long): Boolean = {
+    getImpl(groupingKey, expiryTimestampMs) != null
   }
 
-  private def getImpl(expiryTimestampMs: Long): UnsafeRow = {
-    store.get(encodeKey(expiryTimestampMs), keyToTsCFName)
+  private def getImpl(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
+    store.get(encodeKey(groupingKey, expiryTimestampMs), keyToTsCFName)
   }
 
   /**
    * Function to add a new timer for the given key and timestamp
    * @param expiryTimestampMs - expiry timestamp of the timer
-   * @param newState = boolean value to be stored for the state value
    */
-  def add(expiryTimestampMs: Long, newState: S): Unit = {
-    store.put(encodeKey(expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
-    store.put(encodeSecIndexKey(expiryTimestampMs), EMPTY_ROW, tsToKeyCFName)
+  def registerTimer(expiryTimestampMs: Long): Unit = {
+    val groupingKey = getGroupingKey(keyToTsCFName)
+    if (exists(groupingKey, expiryTimestampMs)) {
+      logWarning(s"Failed to register timer for key=$groupingKey and " +
+        s"timestamp=$expiryTimestampMs since it already exists")
+    } else {
+      store.put(encodeKey(groupingKey, expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
+      store.put(encodeSecIndexKey(groupingKey, expiryTimestampMs), EMPTY_ROW, tsToKeyCFName)
+      logDebug(s"Registered timer for key=$groupingKey and timestamp=$expiryTimestampMs")
+    }
   }
 
   /**
    * Function to remove the timer for the given key and timestamp
    * @param expiryTimestampMs - expiry timestamp of the timer
    */
-  def remove(expiryTimestampMs: Long): Unit = {
-    store.remove(encodeKey(expiryTimestampMs), keyToTsCFName)
-    store.remove(encodeSecIndexKey(expiryTimestampMs), tsToKeyCFName)
+  def deleteTimer(expiryTimestampMs: Long): Unit = {
+    val groupingKey = getGroupingKey(keyToTsCFName)
+
+    if (!exists(groupingKey, expiryTimestampMs)) {
+      logWarning(s"Failed to delete timer for key=$groupingKey and " +
+        s"timestamp=$expiryTimestampMs since it does not exist")
+    } else {
+      store.remove(encodeKey(groupingKey, expiryTimestampMs), keyToTsCFName)
+      store.remove(encodeSecIndexKey(groupingKey, expiryTimestampMs), tsToKeyCFName)
+      logDebug(s"Deleted timer for key=$groupingKey and timestamp=$expiryTimestampMs")
+    }
   }
 
   def listTimers(): Iterator[Long] = {
@@ -172,7 +183,7 @@ class TimerStateImpl[S](
     }
   }
 
-  private def getTimerRow(keyRow: UnsafeRow): (Any, Long) = {
+  private def getTimerRowFromSecIndex(keyRow: UnsafeRow): (Any, Long) = {
     // Decode the key object from the UnsafeRow
     val keyBytes = keyRow.getBinary(1)
     val retUnsafeRow = new UnsafeRow(1)
@@ -201,7 +212,7 @@ class TimerStateImpl[S](
         if (iter.hasNext) {
           val rowPair = iter.next()
           val keyRow = rowPair.key
-          val result = getTimerRow(keyRow)
+          val result = getTimerRowFromSecIndex(keyRow)
           if (result._2 <= expiryTimestampThreshold) {
             result
           } else {

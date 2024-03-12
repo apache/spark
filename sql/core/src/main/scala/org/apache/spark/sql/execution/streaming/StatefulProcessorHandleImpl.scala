@@ -124,43 +124,53 @@ class StatefulProcessorHandleImpl(
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
 
-  private def getTimerState[T](): TimerStateImpl[T] =
-    new TimerStateImpl[T](store, timeoutMode, keyEncoder)
+  private lazy val timerState = new TimerStateImpl(store, timeoutMode, keyEncoder)
 
-  private val timerState = getTimerState[Boolean]()
-
-  override def registerTimer(expiryTimestampMs: Long): Unit = {
+  private def verifyTimerOperations(): Unit = {
     if (timeoutMode == NoTimeouts) {
       throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
     }
 
     if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
       throw StateStoreErrors.cannotUseTimersWithInvalidHandleState(currState.toString)
-    }
-
-    if (timerState.exists(expiryTimestampMs)) {
-      logWarning(s"Timer already exists for expiryTimestampMs=$expiryTimestampMs")
-    } else {
-      logInfo(s"Registering timer with expiryTimestampMs=$expiryTimestampMs")
-      timerState.add(expiryTimestampMs, true)
     }
   }
 
+  /**
+   * Function to register a timer for the given expiryTimestampMs
+   * @param expiryTimestampMs - timestamp in milliseconds for the timer to expire
+   */
+  override def registerTimer(expiryTimestampMs: Long): Unit = {
+    verifyTimerOperations()
+    timerState.registerTimer(expiryTimestampMs)
+  }
+
+  /**
+   * Function to delete a timer for the given expiryTimestampMs
+   * @param expiryTimestampMs - timestamp in milliseconds for the timer to delete
+   */
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
-    if (timeoutMode == NoTimeouts) {
-      throw StateStoreErrors.cannotUseTimersWithInvalidTimeoutMode(timeoutMode.toString)
-    }
+    verifyTimerOperations()
+    timerState.deleteTimer(expiryTimestampMs)
+  }
 
-    if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
-      throw StateStoreErrors.cannotUseTimersWithInvalidHandleState(currState.toString)
-    }
+  /**
+   * Function to retrieve expired timers based on the expiryTimestampThreshold
+   * @param expiryTimestampThreshold - threshold for expiry timestamp
+   * @return - iterator of expired timers
+   */
+  def getExpiredTimers(expiryTimestampThreshold: Long): Iterator[(Any, Long)] = {
+    verifyTimerOperations()
+    timerState.getExpiredTimers(expiryTimestampThreshold)
+  }
 
-    if (!timerState.exists(expiryTimestampMs)) {
-      logInfo(s"Timer does not exist for expiryTimestampMs=$expiryTimestampMs")
-    } else {
-      logInfo(s"Removing timer with expiryTimestampMs=$expiryTimestampMs")
-      timerState.remove(expiryTimestampMs)
-    }
+  /**
+   * Function to list all the registered timers for given implicit key
+   * @return - iterator of all the registered timers for given implicit key
+   */
+  def listTimers(): Iterator[Long] = {
+    verifyTimerOperations()
+    timerState.listTimers()
   }
 
   /**
@@ -172,31 +182,6 @@ class StatefulProcessorHandleImpl(
     verify(currState == CREATED, s"Cannot delete state variable with name=$stateName after " +
       "initialization is complete")
     store.removeColFamilyIfExists(stateName)
-  }
-
-  /**
-   * Function to retrieve expired timers based on the expiryTimestampThreshold
-   * @param expiryTimestampThreshold - threshold for expiry timestamp
-   * @return - iterator of expired timers
-   */
-  def getExpiredTimers(expiryTimestampThreshold: Long): Iterator[(Any, Long)] = {
-    timerState.getExpiredTimers(expiryTimestampThreshold)
-  }
-
-  /**
-   * Function to list all the registered timers for given implicit key
-   * @return - iterator of all the registered timers
-   */
-  def listTimers(): Iterator[Long] = {
-    timerState.listTimers()
-  }
-
-  /**
-   * Function to remove expired timer based on the expiryTimestampMs
-   * @param expiryTimestampMs - expiry timestamp in milliseconds
-   */
-  def removeExpiredTimer(expiryTimestampMs: Long): Unit = {
-    timerState.remove(expiryTimestampMs)
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {

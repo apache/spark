@@ -148,7 +148,7 @@ case class TransformWithStateExec(
       new ExpiredTimerInfoImpl(isValid = true, Some(expiryTimestampMs))).map { obj =>
       getOutputRow(obj)
     }
-    processorHandle.removeExpiredTimer(expiryTimestampMs)
+    processorHandle.deleteTimer(expiryTimestampMs)
     ImplicitGroupingKeyTracker.removeImplicitKey()
     mappedIterator
   }
@@ -250,10 +250,14 @@ case class TransformWithStateExec(
 
     timeoutMode match {
       case ProcessingTime =>
-        require(batchTimestampMs.nonEmpty)
+        if (batchTimestampMs.isEmpty) {
+          StateStoreErrors.missingTimeoutValues(timeoutMode.toString)
+        }
 
       case EventTime =>
-        require(eventTimeWatermarkForEviction.nonEmpty)
+        if (eventTimeWatermarkForEviction.isEmpty) {
+          StateStoreErrors.missingTimeoutValues(timeoutMode.toString)
+        }
 
       case _ =>
     }

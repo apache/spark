@@ -32,6 +32,13 @@ object StateStoreErrors {
     )
   }
 
+  def missingTimeoutValues(timeoutMode: String): SparkException = {
+    SparkException.internalError(
+      msg = s"Failed to find timeout values for timeoutMode=$timeoutMode",
+      category = "TWS"
+    )
+  }
+
   def multipleColumnFamiliesNotSupported(stateStoreProvider: String):
     StateStoreMultipleColumnFamiliesNotSupportedException = {
       new StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider)
