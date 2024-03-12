@@ -1546,6 +1546,13 @@
           "2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       },
+      "DATETIME_WEEK_BASED_PATTERN" : {
+        "message" : [
+          "Spark >= 3.0:",
+          "All week-based patterns are unsupported since Spark 3.0, detected week-based character: <c>.",
+          "Please use the SQL function EXTRACT instead."
+        ]
+      },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
         "message" : [
           "Spark >= 3.0:",
@@ -1840,6 +1847,24 @@
     },
     "sqlState" : "HY109"
   },
+  "INVALID_DATETIME_PATTERN" : {
+    "message" : [
+      "Unrecognized datetime pattern: <pattern>."
+    ],
+    "subClass" : {
+      "ILLEGAL_CHARACTER" : {
+        "message" : [
+          "Illegal pattern character found in datetime pattern: <c>. Please provide legal character."
+        ]
+      },
+      "LENGTH" : {
+        "message" : [
+          "Too many letters in datetime pattern: <pattern>. Please reduce pattern length."
+        ]
+      }
+    },
+    "sqlState" : "22007"
+  },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
       "Failed to execute <statement> command because the destination column or variable <colName> has a DEFAULT value <defaultValue>,"
@@ -2105,6 +2130,74 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_INTERVAL_FORMAT" : {
+    "message" : [
+      "Error parsing '<input>' to interval. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format."
+    ],
+    "subClass" : {
+      "ARITHMETIC_EXCEPTION" : {
+        "message" : [
+          "Uncaught arithmetic exception while parsing '<input>'."
+        ]
+      },
+      "INPUT_IS_EMPTY" : {
+        "message" : [
+          "Interval string cannot be empty."
+        ]
+      },
+      "INPUT_IS_NULL" : {
+        "message" : [
+          "Interval string cannot be null."
+        ]
+      },
+      "INVALID_FRACTION" : {
+        "message" : [
+          "<unit> cannot have fractional part."
+        ]
+      },
+      "INVALID_PRECISION" : {
+        "message" : [
+          "Interval can only support nanosecond precision, <value> is out of range."
+        ]
+      },
+      "INVALID_PREFIX" : {
+        "message" : [
+          "Invalid interval prefix <prefix>."
+        ]
+      },
+      "INVALID_UNIT" : {
+        "message" : [
+          "Invalid unit <unit>."
+        ]
+      },
+      "INVALID_VALUE" : {
+        "message" : [
+          "Invalid value <value>."
+        ]
+      },
+      "MISSING_NUMBER" : {
+        "message" : [
+          "Expect a number after <word> but hit EOL."
+        ]
+      },
+      "MISSING_UNIT" : {
+        "message" : [
+          "Expect a unit name after <word> but hit EOL."
+        ]
+      },
+      "UNKNOWN_PARSING_ERROR" : {
+        "message" : [
+          "Unknown error when parsing <word>."
+        ]
+      },
+      "UNRECOGNIZED_NUMBER" : {
+        "message" : [
+          "Unrecognized number <number>."
+        ]
+      }
+    },
+    "sqlState" : "22006"
+  },
   "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
     "message" : [
       "Invalid inverse distribution function <funcName>."
@@ -2127,6 +2220,12 @@
       }
     },
     "sqlState" : "42K0K"
+  },
+  "INVALID_JSON_DATA_TYPE" : {
+    "message" : [
+      "Failed to convert the JSON string '<invalidType>' to a data type. Please enter a valid data type."
+    ],
+    "sqlState" : "2203G"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -2851,6 +2950,12 @@
       "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
     ],
     "sqlState" : "07501"
+  },
+  "NONEXISTENT_FIELD_NAME_IN_LIST" : {
+    "message" : [
+      "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
+    ],
+    "sqlState" : "HV091"
   },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [
@@ -7861,51 +7966,6 @@
   "_LEGACY_ERROR_TEMP_3250" : {
     "message" : [
       "Failed to convert the JSON string '<other>' to a field."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3251" : {
-    "message" : [
-      "Failed to convert the JSON string '<other>' to a data type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3252" : {
-    "message" : [
-      "<name> does not exist. Available: <fieldNames>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3253" : {
-    "message" : [
-      "<nonExistFields> do(es) not exist. Available: <fieldNames>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3254" : {
-    "message" : [
-      "<name> does not exist. Available: <fieldNames>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3255" : {
-    "message" : [
-      "Error parsing '<input>' to interval, <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3256" : {
-    "message" : [
-      "Unrecognized datetime pattern: <pattern>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3257" : {
-    "message" : [
-      "All week-based patterns are unsupported since Spark 3.0, detected: <c>, Please use the SQL function EXTRACT instead"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3258" : {
-    "message" : [
-      "Illegal pattern character: <c>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3259" : {
-    "message" : [
-      "Too many pattern letters: <style>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3260" : {
