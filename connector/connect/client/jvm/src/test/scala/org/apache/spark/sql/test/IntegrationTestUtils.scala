@@ -33,7 +33,7 @@ object IntegrationTestUtils {
   private val DEBUG_SC_JVM_CLIENT_ENV = "SPARK_DEBUG_SC_JVM_CLIENT"
   // Enable this flag to print all server logs to the console
   private[sql] val isDebug = {
-    System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean ||
+    System.getProperty(DEBUG_SC_JVM_CLIENT, "true").toBoolean ||
     Option(System.getenv(DEBUG_SC_JVM_CLIENT_ENV)).exists(_.toBoolean)
   }
 
