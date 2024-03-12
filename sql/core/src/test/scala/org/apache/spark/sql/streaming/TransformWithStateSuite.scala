@@ -92,8 +92,8 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
   }
 }
 
-// Class to verify stateful processor usage with adding/deleting processing time timers
-class RunningCountStatefulProcessorWithAddRemoveProcTimeTimer
+// Class to verify stateful processor usage with updating processing time timers
+class RunningCountStatefulProcessorWithProcTimeTimerUpdates
   extends RunningCountStatefulProcessor {
   @transient private var _timerState: ValueState[Long] = _
 
@@ -344,7 +344,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "b"),
         AddData(inputData, "c"),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("c", "1")),
+        CheckNewAnswer(("c", "1")), // should remove 'b' as count reaches 3
+
         AddData(inputData, "d"),
         AdvanceManualClock(10 * 1000),
         CheckNewAnswer(("c", "-1"), ("d", "1")),
@@ -354,7 +355,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - streaming with rocksdb and processing time timer " +
-   "and add/remove timers should succeed") {
+   "and updating timers should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       val clock = new StreamManualClock
@@ -363,7 +364,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS()
         .groupByKey(x => x)
         .transformWithState(
-          new RunningCountStatefulProcessorWithAddRemoveProcTimeTimer(),
+          new RunningCountStatefulProcessorWithProcTimeTimerUpdates(),
           TimeoutMode.ProcessingTime(),
           OutputMode.Update())
 
