@@ -254,22 +254,21 @@ class PandasConversionMixin:
 
         jconf = self.sparkSession._jconf
 
-        try:
-            from pyspark.sql.pandas.types import to_arrow_schema
-            from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+        from pyspark.sql.pandas.types import to_arrow_schema
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
-            require_minimum_pyarrow_version()
-            schema = to_arrow_schema(self.schema)
+        require_minimum_pyarrow_version()
+        schema = to_arrow_schema(self.schema)
 
-            import pyarrow as pa
+        import pyarrow as pa
 
-            self_destruct = jconf.arrowPySparkSelfDestructEnabled()
-            batches = self._collect_as_arrow(split_batches=self_destruct)
-            table = pa.Table.from_batches(batches, schema=schema)
-            # Ensure only the table has a reference to the batches, so that
-            # self_destruct (if enabled) is effective
-            del batches
-            return table
+        self_destruct = jconf.arrowPySparkSelfDestructEnabled()
+        batches = self._collect_as_arrow(split_batches=self_destruct)
+        table = pa.Table.from_batches(batches, schema=schema)
+        # Ensure only the table has a reference to the batches, so that
+        # self_destruct (if enabled) is effective
+        del batches
+        return table
 
     def _collect_as_arrow(self, split_batches: bool = False) -> List["pa.RecordBatch"]:
         """
