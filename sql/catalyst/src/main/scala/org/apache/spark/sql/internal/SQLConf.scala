@@ -333,6 +333,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PLAN_EXPLAIN_EXTENSIONS_ENABLED = buildConf("spark.sql.plan.explain.extensions.enabled")
+    .doc("If true, Spark will print plan information from extensions (if any) in explain plan " +
+      " and in the UI")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
@@ -861,7 +868,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
     buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
       .doc(s"A partition will be merged during splitting if its size is small than this factor " +
         s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
@@ -1160,7 +1167,7 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
-  val PARQUET_FIELD_ID_WRITE_ENABLED =
+   val PARQUET_FIELD_ID_WRITE_ENABLED =
     buildConf("spark.sql.parquet.fieldId.write.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, " +
         "Parquet writers will populate the field Id " +
@@ -1519,7 +1526,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val V2_BUCKETING_SHUFFLE_ENABLED =
+ val V2_BUCKETING_SHUFFLE_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.shuffle.enabled")
       .doc("During a storage-partitioned join, whether to allow to shuffle only one side." +
         "When only one side is KeyGroupedPartitioning, if the conditions are met, spark will " +
@@ -1529,7 +1536,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-   val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
+  val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
     buildConf("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
       .doc("Whether to allow storage-partition join in the case where join keys are" +
         "a subset of the partition keys of the source tables. At planning time, " +
@@ -4101,7 +4108,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LEGACY_INTEGER_GROUPING_ID =
+   val LEGACY_INTEGER_GROUPING_ID =
     buildConf("spark.sql.legacy.integerGroupingId")
       .internal()
       .doc("When true, grouping_id() returns int values instead of long values.")
@@ -4109,7 +4116,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
+   val LEGACY_GROUPING_ID_WITH_APPENDED_USER_GROUPBY =
     buildConf("spark.sql.legacy.groupingIdWithAppendedUserGroupBy")
       .internal()
       .doc("When true, grouping_id() returns values based on grouping set columns plus " +
@@ -4863,6 +4870,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
 
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
+
+  def planExplainExtensionsEnabled: Boolean = getConf(PLAN_EXPLAIN_EXTENSIONS_ENABLED)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 

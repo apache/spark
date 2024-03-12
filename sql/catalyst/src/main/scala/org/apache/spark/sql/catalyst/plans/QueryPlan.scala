@@ -464,6 +464,60 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     s"($opId) $nodeName$codegenId"
   }
 
+  def extensionsInfo(mode: String = "simple"): String = {
+    mode match {
+      case "simple" =>
+        summaryExtensionsInfoSimple().mkString("\n")
+      case _ =>
+        val sb = new StringBuilder
+        summaryExtensionsInfo(0, sb)
+        sb.toString
+    }
+  }
+
+  def summaryExtensionsInfo(indent: Int, sb: StringBuilder): Unit = {
+    var indentLevel = indent
+    sb.append(
+      getTagValue(QueryPlan.EXPLAIN_PLAN_INFO).map(t => {
+        indentLevel = indentLevel + 1
+        "  " * indentLevel + t + "\n"
+      }).getOrElse("")
+    )
+    if (innerChildren.nonEmpty) {
+      innerChildren.foreach(_.summaryExtensionsInfo(indentLevel, sb))
+    }
+    if (children.nonEmpty) {
+      children.foreach(_.summaryExtensionsInfo(indentLevel, sb))
+    }
+  }
+
+  // Sometimes all that is needed is the root level information
+  // (especially with errors during planning)
+  def summaryExtensionsInfoSimple(): mutable.Set[String] = {
+    val sb = mutable.Set[String]() // don't allow duplicates
+    if (innerChildren.nonEmpty) {
+      innerChildren.foreach(c => {
+        val s = c.summaryExtensionsInfoSimple()
+        if (s.nonEmpty) {
+          sb ++= s
+        }
+      })
+    }
+    if (children.nonEmpty) {
+      children.foreach(c => {
+        val s = c.summaryExtensionsInfoSimple()
+        if (s.nonEmpty) {
+          sb ++= s
+        }
+      })
+    }
+    val s = getTagValue(QueryPlan.EXPLAIN_PLAN_INFO_SIMPLE).map(t => t).getOrElse("")
+    if (s.nonEmpty) {
+      sb += s
+    }
+    sb
+  }
+
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
@@ -648,6 +702,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 object QueryPlan extends PredicateHelper {
   val OP_ID_TAG = TreeNodeTag[Int]("operatorId")
   val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
+  val EXPLAIN_PLAN_INFO_SIMPLE = new TreeNodeTag[String]("explainPlanInfoSimple")
+  val EXPLAIN_PLAN_INFO = new TreeNodeTag[String]("explainPlanInfo")
 
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`

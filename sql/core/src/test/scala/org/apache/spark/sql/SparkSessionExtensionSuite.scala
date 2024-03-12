@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.{QueryPlan, SQLHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveS
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
@@ -543,6 +544,33 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       }
     }
   }
+
+  test("explain info") {
+    val extensions = create { extensions =>
+      extensions.injectQueryStagePrepRule { _ => AddTagRule() }
+    }
+    withSession(extensions) { session =>
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        import session.sqlContext.implicits._
+        val left = Seq((1, 10L), (2, 100L), (3, 1000L)).toDF("l1", "l2")
+        val right = Seq((1, 2), (2, 3), (3, 5)).toDF("r1", "r2")
+        val data = left.join(right, $"l1" === $"r1")
+        val df = data.selectExpr("l2 + r2")
+        // execute the plan so that the final adaptive plan is available
+        df.collect()
+        val info = df.queryExecution.executedPlan.extensionsInfo("extended")
+        val simpleInfo = df.queryExecution.executedPlan.extensionsInfo()
+        val expected = "  Project info: Project\n" +
+          "    SMJ Info: SortMergeJoin\n" +
+          "      Scan Info: LocalTableScan\n" +
+          "      Scan Info: LocalTableScan\n"
+        val expectedSimple = "Scan Simple Info: LocalTableScan\nSMJ Simple Info: SortMergeJoin"
+        assert(info == expected)
+        assert(simpleInfo == expectedSimple)
+      }
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
@@ -581,6 +609,24 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
 
   override def parseQuery(sqlText: String): LogicalPlan =
     delegate.parseQuery(sqlText)
+}
+
+case class AddTagRule() extends Rule[SparkPlan] {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    plan.transform {
+      case s: LocalTableScanExec =>
+        s.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO, s"Scan Info: ${s.nodeName}")
+        s.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO_SIMPLE, s"Scan Simple Info: ${s.nodeName}")
+        s.withNewChildren(s.children)
+      case s: SortMergeJoinExec =>
+        s.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO, s"SMJ Info: ${s.nodeName}")
+        s.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO_SIMPLE, s"SMJ Simple Info: ${s.nodeName}")
+        s.withNewChildren(s.children)
+      case p: ProjectExec =>
+        p.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO, s"Project info: ${p.nodeName}")
+        p.withNewChildren(p.children)
+    }
+  }
 }
 
 object MyExtensions {

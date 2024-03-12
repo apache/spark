@@ -258,6 +258,13 @@ class QueryExecution(
       QueryPlan.append(executedPlan,
         append, verbose = false, addSuffix = false, maxFields = maxFields)
     }
+    if (sparkSession.sessionState.conf.planExplainExtensionsEnabled) {
+      val extensionsInfo = executedPlan.extensionsInfo()
+      if (extensionsInfo.nonEmpty) {
+        append("\n== Extended Information ==\n")
+        append(extensionsInfo)
+      }
+    }
     append("\n")
   }
 
@@ -317,6 +324,13 @@ class QueryExecution(
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
       append("\n== Physical Plan ==\n")
       QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
+      if (sparkSession.sessionState.conf.planExplainExtensionsEnabled) {
+        val extensionsInfo = executedPlan.extensionsInfo()
+        if (extensionsInfo.nonEmpty) {
+          append("\n== Extended Information ==\n")
+          append(extensionsInfo)
+        }
+      }
     } catch {
       case e: AnalysisException => append(e.toString)
     }
