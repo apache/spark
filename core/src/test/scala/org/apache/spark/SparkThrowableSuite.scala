@@ -119,7 +119,8 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("SQLSTATE is mandatory") {
     val errorClassesNoSqlState = errorReader.errorInfoMap.filter {
       case (error: String, info: ErrorInfo) =>
-        !error.startsWith("_LEGACY_ERROR_TEMP") && info.sqlState.isEmpty
+        (!error.startsWith("_LEGACY_ERROR_TEMP") && !error.equals("_LEGACY_ERROR_UNKNOWN")
+          && info.sqlState.isEmpty)
     }.keys.toSeq
     assert(errorClassesNoSqlState.isEmpty,
       s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
@@ -472,7 +473,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       throw new SparkException("Arbitrary legacy message")
     } catch {
       case e: SparkThrowable =>
-        assert(e.getErrorClass == null)
+        assert(e.getErrorClass == "_LEGACY_ERROR_UNKNOWN")
         assert(e.getSqlState == null)
       case _: Throwable =>
         // Should not end up here
