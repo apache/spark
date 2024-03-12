@@ -851,6 +851,19 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       ))
   }
 
+  test("EXEC IMMEDIATE - Null string as sqlString parameter") {
+    val execImmediatePlan = ExecuteImmediateQuery(
+      Seq.empty,
+      scala.util.Right(UnresolvedAttribute("testVarNull")),
+      Seq(UnresolvedAttribute("testVarNull")))
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediatePlan,
+      expectedErrorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+      expectedMessageParameters = Map("varName" -> "`testVarNull`"))
+  }
+
+
   test("EXEC IMMEDIATE - Unsupported expr for parameter") {
     val execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(
       Seq(UnresolvedAttribute("testVarA"), NaNvl(Literal(1), Literal(1))),

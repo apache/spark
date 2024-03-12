@@ -40,9 +40,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3259",
+  "errorClass" : "INVALID_DATETIME_PATTERN.LENGTH",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "style" : "q"
+    "pattern" : "qqqqq"
   }
 }
 
@@ -54,9 +55,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3259",
+  "errorClass" : "INVALID_DATETIME_PATTERN.LENGTH",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "style" : "Q"
+    "pattern" : "QQQQQ"
   }
 }
 
@@ -376,9 +378,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "A"
+    "c" : "A",
+    "pattern" : "A"
   }
 }
 
@@ -390,9 +394,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "n"
+    "c" : "n",
+    "pattern" : "n"
   }
 }
 
@@ -404,9 +410,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "N"
+    "c" : "N",
+    "pattern" : "N"
   }
 }
 
@@ -418,9 +426,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "p"
+    "c" : "p",
+    "pattern" : "p"
   }
 }
 
@@ -500,7 +510,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3257",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "c" : "e"
   }
@@ -514,7 +525,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3257",
+  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
+  "sqlState" : "42K0B",
   "messageParameters" : {
     "c" : "c"
   }
@@ -528,9 +540,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_3258",
+  "errorClass" : "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "c" : "B"
+    "c" : "B",
+    "pattern" : "B"
   }
 }
 

@@ -71,7 +71,7 @@ Column or field `<name>` is ambiguous and has `<n>` matches.
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
-This column points to one of the DataFrame but Spark is unable to figure out which one.
+This column points to one of the DataFrames but Spark is unable to figure out which one.
 Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
 and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
 
@@ -1082,6 +1082,12 @@ The boundary `<boundary>` is invalid: `<invalidValue>`.
 
 For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary-error-class.html)
 
+### INVALID_BUCKET_COLUMN_DATA_TYPE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use `<type>` for bucket column. Collated data types are not supported for bucketing.
+
 ### INVALID_BUCKET_FILE
 
 SQLSTATE: 58030
@@ -1121,6 +1127,14 @@ For more details see [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-valu
 The cursor is invalid.
 
 For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
+
+### [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
+
+[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Unrecognized datetime pattern: `<pattern>`.
+
+For more details see [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
 
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
@@ -1242,6 +1256,14 @@ Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
 
+### [INVALID_INTERVAL_FORMAT](sql-error-conditions-invalid-interval-format-error-class.html)
+
+[SQLSTATE: 22006](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Error parsing '`<input>`' to interval. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format.
+
+For more details see [INVALID_INTERVAL_FORMAT](sql-error-conditions-invalid-interval-format-error-class.html)
+
 ### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
 [SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1249,6 +1271,12 @@ For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-
 Invalid inverse distribution function `<funcName>`.
 
 For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+### INVALID_JSON_DATA_TYPE
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the JSON string '`<invalidType>`' to a data type. Please enter a valid data type.
 
 ### INVALID_JSON_ROOT_FIELD
 
@@ -1636,6 +1664,12 @@ SQLSTATE: 07501
 
 Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
 
+### NONEXISTENT_FIELD_NAME_IN_LIST
+
+SQLSTATE: HV091
+
+Field(s) `<nonExistFields>` do(es) not exist. Available fields: `<fieldNames>`
+
 ### NON_FOLDABLE_ARGUMENT
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1788,6 +1822,12 @@ Row ID attributes cannot be nullable: `<nullableRowIdAttrs>`.
 [SQLSTATE: 2200E](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Cannot use null as map key.
+
+### NULL_QUERY_STRING_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Execute immediate requires a non-null variable as the query string, but the provided variable `<varName>` is null.
 
 ### NUMERIC_OUT_OF_SUPPORTED_RANGE
 
