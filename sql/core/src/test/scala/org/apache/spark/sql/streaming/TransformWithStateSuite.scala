@@ -140,6 +140,40 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
   }
 }
 
+class RunningCountStatefulProcessorWithMultipleTimers
+  extends RunningCountStatefulProcessor {
+  private def handleProcessingTimeBasedTimers(
+      key: String,
+      expiryTimestampMs: Long): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    if (getHandle.listTimers().size == 1) {
+      _countState.clear()
+    }
+    Iterator((key, currCount.toString))
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    if (expiredTimerInfo.isValid()) {
+      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
+    } else {
+      val currCount = _countState.getOption().getOrElse(0L)
+      val count = currCount + inputRows.size
+      _countState.update(count)
+      if (getHandle.listTimers().isEmpty) {
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 15000)
+        assert(getHandle.listTimers().size == 3)
+      }
+      Iterator.empty
+    }
+  }
+}
+
 class MaxEventTimeStatefulProcessor
   extends StatefulProcessor[String, (String, Long), (String, Int)]
   with Logging {
@@ -372,17 +406,55 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "a"),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("a", "1")),
+        CheckNewAnswer(("a", "1")), // at batch 0, ts = 1, timer = "a" -> [6] (= 1 + 5)
 
         AddData(inputData, "a"),
         AdvanceManualClock(2 * 1000),
-        CheckNewAnswer(("a", "2")),
+        CheckNewAnswer(("a", "2")), // at batch 1, ts = 3, timer = "a" -> [9.5] (2 + 7.5)
         StopStream,
 
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "d"),
         AdvanceManualClock(10 * 1000),
-        CheckNewAnswer(("a", "-1"), ("d", "1")),
+        CheckNewAnswer(("a", "-1"), ("d", "1")), // at batch 2, ts = 13, timer for "a" is expired.
+        // If the timer of "a" was not replaced (pure addition), it would have triggered the timer
+        // two times here and produced ("a", "-1") two times.
+        StopStream
+      )
+    }
+  }
+
+  test("transformWithState - streaming with rocksdb and processing time timer " +
+   "and multiple timers should succeed") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val clock = new StreamManualClock
+
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(
+          new RunningCountStatefulProcessorWithMultipleTimers(),
+          TimeoutMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000), // at batch 0, add 3 timers for given key = "a"
+
+        AddData(inputData, "a"),
+        AdvanceManualClock(6 * 1000),
+        CheckNewAnswer(("a", "2")), // at ts = 7, first timer expires and produces ("a", "2")
+        AddData(inputData, "a"),
+        AdvanceManualClock(5 * 1000),
+        CheckNewAnswer(("a", "3")), // at ts = 12, second timer expires and produces ("a", "3")
+        StopStream,
+
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(5 * 1000),
+        CheckNewAnswer(("a", "4")), // at ts = 17, third timer expires and produces ("a", "4")
         StopStream
       )
     }
