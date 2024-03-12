@@ -261,7 +261,7 @@ class StringType(AtomicType):
 
     def collationIdToName(self) -> str:
         return (
-            " COLLATE %s" % StringType.collationNames[self.collationId]
+            " collate %s" % StringType.collationNames[self.collationId]
             if self.collationId != 0
             else ""
         )
