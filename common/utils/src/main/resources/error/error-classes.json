@@ -40,7 +40,7 @@
   "AMBIGUOUS_COLUMN_REFERENCE" : {
     "message" : [
       "Column <name> is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.",
-      "This column points to one of the DataFrame but Spark is unable to figure out which one.",
+      "This column points to one of the DataFrames but Spark is unable to figure out which one.",
       "Please alias the DataFrames with different names via `DataFrame.alias` before joining them,",
       "and specify the column using qualified name, e.g. `df.alias(\"a\").join(df.alias(\"b\"), col(\"a.id\") > col(\"b.id\"))`."
     ],
@@ -6184,17 +6184,17 @@
   },
   "_LEGACY_ERROR_TEMP_2109" : {
     "message" : [
-      "Cannot build HashedRelation with more than 1/3 billions unique keys."
+      "Cannot build HashedRelation with more than 1/3 billion unique keys."
     ]
   },
   "_LEGACY_ERROR_TEMP_2110" : {
     "message" : [
-      "Can not build a HashedRelation that is larger than 8G."
+      "Cannot build a HashedRelation that is larger than 8G."
     ]
   },
   "_LEGACY_ERROR_TEMP_2111" : {
     "message" : [
-      "failed to push a row into <rowQueue>."
+      "Failed to push a row into <rowQueue>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2112" : {
