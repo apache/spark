@@ -1765,7 +1765,7 @@ Cannot use null as map key.
 
 ### NULL_QUERY_STRING_EXECUTE_IMMEDIATE
 
-[SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Execute immediate requires a non-null variable as the query string, but the provided variable `<varName>` is null.
 

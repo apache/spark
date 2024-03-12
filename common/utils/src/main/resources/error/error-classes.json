@@ -3008,7 +3008,7 @@
     "message" : [
       "Execute immediate requires a non-null variable as the query string, but the provided variable <varName> is null."
     ],
-    "sqlState" : "42K09"
+    "sqlState" : "22004"
   },
   "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
     "message" : [

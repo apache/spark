@@ -746,7 +746,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
-  "sqlState" : "42K09",
+  "sqlState" : "22004",
   "messageParameters" : {
     "varName" : "`sql_string`"
   }
