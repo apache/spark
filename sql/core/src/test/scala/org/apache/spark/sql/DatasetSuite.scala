@@ -2719,6 +2719,25 @@ class DatasetSuite extends QueryTest
     checkDataset(ds.map(t => t),
       WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
   }
+
+  test("SPARK-47270: isEmpty does not trigger job execution on CommandResults") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      withTable("t1") {
+        sql("create table t1(c int) using parquet")
+
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        withListener(spark.sparkContext, listener) { _ =>
+          sql("show tables").isEmpty
+        }
+        assert(jobCounter === 0)
+      }
+    }
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
