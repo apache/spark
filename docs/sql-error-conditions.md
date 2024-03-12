@@ -1931,6 +1931,12 @@ Protobuf type not yet supported: `<protobufType>`.
 
 Failed to `<action>` Python data source `<type>`: `<msg>`
 
+### PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed when Python streaming data source perform `<action>`: `<msg>`
+
 ### RECURSIVE_PROTOBUF_SCHEMA
 
 [SQLSTATE: 42K0G](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
