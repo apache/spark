@@ -63,7 +63,7 @@ class StreamingListenerTestsMixin:
         if error_class:
             self.assertTrue(error_class in event.errorClassOnException)
         else:
-            self.assertEqual(event.errorClassOnException, None)
+            self.assertEqual(event.errorClassOnException, "_LEGACY_ERROR_UNKNOWN")
 
     def check_streaming_query_progress(self, progress):
         """Check StreamingQueryProgress"""
