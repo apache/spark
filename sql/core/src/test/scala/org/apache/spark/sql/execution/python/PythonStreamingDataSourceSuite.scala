@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 import java.util.concurrent.CountDownLatch
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
 import org.apache.spark.sql.streaming.StreamingQueryException
@@ -196,20 +196,21 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       s"""
          |from pyspark.sql.datasource import DataSource
          |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
          |    def streamReader(self, schema):
          |        raise Exception("error creating stream reader")
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(
       name = dataSourceName, pythonScript = dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
-    val pythonDs = new PythonDataSourceV2
-    pythonDs.setShortName("SimpleDataSource")
-    val inputSchema = StructType.fromDDL("input BINARY")
-    val err = intercept[AnalysisException] {
-      new PythonMicroBatchStream(
-        pythonDs, dataSourceName, inputSchema, CaseInsensitiveStringMap.empty())
+
+    val err = intercept[StreamingQueryException] {
+      val q = spark.readStream.format(dataSourceName).load()
+        .writeStream.format("console").start()
+      q.awaitTermination()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getErrorClass == "STREAM_FAILED")
     assert(err.getMessage.contains("error creating stream reader"))
   }
 
