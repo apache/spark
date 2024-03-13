@@ -93,7 +93,7 @@ class PythonStreamingSinkCommitRunner(
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "initial streaming sink", msg)
+        action = "initialize streaming sink", msg)
     }
   }
 
