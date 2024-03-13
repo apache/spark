@@ -197,7 +197,7 @@ class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
 
-  private var queryPersisted: Option[(Array[Boolean], QueryExecution)] = None
+  @volatile private var queryPersisted: Option[(Array[Boolean], QueryExecution)] = None
 
   def queryExecution: QueryExecution = {
     val cacheStatesSign = queryUnpersisted.computeCacheStateSignature()
