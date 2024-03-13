@@ -40,57 +40,12 @@ case class TestClass(var id: Long, var name: String)
  * Class that adds tests for single value ValueState types used in arbitrary stateful
  * operators such as transformWithState
  */
-class ValueStateSuite extends SharedSparkSession
-  with BeforeAndAfter {
-
-  before {
-    StateStore.stop()
-    require(!StateStore.isMaintenanceRunning)
-  }
-
-  after {
-    StateStore.stop()
-    require(!StateStore.isMaintenanceRunning)
-  }
+class ValueStateSuite extends StateVariableSuiteBase {
 
   import StateStoreTestsHelper._
 
-  val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-
-  val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
-
-  private def newStoreProviderWithValueState(useColumnFamilies: Boolean):
-    RocksDBStateStoreProvider = {
-    newStoreProviderWithValueState(StateStoreId(newDir(), Random.nextInt(), 0),
-      numColsPrefixKey = 0,
-      useColumnFamilies = useColumnFamilies)
-  }
-
-  private def newStoreProviderWithValueState(
-      storeId: StateStoreId,
-      numColsPrefixKey: Int,
-      sqlConf: SQLConf = SQLConf.get,
-      conf: Configuration = new Configuration,
-      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
-    val provider = new RocksDBStateStoreProvider()
-    provider.init(
-      storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
-      useColumnFamilies,
-      new StateStoreConf(sqlConf), conf)
-    provider
-  }
-
-  private def tryWithProviderResource[T](
-      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
-    try {
-      f(provider)
-    } finally {
-      provider.close()
-    }
-  }
-
   test("Implicit key operations") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -134,7 +89,7 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   test("Value state operations for single instance") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -160,7 +115,7 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   test("Value state operations for multiple instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -217,14 +172,14 @@ class ValueStateSuite extends SharedSparkSession
       ex,
       errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
       parameters = Map(
-        "stateStoreProvider" -> "HDFSStateStoreProvider"
+        "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
       ),
       matchPVals = true
     )
   }
 
   test("test SQL encoder - Value state operations for Primitive(Double) instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -250,7 +205,7 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   test("test SQL encoder - Value state operations for Primitive(Long) instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -276,7 +231,7 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   test("test SQL encoder - Value state operations for case class instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -302,7 +257,7 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   test("test SQL encoder - Value state operations for POJO instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
@@ -327,3 +282,59 @@ class ValueStateSuite extends SharedSparkSession
     }
   }
 }
+
+/**
+ * Abstract Base Class that provides test utilities for different state variable
+ * types (ValueState, ListState, MapState) used in arbitrary stateful operators.
+ */
+abstract class StateVariableSuiteBase extends SharedSparkSession
+  with BeforeAndAfter {
+
+  before {
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
+  after {
+    ImplicitGroupingKeyTracker.removeImplicitKey()
+    require(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
+  import StateStoreTestsHelper._
+
+  protected var schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  protected var schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+
+  protected def newStoreProviderWithStateVariable(
+      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+    newStoreProviderWithStateVariable(StateStoreId(newDir(), Random.nextInt(), 0),
+      numColsPrefixKey = 0,
+      useColumnFamilies = useColumnFamilies)
+  }
+
+  protected def newStoreProviderWithStateVariable(
+      storeId: StateStoreId,
+      numColsPrefixKey: Int,
+      sqlConf: SQLConf = SQLConf.get,
+      conf: Configuration = new Configuration,
+      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
+    val provider = new RocksDBStateStoreProvider()
+    provider.init(
+      storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
+      useColumnFamilies,
+      new StateStoreConf(sqlConf), conf)
+    provider
+  }
+
+  protected def tryWithProviderResource[T](
+      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
+    try {
+      f(provider)
+    } finally {
+      provider.close()
+    }
+  }
+}
+

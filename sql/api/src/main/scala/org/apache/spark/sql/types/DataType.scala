@@ -195,8 +195,8 @@ object DataType {
       case other => otherTypes.getOrElse(
         other,
         throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3251",
-          messageParameters = Map("other" -> name)))
+          errorClass = "INVALID_JSON_DATA_TYPE",
+          messageParameters = Map("invalidType" -> name)))
     }
   }
 
@@ -247,8 +247,8 @@ object DataType {
         new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
     case other => throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3251",
-      messageParameters = Map("other" -> compact(render(other))))
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
   private def parseStructField(json: JValue): StructField = json match {
