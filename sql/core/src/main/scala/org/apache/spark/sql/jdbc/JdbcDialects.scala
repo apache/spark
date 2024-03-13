@@ -124,14 +124,14 @@ abstract class JdbcDialect extends Serializable with Logging {
    *             <li>
    *               `isTimestampNTZ`: Whether read a TIMESTAMP WITHOUT TIME ZONE value as
    *               [[org.apache.spark.sql.types.TimestampNTZType]] or not. This is configured by
-   *               [[JDBCOptions.preferTimestampNTZ]]
+   *               `JDBCOptions.preferTimestampNTZ`.
    *             </li>
    *             <li>
    *               `scale`: The length of fractional part [[java.sql.ResultSetMetaData#getScale]]
    *             </li>
    *            </ul>
    * @return An option the actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
-   *         or [[None]] if the default type mapping should be used.
+   *         or None if the default type mapping should be used.
    */
   def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
