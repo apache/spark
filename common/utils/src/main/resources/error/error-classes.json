@@ -2098,7 +2098,10 @@
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
-      "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
+      "The unquoted identifier <ident> is invalid and must be back quoted as: `<ident>`.",
+      "Unquoted identifiers can only contain ASCII letters ('a' - 'z', 'A' - 'Z'), digits ('0' - '9'), and underbar ('_').",
+      "Unquoted identifiers must also not start with a digit.",
+      "Different data sources and meta stores may impose additional restrictions on valid identifiers."
     ],
     "sqlState" : "42602"
   },
