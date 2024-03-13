@@ -52,7 +52,7 @@ on:
 jobs:
   precondition:
     name: Check changes
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -122,7 +122,7 @@ jobs:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).build == 'true'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
       fail-fast: false
@@ -252,7 +252,7 @@ jobs:
     - name: Install Python packages (Python 3.9)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.59.3' 'grpcio-status==1.59.3' 'protobuf==4.25.1'
+        python3.9 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.62.0' 'grpcio-status==1.62.0' 'protobuf==4.25.1'
         python3.9 -m pip list
     # Run the tests.
     - name: Run tests
@@ -333,7 +333,7 @@ jobs:
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).pyspark == 'true'
     name: "Build modules: ${{ matrix.modules }}"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 300
     container:
       image: ${{ needs.precondition.outputs.image_url }}
@@ -481,7 +481,7 @@ jobs:
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 300
     container:
       image: ${{ needs.precondition.outputs.image_url }}
@@ -559,7 +559,7 @@ jobs:
     needs: [precondition]
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).buf == 'true'
     name: Protobuf breaking change detection and Python CodeGen check
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -574,9 +574,8 @@ jobs:
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Install Buf
-      uses: bufbuild/buf-setup-action@v1.29.0
+      uses: bufbuild/buf-setup-action@v1
       with:
-        version: 1.29.0
         github_token: ${{ secrets.GITHUB_TOKEN }}
     - name: Protocol Buffers Linter
       uses: bufbuild/buf-lint-action@v1
@@ -605,7 +604,7 @@ jobs:
     # always run if lint == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).lint == 'true'
     name: Linters, licenses, dependencies and documentation generation
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 300
     env:
       LC_ALL: C.UTF-8
@@ -703,7 +702,7 @@ jobs:
         python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
           ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 'docutils<0.18.0' \
           'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.9.1' \
-          'pandas-stubs==1.2.0.53' 'grpcio==1.59.3' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
+          'pandas-stubs==1.2.0.53' 'grpcio==1.62.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
           'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
         python3.9 -m pip list
     - name: Python linter
@@ -798,9 +797,9 @@ jobs:
       matrix:
         include:
           - java: 17
-            os: ubuntu-22.04 
+            os: ubuntu-latest
           - java: 21
-            os: ubuntu-22.04 
+            os: ubuntu-latest
           - java: 21
             os: macos-14 
     runs-on: ${{ matrix.os }}
@@ -955,7 +954,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 300
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -1024,7 +1023,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
       - name: Checkout Spark repository
@@ -1097,7 +1096,7 @@ jobs:
     needs: [precondition]
     if: fromJson(needs.precondition.outputs.required).ui == 'true'
     name: Run Spark UI tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4

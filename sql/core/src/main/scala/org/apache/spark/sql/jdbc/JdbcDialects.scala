@@ -97,7 +97,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    *         or null if the default type mapping should be used.
    */
   def getCatalystType(
-    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
 
   /**
    * Retrieve the jdbc / sql type for a given datatype.
@@ -743,6 +743,13 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("3.5.0")
   def getFullyQualifiedQuotedTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
+  }
+
+  /**
+   * Return TimestampType/TimestampNTZType based on the metadata.
+   */
+  protected final def getTimestampType(md: Metadata): DataType = {
+    JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
   }
 }
 

@@ -25,6 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -84,14 +85,12 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     invalidatedTables.add(ident)
   }
 
-  // TODO: remove it when no tests calling this deprecated method.
   override def createTable(
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    createTable(ident, schema, partitions, properties, Distributions.unspecified(),
-      Array.empty, None, None)
+    throw QueryCompilationErrors.createTableDeprecatedError()
   }
 
   override def createTable(
@@ -99,13 +98,13 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
-    createTable(ident, schema, partitions, properties)
+    createTable(ident, columns, partitions, properties, Distributions.unspecified(),
+      Array.empty, None, None)
   }
 
   def createTable(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String],
       distribution: Distribution,
@@ -114,6 +113,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       advisoryPartitionSize: Option[Long],
       distributionStrictlyRequired: Boolean = true,
       numRowsPerSplit: Int = Int.MaxValue): Table = {
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }

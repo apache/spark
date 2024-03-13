@@ -30,7 +30,7 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -2190,6 +2190,13 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     Collate(expression(ctx.primaryExpression), collationName)
   }
 
+  override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
+    if (!SQLConf.get.collationEnabled) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
+    ctx.identifier.getText
+  }
+
   /**
    * Create a [[Cast]] expression.
    */
@@ -3078,6 +3085,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         }
         IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
       } catch {
+        case st: SparkThrowable => throw st
         case i: IllegalArgumentException =>
           val e = new ParseException(
             errorClass = "_LEGACY_ERROR_TEMP_0062",

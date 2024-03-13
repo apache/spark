@@ -49,7 +49,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def notSupportsTableComment: Boolean = false
 
-  def defaultMetadata: Metadata = new MetadataBuilder().putLong("scale", 0).build()
+  def defaultMetadata: Metadata = new MetadataBuilder()
+    .putLong("scale", 0)
+    .putBoolean("isTimestampNTZ", false)
+    .build()
 
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")

@@ -71,7 +71,7 @@ Column or field `<name>` is ambiguous and has `<n>` matches.
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
-This column points to one of the DataFrame but Spark is unable to figure out which one.
+This column points to one of the DataFrames but Spark is unable to figure out which one.
 Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
 and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
 
@@ -756,6 +756,12 @@ SQLSTATE: 58030
 
 Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename returned false.
 
+### FAILED_ROW_TO_JSON
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the row value `<value>` of the class `<class>` to the target SQL type `<sqlType>` in the JSON format.
+
 ### FIELDS_ALREADY_EXISTS
 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -778,7 +784,7 @@ The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`
 
 [SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
 
-An error occurred in the user provided function in foreach batch sink.
+An error occurred in the user provided function in foreach batch sink. Reason: `<reason>`
 
 ### FOUND_MULTIPLE_DATA_SOURCES
 
@@ -1076,6 +1082,12 @@ The boundary `<boundary>` is invalid: `<invalidValue>`.
 
 For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary-error-class.html)
 
+### INVALID_BUCKET_COLUMN_DATA_TYPE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use `<type>` for bucket column. Collated data types are not supported for bucketing.
+
 ### INVALID_BUCKET_FILE
 
 SQLSTATE: 58030
@@ -1116,6 +1128,14 @@ The cursor is invalid.
 
 For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
+### [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
+
+[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Unrecognized datetime pattern: `<pattern>`.
+
+For more details see [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
+
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
 [SQLSTATE: 42623](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1123,6 +1143,14 @@ For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-
 Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
 
 For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
+
+### [INVALID_DELIMITER_VALUE](sql-error-conditions-invalid-delimiter-value-error-class.html)
+
+[SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid value for delimiter.
+
+For more details see [INVALID_DELIMITER_VALUE](sql-error-conditions-invalid-delimiter-value-error-class.html)
 
 ### INVALID_DRIVER_MEMORY
 
@@ -1228,6 +1256,14 @@ Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
 
+### [INVALID_INTERVAL_FORMAT](sql-error-conditions-invalid-interval-format-error-class.html)
+
+[SQLSTATE: 22006](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Error parsing '`<input>`' to interval. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format.
+
+For more details see [INVALID_INTERVAL_FORMAT](sql-error-conditions-invalid-interval-format-error-class.html)
+
 ### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
 [SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1235,6 +1271,12 @@ For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-
 Invalid inverse distribution function `<funcName>`.
 
 For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+### INVALID_JSON_DATA_TYPE
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the JSON string '`<invalidType>`' to a data type. Please enter a valid data type.
 
 ### INVALID_JSON_ROOT_FIELD
 
@@ -1622,6 +1664,12 @@ SQLSTATE: 07501
 
 Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
 
+### NONEXISTENT_FIELD_NAME_IN_LIST
+
+SQLSTATE: HV091
+
+Field(s) `<nonExistFields>` do(es) not exist. Available fields: `<fieldNames>`
+
 ### NON_FOLDABLE_ARGUMENT
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1775,6 +1823,12 @@ Row ID attributes cannot be nullable: `<nullableRowIdAttrs>`.
 
 Cannot use null as map key.
 
+### NULL_QUERY_STRING_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Execute immediate requires a non-null variable as the query string, but the provided variable `<varName>` is null.
+
 ### NUMERIC_OUT_OF_SUPPORTED_RANGE
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1916,6 +1970,12 @@ Protobuf type not yet supported: `<protobufType>`.
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
 Failed to `<action>` Python data source `<type>`: `<msg>`
+
+### PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed when Python streaming data source perform `<action>`: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 
@@ -2085,11 +2145,11 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
-### STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY
+### STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to remove default column family with reserved name=`<colFamilyName>`.
+Failed to perform column family operation=`<operationName>` with invalid name=`<colFamilyName>`. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default
 
 ### STATE_STORE_HANDLE_NOT_INITIALIZED
 
@@ -2109,6 +2169,12 @@ Store does not support multiple values per key
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<operationType>` operation not supported with `<entity>`
+
+### STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+State store operation=`<operationType>` not supported on missing column family=`<colFamilyName>`.
 
 ### STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST
 

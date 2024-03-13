@@ -57,6 +57,8 @@
       url: sql-performance-tuning.html#caching-data
     - text: Tuning Partitions
       url: sql-performance-tuning.html#tuning-partitions
+    - text: Leveraging Statistics
+      url: sql-performance-tuning.html#leveraging-statistics
     - text: Optimizing the Join Strategy
       url: sql-performance-tuning.html#optimizing-the-join-strategy
     - text: Adaptive Query Execution

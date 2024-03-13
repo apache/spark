@@ -33,67 +33,25 @@ import org.apache.spark.sql.streaming.ValueState
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
+/** A case class for SQL encoder test purpose */
+case class TestClass(var id: Long, var name: String)
+
 /**
  * Class that adds tests for single value ValueState types used in arbitrary stateful
  * operators such as transformWithState
  */
-class ValueStateSuite extends SharedSparkSession
-  with BeforeAndAfter {
-
-  before {
-    StateStore.stop()
-    require(!StateStore.isMaintenanceRunning)
-  }
-
-  after {
-    StateStore.stop()
-    require(!StateStore.isMaintenanceRunning)
-  }
+class ValueStateSuite extends StateVariableSuiteBase {
 
   import StateStoreTestsHelper._
 
-  val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-
-  val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
-
-  private def newStoreProviderWithValueState(useColumnFamilies: Boolean):
-    RocksDBStateStoreProvider = {
-    newStoreProviderWithValueState(StateStoreId(newDir(), Random.nextInt(), 0),
-      numColsPrefixKey = 0,
-      useColumnFamilies = useColumnFamilies)
-  }
-
-  private def newStoreProviderWithValueState(
-      storeId: StateStoreId,
-      numColsPrefixKey: Int,
-      sqlConf: SQLConf = SQLConf.get,
-      conf: Configuration = new Configuration,
-      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
-    val provider = new RocksDBStateStoreProvider()
-    provider.init(
-      storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
-      useColumnFamilies,
-      new StateStoreConf(sqlConf), conf)
-    provider
-  }
-
-  private def tryWithProviderResource[T](
-      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
-    try {
-      f(provider)
-    } finally {
-      provider.close()
-    }
-  }
-
   test("Implicit key operations") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
       val stateName = "testState"
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -131,12 +89,12 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   test("Value state operations for single instance") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState")
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -157,13 +115,15 @@ class ValueStateSuite extends SharedSparkSession
   }
 
   test("Value state operations for multiple instances") {
-    tryWithProviderResource(newStoreProviderWithValueState(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
 
-      val testState1: ValueState[Long] = handle.getValueState[Long]("testState1")
-      val testState2: ValueState[Long] = handle.getValueState[Long]("testState2")
+      val testState1: ValueState[Long] = handle.getValueState[Long](
+        "testState1", Encoders.scalaLong)
+      val testState2: ValueState[Long] = handle.getValueState[Long](
+        "testState2", Encoders.scalaLong)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)
@@ -212,9 +172,169 @@ class ValueStateSuite extends SharedSparkSession
       ex,
       errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
       parameters = Map(
-        "stateStoreProvider" -> "HDFSStateStoreProvider"
+        "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
       ),
       matchPVals = true
     )
   }
+
+  test("test SQL encoder - Value state operations for Primitive(Double) instances") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[Double] = handle.getValueState[Double]("testState",
+        Encoders.scalaDouble)
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(1.0)
+      assert(testState.get().equals(1.0))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(2.0)
+      assert(testState.get().equals(2.0))
+      testState.update(3.0)
+      assert(testState.get().equals(3.0))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("test SQL encoder - Value state operations for Primitive(Long) instances") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        Encoders.scalaLong)
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(1L)
+      assert(testState.get().equals(1L))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(2L)
+      assert(testState.get().equals(2L))
+      testState.update(3L)
+      assert(testState.get().equals(3L))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("test SQL encoder - Value state operations for case class instances") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
+        Encoders.product[TestClass])
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(TestClass(1, "testcase1"))
+      assert(testState.get().equals(TestClass(1, "testcase1")))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(TestClass(2, "testcase2"))
+      assert(testState.get() === TestClass(2, "testcase2"))
+      testState.update(TestClass(3, "testcase3"))
+      assert(testState.get() === TestClass(3, "testcase3"))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
+
+  test("test SQL encoder - Value state operations for POJO instances") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+
+      val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass]("testState",
+        Encoders.bean(classOf[POJOTestClass]))
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update(new POJOTestClass("testcase1", 1))
+      assert(testState.get().equals(new POJOTestClass("testcase1", 1)))
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      testState.update(new POJOTestClass("testcase2", 2))
+      assert(testState.get().equals(new POJOTestClass("testcase2", 2)))
+      testState.update(new POJOTestClass("testcase3", 3))
+      assert(testState.get().equals(new POJOTestClass("testcase3", 3)))
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+    }
+  }
 }
+
+/**
+ * Abstract Base Class that provides test utilities for different state variable
+ * types (ValueState, ListState, MapState) used in arbitrary stateful operators.
+ */
+abstract class StateVariableSuiteBase extends SharedSparkSession
+  with BeforeAndAfter {
+
+  before {
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
+  after {
+    ImplicitGroupingKeyTracker.removeImplicitKey()
+    require(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
+    StateStore.stop()
+    require(!StateStore.isMaintenanceRunning)
+  }
+
+  import StateStoreTestsHelper._
+
+  protected var schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  protected var schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+
+  protected def newStoreProviderWithStateVariable(
+      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
+    newStoreProviderWithStateVariable(StateStoreId(newDir(), Random.nextInt(), 0),
+      numColsPrefixKey = 0,
+      useColumnFamilies = useColumnFamilies)
+  }
+
+  protected def newStoreProviderWithStateVariable(
+      storeId: StateStoreId,
+      numColsPrefixKey: Int,
+      sqlConf: SQLConf = SQLConf.get,
+      conf: Configuration = new Configuration,
+      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
+    val provider = new RocksDBStateStoreProvider()
+    provider.init(
+      storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
+      useColumnFamilies,
+      new StateStoreConf(sqlConf), conf)
+    provider
+  }
+
+  protected def tryWithProviderResource[T](
+      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
+    try {
+      f(provider)
+    } finally {
+      provider.close()
+    }
+  }
+}
+

@@ -1758,6 +1758,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "outputMode" -> outputMode.toString()))
   }
 
+  def pythonStreamingDataSourceRuntimeError(
+      action: String,
+      message: String): SparkException = {
+    new SparkException(
+      errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+      messageParameters = Map("action" -> action, "msg" -> message),
+      cause = null)
+  }
+
   def invalidCatalogNameError(name: String): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2212",

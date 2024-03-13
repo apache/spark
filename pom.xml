@@ -141,7 +141,7 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.13.1</parquet.version>
-    <orc.version>1.9.2</orc.version>
+    <orc.version>2.0.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.20</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
@@ -289,7 +289,7 @@
     <!-- Version used in Connect -->
     <connect.guava.version>33.0.0-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
-    <io.grpc.version>1.59.0</io.grpc.version>
+    <io.grpc.version>1.62.2</io.grpc.version>
     <mima.version>1.1.3</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
@@ -684,7 +684,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>8.8.1</version>
+        <version>8.11.3</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1250,13 +1250,13 @@
       <dependency>
         <groupId>com.mysql</groupId>
         <artifactId>mysql-connector-j</artifactId>
-        <version>8.2.0</version>
+        <version>8.3.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mariadb.jdbc</groupId>
         <artifactId>mariadb-java-client</artifactId>
-        <version>2.7.11</version>
+        <version>2.7.12</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2595,11 +2595,26 @@
 
       <dependency>
         <groupId>org.apache.orc</groupId>
+        <artifactId>orc-format</artifactId>
+        <version>1.0.0</version>
+        <classifier>${orc.classifier}</classifier>
+        <scope>${orc.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
         <version>${orc.version}</version>
         <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-format</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.aayushatharva.brotli4j</groupId>
+            <artifactId>brotli4j</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
@@ -3487,7 +3502,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>9.3</version>
+            <version>10.14.0</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3549,7 +3564,7 @@
       <plugin>
         <groupId>org.antipathy</groupId>
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
-        <version>1.1.1640084764.9f463a9</version>
+        <version>1.1.1684076452.9f83818</version>
         <configuration>
           <validateOnly>${scalafmt.validateOnly}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>
