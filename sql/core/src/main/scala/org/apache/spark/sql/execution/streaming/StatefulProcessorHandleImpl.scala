@@ -163,8 +163,8 @@ class StatefulProcessorHandleImpl(
   }
 
   /**
-   * Function to retrieve all registered timers
-   * @return - iterator of registered timers
+   * Function to retrieve all registered timers for all grouping keys
+   * @return - iterator of registered timers for all grouping keys
    */
   def getExpiredTimers(): Iterator[(Any, Long)] = {
     verifyTimerOperations("get_expired_timers")

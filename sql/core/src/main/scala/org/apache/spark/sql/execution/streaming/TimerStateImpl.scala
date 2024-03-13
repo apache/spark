@@ -189,8 +189,8 @@ class TimerStateImpl(
   }
 
   /**
-   * Function to get all the registered timers
-   * @return - iterator of all the registered timers
+   * Function to get all the registered timers for all grouping keys
+   * @return - iterator of all the registered timers for all grouping keys
    */
   def getExpiredTimers(): Iterator[(Any, Long)] = {
     val iter = store.iterator(tsToKeyCFName)
