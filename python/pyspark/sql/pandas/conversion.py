@@ -296,6 +296,9 @@ class PandasConversionMixin:
 
         assert isinstance(self, DataFrame)
 
+        from pyspark.sql.pandas.types import to_arrow_schema
+        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
         require_minimum_pyarrow_version()
 
         with SCCallSiteSync(self._sc):
