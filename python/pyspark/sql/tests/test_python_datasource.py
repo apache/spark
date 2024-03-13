@@ -236,12 +236,10 @@ class BasePythonDataSourceTestsMixin:
 
         self.spark.dataSource.register(InMemoryDataSource)
         df = self.spark.read.format("memory").load()
-        self.assertEqual(df.rdd.getNumPartitions(), 3)
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1"), Row(x=2, y="2")])
 
         df = self.spark.read.format("memory").option("num_partitions", 2).load()
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
-        self.assertEqual(df.rdd.getNumPartitions(), 2)
 
     def _get_test_json_data_source(self):
         import json

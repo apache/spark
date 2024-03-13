@@ -1000,6 +1000,24 @@ message PythonUDTF {
   string python_ver = 4;
 }
 
+message CommonInlineUserDefinedDataSource {
+  // (Required) Name of the data source.
+  string name = 1;
+
+  // (Required) The data source type.
+  oneof data_source {
+    PythonDataSource python_data_source = 2;
+  }
+}
+
+message PythonDataSource {
+  // (Required) The encoded commands of the Python data source.
+  bytes command = 1;
+
+  // (Required) Python version being used in the client.
+  string python_ver = 2;
+}
+
 // Collect arbitrary (named) metrics from a dataset.
 message CollectMetrics {
   // (Required) The input relation.

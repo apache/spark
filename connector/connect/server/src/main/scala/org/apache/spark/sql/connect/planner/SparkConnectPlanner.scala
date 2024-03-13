@@ -68,6 +68,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
@@ -972,6 +973,20 @@ class SparkConnectPlanner(
       pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
       pythonExec = pythonExec,
       pythonVer = fun.getPythonVer,
+      // Empty broadcast variables
+      broadcastVars = Lists.newArrayList(),
+      // Accumulator if available
+      accumulator = sessionHolder.pythonAccumulator.orNull)
+  }
+
+  private def transformPythonDataSource(ds: proto.PythonDataSource): SimplePythonFunction = {
+    SimplePythonFunction(
+      command = ds.getCommand.toByteArray.toImmutableArraySeq,
+      // Empty environment variables
+      envVars = Maps.newHashMap(),
+      pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
+      pythonExec = pythonExec,
+      pythonVer = ds.getPythonVer,
       // Empty broadcast variables
       broadcastVars = Lists.newArrayList(),
       // Accumulator if available
@@ -2494,6 +2509,8 @@ class SparkConnectPlanner(
         handleRegisterUserDefinedFunction(command.getRegisterFunction)
       case proto.Command.CommandTypeCase.REGISTER_TABLE_FUNCTION =>
         handleRegisterUserDefinedTableFunction(command.getRegisterTableFunction)
+      case proto.Command.CommandTypeCase.REGISTER_DATA_SOURCE =>
+        handleRegisterUserDefinedDataSource(command.getRegisterDataSource)
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
@@ -2657,6 +2674,20 @@ class SparkConnectPlanner(
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
+    }
+    executeHolder.eventsManager.postFinished()
+  }
+
+  private def handleRegisterUserDefinedDataSource(
+      fun: proto.CommonInlineUserDefinedDataSource): Unit = {
+    fun.getDataSourceCase match {
+      case proto.CommonInlineUserDefinedDataSource.DataSourceCase.PYTHON_DATA_SOURCE =>
+        val ds = fun.getPythonDataSource
+        val dataSource = UserDefinedPythonDataSource(transformPythonDataSource(ds))
+        session.dataSource.registerPython(fun.getName, dataSource)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Data source with ID: ${fun.getDataSourceCase.getNumber} is not supported")
     }
     executeHolder.eventsManager.postFinished()
   }

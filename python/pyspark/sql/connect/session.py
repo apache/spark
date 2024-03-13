@@ -744,6 +744,14 @@ class SparkSession:
     udtf.__doc__ = PySparkSession.udtf.__doc__
 
     @property
+    def dataSource(self) -> "DataSourceRegistration":
+        from pyspark.sql.connect.datasource import DataSourceRegistration
+
+        return DataSourceRegistration(self)
+
+    dataSource.__doc__ = PySparkSession.dataSource.__doc__
+
+    @property
     def version(self) -> str:
         result = self._client._analyze(method="spark_version").spark_version
         assert result is not None

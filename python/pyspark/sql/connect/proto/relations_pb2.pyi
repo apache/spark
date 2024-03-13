@@ -3620,6 +3620,66 @@ class PythonUDTF(google.protobuf.message.Message):
 
 global___PythonUDTF = PythonUDTF
 
+class CommonInlineUserDefinedDataSource(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: builtins.int
+    PYTHON_DATA_SOURCE_FIELD_NUMBER: builtins.int
+    name: builtins.str
+    """(Required) Name of the data source."""
+    @property
+    def python_data_source(self) -> global___PythonDataSource: ...
+    def __init__(
+        self,
+        *,
+        name: builtins.str = ...,
+        python_data_source: global___PythonDataSource | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "data_source", b"data_source", "python_data_source", b"python_data_source"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "data_source",
+            b"data_source",
+            "name",
+            b"name",
+            "python_data_source",
+            b"python_data_source",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["data_source", b"data_source"]
+    ) -> typing_extensions.Literal["python_data_source"] | None: ...
+
+global___CommonInlineUserDefinedDataSource = CommonInlineUserDefinedDataSource
+
+class PythonDataSource(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    COMMAND_FIELD_NUMBER: builtins.int
+    PYTHON_VER_FIELD_NUMBER: builtins.int
+    command: builtins.bytes
+    """(Required) The encoded commands of the Python data source."""
+    python_ver: builtins.str
+    """(Required) Python version being used in the client."""
+    def __init__(
+        self,
+        *,
+        command: builtins.bytes = ...,
+        python_ver: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal["command", b"command", "python_ver", b"python_ver"],
+    ) -> None: ...
+
+global___PythonDataSource = PythonDataSource
+
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""
 
