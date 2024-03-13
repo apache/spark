@@ -179,6 +179,9 @@ private [util] class SparkShutdownHookManager {
       override def run(): Unit = runAll()
     }
     val priority = FileSystem.SHUTDOWN_HOOK_PRIORITY + 30
+    // The timeout property must be passed as a Java system property because this
+    // is initialized before Spark configurations are registered as system
+    // properties later in initialization.
     val timeout = new SparkConf().get(SPARK_SHUTDOWN_TIMEOUT_MS)
 
     timeout.fold {
