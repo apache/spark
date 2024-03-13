@@ -1647,7 +1647,7 @@ test_that("column functions", {
   expect_equal(result, expected_entries)
 
   # Test map_sort
-  df <- createDataFrame(list(List(map1 = as.environment(list(c = 3, a = 1, b = 2)))))
+  df <- createDataFrame(list(list(map1 = as.environment(list(c = 3, a = 1, b = 2)))))
   result <- collect(select(df, map_sort(df[[1]])))[[1]]
   expected_entries <- list(as.environment(list(a = 1, b = 2, c = 3)))
   expect_equal(result, expected_entries)
