@@ -79,7 +79,6 @@ private[connect] object ProtoUtils {
               .concat(createTruncatedByteString(size)))
         }
 
-      // TODO(SPARK-46988): should support map<xxx, msg>
       case (field: FieldDescriptor, msg: Message)
           if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && !field.isRepeated
             && msg != null =>

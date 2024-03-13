@@ -20,9 +20,10 @@ import java.util.UUID
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.streaming.{ListState, QueryInfo, StatefulProcessorHandle, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -112,10 +113,10 @@ class StatefulProcessorHandleImpl(
 
   def getHandleState: StatefulProcessorHandleState = currState
 
-  override def getValueState[T](stateName: String): ValueState[T] = {
+  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder)
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
 
@@ -132,10 +133,20 @@ class StatefulProcessorHandleImpl(
     store.removeColFamilyIfExists(stateName)
   }
 
-  override def getListState[T](stateName: String): ListState[T] = {
+  override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
       "initialization is complete")
-    val resultState = new ListStateImpl[T](store, stateName, keyEncoder)
+    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
+    resultState
+  }
+
+  override def getMapState[K, V](
+      stateName: String,
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V]): MapState[K, V] = {
+    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
+      "initialization is complete")
+    val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
   }
 }

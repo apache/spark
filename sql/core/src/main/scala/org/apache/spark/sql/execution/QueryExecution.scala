@@ -540,20 +540,31 @@ object QueryExecution {
   }
 
   /**
-   * Converts asserts, null pointer exceptions to internal errors.
+   * Marks null pointer exceptions, asserts and scala match errors as internal errors
    */
-  private[sql] def toInternalError(msg: String, e: Throwable): Throwable = e match {
-    case e @ (_: java.lang.NullPointerException | _: java.lang.AssertionError) =>
+  private[sql] def isInternalError(e: Throwable): Boolean = e match {
+    case _: java.lang.NullPointerException => true
+    case _: java.lang.AssertionError => true
+    case _: scala.MatchError => true
+    case _ => false
+  }
+
+  /**
+   * Converts marked exceptions from [[isInternalError]] to internal errors.
+   */
+  private[sql] def toInternalError(msg: String, e: Throwable): Throwable = {
+    if (isInternalError(e)) {
       SparkException.internalError(
         msg + " You hit a bug in Spark or the Spark plugins you use. Please, report this bug " +
           "to the corresponding communities or vendors, and provide the full stack trace.",
         e)
-    case e: Throwable =>
+    } else {
       e
+    }
   }
 
   /**
-   * Catches asserts, null pointer exceptions, and converts them to internal errors.
+   * Catches marked exceptions from [[isInternalError]], and converts them to internal errors.
    */
   private[sql] def withInternalError[T](msg: String)(block: => T): T = {
     try {

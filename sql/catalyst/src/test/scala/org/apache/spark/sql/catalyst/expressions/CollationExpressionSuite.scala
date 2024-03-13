@@ -23,55 +23,58 @@ import org.apache.spark.sql.types._
 
 class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("validate default collation") {
-    val collationId = CollationFactory.collationNameToId("UCS_BASIC")
+    val collationId = CollationFactory.collationNameToId("UTF8_BINARY")
     assert(collationId == 0)
-    val collateExpr = Collate(Literal("abc"), "UCS_BASIC")
+    val collateExpr = Collate(Literal("abc"), "UTF8_BINARY")
     assert(collateExpr.dataType === StringType(collationId))
     collateExpr.dataType.asInstanceOf[StringType].collationId == 0
     checkEvaluation(collateExpr, "abc")
   }
 
   test("collate against literal") {
-    val collateExpr = Collate(Literal("abc"), "UCS_BASIC_LCASE")
-    val collationId = CollationFactory.collationNameToId("UCS_BASIC_LCASE")
+    val collateExpr = Collate(Literal("abc"), "UTF8_BINARY_LCASE")
+    val collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
     assert(collateExpr.dataType == StringType(collationId))
     checkEvaluation(collateExpr, "abc")
   }
 
   test("check input types") {
-    val collateExpr = Collate(Literal("abc"), "UCS_BASIC")
+    val collateExpr = Collate(Literal("abc"), "UTF8_BINARY")
     assert(collateExpr.checkInputDataTypes().isSuccess)
 
     val collateExprExplicitDefault =
-      Collate(Literal.create("abc", StringType(0)), "UCS_BASIC")
+      Collate(Literal.create("abc", StringType(0)), "UTF8_BINARY")
     assert(collateExprExplicitDefault.checkInputDataTypes().isSuccess)
 
     val collateExprExplicitNonDefault =
-      Collate(Literal.create("abc", StringType(1)), "UCS_BASIC")
+      Collate(Literal.create("abc", StringType(1)), "UTF8_BINARY")
     assert(collateExprExplicitNonDefault.checkInputDataTypes().isSuccess)
 
-    val collateOnNull = Collate(Literal.create(null, StringType(1)), "UCS_BASIC")
+    val collateOnNull = Collate(Literal.create(null, StringType(1)), "UTF8_BINARY")
     assert(collateOnNull.checkInputDataTypes().isSuccess)
 
-    val collateOnInt = Collate(Literal(1), "UCS_BASIC")
+    val collateOnInt = Collate(Literal(1), "UTF8_BINARY")
     assert(collateOnInt.checkInputDataTypes().isFailure)
   }
 
   test("collate on non existing collation") {
     checkError(
-      exception = intercept[SparkException] { Collate(Literal("abc"), "UCS_BASIS") },
+      exception = intercept[SparkException] { Collate(Literal("abc"), "UTF8_BS") },
       errorClass = "COLLATION_INVALID_NAME",
       sqlState = "42704",
-      parameters = Map("proposal" -> "UCS_BASIC", "collationName" -> "UCS_BASIS"))
+      parameters = Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
   }
 
   test("collation on non-explicit default collation") {
-    checkEvaluation(Collation(Literal("abc")).replacement, "UCS_BASIC")
+    checkEvaluation(Collation(Literal("abc")).replacement, "UTF8_BINARY")
   }
 
   test("collation on explicitly collated string") {
-    checkEvaluation(Collation(Literal.create("abc", StringType(1))).replacement, "UCS_BASIC_LCASE")
     checkEvaluation(
-      Collation(Collate(Literal("abc"), "UCS_BASIC_LCASE")).replacement, "UCS_BASIC_LCASE")
+      Collation(Literal.create("abc", StringType(1))).replacement,
+      "UTF8_BINARY_LCASE")
+    checkEvaluation(
+      Collation(Collate(Literal("abc"), "UTF8_BINARY_LCASE")).replacement,
+      "UTF8_BINARY_LCASE")
   }
 }

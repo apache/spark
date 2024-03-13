@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
+import java.time.LocalDateTime
 import java.util.Properties
 
 import org.scalatest.time.SpanSugar._
@@ -29,30 +30,16 @@ import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.6.0a):
+ * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.8.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.6.0a
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.8.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.DB2IntegrationSuite"
  * }}}
  */
 @DockerTest
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.6.0a")
-    override val env = Map(
-      "DB2INST1_PASSWORD" -> "rootpass",
-      "LICENSE" -> "accept",
-      "DBNAME" -> "foo",
-      "ARCHIVE_LOGS" -> "false",
-      "AUTOCONFIG" -> "false"
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 50000
-    override val privileged = true
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
-  }
+  override val db = new DB2DatabaseOnDocker
 
   override val connectionTimeout = timeout(3.minutes)
 
@@ -237,5 +224,18 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .collect()
 
     assert(actual === expected)
+  }
+
+  test("SPARK-47342:gi Support TimestampNTZ for DB2 TIMESTAMP WITH TIME ZONE") {
+    // The test only covers TIMESTAMP WITHOUT TIME ZONE so far, we shall support
+    // TIMESTAMP WITH TIME ZONE but I don't figure it out to mock a TSTZ value.
+    withDefaultTimeZone(UTC) {
+      val df = spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("preferTimestampNTZ", "true")
+        .option("query", "select ts from dates")
+        .load()
+      checkAnswer(df, Row(LocalDateTime.of(2009, 2, 13, 23, 31, 30)))
+    }
   }
 }
