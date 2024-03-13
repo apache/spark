@@ -55,9 +55,6 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 
   override def hashCode(): Int = collationId.hashCode()
 
-  override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isDefaultCollation
-
   /**
    * The default size of a value of the StringType is 20 bytes.
    */
@@ -74,6 +71,8 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 @Stable
 case object StringType extends StringType(0) {
   def apply(collationId: Int): StringType = new StringType(collationId)
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isDefaultCollation
 }
 
 /**

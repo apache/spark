@@ -703,7 +703,7 @@ abstract class TypeCoercionBase {
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
-          case (expr: Expression, st2: StringType) if expr.dataType.isInstanceOf[StringType] => expr
+          case (expr: Expression, StringType) if expr.dataType.isInstanceOf[StringType] => expr
           // If we cannot do the implicit cast, just use the original input.
           case (in, expected) => implicitCast(in, expected).getOrElse(in)
         }
