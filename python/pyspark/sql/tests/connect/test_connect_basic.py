@@ -954,8 +954,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             cdf = self.connect.createDataFrame(data)
             sdf = self.spark.createDataFrame(data)
 
-            # TODO: the nullability is different, need to fix
-            # self.assertEqual(cdf.schema, sdf.schema)
+            self.assertEqual(cdf.schema, sdf.schema)
             self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_timestampe_create_from_rows(self):
