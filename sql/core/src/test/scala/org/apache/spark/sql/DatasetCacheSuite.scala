@@ -151,7 +151,7 @@ class DatasetCacheSuite extends QueryTest
     assert(parentDs.queryExecution.computeCacheStateSignature()
       .sameElements(Array(false, false, true, false, false, false)))
     assertCached(parentDs)
-    
+
     // The child ds is un-persisted so the same is parent ds
     childDs.unpersist()
     assert(childDs.queryExecution.computeCacheStateSignature()
@@ -160,7 +160,7 @@ class DatasetCacheSuite extends QueryTest
     assert(parentDs.queryExecution.computeCacheStateSignature()
       .sameElements(Array(false, false, false, false, false, false)))
     assertNotCached(parentDs)
-    
+
     // The child ds is persisted so the same is parent ds
     childDs.cache()
     assert(childDs.queryExecution.computeCacheStateSignature()
