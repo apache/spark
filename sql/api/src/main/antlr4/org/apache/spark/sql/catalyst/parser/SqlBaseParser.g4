@@ -383,11 +383,11 @@ namespaces
     ;
 
 describeFuncName
-    : stringLit
+    : identifierReference
+    | stringLit
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
-    | identifierReference
     ;
 
 describeColName
@@ -946,7 +946,7 @@ expressionSeq
     ;
 
 booleanExpression
-    : NOT booleanExpression                                        #logicalNot
+    : (NOT | BANG) booleanExpression                               #logicalNot
     | EXISTS LEFT_PAREN query RIGHT_PAREN                          #exists
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
@@ -954,15 +954,15 @@ booleanExpression
     ;
 
 predicate
-    : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
-    | NOT? kind=IN LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
-    | NOT? kind=IN LEFT_PAREN query RIGHT_PAREN
-    | NOT? kind=RLIKE pattern=valueExpression
-    | NOT? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
-    | NOT? kind=(LIKE | ILIKE) pattern=valueExpression (ESCAPE escapeChar=stringLit)?
-    | IS NOT? kind=NULL
-    | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
-    | IS NOT? kind=DISTINCT FROM right=valueExpression
+    : not=(NOT | BANG)? kind=BETWEEN lower=valueExpression AND upper=valueExpression
+    | not=(NOT | BANG)? kind=IN LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+    | not=(NOT | BANG)? kind=IN LEFT_PAREN query RIGHT_PAREN
+    | not=(NOT | BANG)? kind=RLIKE pattern=valueExpression
+    | not=(NOT | BANG)? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
+    | not=(NOT | BANG)? kind=(LIKE | ILIKE) pattern=valueExpression (ESCAPE escapeChar=stringLit)?
+    | IS not=NOT? kind=NULL
+    | IS not=NOT? kind=(TRUE | FALSE | UNKNOWN)
+    | IS not=NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
 valueExpression

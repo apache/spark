@@ -2002,7 +2002,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   private def withPredicate(e: Expression, ctx: PredicateContext): Expression = withOrigin(ctx) {
     // Invert a predicate if it has a valid NOT clause.
-    def invertIfNotDefined(e: Expression): Expression = ctx.NOT match {
+    def invertIfNotDefined(e: Expression): Expression = ctx.not match {
       case null => e
       case not => Not(e)
     }
@@ -2045,7 +2045,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
               // So we use LikeAny or NotLikeAny instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
               val (expr, pat) = lowerLikeArgsIfNeeded(e, patterns)
-              ctx.NOT match {
+              ctx.not match {
                 case null => LikeAny(expr, pat)
                 case _ => NotLikeAny(expr, pat)
               }
@@ -2061,7 +2061,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
               val (expr, pat) = lowerLikeArgsIfNeeded(e, patterns)
-              ctx.NOT match {
+              ctx.not match {
                 case null => LikeAll(expr, pat)
                 case _ => NotLikeAll(expr, pat)
               }
@@ -2085,23 +2085,23 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         }
       case SqlBaseParser.RLIKE =>
         invertIfNotDefined(RLike(e, expression(ctx.pattern)))
-      case SqlBaseParser.NULL if ctx.NOT != null =>
+      case SqlBaseParser.NULL if ctx.not != null =>
         IsNotNull(e)
       case SqlBaseParser.NULL =>
         IsNull(e)
-      case SqlBaseParser.TRUE => ctx.NOT match {
+      case SqlBaseParser.TRUE => ctx.not match {
         case null => EqualNullSafe(e, Literal(true))
         case _ => Not(EqualNullSafe(e, Literal(true)))
       }
-      case SqlBaseParser.FALSE => ctx.NOT match {
+      case SqlBaseParser.FALSE => ctx.not match {
         case null => EqualNullSafe(e, Literal(false))
         case _ => Not(EqualNullSafe(e, Literal(false)))
       }
-      case SqlBaseParser.UNKNOWN => ctx.NOT match {
+      case SqlBaseParser.UNKNOWN => ctx.not match {
         case null => IsUnknown(e)
         case _ => IsNotUnknown(e)
       }
-      case SqlBaseParser.DISTINCT if ctx.NOT != null =>
+      case SqlBaseParser.DISTINCT if ctx.not != null =>
         EqualNullSafe(e, expression(ctx.right))
       case SqlBaseParser.DISTINCT =>
         Not(EqualNullSafe(e, expression(ctx.right)))
