@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PartitionMetricsCollector, PartitionMetricsWriteInfo, PhysicalWriteInfoImpl, SparkListenerSQLPartitionMetrics, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -399,6 +399,20 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
       logInfo(s"Data source write support $batchWrite is committing.")
       batchWrite.commit(messages)
       logInfo(s"Data source write support $batchWrite committed.")
+
+      // Post the partition metrics for batch writers that support collection
+      batchWrite match {
+        case collector: PartitionMetricsCollector =>
+          // Collect the metrics
+          val metrics = new PartitionMetricsWriteInfo()
+          collector.partitionMetrics(metrics, messages)
+
+          // Post them to the listener bus
+          val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+          sparkContext.listenerBus.post(SparkListenerSQLPartitionMetrics(executionId.toLong, metrics))
+        case _ =>
+      }
+
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
       case cause: Throwable =>
