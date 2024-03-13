@@ -46,14 +46,15 @@ import org.apache.logging.log4j.core.config.builder.api.ConfigurationBuilderFact
 import org.eclipse.jetty.server.Handler
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.handler.DefaultHandler
-import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.server.handler.ResourceHandler
+import org.eclipse.jetty.util.resource.ResourceFactory
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{SparkTestUtils, Utils}
+
 
 /**
  * Utilities for tests. Included in main codebase since it's used by multiple
@@ -335,9 +336,9 @@ private[spark] object TestUtils extends SparkTestUtils {
     // 0 as port means choosing randomly from the available ports
     val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName(), 0))
     val resHandler = new ResourceHandler()
-    resHandler.setResourceBase(resBaseDir)
-    val handlers = new HandlerList()
-    handlers.setHandlers(Array[Handler](resHandler, new DefaultHandler()))
+    resHandler.setBaseResource(ResourceFactory.of(resHandler).newResource(resBaseDir))
+    val handlers = new Handler.Sequence;
+    handlers.setHandlers(resHandler, new DefaultHandler())
     server.setHandler(handlers)
     server.start()
     try {

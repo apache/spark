@@ -25,7 +25,7 @@ import scala.io.Source
 
 import jakarta.servlet._
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.eclipse.jetty.ee10.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.concurrent.Eventually._
@@ -358,20 +358,8 @@ class UISuite extends SparkFunSuite {
     val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
     try {
       val serverAddr = s"http://$localhost:${serverInfo.boundPort}"
-
-      val (_, ctx) = newContext("/ctx1")
-      serverInfo.addHandler(ctx, securityMgr)
-
       val redirect = JettyUtils.createRedirectHandler("/src", "/dst")
       serverInfo.addHandler(redirect, securityMgr)
-
-      // Test Jetty's built-in redirect to add the trailing slash to the context path.
-      TestUtils.withHttpConnection(new URL(s"$serverAddr/ctx1")) { conn =>
-        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
-        val location = Option(conn.getHeaderFields().get("Location"))
-          .map(_.get(0)).orNull
-        assert(location === s"$proxyRoot/ctx1/")
-      }
 
       // Test with a URL handled by the added redirect handler, and also including a path prefix.
       val headers = Seq("X-Forwarded-Context" -> "/prefix")
@@ -398,8 +386,8 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-45522: Jetty 10 and above shouuld return status code 302 with correct redirect url" +
-    " when request URL ends with a context path without trailing '/'") {
+  test("SPARK-34449: Jetty 9.4.35.v20201120 and later no longer return status code 302 " +
+    " and handle internally when request URL ends with a context path without trailing '/'") {
     val proxyRoot = "https://proxy.example.com:443/prefix"
     val (conf, securityMgr, sslOptions) = sslDisabledConf()
     conf.set(UI.PROXY_REDIRECT_URI, proxyRoot)
@@ -412,10 +400,9 @@ class UISuite extends SparkFunSuite {
 
       assert(TestUtils.httpResponseCode(new URL(urlStr + "/")) === HttpServletResponse.SC_OK)
 
-      // In the case of trailing slash,
-      // 302 should be return and the redirect URL shouuld be part of the header.
-      assert(TestUtils.redirectUrl(new URL(urlStr)) === proxyRoot + "/ctx/");
-      assert(TestUtils.httpResponseCode(new URL(urlStr)) === HttpServletResponse.SC_FOUND)
+      // If the following assertion fails when we upgrade Jetty, it seems to change the behavior of
+      // handling context path which doesn't have the trailing slash.
+      assert(TestUtils.httpResponseCode(new URL(urlStr)) === HttpServletResponse.SC_OK)
     } finally {
       stopServer(serverInfo)
     }

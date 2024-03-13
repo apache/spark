@@ -63,7 +63,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
 import org.apache.logging.log4j.core.config.LoggerConfig
-import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
 
 import org.apache.spark._
@@ -2198,8 +2197,6 @@ private[spark] object Utils
           return true
         }
         isBindCollision(e.getCause)
-      case e: MultiException =>
-        e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
         (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
           isBindCollision(e.getCause)

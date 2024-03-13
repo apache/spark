@@ -154,7 +154,7 @@ public class ThriftHttpServlet extends TServlet {
       SessionManager.setUserName(clientUserName);
 
       // find proxy user if any from query param
-      String doAsQueryParam = getDoAsQueryParam(request.getQueryString());
+      String doAsQueryParam = getDoAsQueryParam(request);
       if (doAsQueryParam != null) {
         SessionManager.setProxyUserName(doAsQueryParam);
       }
@@ -542,14 +542,8 @@ public class ThriftHttpServlet extends TServlet {
     return authType.equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString());
   }
 
-  private static String getDoAsQueryParam(String queryString) {
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("URL query string:" + queryString);
-    }
-    if (queryString == null) {
-      return null;
-    }
-    Map<String, String[]> params = jakarta.servlet.http.HttpUtils.parseQueryString( queryString );
+  private static String getDoAsQueryParam(HttpServletRequest request) {
+    Map<String, String[]> params = request.getParameterMap();
     Set<String> keySet = params.keySet();
     for (String key: keySet) {
       if (key.equalsIgnoreCase("doAs")) {

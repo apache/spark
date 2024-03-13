@@ -26,7 +26,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, Removal
 import com.google.common.util.concurrent.UncheckedExecutionException
 import jakarta.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.servlet.FilterHolder
+import org.eclipse.jetty.ee10.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.Source
