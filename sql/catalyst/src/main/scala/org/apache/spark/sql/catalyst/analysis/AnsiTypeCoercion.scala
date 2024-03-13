@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{castStringType, hasStringType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -154,17 +153,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     }
   }
 
-  override def findWiderCommonType(exprs: Seq[Expression],
-                                   failOnIndeterminate: Boolean = false): Option[DataType] = {
-    (if (exprs.map(_.dataType).filter(hasStringType).distinct.size > 1) {
-      val collationId = CollationTypeCasts.getOutputCollation(exprs, failOnIndeterminate)
-      exprs.map(e =>
-        if (hasStringType(e.dataType)) {
-          castStringType(e.dataType, collationId)
-          e
-        }
-        else e)
-    } else exprs).map(_.dataType).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
+  override def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
+    types.foldLeft[Option[DataType]](Some(NullType))((r, c) =>
       r match {
         case Some(d) => findWiderTypeForTwo(d, c)
         case _ => None

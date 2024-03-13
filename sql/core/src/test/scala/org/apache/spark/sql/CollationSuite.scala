@@ -628,14 +628,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         errorClass = "INDETERMINATE_COLLATION"
       )
 
-      // concat should fail on indeterminate collation
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT c1 FROM $tableName ORDER BY c1 || c3")
-        },
-        errorClass = "INDETERMINATE_COLLATION"
-      )
-
       // concat + in
       checkError(
         exception = intercept[AnalysisException] {
@@ -648,6 +640,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
       )
     }
+
+
   }
 
   test("cast of default collated string in IN expression") {

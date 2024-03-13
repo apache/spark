@@ -263,9 +263,7 @@ class StringType(AtomicType):
         return (
             " COLLATE %s" % StringType.collationNames[self.collationId]
             if self.collationId != 0 and self.collationId != -1
-            else ("INDETERMINATE_COLLATION"
-                  if self.collationId == -1
-                  else "")
+            else ("INDETERMINATE_COLLATION" if self.collationId == -1 else "")
         )
 
     @classmethod

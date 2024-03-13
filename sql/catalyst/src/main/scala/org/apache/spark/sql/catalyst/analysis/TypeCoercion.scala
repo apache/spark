@@ -65,8 +65,7 @@ abstract class TypeCoercionBase {
    * is larger than decimal, and yet decimal is more precise than double, but in
    * union we would cast the decimal into double.
    */
-  def findWiderCommonType(children: Seq[Expression],
-                          failOnIndeterminate: Boolean = false): Option[DataType]
+  def findWiderCommonType(children: Seq[DataType]): Option[DataType]
 
   /**
    * Given an expected data type, try to cast the expression and return the cast expression.
@@ -321,7 +320,7 @@ abstract class TypeCoercionBase {
       if (attrIndex >= children.head.output.length) return castedTypes.toSeq
 
       // For the attrIndex-th attribute, find the widest type
-      val widenTypeOpt = findWiderCommonType(children.map(_.output(attrIndex)))
+      val widenTypeOpt = findWiderCommonType(children.map(_.output(attrIndex).dataType))
       castedTypes.enqueue(widenTypeOpt)
       getWidestTypes(children, attrIndex + 1, castedTypes)
     }
@@ -392,7 +391,7 @@ abstract class TypeCoercionBase {
         }
 
       case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-        findWiderCommonType(i.children, failOnIndeterminate = true) match {
+        findWiderCommonType(i.children.map(_.dataType)) match {
           case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
           case None => i
         }
@@ -409,14 +408,16 @@ abstract class TypeCoercionBase {
       case e if !e.childrenResolved => e
 
       case a @ CreateArray(children, _) if !haveSameType(children.map(_.dataType)) =>
-        findWiderCommonType(children) match {
+        val types = children.map(_.dataType)
+        findWiderCommonType(types) match {
           case Some(finalDataType) => a.copy(children.map(castIfNotSameType(_, finalDataType)))
           case None => a
         }
 
       case c @ Concat(children) if children.forall(c => ArrayType.acceptsType(c.dataType)) &&
         !haveSameType(c.inputTypesForMerging) =>
-        findWiderCommonType(children) match {
+        val types = children.map(_.dataType)
+        findWiderCommonType(types) match {
           case Some(finalDataType) => Concat(children.map(castIfNotSameType(_, finalDataType)))
           case None => c
         }
@@ -431,26 +432,30 @@ abstract class TypeCoercionBase {
 
       case s @ Sequence(_, _, _, timeZoneId)
           if !haveSameType(s.coercibleChildren.map(_.dataType)) =>
-        findWiderCommonType(s.coercibleChildren) match {
+        val types = s.coercibleChildren.map(_.dataType)
+        findWiderCommonType(types) match {
           case Some(widerDataType) => s.castChildrenTo(widerDataType)
           case None => s
         }
 
       case m @ MapConcat(children) if children.forall(c => MapType.acceptsType(c.dataType)) &&
           !haveSameType(m.inputTypesForMerging) =>
-        findWiderCommonType(children) match {
+        val types = children.map(_.dataType)
+        findWiderCommonType(types) match {
           case Some(finalDataType) => MapConcat(children.map(castIfNotSameType(_, finalDataType)))
           case None => m
         }
 
       case m @ CreateMap(children, _) if m.keys.length == m.values.length &&
           (!haveSameType(m.keys.map(_.dataType)) || !haveSameType(m.values.map(_.dataType))) =>
-        val newKeys = findWiderCommonType(m.keys) match {
+        val keyTypes = m.keys.map(_.dataType)
+        val newKeys = findWiderCommonType(keyTypes) match {
           case Some(finalDataType) => m.keys.map(castIfNotSameType(_, finalDataType))
           case None => m.keys
         }
 
-        val newValues = findWiderCommonType(m.values) match {
+        val valueTypes = m.values.map(_.dataType)
+        val newValues = findWiderCommonType(valueTypes) match {
           case Some(finalDataType) => m.values.map(castIfNotSameType(_, finalDataType))
           case None => m.values
         }
@@ -465,7 +470,8 @@ abstract class TypeCoercionBase {
       // from the list. So we need to make sure the return type is deterministic and
       // compatible with every child column.
       case c @ Coalesce(es) if !haveSameType(c.inputTypesForMerging) =>
-        findWiderCommonType(es) match {
+        val types = es.map(_.dataType)
+        findWiderCommonType(types) match {
           case Some(finalDataType) =>
             Coalesce(es.map(castIfNotSameType(_, finalDataType)))
           case None =>
@@ -543,8 +549,7 @@ abstract class TypeCoercionBase {
   object CaseWhenCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case c: CaseWhen if c.childrenResolved && !haveSameType(c.inputTypesForMerging) =>
-        val maybeCommonType = findWiderCommonType(
-          c.branches.map(_._2) ++ c.elseValue)
+        val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
         maybeCommonType.map { commonType =>
           val newBranches = c.branches.map { case (condition, value) =>
             (condition, castIfNotSameType(value, commonType))
@@ -563,7 +568,7 @@ abstract class TypeCoercionBase {
       case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if !haveSameType(i.inputTypesForMerging) =>
-        findWiderCommonType(Seq(left, right)).map { widestType =>
+        findWiderTypeForTwo(left.dataType, right.dataType).map { widestType =>
           val newLeft = castIfNotSameType(left, widestType)
           val newRight = castIfNotSameType(right, widestType)
           If(pred, newLeft, newRight)
@@ -609,16 +614,7 @@ abstract class TypeCoercionBase {
           else implicitCast(e, StringType).getOrElse(e)
         }
 
-        val collationId = if (CollationTypeCasts.shouldCast(children.map(_.dataType))) {
-          // if original children had different collations we need to
-          // cast the output to the expected collation
-          CollationTypeCasts.getOutputCollation(
-            children, failOnIndeterminate = false)
-        }
-        else 0
-
-        c.copy(
-          children = newChildren.map(e => implicitCast(e, StringType(collationId)).getOrElse(e)))
+        c.copy(children = newChildren)
     }
   }
 
@@ -632,7 +628,7 @@ abstract class TypeCoercionBase {
       case m @ MapZipWith(left, right, function) if m.arguments.forall(a => a.resolved &&
           MapType.acceptsType(a.dataType)) &&
         !DataTypeUtils.sameType(m.leftKeyType, m.rightKeyType) =>
-        findWiderCommonType(Seq(m.left, m.right)) match {
+        findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
           case Some(finalKeyType) if !Cast.forceNullable(m.leftKeyType, finalKeyType) &&
               !Cast.forceNullable(m.rightKeyType, finalKeyType) =>
             val newLeft = castIfNotSameType(
@@ -777,26 +773,44 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
 
-      case s : SortOrder if s.dataType.isInstanceOf[StringType] &&
-        hasIndeterminate(s.children.map(_.dataType.asInstanceOf[StringType])) =>
-        val newChildren = collateToSingleType(s.children)
-        s.withNewChildren(newChildren)
+      case c @ (_: Concat) if shouldCast(c.children.map(_.dataType)) =>
+        val newChildren = collateToSingleType(c.children, failOnIndeterminate = false)
+        c.withNewChildren(newChildren)
 
-      case b @ BinaryComparison(left, right) if shouldCast(Seq(left.dataType, right.dataType)) =>
-        val newChildren = collateToSingleType(Seq(left, right))
-        b.withNewChildren(newChildren)
+      case e if shouldCast(e.children.map(_.dataType)) =>
+        val newChildren = collateToSingleType(e.children)
+        e.withNewChildren(newChildren)
     }
 
     def shouldCast(types: Seq[DataType]): Boolean = {
-      types.forall(_.isInstanceOf[StringType]) &&
-        types.map(t => t.asInstanceOf[StringType].collationId).distinct.length > 1
+      types.filter(hasStringType).map(dt => extractStringType(dt).collationId).distinct.size > 1
+    }
+
+    /**
+     * Whether the data type contains StringType.
+     */
+    @tailrec
+    def hasStringType(dt: DataType): Boolean = dt match {
+      case _: StringType => true
+      case ArrayType(et, _) => hasStringType(et)
+      // Add StructType if we support string promotion for struct fields in the future.
+      case _ => false
+    }
+
+    /**
+     * Extracts StringTypes from flitered hasStringType
+     */
+    private def extractStringType(dt: DataType): StringType = dt match {
+      case st: StringType => st
+      case ArrayType(et, _) => et.asInstanceOf[StringType]
     }
 
     /**
      *  Collates the input expressions to a single collation.
      */
-    def collateToSingleType(exprs: Seq[Expression]): Seq[Expression] = {
-      val collationId = getOutputCollation(exprs)
+    def collateToSingleType(exprs: Seq[Expression],
+                            failOnIndeterminate: Boolean = true): Seq[Expression] = {
+      val collationId = getOutputCollation(exprs, failOnIndeterminate)
 
       exprs.map { expression =>
         expression.dataType match {
@@ -804,6 +818,11 @@ abstract class TypeCoercionBase {
             expression
           case _: StringType =>
             Cast(expression, StringType(collationId))
+          case at: ArrayType if at.elementType.isInstanceOf[StringType]
+            && at.elementType.asInstanceOf[StringType].collationId != collationId =>
+            Cast(expression, ArrayType(StringType(collationId), at.containsNull))
+          case at: ArrayType if at.elementType.isInstanceOf[StringType] =>
+            expression
         }
       }
     }
@@ -814,7 +833,7 @@ abstract class TypeCoercionBase {
      */
     def getOutputCollation(exprs: Seq[Expression], failOnIndeterminate: Boolean = true): Int = {
       val explicitTypes = exprs.filter(hasExplicitCollation)
-        .map(_.dataType.asInstanceOf[StringType].collationId).distinct
+        .map(e => extractStringType(e.dataType).collationId).distinct
 
       explicitTypes.size match {
         case 1 => explicitTypes.head
@@ -824,7 +843,7 @@ abstract class TypeCoercionBase {
               explicitTypes.map(t => StringType(t).typeName)
             )
         case 0 =>
-          val dataTypes = exprs.map(_.dataType.asInstanceOf[StringType])
+          val dataTypes = exprs.map(e => extractStringType(e.dataType))
 
           if (hasIndeterminate(dataTypes)) {
             if (failOnIndeterminate) {
@@ -848,22 +867,18 @@ abstract class TypeCoercionBase {
       }
     }
 
-    private def hasIndeterminate(dataTypes: Seq[StringType]): Boolean =
-      dataTypes.exists(_.isIndeterminateCollation)
+    private def hasIndeterminate(dataTypes: Seq[DataType]): Boolean =
+      dataTypes.exists(dt => dt.isInstanceOf[StringType]
+        && dt.asInstanceOf[StringType].isIndeterminateCollation)
 
 
     private def hasMultipleImplicits(dataTypes: Seq[StringType]): Boolean =
-      dataTypes.filter(!_.isDefaultCollation).distinct.size > 1
+      dataTypes.filter(!_.isDefaultCollation).map(_.collationId).distinct.size > 1
 
     private def hasExplicitCollation(expression: Expression): Boolean = {
-      if (!expression.dataType.isInstanceOf[StringType]) {
-        false
-      }
-      else {
-        expression match {
-          case _: Collate => true
-          case _ => expression.children.exists(hasExplicitCollation)
-        }
+      expression match {
+        case _: Collate => true
+        case _ => expression.children.exists(hasExplicitCollation)
       }
     }
   }
@@ -1048,19 +1063,13 @@ object TypeCoercion extends TypeCoercionBase {
       .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwo))
   }
 
-  override def findWiderCommonType(exprs: Seq[Expression],
-                                   failOnIndeterminate: Boolean = false): Option[DataType] = {
+  override def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
     // findWiderTypeForTwo doesn't satisfy the associative law, i.e. (a op b) op c may not equal
     // to a op (b op c). This is only a problem for StringType or nested StringType in ArrayType.
     // Excluding these types, findWiderTypeForTwo satisfies the associative law. For instance,
     // (TimestampType, IntegerType, StringType) should have StringType as the wider common type.
-    val (stringTypes, nonStringTypes) = exprs.map(_.dataType).partition(hasStringType)
-    (if (stringTypes.distinct.size > 1) {
-      val collationId = CollationTypeCasts.getOutputCollation(exprs, failOnIndeterminate)
-      stringTypes.distinct.map(castStringType(_, collationId)) ++ nonStringTypes
-    }
-    else stringTypes.distinct ++ nonStringTypes)
-      .foldLeft[Option[DataType]](Some(NullType))((r, c) =>
+    val (stringTypes, nonStringTypes) = types.partition(hasStringType(_))
+    (stringTypes.distinct ++ nonStringTypes).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
       r match {
         case Some(d) => findWiderTypeForTwo(d, c)
         case _ => None
@@ -1077,7 +1086,7 @@ object TypeCoercion extends TypeCoercionBase {
     // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
     // We wrap immediately an Option after this.
     @Nullable val ret: DataType = (inType, expectedType) match {
-      case (_: StringType, st2: StringType) => st2
+      case (st1: StringType, st2: StringType) if st1 != st2 => st2
       // If the expected type is already a parent of the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => inType
 
@@ -1196,8 +1205,10 @@ object TypeCoercion extends TypeCoercionBase {
    */
   @tailrec
   def castStringType(fromType: DataType, collationId: Int): DataType = fromType match {
-    case _: StringType => implicitCast(fromType, StringType(collationId)).get
+    case _: StringType if fromType != StringType(collationId)
+    => implicitCast(fromType, StringType(collationId)).get
     case ArrayType(et, _) => castStringType(et, collationId)
+    case _ => fromType
   }
 
   /**
