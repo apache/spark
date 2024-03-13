@@ -726,15 +726,15 @@ class ClientSuite extends SparkFunSuite
           new YarnClientApplication(getNewApplicationResponse, appContext),
           containerLaunchContext)
 
-        appContext.getApplicationName should be("foo-test-app")
+        appContext.getApplicationName should be ("foo-test-app")
         // flag should only work for cluster mode
-        if (deployMode=="cluster") {
+        if (deployMode == "cluster") {
           // 1Gb driver default + 500 overridden minimum default overhead
-          appContext.getResource should be(Resource.newInstance(1524L, 1))
+          appContext.getResource should be (Resource.newInstance(1524L, 1))
         } else {
           // 512 driver default (non-cluster) + 384 overhead default
           // that can't be changed in non cluster mode.
-          appContext.getResource should be(Resource.newInstance(896L, 1))
+          appContext.getResource should be (Resource.newInstance(896L, 1))
         }
       }
     }

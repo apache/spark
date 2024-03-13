@@ -788,8 +788,7 @@ class YarnAllocatorSuite extends SparkFunSuite
       val memory = defaultResource.getMemorySize
       assert(memory == (executorMemory + 500))
     } finally {
-      sparkConf
-        .remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
+      sparkConf.remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
     }
   }
 
@@ -805,10 +804,8 @@ class YarnAllocatorSuite extends SparkFunSuite
       val memory = defaultResource.getMemorySize
       assert(memory == (executorMemory + 100))
     } finally {
-      sparkConf
-        .remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
-      sparkConf
-        .remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
+      sparkConf.remove(EXECUTOR_MEMORY_OVERHEAD)
+      sparkConf.remove(EXECUTOR_MIN_MEMORY_OVERHEAD)
     }
   }
 
