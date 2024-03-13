@@ -409,7 +409,8 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
           // Post them to the listener bus
           val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-          sparkContext.listenerBus.post(SparkListenerSQLPartitionMetrics(executionId.toLong, metrics))
+          sparkContext.listenerBus.post(
+            SparkListenerSQLPartitionMetrics(executionId.toLong, metrics))
         case _ =>
       }
 
