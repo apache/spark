@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ReducibleFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -75,6 +75,23 @@ case class TransformExpression(
           reducer.isDefined || otherReducer.isDefined
         case _ => false
       }
+    }
+  }
+
+  /**
+   * Return a [[Reducer]] for this transform expression on another
+   * on the transform expression.
+   * <p>
+   * A [[Reducer]] exists for a transform expression function if it is
+   * 'reducible' on the other expression function.
+   * <p>
+   * @return reducer function or None if not reducible on the other transform expression
+   */
+  def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
+    (function, other.function) match {
+      case(e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _]) =>
+        e1.reducer(e2, numBucketsOpt, other.numBucketsOpt)
+      case _ => None
     }
   }
 

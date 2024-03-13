@@ -25,18 +25,48 @@ import scala.Option;
  * A function f_source(x) is 'reducible' on another function f_target(x) if
  * there exists a reducer function r(x) such that r(f_source(x)) = f_target(x) for all input x.
  *
+ * <p>
+ * Examples:
+ * <ul>
+ *    <li>Bucket functions
+ *    <ul>
+ *        <li>f_source(x) = bucket(4, x)</li>
+ *        <li>f_target(x) = bucket(2, x)</li>
+ *        <li>r(x) = x / 2</li>
+ *     </ul>
+ *    <li>Date functions</li>
+ *    <ul>
+ *        <li>f_source(x) = days(x)</li>
+ *        <li>f_target(x) = hours(x)</li>
+ *        <li>r(x) = x / 24</li>
+ *     </ul>
+ * </ul>
+ * @param <I> reducer function input type
+ * @param <O> reducer function output type
  * @since 4.0.0
  */
 @Evolving
-public interface ReducibleFunction<T, A> extends ScalarFunction<T> {
+public interface ReducibleFunction<I, O> {
 
     /**
      * If this function is 'reducible' on another function, return the {@link Reducer} function.
-     * @param other other function
-     * @param thisArgument argument for this function instance
-     * @param otherArgument argument for other function instance
+     * <p>
+     * Example:
+     * <ul>
+     *     <li>this_function = bucket(4, x)
+     *     <li>other function = bucket(2, x)
+     * </ul>
+     * Invoke with arguments
+     * <ul>
+     *     <li>other = bucket</li>
+     *     <li>this param = Int(4)</li>
+     *     <li>other param = Int(2)</li>
+     * </ul>
+     * @param other the other function
+     * @param thisParam param for this function
+     * @param otherParam param for the other function
      * @return a reduction function if it is reducible, none if not
      */
-    Option<Reducer<A>> reducer(ReducibleFunction<?, ?> other, Option<?> thisArgument,
-                               Option<?> otherArgument);
+    Option<Reducer<I, O>> reducer(ReducibleFunction<?, ?> other, Option<?> thisParam,
+                               Option<?> otherParam);
 }
