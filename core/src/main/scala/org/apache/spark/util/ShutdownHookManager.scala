@@ -19,13 +19,16 @@ package org.apache.spark.util
 
 import java.io.File
 import java.util.PriorityQueue
+import java.util.concurrent.TimeUnit
+
 import scala.util.Try
+
 import org.apache.hadoop.fs.FileSystem
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SPARK_SHUTDOWN_TIMEOUT_MS
 
-import java.util.concurrent.TimeUnit
 
 /**
  * Various utility methods used by Spark.
