@@ -413,19 +413,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("test concurrently generating collation keys") {
-    // generating ICU sort keys is not thread-safe by default so this should fail
-    // if we don't handle the concurrency properly on Collator level
-
-    (0 to 10).foreach(_ => {
-      val collator = CollationFactory.fetchCollation("UNICODE").collator
-
-      (0 to 100).par.foreach { _ =>
-        collator.getCollationKey("aaa")
-      }
-    })
-  }
-
   test("text writing to parquet with collation enclosed with backticks") {
     withTempPath{ path =>
       sql(s"select 'a' COLLATE `UNICODE`").write.parquet(path.getAbsolutePath)
