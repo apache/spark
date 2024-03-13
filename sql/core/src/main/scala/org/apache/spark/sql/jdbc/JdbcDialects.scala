@@ -92,10 +92,16 @@ abstract class JdbcDialect extends Serializable with Logging {
    *
    * Guidelines for mapping database defined timestamps to Spark SQL timestamps:
    * <ul>
-   *   <li>TIMESTAMP WITHOUT TIME ZONE if preferTimestampNTZ -> [[TimestampNTZType]]</li>
-   *   <li>TIMESTAMP WITHOUT TIME ZONE if !preferTimestampNTZ -> [[TimestampType]](LTZ)</li>
-   *   <li>TIMESTAMP WITH TIME ZONE -> [[TimestampType]](LTZ)</li>
-   *   <li>TIMESTAMP WITH LOCAL TIME ZONE -> [[TimestampType]](LTZ)</li>
+   *   <li>
+   *     TIMESTAMP WITHOUT TIME ZONE if preferTimestampNTZ ->
+   *     [[org.apache.spark.sql.types.TimestampNTZType]]
+   *   </li>
+   *   <li>
+   *     TIMESTAMP WITHOUT TIME ZONE if !preferTimestampNTZ ->
+   *     [[org.apache.spark.sql.types.TimestampType]](LTZ)
+   *   </li>
+   *   <li>TIMESTAMP WITH TIME ZONE -> [[org.apache.spark.sql.types.TimestampType]](LTZ)</li>
+   *   <li>TIMESTAMP WITH LOCAL TIME ZONE -> [[org.apache.spark.sql.types.TimestampType]](LTZ)</li>
    *   <li>
    *     If the TIMESTAMP cannot be distinguished by `sqlType` and `typeName`, preferTimestampNTZ
    *     is respected for now, but we may need to add another option in the future if necessary.
@@ -117,7 +123,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    *           <ul>
    *             <li>
    *               `isTimestampNTZ`: Whether read a TIMESTAMP WITHOUT TIME ZONE value as
-   *               [[TimestampNTZType]] or not. This is configured by
+   *               [[org.apache.spark.sql.types.TimestampNTZType]] or not. This is configured by
    *               [[JDBCOptions.preferTimestampNTZ]]
    *             </li>
    *             <li>
