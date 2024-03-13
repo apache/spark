@@ -665,8 +665,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {
     Dataset[U](
       sparkSession,
-      // The last K type is only to silence compiler error
-      TransformWithState[K, V, U, K](
+      TransformWithState[K, V, U](
         groupingAttributes,
         dataAttributes,
         statefulProcessor,

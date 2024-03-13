@@ -570,7 +570,7 @@ case class FlatMapGroupsWithState(
 }
 
 object TransformWithState {
-  def apply[K: Encoder, V: Encoder, U: Encoder, S: Encoder](
+  def apply[K: Encoder, V: Encoder, U: Encoder](
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       statefulProcessor: StatefulProcessor[K, V, U],
@@ -595,7 +595,7 @@ object TransformWithState {
       initialStateDataAttrs = dataAttributes,
       initialStateDeserializer =
         UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
-      initialState = LocalRelation(encoderFor[S].schema) // empty data set
+      initialState = LocalRelation(encoderFor[K].schema) // empty data set
     )
     CatalystSerde.serialize[U](mapped)
   }

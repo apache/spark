@@ -93,9 +93,10 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
 }
 
 /**
- * Similar usage as StatefulProcessor. Represents the arbitrary stateful logic that needs to
- * be provided by the user to perform stateful manipulations on keyed streams.
+ * Stateful processor with support for specifying initial state.
  * Accepts a user-defined type as initial state to be initialized in the first batch.
+ * This can be used for starting a new streaming query with existing state from a
+ * previous streaming query.
  */
 @Experimental
 @Evolving

@@ -115,9 +115,9 @@ case class TransformWithStateExec(
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(
       groupingAttributes, getStateInfo, conf) ::
-      StatefulOperatorPartitioning.getCompatibleDistribution(
-        initialStateGroupingAttrs, getStateInfo, conf) ::
-      Nil
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      initialStateGroupingAttrs, getStateInfo, conf) ::
+    Nil
   }
 
   /**
@@ -152,8 +152,9 @@ case class TransformWithStateExec(
     mappedIterator
   }
 
-  private def processInitialStateRows(keyRow: UnsafeRow, initStateIter: Iterator[InternalRow]):
-  Unit = {
+  private def processInitialStateRows(
+      keyRow: UnsafeRow,
+      initStateIter: Iterator[InternalRow]): Unit = {
     val getKeyObj =
       ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
 
