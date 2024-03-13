@@ -117,7 +117,7 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
-  private val COLLATED_STRING_TYPE = """string\s+COLLATE\s+([\w_]+|`[\w_]`)""".r
+  private val COLLATED_STRING_TYPE = """string\s+collate\s+([\w_]+|`[\w_]`)""".r
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
