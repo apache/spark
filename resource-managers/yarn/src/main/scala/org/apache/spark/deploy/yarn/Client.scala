@@ -59,7 +59,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
 import org.apache.spark.util.ArrayImplicits._
@@ -100,7 +99,7 @@ private[spark] class Client(
     if (isClusterMode) {
       sparkConf.get(DRIVER_MIN_MEMORY_OVERHEAD)
     } else {
-      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB
+      384L
     }
 
   private val amMemoryOverhead = {

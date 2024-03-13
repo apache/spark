@@ -460,7 +460,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test(s"SPARK-38194: memory overhead factor precendence") {
     // Choose an executor memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
     val defaultFactor = EXECUTOR_MEMORY_OVERHEAD_FACTOR.defaultValue.get
-    val executorMem = ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / defaultFactor * 2
+    val executorMem = EXECUTOR_MIN_MEMORY_OVERHEAD.defaultValue.get / defaultFactor * 2
 
     // main app resource, overhead factor
     val sparkConf = new SparkConf(false)
@@ -487,7 +487,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test(s"SPARK-38194: old memory factor settings is applied if new one isn't given") {
     // Choose an executor memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
     val defaultFactor = EXECUTOR_MEMORY_OVERHEAD_FACTOR.defaultValue.get
-    val executorMem = ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / defaultFactor * 2
+    val executorMem = EXECUTOR_MIN_MEMORY_OVERHEAD.defaultValue.get / defaultFactor * 2
 
     // main app resource, overhead factor
     val sparkConf = new SparkConf(false)

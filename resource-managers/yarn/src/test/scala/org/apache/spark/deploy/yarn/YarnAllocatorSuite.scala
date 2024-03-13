@@ -731,6 +731,7 @@ class YarnAllocatorSuite extends SparkFunSuite
     val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
     val offHeapMemoryInMB = 1024L
     val offHeapMemoryInByte = offHeapMemoryInMB * 1024 * 1024
+    val clientModeMinOffHeapMemory = 384L
     try {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, true)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, offHeapMemoryInByte)
@@ -739,7 +740,7 @@ class YarnAllocatorSuite extends SparkFunSuite
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
       val memory = defaultResource.getMemorySize
       assert(memory ==
-        executorMemory + offHeapMemoryInMB + ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)
+        executorMemory + offHeapMemoryInMB + clientModeMinOffHeapMemory)
     } finally {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
