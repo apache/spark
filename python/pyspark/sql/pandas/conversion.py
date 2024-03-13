@@ -264,8 +264,7 @@ class PandasConversionMixin:
 
         self_destruct = jconf.arrowPySparkSelfDestructEnabled()
         batches = self._collect_as_arrow(
-            split_batches=self_destruct,
-            empty_list_if_zero_records=False
+            split_batches=self_destruct, empty_list_if_zero_records=False
         )
         table = pa.Table.from_batches(batches)
         # Ensure only the table has a reference to the batches, so that
@@ -343,7 +342,7 @@ class PandasConversionMixin:
         batches = results[:-1]
         batch_order = results[-1]
 
-        if len(batches) or empty_list_if_zero_records: 
+        if len(batches) or empty_list_if_zero_records:
             # Re-order the batch list using the correct order
             return [batches[i] for i in batch_order]
         else:
