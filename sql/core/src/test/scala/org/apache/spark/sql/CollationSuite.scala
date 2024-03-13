@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
-import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParallelizable
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
