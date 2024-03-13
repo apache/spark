@@ -274,7 +274,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     }
   }
 
-
   Seq("append", "complete").foreach { mode =>
     test(s"data source stream write - $mode mode") {
       assume(shouldTestPandasUDFs)

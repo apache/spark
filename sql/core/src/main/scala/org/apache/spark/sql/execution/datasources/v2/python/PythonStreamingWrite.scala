@@ -48,7 +48,7 @@ class PythonStreamingWrite(
       info.schema(),
       info.options(),
       isTruncate,
-      true)
+      isStreaming = true)
 
     pythonDataSourceWriter = writeInfo.writer
 

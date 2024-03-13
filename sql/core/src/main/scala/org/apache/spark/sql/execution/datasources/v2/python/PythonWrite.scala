@@ -61,7 +61,7 @@ class PythonBatchWrite(
       info.schema(),
       info.options(),
       isTruncate,
-      false)
+      isStreaming = false)
 
     pythonDataSourceWriter = writeInfo.writer
 
