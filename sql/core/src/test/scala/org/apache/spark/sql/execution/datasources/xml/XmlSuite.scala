@@ -39,6 +39,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{DebugFilesystem, SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -1381,6 +1382,23 @@ class XmlSuite
     val df3 = df2.select(col("fromXML.*"))
     assert(df3.collect().length === 3)
     checkAnswer(df3, df)
+  }
+
+  test("to_xml: input must be struct data type") {
+    val df = Seq(1, 2).toDF("value")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_xml($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"to_xml(value)\"",
+        "paramIndex" -> ordinalNumber(0),
+        "inputSql" -> "\"value\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(fragment = "to_xml", getCurrentClassCallSitePattern)
+    )
   }
 
   test("decimals with scale greater than precision") {
