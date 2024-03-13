@@ -46,6 +46,7 @@ class CatalogManager(
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
+
   // TODO: create a real SYSTEM catalog to host `TempVariableManager` under the SESSION namespace.
   val tempVariableManager: TempVariableManager = new TempVariableManager
 
