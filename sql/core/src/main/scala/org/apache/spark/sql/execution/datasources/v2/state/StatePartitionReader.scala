@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderType, PrefixKeyScanStateEncoderType, ReadStateStore, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -77,9 +77,16 @@ class StatePartitionReader(
       stateStoreMetadata.head.numColsPrefixKey
     }
 
+    val keyStateEncoderType = if (numColsPrefixKey > 0) {
+      PrefixKeyScanStateEncoderType
+    } else {
+      NoPrefixKeyStateEncoderType
+    }
+
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, numColsPrefixKey,
-      useColumnFamilies = false, storeConf, hadoopConf.value, useMultipleValuesPerKey = false)
+      useColumnFamilies = false, storeConf, hadoopConf.value,
+      useMultipleValuesPerKey = false, keyStateEncoderType)
   }
 
   private lazy val store: ReadStateStore = {

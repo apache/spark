@@ -48,6 +48,7 @@ package object state {
         storeUpdateFunction)
     }
 
+    // scalastyle:off
     /** Map each partition of an RDD along with data in a [[StateStore]]. */
     def mapPartitionsWithStateStore[U: ClassTag](
         stateInfo: StatefulOperatorStateInfo,
@@ -58,7 +59,8 @@ package object state {
         storeCoordinator: Option[StateStoreCoordinatorRef],
         useColumnFamilies: Boolean = false,
         extraOptions: Map[String, String] = Map.empty,
-        useMultipleValuesPerKey: Boolean = false)(
+        useMultipleValuesPerKey: Boolean = false,
+        keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
@@ -84,8 +86,10 @@ package object state {
         storeCoordinator,
         useColumnFamilies,
         extraOptions,
-        useMultipleValuesPerKey)
+        useMultipleValuesPerKey,
+        keyStateEncoderType)
     }
+    // scalastyle:on
 
     /** Map each partition of an RDD along with data in a [[ReadStateStore]]. */
     private[streaming] def mapPartitionsWithReadStateStore[U: ClassTag](
@@ -96,7 +100,8 @@ package object state {
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef],
         useColumnFamilies: Boolean = false,
-        extraOptions: Map[String, String] = Map.empty)(
+        extraOptions: Map[String, String] = Map.empty,
+        keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType)(
         storeReadFn: (ReadStateStore, Iterator[T]) => Iterator[U])
       : ReadStateStoreRDD[T, U] = {
 
@@ -121,7 +126,8 @@ package object state {
         sessionState,
         storeCoordinator,
         useColumnFamilies,
-        extraOptions)
+        extraOptions,
+        keyStateEncoderType = keyStateEncoderType)
     }
   }
 }

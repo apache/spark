@@ -205,7 +205,8 @@ case class TransformWithStateExec(
             useColumnFamilies = true,
             storeConf = storeConf,
             hadoopConf = broadcastedHadoopConf.value,
-            useMultipleValuesPerKey = true)
+            useMultipleValuesPerKey = true,
+            keyStateEncoderType = NoPrefixKeyStateEncoderType)
 
           val store = stateStoreProvider.getStore(0)
           val outputIterator = processData(store, iter)

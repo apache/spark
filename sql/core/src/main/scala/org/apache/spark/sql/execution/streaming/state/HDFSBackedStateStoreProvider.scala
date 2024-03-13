@@ -122,6 +122,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def createColFamilyIfAbsent(
         colFamilyName: String,
+        keyStateEncoderType: KeyStateEncoderType,
         keySchema: StructType,
         numColsPrefixKey: Int,
         valueSchema: StructType,
@@ -287,7 +288,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -302,6 +304,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     if (useMultipleValuesPerKey) {
       throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
+    }
+
+    if (keyStateEncoderType == RangeKeyScanStateEncoderType) {
+      throw StateStoreErrors.unsupportedOperationException("range key scan", providerName)
+    }
+
+    if (keyStateEncoderType == NoPrefixKeyStateEncoderType && numColsPrefixKey > 0) {
+      throw StateStoreErrors.unsupportedOperationException("incorrect encoder type for prefix scan",
+        providerName)
     }
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||

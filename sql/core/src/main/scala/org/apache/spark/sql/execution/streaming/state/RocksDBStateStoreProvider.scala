@@ -50,6 +50,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def createColFamilyIfAbsent(
         colFamilyName: String,
+        keyStateEncoderType: KeyStateEncoderType,
         keySchema: StructType,
         numColsPrefixKey: Int,
         valueSchema: StructType,
@@ -59,7 +60,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(useColumnFamilies, "Column families are not supported in this store")
       rocksDB.createColFamilyIfAbsent(colFamilyName)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
+        (RocksDBStateEncoder.getKeyEncoder(keySchema, keyStateEncoderType, numColsPrefixKey),
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
@@ -266,7 +267,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -286,7 +288,7 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
+      (RocksDBStateEncoder.getKeyEncoder(keySchema, keyStateEncoderType, numColsPrefixKey),
        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
 
     rocksDB // lazy initialization

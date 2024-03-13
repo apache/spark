@@ -487,7 +487,7 @@ class SymmetricHashJoinStateManager(
         stateStoreProvider = StateStoreProvider.createAndInit(
           storeProviderId, keySchema, valueSchema, numColsPrefixKey = 0,
           useColumnFamilies = false, storeConf, hadoopConf,
-          useMultipleValuesPerKey = false)
+          useMultipleValuesPerKey = false, NoPrefixKeyStateEncoderType)
         stateStoreProvider.getStore(stateInfo.get.storeVersion)
       }
       logInfo(s"Loaded store ${store.id}")

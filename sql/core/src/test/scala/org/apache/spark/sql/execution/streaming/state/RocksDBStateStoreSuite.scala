@@ -165,7 +165,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
       if (colFamiliesEnabled) {
-        store.createColFamilyIfAbsent(testColFamily, keySchema, numColsPrefixKey = 0, valueSchema)
+        store.createColFamilyIfAbsent(testColFamily, NoPrefixKeyStateEncoderType,
+          keySchema, numColsPrefixKey = 0, valueSchema)
         val keyRow1 = dataToKeyRow("a", 0)
         val valueRow1 = dataToValueRow(1)
         store.put(keyRow1, valueRow1, colFamilyName = testColFamily)

@@ -699,7 +699,8 @@ case class SessionWindowStateStoreRestoreExec(
       stateManager.getStateValueSchema,
       numColsPrefixKey = stateManager.getNumColsForPrefixKey,
       session.sessionState,
-      Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
+      Some(session.streams.stateStoreCoordinator),
+      keyStateEncoderType = PrefixKeyScanStateEncoderType) { case (store, iter) =>
 
       // We need to filter out outdated inputs
       val filteredIterator = watermarkPredicateForDataForLateEvents match {
@@ -784,7 +785,8 @@ case class SessionWindowStateStoreSaveExec(
       stateManager.getStateValueSchema,
       numColsPrefixKey = stateManager.getNumColsForPrefixKey,
       session.sessionState,
-      Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
+      Some(session.streams.stateStoreCoordinator),
+      keyStateEncoderType = PrefixKeyScanStateEncoderType) { case (store, iter) =>
 
       val numOutputRows = longMetric("numOutputRows")
       val numRemovedStateRows = longMetric("numRemovedStateRows")

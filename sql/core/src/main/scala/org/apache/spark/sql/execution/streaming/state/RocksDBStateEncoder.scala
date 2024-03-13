@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.Platform
 sealed trait RocksDBKeyStateEncoder {
   def supportPrefixKeyScan: Boolean
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
-  def extractPrefixKey(key: UnsafeRow): UnsafeRow
+//  def extractPrefixKey(key: UnsafeRow): UnsafeRow
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
 }
@@ -41,11 +41,17 @@ sealed trait RocksDBValueStateEncoder {
 object RocksDBStateEncoder {
   def getKeyEncoder(
       keySchema: StructType,
-      numColsPrefixKey: Int): RocksDBKeyStateEncoder = {
-    if (numColsPrefixKey > 0) {
-      new PrefixKeyScanStateEncoder(keySchema, numColsPrefixKey)
-    } else {
-      new NoPrefixKeyStateEncoder(keySchema)
+      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType,
+      numColsPrefixKey: Int = 0): RocksDBKeyStateEncoder = {
+    keyStateEncoderType match {
+      case NoPrefixKeyStateEncoderType =>
+        new NoPrefixKeyStateEncoder(keySchema)
+
+      case PrefixKeyScanStateEncoderType =>
+        new PrefixKeyScanStateEncoder(keySchema, numColsPrefixKey)
+
+      case RangeKeyScanStateEncoderType =>
+        new RangeKeyScanStateEncoder(keySchema, numColsPrefixKey)
     }
   }
 
@@ -176,8 +182,110 @@ class PrefixKeyScanStateEncoder(
     restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
   }
 
-  override def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
+  private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
     prefixKeyProjection(key)
+  }
+
+  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
+    val prefixKeyEncoded = encodeUnsafeRow(prefixKey)
+    val prefix = new Array[Byte](prefixKeyEncoded.length + 4)
+    Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET, prefixKeyEncoded.length)
+    Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefix,
+      Platform.BYTE_ARRAY_OFFSET + 4, prefixKeyEncoded.length)
+    prefix
+  }
+
+  override def supportPrefixKeyScan: Boolean = true
+}
+
+/**
+ * RocksDB Key Encoder for UnsafeRow that supports range scan for fixed size fields
+ *
+ * @param keySchema - schema of the key to be encoded
+ * @param numColsPrefixKey - number of columns to be used for prefix key
+ */
+class RangeKeyScanStateEncoder(
+    keySchema: StructType,
+    numOrderingCols: Int) extends RocksDBKeyStateEncoder {
+
+  import RocksDBStateEncoder._
+
+  require(numOrderingCols <= keySchema.length, "The number of columns in the key schema " +
+    "cannot be lower than the number of ordering columns!")
+
+  private val rangeScanKeyFieldsWithIdx: Seq[(StructField, Int)] = {
+    keySchema.zipWithIndex.take(numOrderingCols)
+  }
+
+  // verify that only fixed sized columns are used for ordering
+  rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
+    if (!UnsafeRow.isFixedLength(field.dataType)) {
+      throw new IllegalArgumentException(s"Field $field at index=$idx is not of fixed length!")
+    }
+  }
+
+  private val remainingKeyFieldsWithIdx: Seq[(StructField, Int)] = {
+    keySchema.zipWithIndex.drop(numOrderingCols)
+  }
+
+  private val rangeScanKeyProjection: UnsafeProjection = {
+    val refs = rangeScanKeyFieldsWithIdx.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  private val remainingKeyProjection: UnsafeProjection = {
+    val refs = remainingKeyFieldsWithIdx.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  // This is quite simple to do - just bind sequentially, as we don't change the order.
+  private val restoreKeyProjection: UnsafeProjection = UnsafeProjection.create(keySchema)
+
+  // Reusable objects
+  private val joinedRowOnKey = new JoinedRow()
+
+  override def encodeKey(row: UnsafeRow): Array[Byte] = {
+    val rangeScanKeyEncoded = encodeUnsafeRow(extractPrefixKey(row))
+    val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
+
+    val encodedBytes = new Array[Byte](rangeScanKeyEncoded.length + remainingEncoded.length + 4)
+    Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
+    Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4, rangeScanKeyEncoded.length)
+    // NOTE: We don't put the length of remainingEncoded as we can calculate later
+    // on deserialization.
+    Platform.copyMemory(remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4 + rangeScanKeyEncoded.length,
+      remainingEncoded.length)
+
+    encodedBytes
+  }
+
+  override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
+    val prefixKeyEncodedLen = Platform.getInt(keyBytes, Platform.BYTE_ARRAY_OFFSET)
+    val prefixKeyEncoded = new Array[Byte](prefixKeyEncodedLen)
+    Platform.copyMemory(keyBytes, Platform.BYTE_ARRAY_OFFSET + 4, prefixKeyEncoded,
+      Platform.BYTE_ARRAY_OFFSET, prefixKeyEncodedLen)
+
+    // Here we calculate the remainingKeyEncodedLen leveraging the length of keyBytes
+    val remainingKeyEncodedLen = keyBytes.length - 4 - prefixKeyEncodedLen
+
+    val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
+    Platform.copyMemory(keyBytes, Platform.BYTE_ARRAY_OFFSET + 4 +
+      prefixKeyEncodedLen, remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      remainingKeyEncodedLen)
+
+    val prefixKeyDecoded = decodeToUnsafeRow(prefixKeyEncoded, numFields = numOrderingCols)
+    val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
+      numFields = keySchema.length - numOrderingCols)
+
+    restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
+  }
+
+  private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
+    rangeScanKeyProjection(key)
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
@@ -225,9 +333,9 @@ class NoPrefixKeyStateEncoder(keySchema: StructType)
 
   override def supportPrefixKeyScan: Boolean = false
 
-  override def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
-    throw new IllegalStateException("This encoder doesn't support prefix key!")
-  }
+//  override def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
+  //  throw new IllegalStateException("This encoder doesn't support prefix key!")
+//  }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")
