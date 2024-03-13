@@ -3491,6 +3491,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
+    "message" : [
+      "Failed to perform stateful processor operation=<operationType> with invalid handle state=<handleState>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE" : {
+    "message" : [
+      "Failed to perform stateful processor operation=<operationType> with invalid timeoutMode=<timeoutMode>"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
+    "message" : [
+      "Failed to create column family with unsupported starting character and name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
       "Failed to perform column family operation=<operationName> with invalid name=<colFamilyName>. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default"

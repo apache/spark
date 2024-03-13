@@ -15,37 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming;
+package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.catalyst.plans.logical.*;
+import java.io.Serializable
+
+import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
- * Represents the type of timeouts possible for the Dataset operations
- * {@code transformWithState}.
+ * Class used to provide access to expired timer's expiry time. These values
+ * are only relevant if the ExpiredTimerInfo is valid.
  */
 @Experimental
 @Evolving
-public class TimeoutMode {
+private[sql] trait ExpiredTimerInfo extends Serializable {
   /**
-   * Stateful processor that does not register timers
+   * Check if provided ExpiredTimerInfo is valid.
    */
-  public static final TimeoutMode NoTimeouts() {
-    return NoTimeouts$.MODULE$;
-  }
+  def isValid(): Boolean
 
   /**
-   * Stateful processor that only registers processing time based timers
+   * Get the expired timer's expiry time as milliseconds in epoch time.
    */
-  public static final TimeoutMode ProcessingTime() {
-    return ProcessingTime$.MODULE$;
-  }
-
-  /**
-   * Stateful processor that only registers event time based timers
-   */
-  public static final TimeoutMode EventTime() {
-    return EventTime$.MODULE$;
-  }
+  def getExpiryTimeInMs(): Long
 }
