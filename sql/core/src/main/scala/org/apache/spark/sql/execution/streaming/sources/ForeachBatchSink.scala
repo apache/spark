@@ -48,9 +48,12 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
     // from reloading state multiple times in each batch
     val isStateful = isQueryStateful(data.logicalPlan)
     if (isStateful) {
-      ds.persist()
-      callBatchWriter(ds, batchId)
-      ds.unpersist()
+      try {
+        ds.persist()
+        callBatchWriter(ds, batchId)
+      } finally {
+        ds.unpersist()
+      }
     } else {
       callBatchWriter(ds, batchId)
     }
