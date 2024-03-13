@@ -293,7 +293,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
           // Complete mode only supports stateful aggregation
           inputData.toDF()
             .groupBy("value").count()
-
         }
         def resultDf: DataFrame = spark.read.format("json")
           .load(outputDir.getAbsolutePath)
@@ -404,6 +403,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       def metadataDf: DataFrame = spark.read.format("json")
         .load(outputDir.getAbsolutePath)
 
+      // Batch 0-2 should succeed and json commit files are written.
       inputData.addData(1 to 30)
       eventually(timeout(waitTimeout)) {
         checkAnswer(metadataDf, Seq(Row(3, 30)))
@@ -420,7 +420,8 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         checkAnswer(metadataDf, Seq(Row(3, 30), Row(3, 20), Row(3, 0)))
       }
 
-      // The sink throws exception when encountering value > 50.
+      // The sink throws exception when encountering value > 50 in batch 3.
+      // The streamWriter will write error message in 3.txt during abort().
       inputData.addData(51 to 100)
       eventually(timeout(waitTimeout)) {
         checkAnswer(
@@ -481,7 +482,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
           "msg" -> ("Complete output mode not supported when there are no streaming aggregations" +
             " on streaming DataFrames/Datasets")))
 
-
+      // Query should fail in planning with "invalid" mode.
       val error2 = intercept[IllegalArgumentException] {
         runQuery("invalid")
       }
