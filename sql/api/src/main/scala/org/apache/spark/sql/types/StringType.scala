@@ -81,7 +81,7 @@ case object StringType extends StringType(0) {
  */
 case object StringTypeBinary extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = StringType
-  override private[sql] def simpleString: String = "string_binary_lcase"
+  override private[sql] def simpleString: String = "string_binary"
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isBinaryCollation
 }
@@ -98,10 +98,10 @@ case object StringTypeBinaryLcase extends AbstractDataType {
 }
 
 /**
- * Use StringTypeCollated for expressions supporting all possible collation types.
+ * Use StringTypeAnyCollation for expressions supporting all possible collation types.
  */
-case object StringTypeCollated extends AbstractDataType {
+case object StringTypeAnyCollation extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = StringType
-  override private[sql] def simpleString: String = "string_collated"
+  override private[sql] def simpleString: String = "string_any_collation"
   override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
 }
