@@ -221,7 +221,7 @@ class RocksDB(
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
         changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
           if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
-            createColFamilyIfAbsent(colFamilyName)
+            createColFamilyIfAbsent(colFamilyName, checkInternalColumnFamilies(colFamilyName))
           }
 
           recordType match {
@@ -290,7 +290,8 @@ class RocksDB(
    */
   private def verifyColFamilyCreationOrDeletion(
       operationName: String,
-      colFamilyName: String): Unit = {
+      colFamilyName: String,
+      isInternal: Boolean = false): Unit = {
     // if the state store instance does not support multiple column families, throw an exception
     if (!useColumnFamilies) {
       throw StateStoreErrors.unsupportedOperationException(operationName,
@@ -304,13 +305,25 @@ class RocksDB(
       || colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
       throw StateStoreErrors.cannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
     }
+
+    // if the column family is not internal and uses reserved characters, throw an exception
+    if (!isInternal && colFamilyName.charAt(0) == '_') {
+      throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
+    }
   }
+
+  /**
+   * Check whether the column family name is for internal column families.
+   * @param cfName - column family name
+   * @return - true if the column family is for internal use, false otherwise
+   */
+  private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
 
   /**
    * Create RocksDB column family, if not created already
    */
-  def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-    verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName)
+  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false): Unit = {
+    verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
     if (!checkColFamilyExists(colFamilyName)) {
       assert(db != null)
       val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)

@@ -14,11 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.plans.logical
+package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.streaming.TimeoutMode
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, TimeoutMode}
 
-/** Types of timeouts used in transformWithState operator */
-case object NoTimeouts extends TimeoutMode
-case object ProcessingTime extends TimeoutMode
-case object EventTime extends TimeoutMode
+/**
+ * Class that provides a concrete implementation that can be used to provide access to expired
+ * timer's expiry time. These values are only relevant if the ExpiredTimerInfo
+ * is valid.
+ * @param isValid - boolean to check if the provided ExpiredTimerInfo is valid
+ * @param expiryTimeInMsOpt - option to expired timer's expiry time as milliseconds in epoch time
+ */
+class ExpiredTimerInfoImpl(
+    isValid: Boolean,
+    expiryTimeInMsOpt: Option[Long] = None,
+    timeoutMode: TimeoutMode = TimeoutMode.NoTimeouts()) extends ExpiredTimerInfo {
+
+  override def isValid(): Boolean = isValid
+
+  override def getExpiryTimeInMs(): Long = expiryTimeInMsOpt.getOrElse(-1L)
+}

@@ -64,15 +64,18 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     } else if ("text".equalsIgnoreCase(typeName)) {
       Some(StringType) // sqlType is  Types.VARCHAR
     } else if (sqlType == Types.ARRAY) {
+      val scale = md.build().getLong("scale").toInt
+      val isTimestampNTZ = md.build().getBoolean("isTimestampNTZ")
       // postgres array type names start with underscore
-      toCatalystType(typeName.drop(1), size, md.build()).map(ArrayType(_))
+      toCatalystType(typeName.drop(1), size, scale, isTimestampNTZ).map(ArrayType(_))
     } else None
   }
 
   private def toCatalystType(
       typeName: String,
       precision: Int,
-      metadata: Metadata): Option[DataType] = typeName match {
+      scale: Int,
+      isTimestampNTZ: Boolean): Option[DataType] = typeName match {
     case "bool" => Some(BooleanType)
     case "bit" => Some(BinaryType)
     case "int2" => Some(ShortType)
@@ -88,10 +91,10 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
          "interval" | "pg_snapshot" =>
       Some(StringType)
     case "bytea" => Some(BinaryType)
-    case "timestamp" | "timestamptz" | "time" | "timetz" => Some(getTimestampType(metadata))
+    case "timestamp" | "timestamptz" | "time" | "timetz" =>
+      Some(if (isTimestampNTZ) TimestampNTZType else TimestampType)
     case "date" => Some(DateType)
-    case "numeric" | "decimal" if precision > 0 =>
-      Some(DecimalType.bounded(precision, metadata.getLong("scale").toInt))
+    case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
     case "numeric" | "decimal" =>
       // SPARK-26538: handle numeric without explicit precision and scale.
       Some(DecimalType.SYSTEM_DEFAULT)

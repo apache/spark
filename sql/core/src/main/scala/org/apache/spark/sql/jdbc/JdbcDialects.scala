@@ -89,12 +89,49 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Get the custom datatype mapping for the given jdbc meta information.
-   * @param sqlType The sql type (see java.sql.Types)
-   * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
-   * @param size The size of the type.
-   * @param md Result metadata associated with this type.
-   * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
-   *         or null if the default type mapping should be used.
+   *
+   * Guidelines for mapping database defined timestamps to Spark SQL timestamps:
+   * <ul>
+   *   <li>
+   *     TIMESTAMP WITHOUT TIME ZONE if preferTimestampNTZ ->
+   *     [[org.apache.spark.sql.types.TimestampNTZType]]
+   *   </li>
+   *   <li>
+   *     TIMESTAMP WITHOUT TIME ZONE if !preferTimestampNTZ ->
+   *     [[org.apache.spark.sql.types.TimestampType]](LTZ)
+   *   </li>
+   *   <li>TIMESTAMP WITH TIME ZONE -> [[org.apache.spark.sql.types.TimestampType]](LTZ)</li>
+   *   <li>TIMESTAMP WITH LOCAL TIME ZONE -> [[org.apache.spark.sql.types.TimestampType]](LTZ)</li>
+   *   <li>
+   *     If the TIMESTAMP cannot be distinguished by `sqlType` and `typeName`, preferTimestampNTZ
+   *     is respected for now, but we may need to add another option in the future if necessary.
+   *   </li>
+   * </ul>
+   *
+   * @param sqlType Refers to [[java.sql.Types]] constants, or other constants defined by the
+   *                target database, e.g. `-101` is Oracle's TIMESTAMP WITH TIME ZONE type.
+   *                This value is returned by [[java.sql.ResultSetMetaData#getColumnType]].
+   * @param typeName The column type name used by the database (e.g. "BIGINT UNSIGNED"). This is
+   *                 sometimes used to determine the target data type when `sqlType` is not
+   *                 sufficient if multiple database types are conflated into a single id.
+   *                 This value is returned by [[java.sql.ResultSetMetaData#getColumnTypeName]].
+   * @param size The size of the type, e.g. the maximum precision for numeric types, length for
+   *             character string, etc.
+   *             This value is returned by [[java.sql.ResultSetMetaData#getPrecision]].
+   * @param md Result metadata associated with this type. This contains additional information
+   *           from [[java.sql.ResultSetMetaData]] or user specified options.
+   *           <ul>
+   *             <li>
+   *               `isTimestampNTZ`: Whether read a TIMESTAMP WITHOUT TIME ZONE value as
+   *               [[org.apache.spark.sql.types.TimestampNTZType]] or not. This is configured by
+   *               `JDBCOptions.preferTimestampNTZ`.
+   *             </li>
+   *             <li>
+   *               `scale`: The length of fractional part [[java.sql.ResultSetMetaData#getScale]]
+   *             </li>
+   *            </ul>
+   * @return An option the actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
+   *         or None if the default type mapping should be used.
    */
   def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
@@ -743,13 +780,6 @@ abstract class JdbcDialect extends Serializable with Logging {
   @Since("3.5.0")
   def getFullyQualifiedQuotedTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
-  }
-
-  /**
-   * Return TimestampType/TimestampNTZType based on the metadata.
-   */
-  protected final def getTimestampType(md: Metadata): DataType = {
-    JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
   }
 }
 

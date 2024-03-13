@@ -454,9 +454,8 @@ private[parquet] class ParquetRowConverter(
         }
 
       // Allow upcasting INT32 date to timestampNTZ.
-      case TimestampNTZType if schemaConverter.isTimestampNTZEnabled() &&
-      parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
-      parquetType.getLogicalTypeAnnotation.isInstanceOf[DateLogicalTypeAnnotation] =>
+      case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
+          parquetType.getLogicalTypeAnnotation.isInstanceOf[DateLogicalTypeAnnotation] =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
             this.updater.set(DateTimeUtils.daysToMicros(dateRebaseFunc(value), ZoneOffset.UTC))
@@ -537,11 +536,10 @@ private[parquet] class ParquetRowConverter(
   // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
   // values.
   private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
-    schemaConverter.isTimestampNTZEnabled() &&
-      parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
-      parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-      !parquetType.getLogicalTypeAnnotation
-        .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
+    parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
+    parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+    !parquetType.getLogicalTypeAnnotation
+      .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.

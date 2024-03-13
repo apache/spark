@@ -40,8 +40,11 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
    * Function that will be invoked as the first method that allows for users to
    * initialize all their state variables and perform other init actions before handling data.
    * @param outputMode - output mode for the stateful processor
+   * @param timeoutMode - timeout mode for the stateful processor
    */
-  def init(outputMode: OutputMode): Unit
+  def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit
 
   /**
    * Function that will allow users to interact with input data rows along with the grouping key
@@ -50,12 +53,15 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
    * @param inputRows - iterator of input rows associated with grouping key
    * @param timerValues - instance of TimerValues that provides access to current processing/event
    *                    time if available
+   * @param expiredTimerInfo - instance of ExpiredTimerInfo that provides access to expired timer
+   *                         if applicable
    * @return - Zero or more output rows
    */
   def handleInputRows(
       key: K,
       inputRows: Iterator[I],
-      timerValues: TimerValues): Iterator[O]
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[O]
 
   /**
    * Function called as the last method that allows for users to perform

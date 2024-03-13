@@ -19,7 +19,6 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
-import java.time.LocalDateTime
 import java.util.Properties
 
 import org.scalatest.time.SpanSugar._
@@ -224,18 +223,5 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
       .collect()
 
     assert(actual === expected)
-  }
-
-  test("SPARK-47342:gi Support TimestampNTZ for DB2 TIMESTAMP WITH TIME ZONE") {
-    // The test only covers TIMESTAMP WITHOUT TIME ZONE so far, we shall support
-    // TIMESTAMP WITH TIME ZONE but I don't figure it out to mock a TSTZ value.
-    withDefaultTimeZone(UTC) {
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("preferTimestampNTZ", "true")
-        .option("query", "select ts from dates")
-        .load()
-      checkAnswer(df, Row(LocalDateTime.of(2009, 2, 13, 23, 31, 30)))
-    }
   }
 }
