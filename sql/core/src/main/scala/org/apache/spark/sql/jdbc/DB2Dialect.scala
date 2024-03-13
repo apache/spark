@@ -91,7 +91,7 @@ private object DB2Dialect extends JdbcDialect {
       typeName match {
         case "DECFLOAT" => Option(DecimalType(38, 18))
         case "XML" => Option(StringType)
-        case t if t.startsWith("TIMESTAMP") => Option(getTimestampType(md.build()))
+        case t if (t.startsWith("TIMESTAMP")) => Option(TimestampType) // TIMESTAMP WITH TIMEZONE
         case _ => None
       }
     case _ => None
