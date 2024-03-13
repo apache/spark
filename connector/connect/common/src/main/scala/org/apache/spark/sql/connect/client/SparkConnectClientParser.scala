@@ -24,12 +24,12 @@ import scala.annotation.tailrec
  */
 private[sql] object SparkConnectClientParser {
 
+  // scalastyle:off line.size.limit
   /**
    * @return
    *   usage string.
    */
   def usage(): String =
-    // scalastyle:off line.size.limit
     s"""
        |Options:
        |   --remote REMOTE          URI of the Spark Connect Server to connect to.
@@ -43,7 +43,7 @@ private[sql] object SparkConnectClientParser {
        |   --session_id SESSION_ID  Session Id of the user connecting.
        |   --option KEY=VALUE       Key-value pair that is used to further configure the session.
      """.stripMargin
-     // scalastyle:on line.size.limit
+  // scalastyle:on line.size.limit
 
   /**
    * Parse the command line and configure the builder.
