@@ -26,7 +26,6 @@ import org.apache.spark.unsafe.Platform
 sealed trait RocksDBKeyStateEncoder {
   def supportPrefixKeyScan: Boolean
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
-//  def extractPrefixKey(key: UnsafeRow): UnsafeRow
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
 }
@@ -332,10 +331,6 @@ class NoPrefixKeyStateEncoder(keySchema: StructType)
   }
 
   override def supportPrefixKeyScan: Boolean = false
-
-//  override def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
-  //  throw new IllegalStateException("This encoder doesn't support prefix key!")
-//  }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")

@@ -48,6 +48,7 @@ package object state {
         storeUpdateFunction)
     }
 
+    // Disable scala style because num parameters exceeds the max limit used to enforce scala style
     // scalastyle:off
     /** Map each partition of an RDD along with data in a [[StateStore]]. */
     def mapPartitionsWithStateStore[U: ClassTag](
