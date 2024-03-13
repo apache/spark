@@ -40,6 +40,8 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * equality and hashing).
    */
   def isBinaryCollation: Boolean = CollationFactory.fetchCollation(collationId).isBinaryCollation
+  def isLowercaseCollation: Boolean =
+    CollationFactory.fetchCollation(collationId).isLowercaseCollation
 
   /**
    * Type name that is shown to the customer.
@@ -53,8 +55,6 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
     obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
 
   override def hashCode(): Int = collationId.hashCode()
-
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
 
   /**
    * The default size of a value of the StringType is 20 bytes.
@@ -70,4 +70,18 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 @Stable
 case object StringType extends StringType(0) {
   def apply(collationId: Int): StringType = new StringType(collationId)
+}
+
+case object StringTypeBinaryLowercase extends AbstractDataType {
+  override private[sql] def defaultConcreteType: DataType = StringType
+  override private[sql] def simpleString: String = "string_bin_lcase"
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].isBinaryCollation ||
+    other.asInstanceOf[StringType].isLowercaseCollation)
+}
+
+case object StringTypeCollated extends AbstractDataType {
+  override private[sql] def defaultConcreteType: DataType = StringType
+  override private[sql] def simpleString: String = "string_collated"
+  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
 }

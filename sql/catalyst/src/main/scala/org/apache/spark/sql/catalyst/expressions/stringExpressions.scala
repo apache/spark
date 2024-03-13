@@ -501,7 +501,7 @@ abstract class StringPredicate extends BinaryExpression
 
   def compare(l: UTF8String, r: UTF8String): Boolean
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeCollated, StringTypeCollated)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val checkResult = super.checkInputDataTypes()
