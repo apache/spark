@@ -22,6 +22,7 @@ import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 import javax.xml.stream.XMLStreamException
 
 import scala.collection.immutable.ArraySeq
@@ -31,12 +32,14 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException}
+import org.apache.spark.{DebugFilesystem, SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -1300,6 +1303,42 @@ class XmlSuite
     assert(result.select("decoded._corrupt_record").head().getString(0).nonEmpty)
   }
 
+  test("schema_of_xml with DROPMALFORMED parse error test") {
+    val e = intercept[AnalysisException] {
+       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
+         .collect()
+    }
+    checkError(
+      exception = e,
+      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      parameters = Map(
+        "funcName" -> "schema_of_xml",
+        "mode" -> "DROPMALFORMED",
+        "permissiveMode" -> "PERMISSIVE",
+        "failFastMode" -> FailFastMode.name)
+    )
+  }
+
+  test("schema_of_xml with FAILFAST parse error test") {
+    val e = intercept[SparkException] {
+       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
+         .collect()
+    }
+    checkError(
+      exception = e,
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map(
+        "failFastMode" -> FailFastMode.name)
+    )
+  }
+
+  test("schema_of_xml with PERMISSIVE check no error test") {
+      val s = spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'PERMISSIVE'))""")
+        .collect()
+      assert(s.head.get(0) == "STRUCT<_corrupt_record: STRING>")
+  }
+
+
   test("from_xml with PERMISSIVE parse mode with no corrupt col schema") {
     // XML contains error
     val xmlData =
@@ -1343,6 +1382,23 @@ class XmlSuite
     val df3 = df2.select(col("fromXML.*"))
     assert(df3.collect().length === 3)
     checkAnswer(df3, df)
+  }
+
+  test("to_xml: input must be struct data type") {
+    val df = Seq(1, 2).toDF("value")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_xml($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"to_xml(value)\"",
+        "paramIndex" -> ordinalNumber(0),
+        "inputSql" -> "\"value\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(fragment = "to_xml", getCurrentClassCallSitePattern)
+    )
   }
 
   test("decimals with scale greater than precision") {
@@ -2538,6 +2594,16 @@ class XmlSuite
     checkAnswer(df, Seq(Row(Row(Array(1, 2, 3), Array(1, 2)))))
   }
 
+  test("ignore commented row tags") {
+    val results = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .load(getTestResourcePath(resDir + "commented-row.xml"))
+
+    val expectedResults = Seq.range(1, 11).map(Row(_))
+    checkAnswer(results, expectedResults)
+  }
+
   test("capture values interspersed between elements - nested struct") {
     val xmlString =
       s"""
@@ -2880,5 +2946,93 @@ class XmlSuite
     checkValidation("1field", "Illegal first name character '1'")
     checkValidation("field name with space", "Illegal name character ' '")
     checkValidation("field", "", false)
+  }
+
+  test("SPARK-46355: Check Number of open files") {
+    withSQLConf("fs.file.impl" -> classOf[XmlSuiteDebugFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        val numFiles = 10
+        val numRecords = 10000
+        val data =
+          spark.sparkContext.parallelize(
+            (0 until numRecords).map(i => Row(i.toLong, (i * 2).toLong)))
+        val schema = buildSchema(field("a1", LongType), field("a2", LongType))
+        val df = spark.createDataFrame(data, schema)
+
+        // Write numFiles files
+        df.repartition(numFiles)
+          .write
+          .mode(SaveMode.Overwrite)
+          .option("rowTag", "row")
+          .xml(path)
+
+        // Serialized file read for Schema inference
+        val dfRead = spark.read
+          .option("rowTag", "row")
+          .xml(path)
+        assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
+        assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+
+        XmlSuiteDebugFileSystem.reset()
+        // Serialized file read for parsing across multiple executors
+        assert(dfRead.count() === numRecords)
+        assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
+        assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+      }
+    }
+  }
+}
+
+// Mock file system that checks the number of open files
+class XmlSuiteDebugFileSystem extends DebugFilesystem {
+
+  override def open(f: org.apache.hadoop.fs.Path, bufferSize: Int): FSDataInputStream = {
+    val wrapped: FSDataInputStream = super.open(f, bufferSize)
+    // All files should be closed before reading next one
+    XmlSuiteDebugFileSystem.open()
+    new FSDataInputStream(wrapped.getWrappedStream) {
+      override def close(): Unit = {
+        try {
+          wrapped.close()
+        } finally {
+          XmlSuiteDebugFileSystem.close()
+        }
+      }
+    }
+  }
+}
+
+object XmlSuiteDebugFileSystem {
+  private val openCounterPerThread = new ConcurrentHashMap[Long, Int]()
+  private val maxFilesPerThread = new ConcurrentHashMap[Long, Int]()
+
+  def reset() : Unit = {
+    maxFilesPerThread.clear()
+  }
+
+  def open() : Unit = {
+    val threadId = Thread.currentThread().getId
+    // assert that there are no open files for this executor
+    assert(openCounterPerThread.getOrDefault(threadId, 0) == 0)
+    openCounterPerThread.put(threadId, 1)
+    maxFilesPerThread.put(threadId, maxFilesPerThread.getOrDefault(threadId, 0) + 1)
+  }
+
+  def close(): Unit = {
+    val threadId = Thread.currentThread().getId
+    if (openCounterPerThread.get(threadId) == 1) {
+      openCounterPerThread.put(threadId, 0)
+    }
+    assert(openCounterPerThread.get(threadId) == 0)
+  }
+
+  def maxFiles() : Int = {
+    maxFilesPerThread.values().asScala.max
+  }
+
+  def totalFiles() : Int = {
+    maxFilesPerThread.values().asScala.sum
   }
 }

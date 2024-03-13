@@ -20,10 +20,10 @@ import java.io.CharArrayWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, ExprUtils, NullIntolerant, TimeZoneAwareExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DropMalformedMode, FailFastMode, FailureSafeParser, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -189,8 +189,12 @@ case class SchemaOfXml(
   private lazy val xmlFactory = xmlOptions.buildXmlFactory()
 
   @transient
-  private lazy val xmlInferSchema =
+  private lazy val xmlInferSchema = {
+    if (xmlOptions.parseMode == DropMalformedMode) {
+      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
+    }
     new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
+  }
 
   @transient
   private lazy val xml = child.eval().asInstanceOf[UTF8String]
@@ -277,15 +281,26 @@ case class StructsToXml(
       child = child,
       timeZoneId = None)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    child.dataType match {
+      case _: StructType => TypeCheckSuccess
+      case _ => DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(StructType),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)
+        )
+      )
+    }
+  }
+
   @transient
   lazy val writer = new CharArrayWriter()
 
   @transient
-  lazy val inputSchema: StructType = child.dataType match {
-    case st: StructType => st
-    case other =>
-      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
-  }
+  lazy val inputSchema: StructType = child.dataType.asInstanceOf[StructType]
 
   @transient
   lazy val gen = new StaxXmlGenerator(

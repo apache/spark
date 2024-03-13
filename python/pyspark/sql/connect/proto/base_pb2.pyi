@@ -1410,6 +1410,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     STREAMING_QUERY_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     GET_RESOURCES_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    STREAMING_QUERY_LISTENER_EVENTS_RESULT_FIELD_NUMBER: builtins.int
     RESULT_COMPLETE_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
@@ -1456,6 +1457,11 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult:
         """Response for commands on the streaming query manager."""
     @property
+    def streaming_query_listener_events_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryListenerEventsResult:
+        """Response for commands on the client side streaming query listener."""
+    @property
     def result_complete(self) -> global___ExecutePlanResponse.ResultComplete:
         """Response type informing if the stream is complete in reattachable execution."""
     @property
@@ -1493,6 +1499,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         | None = ...,
         streaming_query_manager_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryManagerCommandResult
         | None = ...,
+        streaming_query_listener_events_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryListenerEventsResult
+        | None = ...,
         result_complete: global___ExecutePlanResponse.ResultComplete | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
@@ -1521,6 +1529,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"sql_command_result",
             "streaming_query_command_result",
             b"streaming_query_command_result",
+            "streaming_query_listener_events_result",
+            b"streaming_query_listener_events_result",
             "streaming_query_manager_command_result",
             b"streaming_query_manager_command_result",
             "write_stream_operation_start_result",
@@ -1558,6 +1568,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"sql_command_result",
             "streaming_query_command_result",
             b"streaming_query_command_result",
+            "streaming_query_listener_events_result",
+            b"streaming_query_listener_events_result",
             "streaming_query_manager_command_result",
             b"streaming_query_manager_command_result",
             "write_stream_operation_start_result",
@@ -1574,6 +1586,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             "streaming_query_command_result",
             "get_resources_command_result",
             "streaming_query_manager_command_result",
+            "streaming_query_listener_events_result",
             "result_complete",
             "extension",
         ]

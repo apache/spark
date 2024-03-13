@@ -203,7 +203,7 @@ case class AlterTableRenameCommand(
         sparkSession.table(oldName.unquotedString))
       val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
       if (optStorageLevel.isDefined) {
-        CommandUtils.uncacheTableOrView(sparkSession, oldName.unquotedString)
+        CommandUtils.uncacheTableOrView(sparkSession, oldName)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
@@ -235,7 +235,7 @@ case class AlterTableAddColumnsCommand(
     val colsWithProcessedDefaults =
       constantFoldCurrentDefaultsToExistDefaults(sparkSession, catalogTable.provider)
 
-    CommandUtils.uncacheTableOrView(sparkSession, table.quotedString)
+    CommandUtils.uncacheTableOrView(sparkSession, table)
     catalog.refreshTable(table)
 
     SchemaUtils.checkColumnNameDuplication(
@@ -642,6 +642,7 @@ case class DescribeTableCommand(
       }
 
       describePartitionInfo(metadata, result)
+      describeClusteringInfo(metadata, result)
 
       if (partitionSpec.nonEmpty) {
         // Outputs the partition-specific info for the DDL command:
@@ -664,6 +665,29 @@ case class DescribeTableCommand(
     if (table.partitionColumnNames.nonEmpty) {
       append(buffer, "# Partition Information", "", "")
       describeSchema(table.partitionSchema, buffer, header = true)
+    }
+  }
+
+  private def describeClusteringInfo(
+      table: CatalogTable,
+      buffer: ArrayBuffer[Row]): Unit = {
+    table.clusterBySpec.foreach { clusterBySpec =>
+      append(buffer, "# Clustering Information", "", "")
+      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+      clusterBySpec.columnNames.map { fieldNames =>
+        val nestedField = table.schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
+        assert(nestedField.isDefined,
+          "The clustering column " +
+            s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
+            s"was not found in the table schema ${table.schema.catalogString}.")
+        nestedField.get
+      }.map { case (path, field) =>
+        append(
+          buffer,
+          (path :+ field.name).map(quoteIfNeeded).mkString("."),
+          field.dataType.simpleString,
+          field.getComment().orNull)
+      }
     }
   }
 

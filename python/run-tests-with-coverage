@@ -41,7 +41,7 @@ mkdir -p "$COVERAGE_DIR/coverage_data"
 # Current directory are added in the python path so that it doesn't refer our built
 # pyspark zip library first.
 export PYTHONPATH="$FWDIR:$PYTHONPATH"
-# Also, our sitecustomize.py and coverage_daemon.py are included in the path.
+# Also, our sitecustomize.py is included in the path.
 export PYTHONPATH="$COVERAGE_DIR:$PYTHONPATH"
 
 # This environment variable enables the coverage.

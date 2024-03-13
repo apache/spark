@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.format.DateTimeFormatter
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.jdk.CollectionConverters._
@@ -77,7 +78,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
+  val defaultMetadata = new MetadataBuilder()
+    .putLong("scale", 0)
+    .putBoolean("isTimestampNTZ", false)
+    .build()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -807,6 +811,10 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       assert(doCompileFilter(LessThan(col0, 5)) === """"col0" < 5""")
       assert(doCompileFilter(LessThan(col0,
         Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col0" < '1995-11-21 00:00:00.0'""")
+      assert(doCompileFilter(LessThan(col0,
+        LocalDateTime.parse("2007-12-03 10:15:30",
+          DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))))
+        === """"col0" < '2007-12-03 10:15:30'""")
       assert(doCompileFilter(LessThan(col0, Date.valueOf("1983-08-04")))
         === """"col0" < '1983-08-04'""")
       assert(doCompileFilter(LessThanOrEqual(col0, 5)) === """"col0" <= 5""")
@@ -928,7 +936,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
-    val md = new MetadataBuilder().putLong("scale", 0)
+    val md = new MetadataBuilder().putLong("scale", 0).putBoolean("isTimestampNTZ", false)
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
@@ -965,7 +973,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(FloatType))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
       Some(DoubleType))
-    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_TZ, "TIMESTAMP", 0, null) ==
+      Some(TimestampType))
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
   }
 

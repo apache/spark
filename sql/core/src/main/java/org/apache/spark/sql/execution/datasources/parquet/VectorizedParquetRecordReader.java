@@ -261,10 +261,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       MemoryMode memMode,
       StructType partitionColumns,
       InternalRow partitionValues) {
-    StructType batchSchema = new StructType();
-    for (StructField f: sparkSchema.fields()) {
-      batchSchema = batchSchema.add(f);
-    }
+    StructType batchSchema = new StructType(sparkSchema.fields());
+
     int constantColumnLength = 0;
     if (partitionColumns != null) {
       for (StructField f : partitionColumns.fields()) {

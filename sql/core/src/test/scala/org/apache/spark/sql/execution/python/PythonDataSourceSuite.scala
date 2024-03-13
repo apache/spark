@@ -28,7 +28,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
+abstract class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
 
   protected val simpleDataSourceReaderScript: String =
     """
@@ -91,53 +91,8 @@ class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
   protected def dataSourceName = "SimpleDataSource"
 }
 
-
 class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
   import IntegratedUDFTestUtils._
-
-  setupTestData()
-
-  override def beforeAll(): Unit = {
-    // Create a Python Data Source package before starting up the Spark Session
-    // that triggers automatic registration of the Python Data Source.
-    val dataSourceScript =
-    s"""
-       |from pyspark.sql.datasource import DataSource, DataSourceReader
-       |$simpleDataSourceReaderScript
-       |
-       |class DefaultSource(DataSource):
-       |    def schema(self) -> str:
-       |        return "id INT, partition INT"
-       |
-       |    def reader(self, schema):
-       |        return SimpleDataSourceReader()
-       |
-       |    @classmethod
-       |    def name(cls):
-       |        return "$staticSourceName"
-       |""".stripMargin
-    tempDir = Utils.createTempDir()
-    // Write a temporary package to test.
-    // tmp/my_source
-    // tmp/my_source/__init__.py
-    val packageDir = new File(tempDir, "pyspark_mysource")
-    assert(packageDir.mkdir())
-    Utils.tryWithResource(
-      new FileWriter(new File(packageDir, "__init__.py")))(_.write(dataSourceScript))
-    // So Spark Session initialization can lookup this temporary directory.
-    DataSourceManager.dataSourceBuilders = None
-    PythonUtils.additionalTestingPath = Some(tempDir.toString)
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      Utils.deleteRecursively(tempDir)
-      PythonUtils.additionalTestingPath = None
-    } finally {
-      super.afterAll()
-    }
-  }
 
   test("SPARK-45917: automatic registration of Python Data Source") {
     assume(shouldTestPandasUDFs)

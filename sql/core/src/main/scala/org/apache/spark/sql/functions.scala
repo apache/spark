@@ -41,22 +41,20 @@ import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.util.Utils
 
 /**
- * Commonly used functions available for DataFrame operations. Using functions defined here provides
- * a little bit more compile-time safety to make sure the function exists.
+ * Commonly used functions available for DataFrame operations. Using functions defined here
+ * provides a little bit more compile-time safety to make sure the function exists.
  *
- * Spark also includes more built-in functions that are less common and are not defined here.
- * You can still access them (and all the functions defined here) using the `functions.expr()` API
- * and calling them through a SQL expression string. You can find the entire list of functions
- * at SQL API documentation of your Spark version, see also
- * <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
+ * You can call the functions defined here by two ways: `_FUNC_(...)` and
+ * `functions.expr("_FUNC_(...)")`.
  *
- * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
- * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
- * exists and is of the proper form. You can also use `expr("isnan(myCol)")` function to invoke the
- * same function. In this case, Spark itself will ensure `isnan` exists when it analyzes the query.
+ * As an example, `regr_count` is a function that is defined here. You can use
+ * `regr_count(col("yCol", col("xCol")))` to invoke the `regr_count` function. This way the
+ * programming language's compiler ensures `regr_count` exists and is of the proper form. You can
+ * also use `expr("regr_count(yCol, xCol)")` function to invoke the same function. In this case,
+ * Spark itself will ensure `regr_count` exists when it analyzes the query.
  *
- * `regr_count` is an example of a function that is built-in but not defined here, because it is
- * less commonly used. To invoke it, use `expr("regr_count(yCol, xCol)")`.
+ * You can find the entire list of functions at SQL API documentation of your Spark version, see
+ * also <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
  *
  * This function APIs usually have methods with `Column` signature only because it can support not
  * only `Column` but also other types such as a native string. The other variants currently exist

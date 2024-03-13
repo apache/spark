@@ -98,11 +98,16 @@ object DataSourceManager extends Logging {
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
   private def initialStaticDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
-    if (Utils.isTesting || shouldLoadPythonDataSources) this.synchronized {
+    if (shouldLoadPythonDataSources) this.synchronized {
       if (dataSourceBuilders.isEmpty) {
         val maybeResult = try {
           Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())
         } catch {
+          case e: Throwable if e.toString.contains(
+              "ModuleNotFoundError: No module named 'pyspark'") =>
+            // If PySpark is not in the Python path at all, suppress the warning
+            // To make it less noisy, see also SPARK-47311.
+            None
           case e: Throwable =>
             // Even if it fails for whatever reason, we shouldn't make the whole
             // application fail.

@@ -32,7 +32,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.apache.spark._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
@@ -289,10 +289,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def ansiIllegalArgumentError(e: IllegalArgumentException): IllegalArgumentException = {
-    ansiIllegalArgumentError(e.getMessage)
-  }
-
   def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {
     arithmeticOverflowError("Overflow in sum of decimals", context = context)
   }
@@ -446,10 +442,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         s"${argClasses.mkString("(", ", ", ")")} on $cls.")
   }
 
-  def constructorNotFoundError(cls: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2020",
-      messageParameters = Map("cls" -> cls))
+  def constructorNotFoundError(cls: String): SparkException = {
+    SparkException.internalError(
+      s"Couldn't find a valid constructor on <$cls>.")
   }
 
   def unsupportedNaturalJoinTypeError(joinType: JoinType): SparkException = {
@@ -459,21 +454,25 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def notExpectedUnresolvedEncoderError(attr: AttributeReference): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2023",
+      errorClass = "NOT_UNRESOLVED_ENCODER",
       messageParameters = Map("attr" -> attr.toString()))
   }
 
-  def unsupportedEncoderError(): SparkRuntimeException = {
+  def invalidExpressionEncoderError(encoderType: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2024",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_EXPRESSION_ENCODER",
+      messageParameters = Map(
+        "encoderType" -> encoderType,
+        "docroot" -> SPARK_DOC_ROOT
+      )
+    )
   }
 
   def notOverrideExpectedMethodsError(
       className: String, m1: String, m2: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2025",
-      messageParameters = Map("className" -> className, "m1" -> m1, "m2" -> m2))
+      errorClass = "CLASS_NOT_OVERRIDE_EXPECTED_METHOD",
+      messageParameters = Map("className" -> className, "method1" -> m1, "method2" -> m2))
   }
 
   def failToConvertValueToJsonError(
@@ -656,15 +655,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def dataPathNotSpecifiedError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2047",
-      messageParameters = Map.empty)
+    new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2047")
   }
 
   def createStreamingSourceNotSpecifySchemaError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2048",
-      messageParameters = Map.empty)
+    new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2048")
   }
 
   def streamedOperatorUnsupportedByDataSourceError(
@@ -862,9 +857,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def missingDatabaseLocationError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2068",
-      messageParameters = Map.empty)
+    new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2068")
   }
 
   def cannotRemoveReservedPropertyError(property: String): SparkUnsupportedOperationException = {
@@ -977,9 +970,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def nestedArraysUnsupportedError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2085",
-      messageParameters = Map.empty)
+    new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2085")
   }
 
   def cannotTranslateNonNullValueForFieldError(pos: Int): SparkIllegalArgumentException = {
@@ -1694,6 +1685,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       new NoSuchElementException("State is either not defined or has already been removed")
   }
 
+  def statefulOperatorNotMatchInStateMetadataError(
+      opsInMetadataSeq: Map[Long, String],
+      opsInCurBatchSeq: Map[Long, String]): SparkRuntimeException = {
+    def formatPairString(pair: (Long, String)): String
+    = s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+    new SparkRuntimeException(
+      errorClass = s"STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA",
+      messageParameters = Map(
+        "OpsInMetadataSeq" -> opsInMetadataSeq.map(formatPairString).mkString(", "),
+        "OpsInCurBatchSeq" -> opsInCurBatchSeq.map(formatPairString).mkString(", "))
+    )
+  }
+
   def cannotSetTimeoutDurationError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2203")
   }
@@ -1752,6 +1756,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "_LEGACY_ERROR_TEMP_2211",
       messageParameters = Map(
         "outputMode" -> outputMode.toString()))
+  }
+
+  def pythonStreamingDataSourceRuntimeError(
+      action: String,
+      message: String): SparkException = {
+    new SparkException(
+      errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+      messageParameters = Map("action" -> action, "msg" -> message),
+      cause = null)
   }
 
   def invalidCatalogNameError(name: String): Throwable = {
@@ -2720,12 +2733,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "availableCodecs" -> availableCodecs))
   }
 
-  def pythonStreamingDataSourceRuntimeError(
-      action: String,
-      message: String): SparkException = {
-    new SparkException(
-      errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-      messageParameters = Map("action" -> action, "msg" -> message),
-      cause = null)
+  def partitionNumMismatchError(numFields: Int, schemaLen: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_3208",
+      messageParameters = Map(
+        "numFields" -> numFields.toString,
+        "schemaLen" -> schemaLen.toString))
   }
 }

@@ -22,7 +22,7 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.spark.{QueryContext, SparkException}
+import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
@@ -302,8 +302,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
   }
 
   if (children.size != names.size) {
-    throw new IllegalArgumentException(
-      "The numbers of zipped arrays and field names should be the same")
+    throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3235")
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)
@@ -837,7 +836,7 @@ case class MapFromEntries(child: Expression)
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> s"${toSQLType(ArrayType)} of pair ${toSQLType(StructType)}",
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType)
@@ -1067,7 +1066,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> "2",
+              "paramIndex" -> ordinalNumber(1),
               "requiredType" -> toSQLType(BooleanType),
               "inputSql" -> toSQLExpr(ascendingOrder),
               "inputType" -> toSQLType(ascendingOrder.dataType))
@@ -1085,7 +1084,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(ArrayType),
           "inputSql" -> toSQLExpr(base),
           "inputType" -> toSQLType(base.dataType))
@@ -1321,7 +1320,7 @@ case class ArrayContains(left: Expression, right: Expression)
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(ArrayType),
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
@@ -1428,7 +1427,7 @@ trait ArrayPendBase extends RuntimeReplaceable
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "0",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(ArrayType),
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType)
@@ -2222,7 +2221,7 @@ case class ArrayPosition(left: Expression, right: Expression)
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(ArrayType),
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
@@ -2382,7 +2381,7 @@ case class ElementAt(
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "2",
+            "paramIndex" -> ordinalNumber(1),
             "requiredType" -> toSQLType(IntegerType),
             "inputSql" -> toSQLExpr(right),
             "inputType" -> toSQLType(right.dataType))
@@ -2401,7 +2400,7 @@ case class ElementAt(
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> toSQLType(TypeCollection(ArrayType, MapType)),
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
@@ -2607,7 +2606,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> (idx + 1).toString,
+              "paramIndex" -> ordinalNumber(idx),
               "requiredType" -> toSQLType(TypeCollection(allowedTypes: _*)),
               "inputSql" -> toSQLExpr(e),
               "inputType" -> toSQLType(e.dataType))
@@ -2824,7 +2823,7 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> s"${toSQLType(ArrayType)} of ${toSQLType(ArrayType)}",
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType))
@@ -3353,8 +3352,9 @@ object Sequence {
       val (stepMonths, stepDays, stepMicros) = splitStep(input3)
 
       if (scale == MICROS_PER_DAY && stepMonths == 0 && stepDays == 0) {
-        throw new IllegalArgumentException(s"sequence step must be an ${intervalType.typeName}" +
-          " of day granularity if start and end values are dates")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3242",
+          messageParameters = Map("intervalType" -> intervalType.typeName))
       }
 
       if (stepMonths == 0 && stepMicros == 0 && scale == MICROS_PER_DAY) {
@@ -3446,9 +3446,10 @@ object Sequence {
       val check = if (scale == MICROS_PER_DAY) {
         s"""
            |if ($stepMonths == 0 && $stepDays == 0) {
-           |  throw new IllegalArgumentException(
-           |    "sequence step must be an ${intervalType.typeName} " +
-           |    "of day granularity if start and end values are dates");
+           |  java.util.Map<String, String> params = new java.util.HashMap<String, String>();
+           |  params.put("intervalType", "${intervalType.typeName}");
+           |  throw new org.apache.spark.SparkIllegalArgumentException(
+           |    "_LEGACY_ERROR_TEMP_3242", params);
            |}
          """.stripMargin
         } else {
@@ -3539,8 +3540,12 @@ object Sequence {
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
        |  ($estimatedStep == 0 && $start == $stop))) {
-       |  throw new IllegalArgumentException(
-       |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
+       |  java.util.Map<String, String> params = new java.util.HashMap<String, String>();
+       |  params.put("start", $start);
+       |  params.put("stop", $stop);
+       |  params.put("step", $step);
+       |  throw new org.apache.spark.SparkIllegalArgumentException(
+       |    "_LEGACY_ERROR_TEMP_3243", params);
        |}
        |int $len = $calcFn((long) $start, (long) $stop, (long) $estimatedStep);
        """.stripMargin
@@ -4742,7 +4747,7 @@ case class ArrayInsert(
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "2",
+            "paramIndex" -> ordinalNumber(1),
             "requiredType" -> toSQLType(IntegerType),
             "inputSql" -> toSQLExpr(second),
             "inputType" -> toSQLType(second.dataType))

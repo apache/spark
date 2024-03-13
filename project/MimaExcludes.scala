@@ -76,8 +76,13 @@ object MimaExcludes {
 
     // SPARK-46410: Assign error classes/subclasses to JdbcUtils.classifyException
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcDialect.classifyException"),
-    // [SPARK-464878][CORE][SQL] (false alert). Invalid rule for StringType extension.
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.StringType.this")
+    // TODO(SPARK-46878): Invalid Mima report for StringType extension
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.StringType.this"),
+    // SPARK-47011: Remove deprecated BinaryClassificationMetrics.scoreLabelsWeight
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.evaluation.BinaryClassificationMetrics.scoreLabelsWeight"),
+    // SPARK-46938: Javax -> Jakarta namespace change.
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.ProxyRedirectHandler$ResponseWrapper"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.this")
   )
 
   // Default exclude rules

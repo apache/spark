@@ -70,5 +70,12 @@ private[sql] trait QueryErrorsBase extends DataTypeErrorsBase {
       else l.sql
     case l => l.sql
   }
+
+  def ordinalNumber(i: Int): String = i match {
+    case 0 => "first"
+    case 1 => "second"
+    case 2 => "third"
+    case i => s"${i + 1}th"
+  }
 }
 

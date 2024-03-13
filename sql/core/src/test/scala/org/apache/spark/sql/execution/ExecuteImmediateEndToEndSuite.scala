@@ -14,22 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.execution
 
-package org.apache.spark.sql.connect.plugin
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.test.SharedSparkSession
 
-import com.google.protobuf
+class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+  test("SPARK-47033: EXECUTE IMMEDIATE USING does not recognize session variable names") {
+    try {
+      spark.sql("DECLARE parm = 'Hello';")
 
-/**
- * Behavior trait for supporting extension mechanisms for the Spark Connect planner.
- *
- * Classes implementing the trait must be trivially constructable and should not rely on internal
- * state. Every registered extension will be passed the Any instance. If the plugin supports
- * handling this type it is responsible of constructing the logical catalyst plan from this object
- * and if necessary traverse it's children.
- */
-trait RelationPlugin {
-  def transform(relation: protobuf.Any, planner: SparkConnectPlanner): Option[LogicalPlan]
+      val originalQuery = spark.sql(
+        "EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm AS parm;")
+      val newQuery = spark.sql("EXECUTE IMMEDIATE 'SELECT :parm' USING system.session.parm;")
+
+      assert(originalQuery.columns sameElements newQuery.columns)
+
+      checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
+    } finally {
+      spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
+    }
+  }
 }
