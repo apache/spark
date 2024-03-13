@@ -255,40 +255,6 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
-    test(s"verify that expired timers are returned in sorted order with timeoutMode=$timeoutMode") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
-        val store = provider.getStore(0)
-        val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
-        handle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
-        assert(handle.getHandleState === StatefulProcessorHandleState.DATA_PROCESSED)
-
-        ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isDefined)
-
-        // Generate some random timer timestamps in arbitrary sorted order
-        val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
-        timerTimestamps.foreach { timestamp =>
-          handle.registerTimer(timestamp)
-        }
-
-        // Ensure that the expired timers are returned in sorted order
-        var expiredTimers = handle.getExpiredTimers(1000000L).map(_._2).toSeq
-        assert(expiredTimers === timerTimestamps.sorted)
-
-        expiredTimers = handle.getExpiredTimers(5L).map(_._2).toSeq
-        assert(expiredTimers === Seq(1L, 2L, 3L, 5L))
-
-        expiredTimers = handle.getExpiredTimers(10L).map(_._2).toSeq
-        assert(expiredTimers === Seq(1L, 2L, 3L, 5L, 6L, 8L, 9L))
-
-        ImplicitGroupingKeyTracker.removeImplicitKey()
-        assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
-      }
-    }
-  }
-
-  Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
     test(s"registering timeouts with timeoutMode=$timeoutMode and invalid state should fail") {
       tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
         val store = provider.getStore(0)

@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.Serializable
-import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -65,7 +64,7 @@ class TimerStateImpl(
     .add("expiryTimestampMs", LongType, nullable = false)
 
   private val keySchemaForSecIndex: StructType = new StructType()
-    .add("expiryTimestampMs", BinaryType, nullable = false)
+    .add("expiryTimestampMs", LongType, nullable = false)
     .add("key", BinaryType)
 
   private val schemaForValueRow: StructType =
@@ -111,18 +110,12 @@ class TimerStateImpl(
     keyRow
   }
 
-  //  We maintain a secondary index that inverts the ordering of the timestamp
-  //  and grouping key and maintains the list of (expiry) timestamps in sorted order
-  //  (using BIG_ENDIAN encoding) within RocksDB.
-  //  This is because RocksDB uses byte-wise comparison using the default comparator to
-  //  determine sorted order of keys. This is used to read expired timers at any given
-  //  processing time/event time timestamp threshold by performing a range scan.
+  // We maintain a secondary index that inverts the ordering of the timestamp
+  // and grouping key
+  // TODO: use range scan encoder to encode the secondary index key
   private def encodeSecIndexKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
     val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
-    val bbuf = ByteBuffer.allocate(8)
-    bbuf.order(ByteOrder.BIG_ENDIAN)
-    bbuf.putLong(expiryTimestampMs)
-    val keyRow = secIndexKeyEncoder(InternalRow(bbuf.array(), keyByteArr))
+    val keyRow = secIndexKeyEncoder(InternalRow(expiryTimestampMs, keyByteArr))
     keyRow
   }
 
@@ -191,20 +184,15 @@ class TimerStateImpl(
     val keyObj = keyExprEnc.resolveAndBind()
       .createDeserializer().apply(retUnsafeRow).asInstanceOf[Any]
 
-    // Decode the expiry timestamp from the UnsafeRow encoded as BIG_ENDIAN
-    val bytes = keyRow.getBinary(0)
-    val byteBuffer = ByteBuffer.wrap(bytes)
-    byteBuffer.order(ByteOrder.BIG_ENDIAN)
-    val expiryTimestampMs = byteBuffer.getLong
+    val expiryTimestampMs = keyRow.getLong(0)
     (keyObj, expiryTimestampMs)
   }
 
   /**
-   * Function to get all the timers that have expired till the given expiryTimestampThreshold
-   * @param expiryTimestampThreshold - threshold timestamp for expiry
-   * @return - iterator of all the timers that have expired till the given threshold
+   * Function to get all the registered timers
+   * @return - iterator of all the registered timers
    */
-  def getExpiredTimers(expiryTimestampThreshold: Long): Iterator[(Any, Long)] = {
+  def getExpiredTimers(): Iterator[(Any, Long)] = {
     val iter = store.iterator(tsToKeyCFName)
 
     new NextIterator[(Any, Long)] {
@@ -213,12 +201,7 @@ class TimerStateImpl(
           val rowPair = iter.next()
           val keyRow = rowPair.key
           val result = getTimerRowFromSecIndex(keyRow)
-          if (result._2 <= expiryTimestampThreshold) {
-            result
-          } else {
-            finished = true
-            null.asInstanceOf[(Any, Long)]
-          }
+          result
         } else {
           finished = true
           null.asInstanceOf[(Any, Long)]

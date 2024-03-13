@@ -163,13 +163,12 @@ class StatefulProcessorHandleImpl(
   }
 
   /**
-   * Function to retrieve expired timers based on the expiryTimestampThreshold
-   * @param expiryTimestampThreshold - threshold for expiry timestamp
-   * @return - iterator of expired timers
+   * Function to retrieve all registered timers
+   * @return - iterator of registered timers
    */
-  def getExpiredTimers(expiryTimestampThreshold: Long): Iterator[(Any, Long)] = {
+  def getExpiredTimers(): Iterator[(Any, Long)] = {
     verifyTimerOperations("get_expired_timers")
-    timerState.getExpiredTimers(expiryTimestampThreshold)
+    timerState.getExpiredTimers()
   }
 
   /**
@@ -201,8 +200,7 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
-    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
-      "initialization is complete")
+    verifyStateVarOperations("get_map_state")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
   }
