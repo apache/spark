@@ -173,6 +173,9 @@ class StatefulProcessorHandleImpl(
 
   /**
    * Function to list all the registered timers for given implicit key
+   * Note: calling listTimers() within the `handleInputRows` method of the StatefulProcessor
+   * will return all the unprocessed registered timers, including the one being fired within the
+   * invocation of `handleInputRows`.
    * @return - iterator of all the registered timers for given implicit key
    */
   def listTimers(): Iterator[Long] = {

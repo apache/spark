@@ -86,6 +86,9 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
 
   /**
    * Function to list all the timers registered for given implicit grouping key
+   * Note: calling listTimers() within the `handleInputRows` method of the StatefulProcessor
+   * will return all the unprocessed registered timers, including the one being fired within the
+   * invocation of `handleInputRows`.
    * @return - list of all the registered timers for given implicit grouping key
    */
   def listTimers(): Iterator[Long]
