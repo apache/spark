@@ -383,11 +383,11 @@ namespaces
     ;
 
 describeFuncName
-    : identifierReference
-    | stringLit
+    : stringLit
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
+    | identifierReference
     ;
 
 describeColName
