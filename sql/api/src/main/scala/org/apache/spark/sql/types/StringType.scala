@@ -40,8 +40,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * equality and hashing).
    */
   def isBinaryCollation: Boolean = CollationFactory.fetchCollation(collationId).isBinaryCollation
-  def isLowercaseCollation: Boolean =
-    CollationFactory.fetchCollation(collationId).isLowercaseCollation
+  def isLcaseCollation: Boolean = CollationFactory.fetchCollation(collationId).isLowercaseCollation
 
   /**
    * Type name that is shown to the customer.
@@ -56,6 +55,9 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 
   override def hashCode(): Int = collationId.hashCode()
 
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isDefaultCollation
+
   /**
    * The default size of a value of the StringType is 20 bytes.
    */
@@ -65,6 +67,8 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 }
 
 /**
+ * Use StringType for expressions supporting only binary collation.
+ *
  * @since 1.3.0
  */
 @Stable
@@ -72,14 +76,30 @@ case object StringType extends StringType(0) {
   def apply(collationId: Int): StringType = new StringType(collationId)
 }
 
-case object StringTypeBinaryLowercase extends AbstractDataType {
+/**
+ * Use StringTypeBinary for expressions supporting only binary collation.
+ */
+case object StringTypeBinary extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = StringType
-  override private[sql] def simpleString: String = "string_bin_lcase"
+  override private[sql] def simpleString: String = "string_binary_lcase"
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].isBinaryCollation ||
-    other.asInstanceOf[StringType].isLowercaseCollation)
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isBinaryCollation
 }
 
+/**
+ * Use StringTypeBinaryLcase for expressions supporting only binary and lowercase collation.
+ */
+case object StringTypeBinaryLcase extends AbstractDataType {
+  override private[sql] def defaultConcreteType: DataType = StringType
+  override private[sql] def simpleString: String = "string_binary_lcase"
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].isBinaryCollation ||
+    other.asInstanceOf[StringType].isLcaseCollation)
+}
+
+/**
+ * Use StringTypeCollated for expressions supporting all possible collation types.
+ */
 case object StringTypeCollated extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType = StringType
   override private[sql] def simpleString: String = "string_collated"

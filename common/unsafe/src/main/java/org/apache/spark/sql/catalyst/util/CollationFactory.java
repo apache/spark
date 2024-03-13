@@ -84,7 +84,7 @@ public final class CollationFactory {
       this.version = version;
       this.hashFunction = hashFunction;
       this.isBinaryCollation = isBinaryCollation;
-      this.isLowercaseCollation = collationName.equals("UCS_BASIC_LCASE");
+      this.isLowercaseCollation = collationName.equals("UTF8_BINARY_LCASE");
 
       if (isBinaryCollation) {
         this.equalsFunction = UTF8String::equals;
