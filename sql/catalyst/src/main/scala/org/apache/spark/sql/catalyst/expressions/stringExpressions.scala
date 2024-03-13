@@ -501,7 +501,8 @@ abstract class StringPredicate extends BinaryExpression
 
   def compare(l: UTF8String, r: UTF8String): Boolean
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     CollationTypeConstraints.checkCollationCompatibility(super.checkInputDataTypes(), collationId,

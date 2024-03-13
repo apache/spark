@@ -545,7 +545,6 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
 
   override def dataType: DataType = ArrayType(StringType, containsNull = false)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
-
   override def first: Expression = str
   override def second: Expression = regex
   override def third: Expression = limit
@@ -620,7 +619,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     if (defaultCheck.isFailure) {
       return defaultCheck
     }
-
     if (!pos.foldable) {
       return DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
@@ -774,7 +772,6 @@ abstract class RegExpExtractBase
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_EXTRACT_FAMILY)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
-
   override def first: Expression = subject
   override def second: Expression = regexp
   override def third: Expression = idx
@@ -852,7 +849,6 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   }
 
   override def dataType: DataType = StringType
-
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -952,7 +948,6 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   }
 
   override def dataType: DataType = ArrayType(StringType)
-
   override def prettyName: String = "regexp_extract_all"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1118,7 +1113,6 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   }
 
   override def dataType: DataType = IntegerType
-
   override def prettyName: String = "regexp_instr"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
