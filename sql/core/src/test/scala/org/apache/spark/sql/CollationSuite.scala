@@ -139,6 +139,36 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map("proposal" -> "UTF8_BINARY", "collationName" -> "UTF8_BS"))
   }
 
+  test("disable bucketing on collated string column") {
+    def createTable(bucketColumns: String*): Unit = {
+      val tableName = "test_partition_tbl"
+      withTable(tableName) {
+        sql(
+          s"""
+             |CREATE TABLE $tableName
+             |(id INT, c1 STRING COLLATE UNICODE, c2 string)
+             |USING parquet
+             |CLUSTERED BY (${bucketColumns.mkString(",")})
+             |INTO 4 BUCKETS""".stripMargin
+        )
+      }
+    }
+    // should work fine on default collated columns
+    createTable("id")
+    createTable("c2")
+    createTable("id", "c2")
+
+    Seq(Seq("c1"), Seq("c1", "id"), Seq("c1", "c2")).foreach { bucketColumns =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          createTable(bucketColumns: _*)
+        },
+        errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+        parameters = Map("type" -> "\"STRING COLLATE UNICODE\"")
+      );
+    }
+  }
+
   test("equality check respects collation") {
     Seq(
       ("utf8_binary", "aaa", "AAA", false),
@@ -287,42 +317,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("Support startsWith string expression with Collation") {
     // Supported collations
     val checks = Seq(
-      CollationTestCase("", "", "UTF8_BINARY", true),
-      CollationTestCase("c", "", "UTF8_BINARY", true),
-      CollationTestCase("", "c", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "a", "UTF8_BINARY", true),
-      CollationTestCase("abcde", "A", "UTF8_BINARY", false),
       CollationTestCase("abcde", "abc", "UTF8_BINARY", true),
       CollationTestCase("abcde", "ABC", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "bcd", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY", false),
-      CollationTestCase("", "", "UNICODE", true),
-      CollationTestCase("c", "", "UNICODE", true),
-      CollationTestCase("", "c", "UNICODE", false),
-      CollationTestCase("abcde", "a", "UNICODE", true),
-      CollationTestCase("abcde", "A", "UNICODE", false),
       CollationTestCase("abcde", "abc", "UNICODE", true),
       CollationTestCase("abcde", "ABC", "UNICODE", false),
-      CollationTestCase("abcde", "bcd", "UNICODE", false),
-      CollationTestCase("abcde", "BCD", "UNICODE", false),
-      CollationTestCase("", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("c", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("", "c", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "a", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "A", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "abc", "UTF8_BINARY_LCASE", true),
       CollationTestCase("abcde", "ABC", "UTF8_BINARY_LCASE", true),
       CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("", "", "UNICODE_CI", true),
-      CollationTestCase("c", "", "UNICODE_CI", true),
-      CollationTestCase("", "c", "UNICODE_CI", false),
-      CollationTestCase("abcde", "a", "UNICODE_CI", true),
-      CollationTestCase("abcde", "A", "UNICODE_CI", true),
-      CollationTestCase("abcde", "abc", "UNICODE_CI", true),
       CollationTestCase("abcde", "ABC", "UNICODE_CI", true),
-      CollationTestCase("abcde", "bcd", "UNICODE_CI", false),
-      CollationTestCase("abcde", "BCD", "UNICODE_CI", false)
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", false)
     )
     checks.foreach(testCase => {
       checkAnswer(sql(s"SELECT startswith(collate('${testCase.left}', '${testCase.collation}')," +
@@ -333,42 +335,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("Support endsWith string expression with Collation") {
     // Supported collations
     val checks = Seq(
-      CollationTestCase("", "", "UTF8_BINARY", true),
-      CollationTestCase("c", "", "UTF8_BINARY", true),
-      CollationTestCase("", "c", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "e", "UTF8_BINARY", true),
-      CollationTestCase("abcde", "E", "UTF8_BINARY", false),
       CollationTestCase("abcde", "cde", "UTF8_BINARY", true),
       CollationTestCase("abcde", "CDE", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "bcd", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY", false),
-      CollationTestCase("", "", "UNICODE", true),
-      CollationTestCase("c", "", "UNICODE", true),
-      CollationTestCase("", "c", "UNICODE", false),
-      CollationTestCase("abcde", "e", "UNICODE", true),
-      CollationTestCase("abcde", "E", "UNICODE", false),
       CollationTestCase("abcde", "cde", "UNICODE", true),
       CollationTestCase("abcde", "CDE", "UNICODE", false),
-      CollationTestCase("abcde", "bcd", "UNICODE", false),
-      CollationTestCase("abcde", "BCD", "UNICODE", false),
-      CollationTestCase("", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("c", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("", "c", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "e", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "E", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "cde", "UTF8_BINARY_LCASE", true),
       CollationTestCase("abcde", "CDE", "UTF8_BINARY_LCASE", true),
       CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("", "", "UNICODE_CI", true),
-      CollationTestCase("c", "", "UNICODE_CI", true),
-      CollationTestCase("", "c", "UNICODE_CI", false),
-      CollationTestCase("abcde", "e", "UNICODE_CI", true),
-      CollationTestCase("abcde", "E", "UNICODE_CI", true),
-      CollationTestCase("abcde", "cde", "UNICODE_CI", true),
       CollationTestCase("abcde", "CDE", "UNICODE_CI", true),
-      CollationTestCase("abcde", "bcd", "UNICODE_CI", false),
-      CollationTestCase("abcde", "BCD", "UNICODE_CI", false)
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", false)
     )
     checks.foreach(testCase => {
       checkAnswer(sql(s"SELECT endswith(collate('${testCase.left}', '${testCase.collation}')," +

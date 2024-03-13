@@ -131,24 +131,21 @@ trait SparkIntervalUtils {
    */
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
-    def throwIAE(msg: String, e: Exception = null) = {
-      throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3255",
-        messageParameters = Map(
-          "input" -> Option(input).map(_.toString).getOrElse("null"),
-          "msg" -> msg),
-        cause = e)
-    }
-
     if (input == null) {
-      throwIAE("interval string cannot be null")
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
+        messageParameters = Map(
+          "input" -> "null"))
     }
     // scalastyle:off caselocale .toLowerCase
     val s = input.trimAll().toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.isEmpty) {
-      throwIAE("interval string cannot be empty")
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
+        messageParameters = Map(
+          "input" -> input.toString))
     }
     var state = PREFIX
     var i = 0
@@ -183,9 +180,16 @@ trait SparkIntervalUtils {
         case PREFIX =>
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
-              throwIAE("interval string cannot be empty")
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
+                messageParameters = Map(
+                  "input" -> input.toString))
             } else if (!Character.isWhitespace(bytes(i + intervalStr.numBytes()))) {
-              throwIAE(s"invalid interval prefix $currentWord")
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
+                messageParameters = Map(
+                  "input" -> input.toString,
+                  "prefix" -> currentWord))
             } else {
               i += intervalStr.numBytes() + 1
             }
@@ -220,7 +224,11 @@ trait SparkIntervalUtils {
               pointPrefixed = true
               i += 1
               state = VALUE_FRACTIONAL_PART
-            case _ => throwIAE( s"unrecognized number '$currentWord'")
+            case _ => throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
+              messageParameters = Map(
+                "input" -> input.toString,
+                "number" -> currentWord))
           }
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
@@ -229,13 +237,20 @@ trait SparkIntervalUtils {
               try {
                 currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
               } catch {
-                case e: ArithmeticException => throwIAE(e.getMessage, e)
+                case e: ArithmeticException => throw new SparkIllegalArgumentException(
+                  errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
+                  messageParameters = Map(
+                    "input" -> input.toString))
               }
             case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = initialFractionScale
               state = VALUE_FRACTIONAL_PART
-            case _ => throwIAE(s"invalid value '$currentWord'")
+            case _ => throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
+              messageParameters = Map(
+                "input" -> input.toString,
+                "value" -> currentWord))
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
@@ -247,17 +262,28 @@ trait SparkIntervalUtils {
             fraction /= NANOS_PER_MICROS.toInt
             state = TRIM_BEFORE_UNIT
           } else if ('0' <= b && b <= '9') {
-            throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
-              s" of range")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
+              messageParameters = Map(
+                "input" -> input.toString,
+                "value" -> currentWord))
           } else {
-            throwIAE(s"invalid value '$currentWord'")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
+              messageParameters = Map(
+                "input" -> input.toString,
+                "value" -> currentWord))
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
-            throwIAE(s"'$currentWord' cannot have fractional part")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
+              messageParameters = Map(
+                "input" -> input.toString,
+                "unit" -> currentWord))
           }
           if (isNegative) {
             currentValue = -currentValue
@@ -299,18 +325,35 @@ trait SparkIntervalUtils {
                 } else if (s.matchAt(microsStr, i)) {
                   microseconds = Math.addExact(microseconds, currentValue)
                   i += microsStr.numBytes()
-                } else throwIAE(s"invalid unit '$currentWord'")
-              case _ => throwIAE(s"invalid unit '$currentWord'")
+                } else {
+                  throw new SparkIllegalArgumentException(
+                    errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+                    messageParameters = Map(
+                      "input" -> input.toString,
+                      "unit" -> currentWord))
+                }
+              case _ => throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+                messageParameters = Map(
+                  "input" -> input.toString,
+                  "unit" -> currentWord))
             }
           } catch {
-            case e: ArithmeticException => throwIAE(e.getMessage, e)
+            case e: ArithmeticException => throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
+              messageParameters = Map(
+                "input" -> input.toString))
           }
           state = UNIT_SUFFIX
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
             case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_SIGN
-            case _ => throwIAE(s"invalid unit '$currentWord'")
+            case _ => throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+              messageParameters = Map(
+                "input" -> input.toString,
+                "unit" -> currentWord))
           }
           i += 1
         case UNIT_END =>
@@ -318,7 +361,11 @@ trait SparkIntervalUtils {
             i += 1
             state = TRIM_BEFORE_SIGN
           } else {
-            throwIAE(s"invalid unit '$currentWord'")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+              messageParameters = Map(
+                "input" -> input.toString,
+                "unit" -> currentWord))
           }
       }
     }
@@ -326,10 +373,22 @@ trait SparkIntervalUtils {
     val result = state match {
       case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
         new CalendarInterval(months, days, microseconds)
-      case TRIM_BEFORE_VALUE => throwIAE(s"expect a number after '$currentWord' but hit EOL")
+      case TRIM_BEFORE_VALUE => throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
+        messageParameters = Map(
+          "input" -> input.toString,
+          "word" -> currentWord))
       case VALUE | VALUE_FRACTIONAL_PART =>
-        throwIAE(s"expect a unit name after '$currentWord' but hit EOL")
-      case _ => throwIAE(s"unknown error when parsing '$currentWord'")
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
+          messageParameters = Map(
+            "input" -> input.toString,
+            "word" -> currentWord))
+      case _ => throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
+        messageParameters = Map(
+          "input" -> input.toString,
+          "word" -> currentWord))
     }
 
     result

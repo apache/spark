@@ -53,8 +53,8 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    */
   override def typeName: String =
     if (isDefaultCollation) "string"
-    else if (isIndeterminateCollation) s"string COLLATE INDETERMINATE_COLLATION"
-    else s"string COLLATE ${CollationFactory.fetchCollation(collationId).collationName}"
+    else if (isIndeterminateCollation) s"string collate INDETERMINATE_COLLATION"
+    else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
 
   override def equals(obj: Any): Boolean =
