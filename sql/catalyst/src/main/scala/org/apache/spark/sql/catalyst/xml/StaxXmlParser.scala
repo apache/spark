@@ -626,6 +626,8 @@ class XmlTokenizer(
   private val endTag = s"</${options.rowTag}>"
   private val commentStart = s"<!--"
   private val commentEnd = s"-->"
+  private val cdataStart = s"<![CDATA["
+  private val cdataEnd = s"]]>"
 
     /**
    * Finds the start of the next record.
@@ -673,7 +675,7 @@ class XmlTokenizer(
       nextString
     }
 
-  private def readUntilCommentClose(): Boolean = {
+  private def readUntilMatch(end: String): Boolean = {
     var i = 0
     while (true) {
       val cOrEOF = reader.read()
@@ -682,18 +684,17 @@ class XmlTokenizer(
         return false
       }
       val c = cOrEOF.toChar
-      if (c == commentEnd(i)) {
-        if (i >= commentEnd.length - 1) {
-          // Found comment close.
+      if (c == end(i)) {
+        i += 1
+        if (i >= end.length) {
+          // Found the end string.
           return true
         }
-        i += 1
       } else {
         i = 0
       }
     }
-
-    // Unreachable (a comment tag must close)
+    // Unreachable.
     false
   }
 
@@ -701,6 +702,7 @@ class XmlTokenizer(
     currentStartTag = startTag
     var i = 0
     var commentIdx = 0
+    var cdataIdx = 0
 
     while (true) {
       val cOrEOF = reader.read()
@@ -714,12 +716,24 @@ class XmlTokenizer(
         if (commentIdx >= commentStart.length - 1) {
           //  If a comment beigns we must ignore all character until its end
           commentIdx = 0
-          readUntilCommentClose()
+          readUntilMatch(commentEnd)
         } else {
           commentIdx += 1
         }
       } else {
         commentIdx = 0
+      }
+
+      if (c == cdataStart(cdataIdx)) {
+        if (cdataIdx >= cdataStart.length - 1) {
+          //  If a CDATA beigns we must ignore all character until its end
+          cdataIdx = 0
+          readUntilMatch(cdataEnd)
+        } else {
+          cdataIdx += 1
+        }
+      } else {
+        cdataIdx = 0
       }
 
       if (c == startTag(i)) {
@@ -751,6 +765,8 @@ class XmlTokenizer(
     var ei = 0
     // Index into the start of a comment tag that matched so far
     var commentIdx = 0
+    // Index into the start of a CDATA tag that matched so far
+    var cdataIdx = 0
     // How many other start tags enclose the one that's started already?
     var depth = 0
     // Previously read character
@@ -778,12 +794,25 @@ class XmlTokenizer(
           //  If a comment beigns we must ignore everything until its end
           buffer.setLength(buffer.length - commentStart.length)
           commentIdx = 0
-          readUntilCommentClose()
+          readUntilMatch(commentEnd)
         } else {
           commentIdx += 1
         }
       } else {
         commentIdx = 0
+      }
+
+      if (c == cdataStart(cdataIdx)) {
+        if (cdataIdx >= cdataStart.length - 1) {
+          //  If a CDATA beigns we must ignore everything until its end
+          buffer.setLength(buffer.length - cdataStart.length)
+          cdataIdx = 0
+          readUntilMatch(cdataEnd)
+        } else {
+          cdataIdx += 1
+        }
+      } else {
+        cdataIdx = 0
       }
 
       if (c == '>' && prevC != '/') {
