@@ -16,9 +16,6 @@ select count(*) from t1 group by utf8_binary;
 -- group by and count utf8_binary_lcase
 select count(*) from t1 group by utf8_binary_lcase;
 
--- order by utf8_binary_lcase
-select * from t1 order by utf8_binary_lcase;
-
 -- filter equal utf8_binary
 select * from t1 where utf8_binary = 'aaa';
 

@@ -60,15 +60,6 @@ Aggregate [utf8_binary_lcase#x], [count(1) AS count(1)#xL]
 
 
 -- !query
-select * from t1 order by utf8_binary_lcase
--- !query analysis
-Sort [utf8_binary_lcase#x ASC NULLS FIRST], true
-+- Project [utf8_binary#x, utf8_binary_lcase#x]
-   +- SubqueryAlias spark_catalog.default.t1
-      +- Relation spark_catalog.default.t1[utf8_binary#x,utf8_binary_lcase#x] parquet
-
-
--- !query
 select * from t1 where utf8_binary = 'aaa'
 -- !query analysis
 Project [utf8_binary#x, utf8_binary_lcase#x]

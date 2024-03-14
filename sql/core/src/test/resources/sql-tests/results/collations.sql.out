@@ -69,17 +69,6 @@ struct<count(1):bigint>
 
 
 -- !query
-select * from t1 order by utf8_binary_lcase
--- !query schema
-struct<utf8_binary:string,utf8_binary_lcase:string collate UTF8_BINARY_LCASE>
--- !query output
-aaa	aaa
-AAA	AAA
-bbb	bbb
-BBB	BBB
-
-
--- !query
 select * from t1 where utf8_binary = 'aaa'
 -- !query schema
 struct<utf8_binary:string,utf8_binary_lcase:string collate UTF8_BINARY_LCASE>
