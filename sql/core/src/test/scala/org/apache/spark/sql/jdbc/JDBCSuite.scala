@@ -700,6 +700,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
   }
 
+  test("SPARK-47396: TIME WITHOUT TIME ZONE preferTimestampNTZ") {
+    spark.catalog.clearCache()
+    val df = spark.read.format("jdbc")
+      .option("preferTimestampNTZ", true)
+      .option("url", urlWithUserAndPass)
+      .option("query", "SELECT A FROM TEST.TIMETYPES limit 1")
+      .load()
+    assert(df.head().get(0).isInstanceOf[LocalDateTime])
+  }
+
   test("test DATE types") {
     val rows = spark.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
