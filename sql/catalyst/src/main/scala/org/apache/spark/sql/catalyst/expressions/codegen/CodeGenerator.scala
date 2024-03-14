@@ -657,6 +657,7 @@ class CodegenContext extends Logging {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
     case CalendarIntervalType => s"$c1.compareTo($c2)"
+    case map : MapType => "0"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
