@@ -343,9 +343,7 @@ class QueryTerminatedEvent:
             id=uuid.UUID(jevent.id().toString()),
             runId=uuid.UUID(jevent.runId().toString()),
             exception=jexception.get() if jexception.isDefined() else None,
-            errorClassOnException=jerrorclass.get()
-            if jerrorclass.isDefined()
-            else "_LEGACY_ERROR_UNKNOWN",
+            errorClassOnException=jerrorclass.get() if jerrorclass.isDefined() else "UNCLASSIFIED",
         )
 
     @classmethod

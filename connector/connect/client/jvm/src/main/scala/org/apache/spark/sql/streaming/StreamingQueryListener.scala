@@ -197,7 +197,7 @@ object StreamingQueryListener extends Serializable {
         ("runId" -> JString(runId.toString)) ~
         ("exception" -> JString(exception.orNull)) ~
         ("errorClassOnException" -> JString(
-          errorClassOnException.getOrElse("_LEGACY_ERROR_UNKNOWN")))
+          errorClassOnException.getOrElse("UNCLASSIFIED")))
     }
   }
 }

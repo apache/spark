@@ -90,7 +90,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       .flatMap(_.split('.').headOption)
       .flatMap(errorInfoMap.get)
       .flatMap(_.sqlState)
-      .getOrElse("_LEGACY_ERROR_UNKNOWN")
+      .orNull
   }
 
   def isValidErrorClass(errorClass: String): Boolean = {

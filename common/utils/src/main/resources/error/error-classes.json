@@ -3618,6 +3618,11 @@
     ],
     "sqlState" : "42P02"
   },
+  "UNCLASSIFIED" : {
+    "message" : [
+      "An unexpected error occurred, and no specific error classification is available. Refer to the stack trace for more details on the error."
+    ]
+  },
   "UNCLOSED_BRACKETED_COMMENT" : {
     "message" : [
       "Found an unclosed bracketed comment. Please, append */ at the end of the comment."
@@ -7921,11 +7926,6 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
-    ]
-  },
-  "_LEGACY_ERROR_UNKNOWN" : {
-    "message" : [
-      "An unexpected error occurred, and no specific error classification is available. Refer to the stack trace for more details on the error."
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

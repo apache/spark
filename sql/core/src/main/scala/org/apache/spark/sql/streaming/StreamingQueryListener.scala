@@ -188,7 +188,7 @@ object StreamingQueryListener extends Serializable {
    *                              with an exception which is a part of error class framework.
    *                              If the query was terminated without an exception, or the
    *                              exception is not a part of error class framework, it will be
-   *                              `_LEGACY_ERROR_UNKNOWN`.
+   *                              `UNCLASSIFIED`.
    * @since 2.1.0
    */
   @Evolving
@@ -209,7 +209,7 @@ object StreamingQueryListener extends Serializable {
       ("runId" -> JString(runId.toString)) ~
       ("exception" -> JString(exception.orNull)) ~
       ("errorClassOnException" -> JString(
-        errorClassOnException.getOrElse("_LEGACY_ERROR_UNKNOWN")))
+        errorClassOnException.getOrElse("UNCLASSIFIED")))
     }
   }
 }

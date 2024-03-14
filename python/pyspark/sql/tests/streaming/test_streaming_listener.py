@@ -63,7 +63,7 @@ class StreamingListenerTestsMixin:
         if error_class:
             self.assertTrue(error_class in event.errorClassOnException)
         else:
-            self.assertEqual(event.errorClassOnException, "_LEGACY_ERROR_UNKNOWN")
+            self.assertEqual(event.errorClassOnException, "UNCLASSIFIED")
 
     def check_streaming_query_progress(self, progress):
         """Check StreamingQueryProgress"""
@@ -392,14 +392,14 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 "id" : "78923ec2-8f4d-4266-876e-1f50cf3c283b",
                 "runId" : "55a95d45-e932-4e08-9caa-0a8ecd9391e8",
                 "exception" : "org.apache.spark.SparkException: Job aborted due to stage failure",
-                "errorClassOnException" : null}
+                "errorClassOnException" : "UNCLASSIFIED"}
         """
         terminated_event = QueryTerminatedEvent.fromJson(json.loads(terminated_json))
         self.check_terminated_event(terminated_event, "SparkException")
         self.assertEqual(terminated_event.id, uuid.UUID("78923ec2-8f4d-4266-876e-1f50cf3c283b"))
         self.assertEqual(terminated_event.runId, uuid.UUID("55a95d45-e932-4e08-9caa-0a8ecd9391e8"))
         self.assertIn("SparkException", terminated_event.exception)
-        self.assertIsNone(terminated_event.errorClassOnException)
+        self.assertEqual(terminated_event.errorClassOnException, "UNCLASSIFIED")
 
     def test_streaming_query_progress_fromJson(self):
         progress_json = """

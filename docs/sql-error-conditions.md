@@ -2337,6 +2337,12 @@ Unable to infer schema for `<format>`. It must be specified manually.
 
 Found the unbound parameter: `<name>`. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`.
 
+### UNCLASSIFIED
+
+SQLSTATE: none assigned
+
+An unexpected error occurred, and no specific error classification is available. Refer to the stack trace for more details on the error.
+
 ### UNCLOSED_BRACKETED_COMMENT
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
