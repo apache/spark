@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.util.concurrent.atomic.AtomicReference
+
 import scala.jdk.CollectionConverters._
 
 import org.antlr.v4.runtime._
-import org.antlr.v4.runtime.atn.PredictionMode
+import org.antlr.v4.runtime.atn.{ATN, ParserATNSimulator, PredictionContextCache, PredictionMode}
+import org.antlr.v4.runtime.dfa.DFA
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
@@ -61,6 +64,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
+    AbstractSqlParser.installCaches(parser)
     parser.addParseListener(PostProcessor)
     parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
     parser.removeErrorListeners()
@@ -105,9 +109,59 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
           messageParameters = e.getMessageParameters.asScala.toMap,
           queryContext = e.getQueryContext)
     }
+    finally {
+      if (conf.releaseAntlrCacheAfterParse) {
+        AbstractSqlParser.refreshParserCaches()
+      }
+    }
   }
 
   private def conf: SqlApiConf = SqlApiConf.get
+}
+
+object AbstractSqlParser {
+  private case class AntlrCaches(atn: ATN) {
+    val predictionContextCache: PredictionContextCache = new PredictionContextCache
+    val decisionToDFA: Array[DFA] = AntlrCaches.makeDecisionToDFA(atn)
+    def installCaches(parser: SqlBaseParser): Unit = {
+      parser.setInterpreter(
+        new ParserATNSimulator(parser, atn, decisionToDFA, predictionContextCache))
+    }
+  }
+
+  private object AntlrCaches {
+    private def makeDecisionToDFA(atn: ATN): Array[DFA] = {
+      val decisionToDFA = new Array[DFA](atn.getNumberOfDecisions)
+      for (i <- 0 until atn.getNumberOfDecisions) {
+        decisionToDFA(i) = new DFA(atn.getDecisionState(i), i)
+      }
+      decisionToDFA
+    }
+  }
+
+  private val parserCaches = new AtomicReference[AntlrCaches](AntlrCaches(SqlBaseParser._ATN))
+
+  /**
+   * Install the parser caches into the given parser.
+   *
+   * This method should be called before parsing any input.
+   */
+  def installCaches(parser: SqlBaseParser): Unit = parserCaches.get().installCaches(parser)
+
+  /**
+   * Drop the existing parser caches and create a new one.
+   *
+   * ANTLR retains caches in its parser that are never released.  This speeds up parsing of future
+   * input, but it can consume a lot of memory depending on the input seen so far.
+   *
+   * This method provides a mechanism to free the retained caches, which can be useful after parsing
+   * very large SQL inputs, especially if those large inputs are unlikely to be similar to future
+   * inputs seen by the driver.
+   *
+   */
+  def refreshParserCaches(): Unit = {
+    parserCaches.set(AntlrCaches(SqlBaseParser._ATN))
+  }
 }
 
 /**

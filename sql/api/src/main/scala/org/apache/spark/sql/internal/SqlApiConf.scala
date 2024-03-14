@@ -43,6 +43,7 @@ private[sql] trait SqlApiConf {
   def datetimeJava8ApiEnabled: Boolean
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
+  def releaseAntlrCacheAfterParse: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -77,4 +78,5 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.EXCEPTION
+  override def releaseAntlrCacheAfterParse: Boolean = false
 }
