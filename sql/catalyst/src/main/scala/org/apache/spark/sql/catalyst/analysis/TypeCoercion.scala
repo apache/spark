@@ -889,8 +889,8 @@ object TypeCoercion extends TypeCoercionBase {
 
   /** Promotes all the way to StringType. */
   private def stringPromotion(dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
-    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
-    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
+    case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
+    case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
     case _ => None
   }
 
@@ -997,9 +997,9 @@ object TypeCoercion extends TypeCoercionBase {
       case (StringType, target: NumericType) => target
       case (StringType, datetime: DatetimeType) => datetime
       case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
-      case (_: StringType, BinaryType) => BinaryType
+      case (StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
+      case (any: AtomicType, StringType) if any != StringType => StringType
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
