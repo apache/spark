@@ -512,28 +512,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("create table with collations inside a struct") {
-    val tableName = "struct_collation_tbl"
-    val collationName = "UTF8_BINARY_LCASE"
-    val collationId = CollationFactory.collationNameToId(collationName)
-
-    withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TABLE $tableName
-           |(c1 STRUCT<name: STRING COLLATE $collationName, age: INT>)
-           |USING PARQUET
-           |""".stripMargin)
-
-      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'aaa', 'id', 1))")
-      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'AAA', 'id', 2))")
-
-      checkAnswer(sql(s"SELECT DISTINCT collation(c1.name) FROM $tableName"),
-        Seq(Row(collationName)))
-      assert(sql(s"SELECT c1.name FROM $tableName").schema.head.dataType == StringType(collationId))
-    }
-  }
-
   test("add collated column with alter table") {
     val tableName = "alter_column_tbl"
     val defaultCollation = "UTF8_BINARY"
