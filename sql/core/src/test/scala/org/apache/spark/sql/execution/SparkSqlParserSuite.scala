@@ -801,12 +801,12 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         stop = 63))
   }
 
-  def getMemoryUsage: Long = {
+  private def getMemoryUsage: Long = {
     System.gc()
     Runtime.getRuntime.totalMemory() - Runtime.getRuntime.freeMemory()
   }
 
-  def awfulQuery(depth: Int): String = {
+  private def awfulQuery(depth: Int): String = {
     if (depth == 0) {
       s"rand()"
     } else {
@@ -817,7 +817,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     }
   }
 
-  test("release ANTLR cache after parsing") {
+  test("SPARK-47404: release ANTLR cache after parsing") {
     val baselineMemory = getMemoryUsage // On my system, this is about 61 MiB
     parser.parsePlan(s"select ${awfulQuery(8)} from range(10)")
     val estimatedCacheOverhead = getMemoryUsage - baselineMemory // about  119 MiB
@@ -828,7 +828,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val memoryUsageWithoutRelease = getMemoryUsage
     assert(memoryUsageWithoutRelease > baselineMemory + (1 - tolerance) * estimatedCacheOverhead)
     assert(memoryUsageWithoutRelease < baselineMemory + (1 + tolerance) * estimatedCacheOverhead)
-    withSQLConf("spark.sql.releaseAntlrCacheAfterParse" -> "true") {
+    withSQLConf("spark.sql.parser.releaseAntlrCacheAfterParsing" -> "true") {
       parser.parsePlan("select id from range(10)")
     }
     // Within some tolerance, the memory usage should be roughly back to the baseline.

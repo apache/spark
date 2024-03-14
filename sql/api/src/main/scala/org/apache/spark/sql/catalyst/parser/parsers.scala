@@ -110,7 +110,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
           queryContext = e.getQueryContext)
     }
     finally {
-      if (conf.releaseAntlrCacheAfterParse) {
+      if (conf.releaseAntlrCacheAfterParsing) {
         AbstractSqlParser.refreshParserCaches()
       }
     }
