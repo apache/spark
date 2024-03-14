@@ -64,12 +64,9 @@ if not "x%JAVA_HOME%"=="x" (
 rem The launcher library prints the command to be executed in a single line suitable for being
 rem executed by the batch interpreter. So read all the output of the launcher into a variable.
 :gen
-set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM%%TIME::=0%.txt
-rem Remove space between the RANDOM and TIME output
-set LAUNCHER_OUTPUT=%LAUNCHER_OUTPUT: =%
-rem SPARK-28302: %RANDOM% would return the same number if we call it instantly after last call,
-rem so we should make it sure to generate unique file to avoid process collision of writing into
-rem the same file concurrently.
+FOR /F %%a IN ('POWERSHELL -COMMAND "$([guid]::NewGuid().ToString())"') DO (SET NEWGUID=%%a)
+set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%NEWGUID%.txt
+
 if exist %LAUNCHER_OUTPUT% goto :gen
 rem unset SHELL to indicate non-bash environment to launcher/Main
 set SHELL=
