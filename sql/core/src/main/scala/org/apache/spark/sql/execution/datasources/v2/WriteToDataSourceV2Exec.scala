@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PartitionMetricsCollector, PartitionMetricsWriteInfo, PhysicalWriteInfoImpl, SparkListenerSQLPartitionMetrics, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PartitionMetricsCollector, PartitionMetricsWriteInfo, PhysicalWriteInfoImpl, SQLPartitionMetrics, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
@@ -409,8 +409,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
           // Post them to the listener bus
           val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-          sparkContext.listenerBus.post(
-            SparkListenerSQLPartitionMetrics(executionId.toLong, metrics))
+          SQLPartitionMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics)
         case _ =>
       }
 

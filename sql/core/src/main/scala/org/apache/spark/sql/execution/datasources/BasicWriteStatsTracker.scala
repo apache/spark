@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.write.{PartitionMetricsWriteInfo, SparkListenerSQLPartitionMetrics}
+import org.apache.spark.sql.connector.write.{PartitionMetricsWriteInfo, SQLPartitionMetrics}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -287,8 +287,8 @@ class BasicWriteJobStatsTracker(
       val value = entry._2
       partitionMetricsWriteInfo.update(key, value.numBytes, value.numRows, value.numFiles)
     })
-    sparkContext.listenerBus.post(
-      SparkListenerSQLPartitionMetrics(executionId.toLong, partitionMetricsWriteInfo))
+    SQLPartitionMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      partitionMetricsWriteInfo)
   }
 }
 

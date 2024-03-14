@@ -17,9 +17,24 @@
 
 package org.apache.spark.sql.connector.write
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler.SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerSQLPartitionMetrics(executorId: Long, metrics: PartitionMetricsWriteInfo)
   extends SparkListenerEvent
+
+object SQLPartitionMetrics {
+
+  def postDriverMetricUpdates(sc: SparkContext, executionId: String,
+                              writeInfo: PartitionMetricsWriteInfo): Unit = {
+    // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
+    // directly without setting an execution id. We should be tolerant to it.
+    if (executionId != null) {
+      sc.listenerBus.post(
+        SparkListenerSQLPartitionMetrics(executionId.toLong, writeInfo))
+    }
+  }
+
+}
