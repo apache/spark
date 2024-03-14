@@ -33,8 +33,8 @@ import scala.Option;
  *        <li>f_source(x) = bucket(4, x)</li>
  *        <li>f_target(x) = bucket(2, x)</li>
  *        <li>r(x) = x / 2</li>
- *     </ul>
- *    <li>Date functions</li>
+ *    </ul>
+ *    <li>Date functions
  *    <ul>
  *        <li>f_source(x) = days(x)</li>
  *        <li>f_target(x) = hours(x)</li>
