@@ -24,13 +24,7 @@ import org.apache.spark.sql.types.{DataType, StringType}
 
 object CollationTypeConstraints {
 
-  def checkCollationCompatibility(
-      checkResult: TypeCheckResult,
-      collationId: Int,
-      dataTypes: Seq[DataType]): TypeCheckResult = {
-    if (checkResult.isFailure) {
-      return checkResult
-    }
+  def checkCollationCompatibility(collationId: Int, dataTypes: Seq[DataType]): TypeCheckResult = {
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     // Additional check needed for collation compatibility
     for (dataType <- dataTypes) {
