@@ -377,7 +377,7 @@ class FunctionsTestsMixin:
 
     def test_collation(self):
         df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
-        actual = df.select(F.collation(F.collate("name", "UNICODE")).distinct().collect()
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
         self.assertEqual([Row("UNICODE")], actual)
 
     def test_octet_length_function(self):
