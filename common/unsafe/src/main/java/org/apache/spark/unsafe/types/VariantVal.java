@@ -120,4 +120,11 @@ public class VariantVal implements Serializable {
       return false;
     }
   }
+
+  @Override
+  public int hashCode() {
+    int result = Arrays.hashCode(value);
+    result = 31 * result + Arrays.hashCode(metadata);
+    return result;
+  }
 }
