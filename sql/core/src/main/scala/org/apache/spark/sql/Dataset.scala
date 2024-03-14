@@ -1151,7 +1151,6 @@ class Dataset[T] private[sql](
 
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
-
     val plan = withPlan(
       tryAmbiguityResolution(right, joinExprs, joinType)
     ).queryExecution.analyzed.asInstanceOf[Join]
@@ -1328,7 +1327,6 @@ class Dataset[T] private[sql](
       case a: AttributeReference if a.metadata.contains(Dataset.DATASET_ID_KEY) =>
         UnresolvedAttributeWithTag(a, a.metadata.getLong(Dataset.DATASET_ID_KEY))
     }
-
     val rightAsOfExpr = rightAsOf.expr.transformUp {
       case a: AttributeReference if other.logicalPlan.outputSet.contains(a) =>
         val index = other.logicalPlan.output.indexWhere(_.exprId == a.exprId)
@@ -1337,7 +1335,6 @@ class Dataset[T] private[sql](
       case a: AttributeReference if a.metadata.contains(Dataset.DATASET_ID_KEY) =>
         UnresolvedAttributeWithTag(a, a.metadata.getLong(Dataset.DATASET_ID_KEY))
     }
-
     withPlan {
       AsOfJoin(
         joined.left, joined.right,
@@ -1600,12 +1597,11 @@ class Dataset[T] private[sql](
 
       case other => other
     }
-    val namedExprs = untypedCols.map(_.named)
     val inputSet = logicalPlan.outputSet
-    val rectifiedNamedExprs = namedExprs.map(ne => (ne transformUp {
+    val namedExprs = untypedCols.map(ne => (ne.named transformUp {
       case attr: AttributeReference => convertToUnresolvedIfNeeded(attr, inputSet)
     }).asInstanceOf[NamedExpression])
-    Project(rectifiedNamedExprs, logicalPlan)
+    Project(namedExprs, logicalPlan)
   }
 
   /**
@@ -4266,7 +4262,7 @@ class Dataset[T] private[sql](
   }
 
   private def convertToUnresolvedIfNeeded(attr: AttributeReference, inputSet: AttributeSet):
-  NamedExpression = {
+    NamedExpression = {
     val attrDatasetIdOpt = if (attr.metadata.contains(Dataset.DATASET_ID_KEY)) {
       Option(attr.metadata.getLong(DATASET_ID_KEY))
     } else {
@@ -4285,7 +4281,6 @@ class Dataset[T] private[sql](
       attr
     }
   }
-
 
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
