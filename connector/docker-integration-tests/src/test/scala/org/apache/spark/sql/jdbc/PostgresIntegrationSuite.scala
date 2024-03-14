@@ -284,7 +284,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(schema(1).dataType == ShortType)
   }
 
-  test("SPARK-20557: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
+  test("SPARK-47390: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
     Seq(true, false).foreach { prefer =>
       val rows = sqlContext.read
         .option("preferTimestampNTZ", prefer)
