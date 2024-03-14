@@ -1,5 +1,19 @@
-Forward Secure Auth Protocol
+Forward Secure Auth Protocol v1.1
 ==============================================
+
+Deprecation Notice
+------------------
+This is a bespoke key exchange protocol that was implemented before Spark supported TLS (aka SSL) for RPC
+calls. It is recommended that Spark users upgrade to using TLS for RPC calls between Spark processes. This protocol
+will be deprecated and removed in the long-term.
+
+See
+the [Spark security documentation](https://github.com/apache/spark/blob/master/docs/security.md#ssl-encryption) for
+more information on how to configure TLS.
+
+
+Summary
+-------
 
 This file describes a forward secure authentication protocol which may be used by Spark. This
 protocol is essentially ephemeral Diffie-Hellman key exchange using Curve25519, referred to as
@@ -77,6 +91,7 @@ Now that the server has the client's ephemeral public key, it can generate its o
 keypair and compute a shared secret.
 
     sharedSecret = X25519.computeSharedSecret(clientPublicKey, serverKeyPair.privateKey())
+    derivedKey = HKDF(sharedSecret, salt=transcript, info="deriveKey")
 
 With the shared secret, the server will also generate two initialization vectors to be used for
 inbound and outbound streams. These IVs are not secret and will be bound to the preceding protocol
@@ -99,3 +114,13 @@ sessions. It would, however, allow impersonation of future sessions.
 In the event of a pre-shared key compromise, messages would still be confidential from a passive
 observer. Only active adversaries spoofing a session would be able to recover plaintext.
 
+Security Changes & Compatibility
+-------------
+
+The original version of this protocol, retroactively called v1.0, did not apply an HKDF to `sharedSecret` and was
+directly using the encoded X coordinate as key material. This is atypical and standard practice is to pass that shared
+coordinate through an HKDF. The current version, v1.1, adds this additional HKDF to
+derive `derivedKey`.
+
+Consequently, older Spark versions using v1.0 of this protocol will not negotiate the same key as
+Spark versions using v1.1 and will be **unable to send encrypted RPCs** across incompatible versions.
