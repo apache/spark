@@ -787,13 +787,13 @@ abstract class TypeCoercionBase {
       case checkIndeterminate @ (_: BinaryExpression | _: In | _: SortOrder)
         if hasIndeterminate(checkIndeterminate.children
           .filter(e => hasStringType(e.dataType))
-          .map(extractStringType)) =>
+          .map(e => extractStringType(e.dataType))) =>
         throw QueryCompilationErrors.indeterminateCollationError()
     }
 
     def shouldCast(types: Seq[Expression]): Boolean = {
       types.filter(e => hasStringType(e.dataType))
-        .map(e => extractStringType(e).collationId).distinct.size > 1
+        .map(e => extractStringType(e.dataType).collationId).distinct.size > 1
     }
 
     /**
@@ -810,9 +810,10 @@ abstract class TypeCoercionBase {
     /**
      * Extracts StringTypes from flitered hasStringType
      */
-    private def extractStringType(expr: Expression): StringType = expr.dataType match {
+    @tailrec
+    private def extractStringType(dt: DataType): StringType = dt match {
       case st: StringType => st
-      case ArrayType(et, _) => et.asInstanceOf[StringType]
+      case ArrayType(et, _) => extractStringType(et)
     }
 
     /**
@@ -843,7 +844,7 @@ abstract class TypeCoercionBase {
      */
     def getOutputCollation(exprs: Seq[Expression], failOnIndeterminate: Boolean = true): Int = {
       val explicitTypes = exprs.filter(hasExplicitCollation)
-        .map(e => extractStringType(e).collationId).distinct
+        .map(e => extractStringType(e.dataType).collationId).distinct
 
       explicitTypes.size match {
         case 1 => explicitTypes.head
@@ -853,7 +854,8 @@ abstract class TypeCoercionBase {
               explicitTypes.map(t => StringType(t).typeName)
             )
         case 0 =>
-          val dataTypes = exprs.filter(e => hasStringType(e.dataType)).map(extractStringType)
+          val dataTypes = exprs.filter(e => hasStringType(e.dataType))
+            .map(e => extractStringType(e.dataType))
 
           if (hasMultipleImplicits(dataTypes)) {
             if (failOnIndeterminate) {
