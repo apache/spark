@@ -177,6 +177,26 @@ trait CreatableRelationProvider {
       data: DataFrame): BaseRelation
 
   /**
+   * Check if the relation supports the given scalar data type. Can be overridden to selectively
+   * exclude or include a type that does not contain nested types. E.g.
+   * `super.supportsScalarDataType(dt) && !isInstanceOf[TimestampNTZType](dt)`.
+   *
+   * @param dt Data type to check
+   * @return True if the data type is supported
+   *
+   * @since 4.0.0
+   */
+  protected def supportsScalarDataType(dt: DataType): Boolean = {
+    dt match {
+      case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
+      case BinaryType | BooleanType | ByteType | CharType(_) | DateType | _ : DecimalType |
+           DoubleType | FloatType | IntegerType | LongType | NullType | ObjectType(_) | ShortType |
+           _: StringType | TimestampNTZType | TimestampType | VarcharType(_) => true
+      case _ => false
+    }
+  }
+
+  /**
    * Check if the relation supports the given data type.
    *
    * @param dt Data type to check
@@ -190,10 +210,7 @@ trait CreatableRelationProvider {
       case MapType(k, v, _) => supportsDataType(k) && supportsDataType(v)
       case StructType(fields) => fields.forall(f => supportsDataType(f.dataType))
       case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
-      case BinaryType | BooleanType | ByteType | CharType(_) | DateType | _ : DecimalType |
-           DoubleType | FloatType | IntegerType | LongType | NullType | ObjectType(_) | ShortType |
-           _: StringType | TimestampNTZType | TimestampType | VarcharType(_) => true
-      case _ => false
+      case _ => supportsScalarDataType(dt)
     }
   }
 }
