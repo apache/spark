@@ -4589,7 +4589,7 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
-  val RELEASE_ANTLR_CACHE_AFTER_PARSE =
+  val RELEASE_ANTLR_CACHE_AFTER_PARSING =
     buildConf("spark.sql.parser.releaseAntlrCacheAfterParsing")
       .doc("When true, release the ANTLR cache after parsing a SQL query. ANTLR parsers retain a " +
         "DFA cache designed to speed up parsing future input. However, there is no limit to how " +
@@ -5140,7 +5140,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
 
-  override def releaseAntlrCacheAfterParsing: Boolean = getConf(RELEASE_ANTLR_CACHE_AFTER_PARSE)
+  override def releaseAntlrCacheAfterParsing: Boolean = getConf(RELEASE_ANTLR_CACHE_AFTER_PARSING)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
