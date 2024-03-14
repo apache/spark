@@ -26,7 +26,6 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 import org.apache.spark.SharedSparkContext
-import org.apache.spark.SparkEnv
 import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.ThreadUtils
@@ -56,14 +55,5 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
 
     // Timeout ensures that the test fails in 5 minutes if createSimplerWorker() doesn't return.
     ThreadUtils.awaitReady(createFuture, 5.minutes)
-  }
-
-  test("SPARK-47346: cannot create Python worker with different useDaemon flag") {
-    val env = SparkEnv.get
-    env.createPythonWorker(
-      "python3", "pyspark.testing.worker_module", Map.empty, useDaemon = true)
-    assert(intercept[SparkException](env.createPythonWorker(
-      "python3", "pyspark.testing.worker_module", Map.empty, useDaemon = false))
-      .getMessage.contains("PythonWorkerFactory is already created with useDaemon = true"))
   }
 }

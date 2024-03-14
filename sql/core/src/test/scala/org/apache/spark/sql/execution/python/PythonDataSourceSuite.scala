@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{File, FileWriter}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.DataSourceManager
@@ -863,5 +863,15 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       .format(dataSourceName).load()
     checkAnswer(df, Row("1", "2", "true"))
     df.write.option("foo", 1).option("bar", 2).format(dataSourceName).mode("append").save()
+  }
+
+  test("SPARK-47346: cannot create Python worker with different useDaemon flag") {
+    assume(shouldTestPythonUDFs)
+    val env = SparkEnv.get
+    env.createPythonWorker(
+      "python3", "pyspark.sql.worker.create_data_source", Map.empty, useDaemon = true)
+    assert(intercept[SparkException](env.createPythonWorker(
+      "python3", "pyspark.sql.worker.create_data_source", Map.empty, useDaemon = false))
+      .getMessage.contains("PythonWorkerFactory is already created with useDaemon = true"))
   }
 }
