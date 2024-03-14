@@ -4845,6 +4845,10 @@ object functions {
       otherChar: Column): Column =
     Column.fn("mask", input, upperChar, lowerChar, digitChar, otherChar)
 
+  def collate(e: Column, collation: String): Column = Column.fn("collate", e, lit(collation))
+
+  def collation(e: Column): Column = Column.fn("collation", e)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
