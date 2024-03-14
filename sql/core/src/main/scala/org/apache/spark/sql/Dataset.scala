@@ -1173,7 +1173,9 @@ class Dataset[T] private[sql](
     }
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
+      ExpressionEncoder
+        .tuple(Seq(this.exprEnc, other.exprEnc), useNullSafeDeserializer = true)
+        .asInstanceOf[Encoder[(T, U)]]
 
     val leftResultExpr = {
       if (!this.exprEnc.isSerializedAsStructForTopLevel) {
