@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.connector.metric;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 import org.apache.spark.annotation.Evolving;
 
 /**
  * A custom file task metric. This allows file based data source V2 implementations
  * to use a single PartitionReader with multiple file readers. Each file reader can
  * provide its own metrics values and they can be added into the parent PartitionReader
+ *
  * @since 4.0.0
  */
 @Evolving
@@ -36,28 +34,4 @@ public interface CustomFileTaskMetric extends CustomTaskMetric {
    */
   default void update(long addValue) {}
 
-
-  /*
-  Merge(add) the values of the corresponding CustomTaskMetric from src array into target array
-  adding a new element if it doesn't already exist. Returns a new array without modifying the
-  target array
-  */
-  static List<CustomFileTaskMetric> mergeMetricValues(List<CustomTaskMetric> src,
-      List<CustomFileTaskMetric> target) {
-    List<CustomFileTaskMetric> out = new ArrayList<>(target);
-    src.forEach(srcMetric -> {
-          Optional<CustomFileTaskMetric> m = out.stream()
-              .filter(targetMetric -> targetMetric.name().equals(srcMetric.name()))
-              .findFirst();
-          if (m.isPresent()) {
-            m.get().update(srcMetric.value());
-          } else {
-            if (srcMetric instanceof CustomFileTaskMetric) {
-              out.add((CustomFileTaskMetric) srcMetric);
-            }
-          }
-        }
-    );
-    return out;
-  }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
+import org.apache.spark.sql.connector.metric.{CustomFileTaskMetric, CustomMetric, CustomTaskMetric}
 
 object CustomMetrics {
   private[spark] val V2_CUSTOM = "v2Custom"
@@ -69,5 +69,24 @@ object CustomMetrics {
         }
       }
     }
+  }
+
+  /**
+   * Merge(add) the values of the corresponding CustomTaskMetric from src array into target array
+   * adding a new element if it doesn't already exist.
+   */
+  def mergeMetricValues(src: Array[CustomFileTaskMetric],
+      target: Array[CustomFileTaskMetric]): Array[CustomFileTaskMetric] = {
+    var out = target
+    src.foreach(srcMetric => {
+      out.find(_.name == srcMetric.name) match {
+        case Some(m) =>
+          m.update(srcMetric.value)
+        case None =>
+          out +:= srcMetric
+          ()
+      }
+    })
+    out
   }
 }
