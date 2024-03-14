@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.nio.{ByteBuffer, ByteOrder}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructField, StructType}
 import org.apache.spark.unsafe.Platform
 
 sealed trait RocksDBKeyStateEncoder {
@@ -245,8 +248,95 @@ class RangeKeyScanStateEncoder(
   // Reusable objects
   private val joinedRowOnKey = new JoinedRow()
 
+  private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
+    rangeScanKeyProjection(key)
+  }
+
+  private def encodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
+    val writer = new UnsafeRowWriter(numOrderingCols)
+    rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
+      val value = row.get(idx, field.dataType)
+      field.dataType match {
+        case BooleanType => writer.write(idx, value.asInstanceOf[Boolean])
+        case ByteType => writer.write(idx, value.asInstanceOf[Byte])
+        case ShortType =>
+          val bbuf = ByteBuffer.allocate(2)
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          bbuf.putShort(value.asInstanceOf[Short])
+          writer.write(idx, bbuf.array())
+
+        case IntegerType =>
+          val bbuf = ByteBuffer.allocate(4)
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          bbuf.putInt(value.asInstanceOf[Int])
+          writer.write(idx, bbuf.array())
+
+        case LongType =>
+          val bbuf = ByteBuffer.allocate(8)
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          bbuf.putLong(value.asInstanceOf[Long])
+          writer.write(idx, bbuf.array())
+
+        case FloatType =>
+          val bbuf = ByteBuffer.allocate(4)
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          bbuf.putFloat(value.asInstanceOf[Float])
+          writer.write(idx, bbuf.array())
+
+        case DoubleType =>
+          val bbuf = ByteBuffer.allocate(8)
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          bbuf.putDouble(value.asInstanceOf[Double])
+          writer.write(idx, bbuf.array())
+      }
+    }
+    writer.getRow().copy()
+  }
+
+  private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
+    val writer = new UnsafeRowWriter(numOrderingCols)
+    rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
+      val value = if (field.dataType == BooleanType || field.dataType == ByteType) {
+        row.get(idx, field.dataType)
+      } else {
+        row.getBinary(idx)
+      }
+
+      field.dataType match {
+        case BooleanType => writer.write(idx, value.asInstanceOf[Boolean])
+        case ByteType => writer.write(idx, value.asInstanceOf[Byte])
+        case ShortType =>
+          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          writer.write(idx, bbuf.getShort)
+
+        case IntegerType =>
+          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          writer.write(idx, bbuf.getInt)
+
+        case LongType =>
+          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          writer.write(idx, bbuf.getLong)
+
+        case FloatType =>
+          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          writer.write(idx, bbuf.getFloat)
+
+        case DoubleType =>
+          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
+          bbuf.order(ByteOrder.BIG_ENDIAN)
+          writer.write(idx, bbuf.getDouble)
+      }
+    }
+    writer.getRow().copy()
+  }
+
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    val rangeScanKeyEncoded = encodeUnsafeRow(extractPrefixKey(row))
+    val prefixKey = extractPrefixKey(row)
+    val rangeScanKeyEncoded = encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
     val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
 
     val encodedBytes = new Array[Byte](rangeScanKeyEncoded.length + remainingEncoded.length + 4)
@@ -276,15 +366,13 @@ class RangeKeyScanStateEncoder(
       prefixKeyEncodedLen, remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
       remainingKeyEncodedLen)
 
-    val prefixKeyDecoded = decodeToUnsafeRow(prefixKeyEncoded, numFields = numOrderingCols)
+    val prefixKeyDecodedForRangeScan = decodeToUnsafeRow(prefixKeyEncoded,
+      numFields = numOrderingCols)
+    val prefixKeyDecoded = decodePrefixKeyForRangeScan(prefixKeyDecodedForRangeScan)
     val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
       numFields = keySchema.length - numOrderingCols)
 
     restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
-  }
-
-  private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
-    rangeScanKeyProjection(key)
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
