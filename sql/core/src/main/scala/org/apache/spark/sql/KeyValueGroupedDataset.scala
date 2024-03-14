@@ -683,15 +683,15 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @tparam S The type of initial state objects. Must be encodable to Spark SQL types.
-   * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
-   *                          operator.
+   * @param StatefulProcessorWithInitialState Instance of statefulProcessor whose functions will
+   *                                          be invoked by the operator.
    * @param timeoutMode       The timeout mode of the stateful processor.
    * @param outputMode        The output mode of the stateful processor. Defaults to APPEND mode.
    * @param initialState      User provided initial state that will be used to initiate state for
    *                          the query in the first batch.
    *
    */
-  def transformWithState[U: Encoder, S: Encoder](
+  private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeoutMode: TimeoutMode,
       outputMode: OutputMode,
