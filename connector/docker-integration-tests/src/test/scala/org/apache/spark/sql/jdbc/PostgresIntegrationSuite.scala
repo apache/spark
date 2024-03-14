@@ -284,15 +284,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(schema(1).dataType == ShortType)
   }
 
-  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
-    "should be recognized") {
-    // When using JDBC to read the columns of TIMESTAMP with TIME ZONE and TIME with TIME ZONE
-    // the actual types are java.sql.Types.TIMESTAMP and java.sql.Types.TIME
-    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-    val rows = dfRead.collect()
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
+  test("SPARK-47390: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
+    Seq(true, false).foreach { prefer =>
+      val rows = sqlContext.read
+        .option("preferTimestampNTZ", prefer)
+        .jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+        .collect()
+      rows.head.toSeq.tail.foreach(c => assert(c.isInstanceOf[java.sql.Timestamp]))
+    }
   }
 
   test("SPARK-22291: Conversion error when transforming array types of " +
