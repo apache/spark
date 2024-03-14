@@ -1246,7 +1246,9 @@ class Dataset[T] private[sql](
         JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
+      ExpressionEncoder
+        .tuple(Seq(this.exprEnc, other.exprEnc), useNullSafeDeserializer = true)
+        .asInstanceOf[Encoder[(T, U)]]
 
     withTypedPlan(JoinWith.typedJoinWith(
       joined,

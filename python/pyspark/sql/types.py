@@ -261,7 +261,7 @@ class StringType(AtomicType):
 
     def collationIdToName(self) -> str:
         return (
-            " COLLATE %s" % StringType.collationNames[self.collationId]
+            " collate %s" % StringType.collationNames[self.collationId]
             if self.collationId != 0
             else ""
         )
@@ -1486,7 +1486,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-_COLLATED_STRING = re.compile(r"string\s+COLLATE\s+([\w_]+|`[\w_]`)")
+_COLLATED_STRING = re.compile(r"string\s+collate\s+([\w_]+|`[\w_]`)")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")

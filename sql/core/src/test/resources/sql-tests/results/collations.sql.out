@@ -82,7 +82,7 @@ BBB	BBB
 -- !query
 select * from t1 where utf8_binary = 'aaa'
 -- !query schema
-struct<utf8_binary:string,utf8_binary_lcase:string COLLATE UTF8_BINARY_LCASE>
+struct<utf8_binary:string,utf8_binary_lcase:string collate UTF8_BINARY_LCASE>
 -- !query output
 aaa	aaa
 
@@ -90,7 +90,7 @@ aaa	aaa
 -- !query
 select * from t1 where utf8_binary_lcase = 'aaa' collate utf8_binary_lcase
 -- !query schema
-struct<utf8_binary:string,utf8_binary_lcase:string COLLATE UTF8_BINARY_LCASE>
+struct<utf8_binary:string,utf8_binary_lcase:string collate UTF8_BINARY_LCASE>
 -- !query output
 AAA	AAA
 aaa	aaa
@@ -99,7 +99,7 @@ aaa	aaa
 -- !query
 select * from t1 where utf8_binary < 'bbb'
 -- !query schema
-struct<utf8_binary:string,utf8_binary_lcase:string COLLATE UTF8_BINARY_LCASE>
+struct<utf8_binary:string,utf8_binary_lcase:string collate UTF8_BINARY_LCASE>
 -- !query output
 AAA	AAA
 BBB	BBB
@@ -109,7 +109,7 @@ aaa	aaa
 -- !query
 select * from t1 where utf8_binary_lcase < 'bbb' collate utf8_binary_lcase
 -- !query schema
-struct<utf8_binary:string,utf8_binary_lcase:string COLLATE UTF8_BINARY_LCASE>
+struct<utf8_binary:string,utf8_binary_lcase:string collate UTF8_BINARY_LCASE>
 -- !query output
 AAA	AAA
 aaa	aaa
@@ -118,7 +118,7 @@ aaa	aaa
 -- !query
 select l.utf8_binary, r.utf8_binary_lcase from t1 l join t1 r on l.utf8_binary_lcase = r.utf8_binary_lcase
 -- !query schema
-struct<utf8_binary:string,utf8_binary_lcase:string COLLATE UTF8_BINARY_LCASE>
+struct<utf8_binary:string,utf8_binary_lcase:string collate UTF8_BINARY_LCASE>
 -- !query output
 AAA	AAA
 AAA	aaa
@@ -157,7 +157,7 @@ struct<>
 -- !query
 select * from t1 anti join t2 on t1.utf8_binary_lcase = t2.utf8_binary_lcase
 -- !query schema
-struct<utf8_binary:string,utf8_binary_lcase:string COLLATE UTF8_BINARY_LCASE>
+struct<utf8_binary:string,utf8_binary_lcase:string collate UTF8_BINARY_LCASE>
 -- !query output
 
 

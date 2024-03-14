@@ -966,7 +966,6 @@ pyspark_pandas_slow = Module(
     ],
 )
 
-
 pyspark_connect = Module(
     name="pyspark-connect",
     dependencies=[pyspark_sql, connect],
@@ -994,7 +993,10 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
+        "pyspark.sql.tests.connect.test_connect_collection",
         "pyspark.sql.tests.connect.test_connect_column",
+        "pyspark.sql.tests.connect.test_connect_creation",
+        "pyspark.sql.tests.connect.test_connect_readwriter",
         "pyspark.sql.tests.connect.test_connect_session",
         "pyspark.sql.tests.connect.test_parity_arrow",
         "pyspark.sql.tests.connect.test_parity_arrow_python_udf",

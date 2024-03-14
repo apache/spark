@@ -388,6 +388,7 @@ describeFuncName
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
+    | BANG
     ;
 
 describeColName
@@ -946,7 +947,7 @@ expressionSeq
     ;
 
 booleanExpression
-    : NOT booleanExpression                                        #logicalNot
+    : (NOT | BANG) booleanExpression                               #logicalNot
     | EXISTS LEFT_PAREN query RIGHT_PAREN                          #exists
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary

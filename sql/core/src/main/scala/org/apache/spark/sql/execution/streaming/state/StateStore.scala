@@ -64,8 +64,9 @@ trait ReadStateStore {
    * Get the current value of a non-null key.
    * @return a non-null row if the key exists in the store, otherwise null.
    */
-  def get(key: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
+  def get(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
   /**
    * Provides an iterator containing all values of a non-null key. If key does not exist,
@@ -89,8 +90,9 @@ trait ReadStateStore {
    * It is expected to throw exception if Spark calls this method without setting numColsPrefixKey
    * to the greater than 0.
    */
-  def prefixScan(prefixKey: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
+  def prefixScan(
+      prefixKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRowPair]
@@ -128,20 +130,24 @@ trait StateStore extends ReadStateStore {
       keySchema: StructType,
       numColsPrefixKey: Int,
       valueSchema: StructType,
-      useMultipleValuesPerKey: Boolean = false): Unit
+      useMultipleValuesPerKey: Boolean = false,
+      isInternal: Boolean = false): Unit
 
   /**
    * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
    * in the params can be reused, and must make copies of the data as needed for persistence.
    */
-  def put(key: UnsafeRow, value: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+  def put(
+      key: UnsafeRow,
+      value: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
    * Remove a single non-null key.
    */
-  def remove(key: UnsafeRow,
-    colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+  def remove(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
   /**
    * Merges the provided value with existing values of a non-null key. If a existing

@@ -27,7 +27,6 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
@@ -67,6 +66,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       conf.get(MEMORY_OVERHEAD_FACTOR)
     }
 
+  private val driverMinimumMemoryOverhead = conf.get(DRIVER_MIN_MEMORY_OVERHEAD)
+
   // Prefer the driver memory overhead factor if set explicitly
   private val memoryOverheadFactor = if (conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
     conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
@@ -74,10 +75,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     defaultOverheadFactor
   }
 
-  private val memoryOverheadMiB = conf
+  private val memoryOverheadMiB: Long = conf
     .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((memoryOverheadFactor * driverMemoryMiB).toInt,
-      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
+      driverMinimumMemoryOverhead))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {

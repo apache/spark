@@ -1240,7 +1240,10 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The identifier `<ident>` is invalid. Please, consider quoting it with back-quotes as ``<ident>``.
+The unquoted identifier `<ident>` is invalid and must be back quoted as: ``<ident>``.
+Unquoted identifiers can only contain ASCII letters ('a' - 'z', 'A' - 'Z'), digits ('0' - '9'), and underbar ('_').
+Unquoted identifiers must also not start with a digit.
+Different data sources and meta stores may impose additional restrictions on valid identifiers.
 
 ### INVALID_INDEX_OF_ZERO
 
@@ -2144,6 +2147,24 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
+
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform stateful processor operation=`<operationType>` with invalid handle state=`<handleState>`.
+
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
+
+### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to create column family with unsupported starting character and name=`<colFamilyName>`.
 
 ### STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME
 
