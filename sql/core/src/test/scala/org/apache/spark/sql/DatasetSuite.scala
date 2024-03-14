@@ -2471,7 +2471,6 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-45282: Coaleasced shuffle read is not compatible with hash partitioning") {
-
     withSQLConf(
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key  -> "33554432",
         SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key -> "false",
@@ -2496,6 +2495,18 @@ class DatasetSuite extends QueryTest
 
       assert(join.count() == 1000000)
     }
+  }
+
+  test("SPARK-47385: Tuple encoder with Option inputs") {
+    implicit val enc: Encoder[(SingleData, Option[SingleData])] =
+      Encoders.tuple(Encoders.product[SingleData], Encoders.product[Option[SingleData]])
+
+    val input = Seq(
+      (SingleData(1), Some(SingleData(1))),
+      (SingleData(2), None)
+    )
+    val ds = spark.createDataFrame(input).as[(SingleData, Option[SingleData])]
+    checkDataset(ds, input: _*)
   }
 }
 
