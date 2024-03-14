@@ -639,9 +639,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(c1, 0, 1)",
-        "reason" -> "generation expression cannot contain non-default collated string type"
-      )
-    )
+        "reason" -> "generation expression cannot contain non-default collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -658,9 +656,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "c1 || 'a' COLLATE UNICODE",
-        "reason" -> "generation expression cannot contain non-default collated string type"
-      )
-    )
+        "reason" -> "generation expression cannot contain non-default collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -677,8 +673,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
-        "reason" -> "generation expression cannot contain non-default collated string type"
-      )
-    )
+        "reason" -> "generation expression cannot contain non-default collated string type"))
   }
 }
