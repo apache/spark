@@ -40,7 +40,7 @@ class StatefulProcessorWithInitialStateTestClass extends StatefulProcessorWithIn
     _mapState.updateValue(initStateVal, 1)
   }
 
-  override def init(operatorOutputMode: OutputMode): Unit = {
+  override def init(outputMode: OutputMode, timeoutMode: TimeoutMode): Unit = {
     _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble)
     _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble)
     _mapState = getHandle.getMapState[Double, Int](
@@ -52,7 +52,8 @@ class StatefulProcessorWithInitialStateTestClass extends StatefulProcessorWithIn
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InitInputRow],
-      timerValues: TimerValues): Iterator[(String, String, Double)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, Double)] = {
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
@@ -91,7 +92,8 @@ class AccumulateStatefulProcessorWithInitState extends StatefulProcessorWithInit
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InitInputRow],
-      timerValues: TimerValues): Iterator[(String, String, Double)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, Double)] = {
     var output = List[(String, String, Double)]()
     for (row <- inputRows) {
       if (row.action == "getOption") {
