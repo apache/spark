@@ -2508,7 +2508,7 @@ setMethod("unhex",
 #'
 #' @rdname column_string_functions
 #' @aliases upper upper,Column-method
-#' @note upper since 1.4.0
+#' @note upper since 4.0.0
 setMethod("upper",
           signature(x = "Column"),
           function(x) {
