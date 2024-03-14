@@ -773,13 +773,14 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
 
-      case c @ (_: Concat) if shouldCast(c.children.map(_.dataType)) =>
-        val newChildren = collateToSingleType(c.children, failOnIndeterminate = false)
-        c.withNewChildren(newChildren)
+      case snf @ (_: Concat) if shouldCast(snf.children.map(_.dataType)) =>
+        val newChildren = collateToSingleType(snf.children, failOnIndeterminate = false)
+        snf.withNewChildren(newChildren)
 
-      case e if shouldCast(e.children.map(_.dataType)) =>
-        val newChildren = collateToSingleType(e.children)
-        e.withNewChildren(newChildren)
+      case sf @ (_: BinaryExpression | _: In | _: SortOrder)
+        if shouldCast(sf.children.map(_.dataType)) =>
+        val newChildren = collateToSingleType(sf.children)
+        sf.withNewChildren(newChildren)
     }
 
     def shouldCast(types: Seq[DataType]): Boolean = {

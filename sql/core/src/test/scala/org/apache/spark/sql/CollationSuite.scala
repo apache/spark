@@ -233,7 +233,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string COLLATE $leftCollationName`.`string COLLATE $rightCollationName`"
+          s"`string collate $leftCollationName`.`string collate $rightCollationName`"
       )
     )
     // startsWith
@@ -247,7 +247,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string COLLATE $leftCollationName`.`string COLLATE $rightCollationName`"
+          s"`string collate $leftCollationName`.`string collate $rightCollationName`"
       )
     )
     // endsWith
@@ -261,7 +261,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sqlState = "42P21",
       parameters = Map(
         "explicitTypes" ->
-          s"`string COLLATE $leftCollationName`.`string COLLATE $rightCollationName`"
+          s"`string collate $leftCollationName`.`string collate $rightCollationName`"
       )
     )
   }
@@ -568,7 +568,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string`.`string COLLATE UNICODE`"
+          "explicitTypes" -> "`string`.`string collate UNICODE`"
         )
       )
 
@@ -580,7 +580,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string`.`string COLLATE UNICODE`"
+          "explicitTypes" -> "`string`.`string collate UNICODE`"
         )
       )
       checkError(
@@ -590,7 +590,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string COLLATE UNICODE`.`string`"
+          "explicitTypes" -> "`string collate UNICODE`.`string`"
         )
       )
 
@@ -610,7 +610,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "explicitTypes" -> "`string`.`string COLLATE UNICODE`"
+          "explicitTypes" -> "`string`.`string collate UNICODE`"
         )
       )
     }
