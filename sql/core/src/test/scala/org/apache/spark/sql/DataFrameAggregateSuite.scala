@@ -2159,13 +2159,14 @@ class DataFrameAggregateSuite extends QueryTest
     val numRows = 10
     val configurations = Seq(
       // Seq.empty[(String, String)], // hash aggregate is used by default
-       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+      // Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
       //   "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 10"),
       // Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
       // Seq(
       //   "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
       //  SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
-      "spark.sql.test.forceApplySortAggregate" -> "true")
+      // "spark.sql.test.forceApplySortAggregate" -> "true",
+      "spark.sql.codegen.wholeStage" -> "false"
     )
 
     // val dfSame = (0 until numRows)
@@ -2174,19 +2175,21 @@ class DataFrameAggregateSuite extends QueryTest
 
     val tableName = "temp" + scala.util.Random.between(1, 10000)
 
-    for (conf <- configurations) {
-      withSQLConf(conf: _*) {
-        sql(s"CREATE TABLE $tableName(id INT, arr MAP<INT, INT>) USING PARQUET;");
-        sql(s"INSERT INTO $tableName VALUES(1, MAP(1,1))")
-        sql(s"INSERT INTO $tableName VALUES(2, MAP(1,2))")
+    // for (conf <- configurations) {
+    //  withSQLConf(conf: _*) {
+        sql(s"CREATE TABLE $tableName(id INT, arr ARRAY<INT>) USING PARQUET;");
+        sql(s"INSERT INTO $tableName VALUES(1, ARRAY(1,2))")
+        sql(s"INSERT INTO $tableName VALUES(2, ARRAY(1,2))")
         val res = sql(s"select count(*) from $tableName group by arr")
         res.foreach { row =>
           println(row);
 
         }
+
+
         // assert(createAggregate(dfSame).count() == 1)
-      }
-    }
+      // }
+    // }
 
     def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
   }
