@@ -773,18 +773,27 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
 
-      case snf @ (_: Concat) if shouldCast(snf.children.map(_.dataType)) =>
-        val newChildren = collateToSingleType(snf.children, failOnIndeterminate = false)
-        snf.withNewChildren(newChildren)
+      case checkCastWithIndeterminate @ (_: Concat)
+        if shouldCast(checkCastWithIndeterminate.children) =>
+        val newChildren =
+          collateToSingleType(checkCastWithIndeterminate.children, failOnIndeterminate = false)
+        checkCastWithIndeterminate.withNewChildren(newChildren)
 
-      case sf @ (_: BinaryExpression | _: In | _: SortOrder)
-        if shouldCast(sf.children.map(_.dataType)) =>
-        val newChildren = collateToSingleType(sf.children)
-        sf.withNewChildren(newChildren)
+      case checkCastWithoutIndeterminate @ (_: BinaryExpression | _: In | _: SortOrder)
+        if shouldCast(checkCastWithoutIndeterminate.children) =>
+        val newChildren = collateToSingleType(checkCastWithoutIndeterminate.children)
+        checkCastWithoutIndeterminate.withNewChildren(newChildren)
+
+      case checkIndeterminate @ (_: BinaryExpression | _: In | _: SortOrder)
+        if hasIndeterminate(checkIndeterminate.children
+          .filter(e => hasStringType(e.dataType))
+          .map(extractStringType)) =>
+        throw QueryCompilationErrors.indeterminateCollationError()
     }
 
-    def shouldCast(types: Seq[DataType]): Boolean = {
-      types.filter(hasStringType).map(dt => extractStringType(dt).collationId).distinct.size > 1
+    def shouldCast(types: Seq[Expression]): Boolean = {
+      types.filter(e => hasStringType(e.dataType))
+        .map(e => extractStringType(e).collationId).distinct.size > 1
     }
 
     /**
@@ -801,7 +810,7 @@ abstract class TypeCoercionBase {
     /**
      * Extracts StringTypes from flitered hasStringType
      */
-    private def extractStringType(dt: DataType): StringType = dt match {
+    private def extractStringType(expr: Expression): StringType = expr.dataType match {
       case st: StringType => st
       case ArrayType(et, _) => et.asInstanceOf[StringType]
     }
@@ -834,7 +843,7 @@ abstract class TypeCoercionBase {
      */
     def getOutputCollation(exprs: Seq[Expression], failOnIndeterminate: Boolean = true): Int = {
       val explicitTypes = exprs.filter(hasExplicitCollation)
-        .map(e => extractStringType(e.dataType).collationId).distinct
+        .map(e => extractStringType(e).collationId).distinct
 
       explicitTypes.size match {
         case 1 => explicitTypes.head
@@ -844,16 +853,9 @@ abstract class TypeCoercionBase {
               explicitTypes.map(t => StringType(t).typeName)
             )
         case 0 =>
-          val dataTypes = exprs.map(e => extractStringType(e.dataType))
+          val dataTypes = exprs.filter(e => hasStringType(e.dataType)).map(extractStringType)
 
-          if (hasIndeterminate(dataTypes)) {
-            if (failOnIndeterminate) {
-              throw QueryCompilationErrors.indeterminateCollationError()
-            } else {
-              CollationFactory.INDETERMINATE_COLLATION_ID
-            }
-          }
-          else if (hasMultipleImplicits(dataTypes)) {
+          if (hasMultipleImplicits(dataTypes)) {
             if (failOnIndeterminate) {
               throw QueryCompilationErrors.implicitCollationMismatchError()
             } else {

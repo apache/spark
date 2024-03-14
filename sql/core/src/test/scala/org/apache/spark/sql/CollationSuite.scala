@@ -602,6 +602,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         errorClass = "INDETERMINATE_COLLATION"
       )
 
+      // concat on different implicit collations should fail
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT * FROM $tableName ORDER BY c1 || c3")
+        },
+        errorClass = "INDETERMINATE_COLLATION"
+      )
+
       // concat + in
       checkError(
         exception = intercept[AnalysisException] {
