@@ -1,5 +1,6 @@
 package org.apache.spark.sql.connector.write;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -21,6 +22,10 @@ public class PartitionMetricsWriteInfo {
   public void updateFile(String partitionPath, long bytes, long records) {
     metrics.computeIfAbsent(partitionPath, key -> new PartitionMetrics(0L, 0L, 0))
         .updateFile(bytes, records);
+  }
+
+  public Map<String, PartitionMetrics> toMap() {
+    return Collections.unmodifiableMap(metrics);
   }
 
   @Override

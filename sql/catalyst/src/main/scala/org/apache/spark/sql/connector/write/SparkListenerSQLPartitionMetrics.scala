@@ -22,7 +22,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler.SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerSQLPartitionMetrics(executorId: Long, metrics: PartitionMetricsWriteInfo)
+case class SparkListenerSQLPartitionMetrics(executorId: Long,
+                                            metrics: java.util.Map[String, PartitionMetrics])
   extends SparkListenerEvent
 
 object SQLPartitionMetrics {
@@ -33,7 +34,7 @@ object SQLPartitionMetrics {
     // directly without setting an execution id. We should be tolerant to it.
     if (executionId != null) {
       sc.listenerBus.post(
-        SparkListenerSQLPartitionMetrics(executionId.toLong, writeInfo))
+        SparkListenerSQLPartitionMetrics(executionId.toLong, writeInfo.toMap))
     }
   }
 
