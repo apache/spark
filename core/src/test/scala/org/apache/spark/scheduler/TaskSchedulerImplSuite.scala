@@ -36,7 +36,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
-import org.apache.spark.resource.ResourceAmountUtils.{ONE_ENTIRE_RESOURCE}
+import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.status.api.v1.ThreadStackTrace
@@ -2687,4 +2687,53 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
     assert(3 === taskDescriptions.length)
   }
+
+  // 1 executor with 4 GPUS
+  Seq(true, false).foreach { barrierMode =>
+    val barrier = if (barrierMode) "in barrier" else ""
+    Seq(1, 2, 3, 4).foreach { gpuTaskAmount =>
+      test(s"SPARK-45527 GPU fraction resource should work when " +
+        s"gpu task amount = ${gpuTaskAmount} $barrier") {
+
+        val executorCpus = 10 // cpu will not limit the concurrent tasks number
+
+        val taskScheduler = setupScheduler(numCores = executorCpus,
+          config.CPUS_PER_TASK.key -> "1",
+          TASK_GPU_ID.amountConf -> gpuTaskAmount.toString,
+          EXECUTOR_GPU_ID.amountConf -> "4",
+          config.EXECUTOR_CORES.key -> executorCpus.toString)
+
+        val taskNum = 4 / gpuTaskAmount
+        val taskSet = if (barrierMode) {
+          FakeTask.createBarrierTaskSet(taskNum)
+        } else {
+          FakeTask.createTaskSet(10)
+        }
+        val resources = new ExecutorResourcesAmounts(
+          Map(GPU -> toInternalResource(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
+
+        val workerOffers = IndexedSeq(
+          WorkerOffer("executor0", "host0", executorCpus, Some("host0"), resources)
+        )
+
+        taskScheduler.submitTasks(taskSet)
+        // Launch tasks on executor that satisfies resource requirements.
+        var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        taskDescriptions = taskDescriptions.sortBy(t => t.index)
+        assert(taskNum === taskDescriptions.length)
+        assert(!failedTaskSet)
+
+        taskDescriptions.foreach { task =>
+          val taskResources = task.resources(GPU).keys.toArray.sorted
+          val expected = if (gpuTaskAmount == 2) {
+            (task.index * 2 until task.index * 2 + gpuTaskAmount).map(_.toString).toArray
+          } else { // gpuTaskAmount = 1, 3, 4
+            (task.index until task.index + gpuTaskAmount).map(_.toString).toArray
+          }
+          assert(taskResources sameElements expected)
+        }
+      }
+    }
+  }
+
 }
