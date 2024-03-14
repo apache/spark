@@ -211,6 +211,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.SMALLINT => IntegerType
     case java.sql.Types.SQLXML => StringType
     case java.sql.Types.STRUCT => StringType
+    case java.sql.Types.TIME if isTimestampNTZ => TimestampNTZType
     case java.sql.Types.TIME => TimestampType
     case java.sql.Types.TIMESTAMP if isTimestampNTZ => TimestampNTZType
     case java.sql.Types.TIMESTAMP => TimestampType
