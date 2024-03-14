@@ -4268,7 +4268,8 @@ class Dataset[T] private[sql](
     } else {
       None
     }
-    if (attrDatasetIdOpt.isDefined && inputSet.find(_ == attr).forall(x => {
+    if (attrDatasetIdOpt.isDefined && inputSet.find(_.canonicalized == attr.canonicalized).
+      forall(x => {
       val datasetIdX = if (x.metadata.contains(DATASET_ID_KEY)) {
         x.metadata.getLong(DATASET_ID_KEY)
       } else {
