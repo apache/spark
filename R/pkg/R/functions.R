@@ -2517,6 +2517,32 @@ setMethod("upper",
           })
 
 #' @details
+#' \code{upper}: Converts a string column to upper case.
+#'
+#' @rdname column_string_functions
+#' @aliases upper upper,Column-method
+#' @note upper since 1.4.0
+setMethod("collate",
+          signature(x = "Column", collation = "character"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "upper", x@jc, collation)
+            column(jc)
+          })
+
+#' @details
+#' \code{upper}: Converts a string column to upper case.
+#'
+#' @rdname column_string_functions
+#' @aliases upper upper,Column-method
+#' @note upper since 1.4.0
+setMethod("collation",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collation", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{var}: Alias for \code{var_samp}.
 #'
 #' @rdname column_aggregate_functions
