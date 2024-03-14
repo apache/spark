@@ -39,22 +39,22 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   test("lookup a single missing field should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s("c")),
-      errorClass = "_LEGACY_ERROR_TEMP_3254",
-      parameters = Map("name" -> "c", "fieldNames" -> "a, b"))
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("lookup a set of missing fields should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s(Set("a", "c"))),
-      errorClass = "_LEGACY_ERROR_TEMP_3253",
-      parameters = Map("nonExistFields" -> "c", "fieldNames" -> "a, b"))
+      errorClass = "NONEXISTENT_FIELD_NAME_IN_LIST",
+      parameters = Map("nonExistFields" -> "`c`", "fieldNames" -> "`a`, `b`"))
   }
 
   test("lookup fieldIndex for missing field should output existing fields") {
     checkError(
       exception = intercept[SparkIllegalArgumentException](s.fieldIndex("c")),
-      errorClass = "_LEGACY_ERROR_TEMP_3252",
-      parameters = Map("name" -> "c", "fieldNames" -> "a, b"))
+      errorClass = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
   }
 
   test("SPARK-24849: toDDL - simple struct") {

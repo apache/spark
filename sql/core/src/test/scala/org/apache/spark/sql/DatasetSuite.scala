@@ -1420,18 +1420,20 @@ class DatasetSuite extends QueryTest
     dataset.sparkSession.catalog.dropTempView("tempView")
 
     withDatabase("test_db") {
-      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
-        spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
-        val e = intercept[AnalysisException](
-          dataset.createTempView("test_db.tempView"))
-        checkError(e,
-          errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-          parameters = Map("actualName" -> "test_db.tempView"))
-      }
+      withTempView("tempView") {
+        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
+          spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+          val e = intercept[AnalysisException](
+            dataset.createTempView("test_db.tempView"))
+          checkError(e,
+            errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+            parameters = Map("actualName" -> "test_db.tempView"))
+        }
 
-      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
-          dataset.createTempView("test_db.tempView")
-          assert(spark.catalog.tableExists("tempView"))
+        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
+            dataset.createTempView("test_db.tempView")
+            assert(spark.catalog.tableExists("tempView"))
+        }
       }
     }
   }
@@ -2574,6 +2576,18 @@ class DatasetSuite extends QueryTest
     assert(result == expected)
   }
 
+  test("SPARK-47385: Tuple encoder with Option inputs") {
+    implicit val enc: Encoder[(SingleData, Option[SingleData])] =
+      Encoders.tuple(Encoders.product[SingleData], Encoders.product[Option[SingleData]])
+
+    val input = Seq(
+      (SingleData(1), Some(SingleData(1))),
+      (SingleData(2), None)
+    )
+    val ds = spark.createDataFrame(input).as[(SingleData, Option[SingleData])]
+    checkDataset(ds, input: _*)
+  }
+
   test("SPARK-43124: Show does not trigger job execution on CommandResults") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       withTable("t1") {
@@ -2716,6 +2730,25 @@ class DatasetSuite extends QueryTest
     val ds = Seq(WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo"))).toDS()
     checkDataset(ds.map(t => t),
       WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
+  }
+
+  test("SPARK-47270: isEmpty does not trigger job execution on CommandResults") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      withTable("t1") {
+        sql("create table t1(c int) using parquet")
+
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        withListener(spark.sparkContext, listener) { _ =>
+          sql("show tables").isEmpty
+        }
+        assert(jobCounter === 0)
+      }
+    }
   }
 }
 

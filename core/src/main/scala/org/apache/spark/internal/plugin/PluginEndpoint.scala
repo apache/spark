@@ -35,7 +35,7 @@ private class PluginEndpoint(
           try {
             val reply = plugin.receive(message)
             if (reply != null) {
-              logInfo(
+              logWarning(
                 s"Plugin $pluginName returned reply for one-way message of type " +
                 s"${message.getClass().getName()}.")
             }

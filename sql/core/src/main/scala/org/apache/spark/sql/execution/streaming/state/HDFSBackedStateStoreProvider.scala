@@ -73,6 +73,8 @@ import org.apache.spark.util.ArrayImplicits._
  */
 private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with Logging {
 
+  private val providerName = "HDFSBackedStateStoreProvider"
+
   class HDFSBackedReadStateStore(val version: Long, map: HDFSBackedStateStoreMap)
     extends ReadStateStore {
 
@@ -123,15 +125,27 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         keySchema: StructType,
         numColsPrefixKey: Int,
         valueSchema: StructType,
-        useMultipleValuesPerKey: Boolean = false): Unit = {
-      throw StateStoreErrors.multipleColumnFamiliesNotSupported("HDFSStateStoreProvider")
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+    }
+
+    // Multiple col families are not supported with HDFSBackedStateStoreProvider. Throw an exception
+    // if the user tries to use a non-default col family.
+    private def assertUseOfDefaultColFamily(colFamilyName: String): Unit = {
+      if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
+
+        throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+      }
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
+      assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.get(key)
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
+      assertUseOfDefaultColFamily(colFamilyName)
       require(value != null, "Cannot put a null value")
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       val keyCopy = key.copy()
@@ -141,6 +155,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
+      assertUseOfDefaultColFamily(colFamilyName)
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
@@ -179,10 +194,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = mapToUpdate.iterator()
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+      assertUseOfDefaultColFamily(colFamilyName)
+      mapToUpdate.iterator()
+    }
 
     override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
       Iterator[UnsafeRowPair] = {
+      assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.prefixScan(prefixKey)
     }
 
@@ -211,18 +230,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     override def removeColFamilyIfExists(colFamilyName: String): Unit = {
-      throw StateStoreErrors.removingColumnFamiliesNotSupported(
-        "HDFSBackedStateStoreProvider")
+      throw StateStoreErrors.removingColumnFamiliesNotSupported(providerName)
     }
 
     override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
-      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
     }
 
     override def merge(key: UnsafeRow,
         value: UnsafeRow,
         colFamilyName: String): Unit = {
-      throw StateStoreErrors.unsupportedOperationException("merge", "HDFSStateStore")
+      throw StateStoreErrors.unsupportedOperationException("merge", providerName)
     }
   }
 
@@ -280,11 +298,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
     if (useColumnFamilies) {
-      throw StateStoreErrors.multipleColumnFamiliesNotSupported("HDFSStateStoreProvider")
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
 
     if (useMultipleValuesPerKey) {
-      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
     }
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||
