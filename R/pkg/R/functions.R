@@ -2517,24 +2517,24 @@ setMethod("upper",
           })
 
 #' @details
-#' \code{upper}: Converts a string column to upper case.
+#' \code{collate}: Marks a given column with specified collation.
 #'
 #' @rdname column_string_functions
-#' @aliases upper upper,Column-method
-#' @note upper since 1.4.0
+#' @aliases collate collate,Column-method
+#' @note collate since 4.0.0
 setMethod("collate",
           signature(x = "Column", collation = "character"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "upper", x@jc, collation)
+            jc <- callJStatic("org.apache.spark.sql.functions", "collate", x@jc, collation)
             column(jc)
           })
 
 #' @details
-#' \code{upper}: Converts a string column to upper case.
+#' \code{upper}: Returns the collation name of a given column.
 #'
 #' @rdname column_string_functions
-#' @aliases upper upper,Column-method
-#' @note upper since 1.4.0
+#' @aliases collation collation,Column-method
+#' @note collation since 1.4.0
 setMethod("collation",
           signature(x = "Column"),
           function(x) {
