@@ -71,8 +71,6 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 @Stable
 case object StringType extends StringType(0) {
   def apply(collationId: Int): StringType = new StringType(collationId)
-  override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isDefaultCollation
 }
 
 /**
