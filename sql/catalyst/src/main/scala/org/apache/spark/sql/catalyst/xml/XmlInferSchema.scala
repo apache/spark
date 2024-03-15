@@ -463,6 +463,15 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     }
   }
 
+  private[xml] def isPrimitiveType(dataType: DataType): Boolean = {
+    dataType match {
+      case _: StructType => false
+      case _: ArrayType => false
+      case _: MapType => false
+      case _ => true
+    }
+  }
+
   private[xml] def isValueTagField(structField: StructField, caseSensitive: Boolean): Boolean = {
     if (!caseSensitive) {
       structField.name.toLowerCase(Locale.ROOT) == options.valueTag.toLowerCase(Locale.ROOT)
@@ -563,14 +572,6 @@ object XmlInferSchema {
         // strings and every string is a XML object.
         case (_, _) => StringType
       }
-    }
-  }
-  private[xml] def isPrimitiveType(dataType: DataType): Boolean = {
-    dataType match {
-      case _: StructType => false
-      case _: ArrayType => false
-      case _: MapType => false
-      case _ => true
     }
   }
 }
