@@ -1,16 +1,13 @@
-Forward Secure Auth Protocol v1.1
+Forward Secure Auth Protocol v2.0
 ==============================================
 
 Deprecation Notice
 ------------------
 This is a bespoke key exchange protocol that was implemented before Spark supported TLS (aka SSL) for RPC
-calls. It is recommended that Spark users upgrade to using TLS for RPC calls between Spark processes. This protocol
-will be deprecated and removed in the long-term.
+calls. It is recommended that Spark users upgrade to using TLS for RPC calls between Spark processes.
 
-See
-the [Spark security documentation](https://github.com/apache/spark/blob/master/docs/security.md#ssl-encryption) for
-more information on how to configure TLS.
-
+See the [Spark security documentation](https://github.com/apache/spark/blob/master/docs/security.md#ssl-encryption)
+for more information on how to configure TLS.
 
 Summary
 -------
@@ -119,8 +116,8 @@ Security Changes & Compatibility
 
 The original version of this protocol, retroactively called v1.0, did not apply an HKDF to `sharedSecret` and was
 directly using the encoded X coordinate as key material. This is atypical and standard practice is to pass that shared
-coordinate through an HKDF. The current version, v1.1, adds this additional HKDF to
+coordinate through an HKDF. The current version, v2.0, adds this additional HKDF to
 derive `derivedKey`.
 
 Consequently, older Spark versions using v1.0 of this protocol will not negotiate the same key as
-Spark versions using v1.1 and will be **unable to send encrypted RPCs** across incompatible versions.
+Spark versions using v2.0 and will be **unable to send encrypted RPCs** across incompatible versions.
