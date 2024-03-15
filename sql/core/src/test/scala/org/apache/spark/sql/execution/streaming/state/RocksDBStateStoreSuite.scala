@@ -163,7 +163,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     // zero ordering cols
     val ex1 = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-        RangeKeyScanStateEncoderType, 0)) { provider =>
+        RangeKeyScanStateEncoderType, 0, colFamiliesEnabled)) { provider =>
         provider.getStore(0)
       }
     }
@@ -179,7 +179,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     // ordering cols greater than schema cols
     val ex2 = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-        RangeKeyScanStateEncoderType, keySchemaWithRangeScan.length + 1)) { provider =>
+        RangeKeyScanStateEncoderType, keySchemaWithRangeScan.length + 1,
+        colFamiliesEnabled)) { provider =>
         provider.getStore(0)
       }
     }
@@ -200,7 +201,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
     val ex = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithVariableSizeCols,
-        RangeKeyScanStateEncoderType, 1)) { provider =>
+        RangeKeyScanStateEncoderType, 1, colFamiliesEnabled)) { provider =>
         provider.getStore(0)
       }
     }
@@ -219,19 +220,26 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderType, 1)) { provider =>
+      RangeKeyScanStateEncoderType, 1, colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
+
+      // use non-default col family if column families are enabled
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(cfName, RangeKeyScanStateEncoderType,
+          keySchemaWithRangeScan, numColsPrefixKey = 1, valueSchema)
+      }
 
       val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
       timerTimestamps.foreach { ts =>
         // non-timestamp col is of fixed size
         val keyRow = dataToKeyRowWithRangeScan(ts, "a")
         val valueRow = dataToValueRow(1)
-        store.put(keyRow, valueRow)
-        assert(valueRowToData(store.get(keyRow)) === 1)
+        store.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      val result = store.iterator().map { kv =>
+      val result = store.iterator(cfName).map { kv =>
         val key = keyRowWithRangeScanToData(kv.key)
         key._1
       }.toSeq
@@ -243,8 +251,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderType, 1)) { provider =>
+      RangeKeyScanStateEncoderType, 1, colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
+
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(cfName, RangeKeyScanStateEncoderType,
+          keySchemaWithRangeScan, numColsPrefixKey = 1, valueSchema)
+      }
 
       val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
       timerTimestamps.foreach { ts =>
@@ -252,11 +266,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val keyRow = dataToKeyRowWithRangeScan(ts,
           Random.alphanumeric.take(Random.nextInt(20) + 1).mkString)
         val valueRow = dataToValueRow(1)
-        store.put(keyRow, valueRow)
-        assert(valueRowToData(store.get(keyRow)) === 1)
+        store.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      val result = store.iterator().map { kv =>
+      val result = store.iterator(cfName).map { kv =>
         val key = keyRowWithRangeScanToData(kv.key)
         key._1
       }.toSeq
@@ -269,19 +283,24 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
     // use the same schema as value schema for single col key schema
     tryWithProviderResource(newStoreProvider(valueSchema,
-      RangeKeyScanStateEncoderType, 1)) { provider =>
+      RangeKeyScanStateEncoderType, 1, colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(cfName, RangeKeyScanStateEncoderType,
+          valueSchema, numColsPrefixKey = 1, valueSchema)
+      }
 
       val timerTimestamps = Seq(931, 8000, 452300, 4200, 90, 1, 2, 8, 3, 35, 6, 9, 5)
       timerTimestamps.foreach { ts =>
         // non-timestamp col is of variable size
         val keyRow = dataToValueRow(ts)
         val valueRow = dataToValueRow(1)
-        store.put(keyRow, valueRow)
-        assert(valueRowToData(store.get(keyRow)) === 1)
+        store.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      val result = store.iterator().map { kv =>
+      val result = store.iterator(cfName).map { kv =>
         valueRowToData(kv.key)
       }.toSeq
       assert(result === timerTimestamps.sorted)
@@ -289,9 +308,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // also check for prefix scan
       timerTimestamps.foreach { ts =>
         val prefix = dataToValueRow(ts)
-        val result = store.prefixScan(prefix).map { kv =>
+        val result = store.prefixScan(prefix, cfName).map { kv =>
           assert(valueRowToData(kv.value) === 1)
-          val key = valueRowToData(kv.key)
+          valueRowToData(kv.key)
         }.toSeq
         assert(result.size === 1)
       }
@@ -302,22 +321,28 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderType, 1)) { provider =>
+      RangeKeyScanStateEncoderType, 1, colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
+
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(cfName, RangeKeyScanStateEncoderType,
+          keySchemaWithRangeScan, numColsPrefixKey = 1, valueSchema)
+      }
 
       val timerTimestamps = Seq(931L, 8000L, 1L)
       timerTimestamps.foreach { ts =>
         (1 to 5).foreach { keyVal =>
           val keyRow = dataToKeyRowWithRangeScan(ts, keyVal.toString)
           val valueRow = dataToValueRow(1)
-          store.put(keyRow, valueRow)
-          assert(valueRowToData(store.get(keyRow)) === 1)
+          store.put(keyRow, valueRow, cfName)
+          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
         }
       }
 
       timerTimestamps.foreach { ts =>
         val prefix = dataToPrefixKeyRowWithRangeScan(ts)
-        val result = store.prefixScan(prefix).map { kv =>
+        val result = store.prefixScan(prefix, cfName).map { kv =>
           assert(valueRowToData(kv.value) === 1)
           val key = keyRowWithRangeScanToData(kv.key)
           key._2
@@ -420,9 +445,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   override def newStoreProvider(
       keySchema: StructType,
       keyStateEncoderType: KeyStateEncoderType,
-      numPrefixCols: Int): RocksDBStateStoreProvider = {
+      numPrefixCols: Int,
+      useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = numPrefixCols,
-      keySchema = keySchema, keyStateEncoderType = keyStateEncoderType)
+      keySchema = keySchema, keyStateEncoderType = keyStateEncoderType,
+      useColumnFamilies = useColumnFamilies)
   }
 
   def newStoreProvider(

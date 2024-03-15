@@ -201,7 +201,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   test("running with range scan encoder should fail") {
     val ex = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-        keyStateEncoderType = RangeKeyScanStateEncoderType, numPrefixCols = 1)) { provider =>
+        keyStateEncoderType = RangeKeyScanStateEncoderType,
+        numPrefixCols = 1, useColumnFamilies = false)) { provider =>
         provider.getStore(0)
       }
     }
@@ -219,7 +220,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   test("running with no prefix encoder and non-zero numPrefixCols should fail") {
     val ex = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-        keyStateEncoderType = NoPrefixKeyStateEncoderType, numPrefixCols = 1)) { provider =>
+        keyStateEncoderType = NoPrefixKeyStateEncoderType,
+        numPrefixCols = 1, useColumnFamilies = false)) { provider =>
         provider.getStore(0)
       }
     }
@@ -974,7 +976,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   override def newStoreProvider(
       keySchema: StructType,
       keyStateEncoderType: KeyStateEncoderType,
-      numPrefixCols: Int): HDFSBackedStateStoreProvider = {
+      numPrefixCols: Int,
+      useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
     newStoreProvider(opId = Random.nextInt(), partition = 0, numColsPrefixKey = numPrefixCols,
       keyStateEncoderType = keyStateEncoderType)
   }
@@ -1086,7 +1089,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   testWithAllCodec("prefix scan") { colFamiliesEnabled =>
     tryWithProviderResource(newStoreProvider(keySchema, PrefixKeyScanStateEncoderType,
-      numPrefixCols = 1)) { provider =>
+      numPrefixCols = 1, colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
       assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
@@ -1607,7 +1610,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   def newStoreProvider(
       keySchema: StructType,
       keyStateEncoderType: KeyStateEncoderType,
-      numPrefixCols: Int): ProviderClass
+      numPrefixCols: Int,
+      useColumnFamilies: Boolean): ProviderClass
 
   /** Return a new provider with useColumnFamilies set to true */
   def newStoreProvider(useColumnFamilies: Boolean): ProviderClass
