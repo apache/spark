@@ -20,8 +20,7 @@ public class PartitionMetricsWriteInfo {
   }
 
   public void updateFile(String partitionPath, long bytes, long records) {
-    metrics.computeIfAbsent(partitionPath, key -> new PartitionMetrics(0L, 0L, 0))
-        .updateFile(bytes, records);
+    update (partitionPath, bytes, records, 1);
   }
 
   public Map<String, PartitionMetrics> toMap() {
