@@ -1182,9 +1182,19 @@ class Dataset[T] private[sql](
       Join(logicalPlan, right.logicalPlan,
         JoinType(joinType), None, JoinHint.NONE))
       .queryExecution.analyzed.asInstanceOf[Join]
-    val inputSet = planPart1.outputSet
+
+    val leftTagIdMap = planPart1.left.getTagValue(LogicalPlan.DATASET_ID_TAG)
+    val rightTagIdMap = planPart1.right.getTagValue(LogicalPlan.DATASET_ID_TAG)
     val joinExprsRectified = joinExprs.map(_.expr transformUp {
-      case attr: AttributeReference => convertToUnresolvedIfNeeded(attr, inputSet)
+      case attr: AttributeReference if attr.metadata.contains(Dataset.DATASET_ID_KEY) =>
+        val attribTagId = attr.metadata.getLong(Dataset.DATASET_ID_KEY)
+        if (!planPart1.outputSet.contains(attr) ||
+          (planPart1.left.outputSet.contains(attr) && !leftTagIdMap.contains(attribTagId)) ||
+          (planPart1.right.outputSet.contains(attr) && !rightTagIdMap.contains(attribTagId))) {
+          UnresolvedAttributeWithTag(attr, attribTagId)
+        } else {
+          attr
+        }
     })
     Join(planPart1.left, planPart1.right, JoinType(joinType), joinExprsRectified, JoinHint.NONE)
   }
@@ -1597,9 +1607,10 @@ class Dataset[T] private[sql](
 
       case other => other
     }
-    val inputSet = logicalPlan.outputSet
+    val inputForProj = logicalPlan.output
     val namedExprs = untypedCols.map(ne => (ne.named transformUp {
-      case attr: AttributeReference => convertToUnresolvedIfNeeded(attr, inputSet)
+      case attr: AttributeReference if shouldChangeToUnresolved(attr, inputForProj, id) =>
+        UnresolvedAttributeWithTag(attr, attr.metadata.getLong(DATASET_ID_KEY))
     }).asInstanceOf[NamedExpression])
     Project(namedExprs, logicalPlan)
   }
@@ -4261,26 +4272,24 @@ class Dataset[T] private[sql](
     queryExecution.analyzed.semanticHash()
   }
 
-  private def convertToUnresolvedIfNeeded(attr: AttributeReference, inputSet: AttributeSet):
-    NamedExpression = {
-    val attrDatasetIdOpt = if (attr.metadata.contains(Dataset.DATASET_ID_KEY)) {
+  private def shouldChangeToUnresolved(
+      attr: AttributeReference,
+      input: Seq[Attribute],
+      dataSetIdOfInput: Long): Boolean = {
+    val attrDatasetIdOpt = if (attr.metadata.contains(DATASET_ID_KEY)) {
       Option(attr.metadata.getLong(DATASET_ID_KEY))
     } else {
       None
     }
-    if (attrDatasetIdOpt.isDefined && inputSet.find(_.canonicalized == attr.canonicalized).
+    (attrDatasetIdOpt.isDefined && input.filter(_.canonicalized == attr.canonicalized).
       forall(x => {
       val datasetIdX = if (x.metadata.contains(DATASET_ID_KEY)) {
         x.metadata.getLong(DATASET_ID_KEY)
       } else {
-        Dataset.this.id
+        dataSetIdOfInput
       }
       attrDatasetIdOpt.get != datasetIdX
-    })) {
-      UnresolvedAttributeWithTag(attr, attrDatasetIdOpt.get)
-    } else {
-      attr
-    }
+    }))
   }
 
   ////////////////////////////////////////////////////////////////////////////
