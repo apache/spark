@@ -29,6 +29,9 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
+/**
+ * Common trait for all InMemoryTableScans implementations to facilitate pattern matching.
+ */
 trait InMemoryTableScanLike extends LeafExecNode {
 
   /**
