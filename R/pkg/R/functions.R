@@ -2530,7 +2530,7 @@ setMethod("collate",
           })
 
 #' @details
-#' \code{upper}: Returns the collation name of a given column.
+#' \code{collation}: Returns the collation name of a given column.
 #'
 #' @rdname column_string_functions
 #' @aliases collation collation,Column-method
