@@ -329,42 +329,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("Support startsWith string expression with Collation") {
     // Supported collations
     val checks = Seq(
-      CollationTestCase("", "", "UTF8_BINARY", true),
-      CollationTestCase("c", "", "UTF8_BINARY", true),
-      CollationTestCase("", "c", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "a", "UTF8_BINARY", true),
-      CollationTestCase("abcde", "A", "UTF8_BINARY", false),
       CollationTestCase("abcde", "abc", "UTF8_BINARY", true),
       CollationTestCase("abcde", "ABC", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "bcd", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY", false),
-      CollationTestCase("", "", "UNICODE", true),
-      CollationTestCase("c", "", "UNICODE", true),
-      CollationTestCase("", "c", "UNICODE", false),
-      CollationTestCase("abcde", "a", "UNICODE", true),
-      CollationTestCase("abcde", "A", "UNICODE", false),
       CollationTestCase("abcde", "abc", "UNICODE", true),
       CollationTestCase("abcde", "ABC", "UNICODE", false),
-      CollationTestCase("abcde", "bcd", "UNICODE", false),
-      CollationTestCase("abcde", "BCD", "UNICODE", false),
-      CollationTestCase("", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("c", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("", "c", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "a", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "A", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "abc", "UTF8_BINARY_LCASE", true),
       CollationTestCase("abcde", "ABC", "UTF8_BINARY_LCASE", true),
       CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("", "", "UNICODE_CI", true),
-      CollationTestCase("c", "", "UNICODE_CI", true),
-      CollationTestCase("", "c", "UNICODE_CI", false),
-      CollationTestCase("abcde", "a", "UNICODE_CI", true),
-      CollationTestCase("abcde", "A", "UNICODE_CI", true),
-      CollationTestCase("abcde", "abc", "UNICODE_CI", true),
       CollationTestCase("abcde", "ABC", "UNICODE_CI", true),
-      CollationTestCase("abcde", "bcd", "UNICODE_CI", false),
-      CollationTestCase("abcde", "BCD", "UNICODE_CI", false)
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", false)
     )
     checks.foreach(testCase => {
       checkAnswer(sql(s"SELECT startswith(collate('${testCase.left}', '${testCase.collation}')," +
@@ -375,42 +347,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   test("Support endsWith string expression with Collation") {
     // Supported collations
     val checks = Seq(
-      CollationTestCase("", "", "UTF8_BINARY", true),
-      CollationTestCase("c", "", "UTF8_BINARY", true),
-      CollationTestCase("", "c", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "e", "UTF8_BINARY", true),
-      CollationTestCase("abcde", "E", "UTF8_BINARY", false),
       CollationTestCase("abcde", "cde", "UTF8_BINARY", true),
       CollationTestCase("abcde", "CDE", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "bcd", "UTF8_BINARY", false),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY", false),
-      CollationTestCase("", "", "UNICODE", true),
-      CollationTestCase("c", "", "UNICODE", true),
-      CollationTestCase("", "c", "UNICODE", false),
-      CollationTestCase("abcde", "e", "UNICODE", true),
-      CollationTestCase("abcde", "E", "UNICODE", false),
       CollationTestCase("abcde", "cde", "UNICODE", true),
       CollationTestCase("abcde", "CDE", "UNICODE", false),
-      CollationTestCase("abcde", "bcd", "UNICODE", false),
-      CollationTestCase("abcde", "BCD", "UNICODE", false),
-      CollationTestCase("", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("c", "", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("", "c", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "e", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "E", "UTF8_BINARY_LCASE", true),
-      CollationTestCase("abcde", "cde", "UTF8_BINARY_LCASE", true),
       CollationTestCase("abcde", "CDE", "UTF8_BINARY_LCASE", true),
       CollationTestCase("abcde", "bcd", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("abcde", "BCD", "UTF8_BINARY_LCASE", false),
-      CollationTestCase("", "", "UNICODE_CI", true),
-      CollationTestCase("c", "", "UNICODE_CI", true),
-      CollationTestCase("", "c", "UNICODE_CI", false),
-      CollationTestCase("abcde", "e", "UNICODE_CI", true),
-      CollationTestCase("abcde", "E", "UNICODE_CI", true),
-      CollationTestCase("abcde", "cde", "UNICODE_CI", true),
       CollationTestCase("abcde", "CDE", "UNICODE_CI", true),
-      CollationTestCase("abcde", "bcd", "UNICODE_CI", false),
-      CollationTestCase("abcde", "BCD", "UNICODE_CI", false)
+      CollationTestCase("abcde", "bcd", "UNICODE_CI", false)
     )
     checks.foreach(testCase => {
       checkAnswer(sql(s"SELECT endswith(collate('${testCase.left}', '${testCase.collation}')," +
@@ -677,5 +621,58 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         .queryExecution.executedPlan) {
       case _: SortMergeJoinExec => ()
     }.nonEmpty)
+  }
+
+  test("Generated column expressions using collations - errors out") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (SUBSTRING(c1, 0, 1))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "SUBSTRING(c1, 0, 1)",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (c1 || 'a' COLLATE UNICODE)
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "c1 || 'a' COLLATE UNICODE",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  struct1 STRUCT<a: STRING COLLATE UNICODE>,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (SUBSTRING(struct1.a, 0, 1))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
   }
 }

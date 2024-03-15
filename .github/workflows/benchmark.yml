@@ -46,7 +46,7 @@ on:
 jobs:
   matrix-gen:
     name: Generate matrix for job splits
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     env:
@@ -117,8 +117,7 @@ jobs:
     name: "Run benchmarks: ${{ github.event.inputs.class }} (JDK ${{ github.event.inputs.jdk }}, Scala ${{ github.event.inputs.scala }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
     if: always()
     needs: [matrix-gen, tpcds-1g-gen]
-    # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:

@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType, TimestampType}
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
@@ -92,23 +92,32 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
-      // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
-      // byte arrays instead of longs.
-      md.putLong("binarylong", 1)
-      Option(LongType)
-    } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
-      Option(BooleanType)
-    } else if ("TINYTEXT".equalsIgnoreCase(typeName)) {
-      // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
-      Some(StringType)
-    } else if (sqlType == Types.VARCHAR && typeName.equals("JSON")) {
-      // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
-      // Explicitly converts it into StringType here.
-      Some(StringType)
-    } else if (sqlType == Types.TINYINT && typeName.equals("TINYINT")) {
-      Some(ByteType)
-    } else None
+    sqlType match {
+      case Types.VARBINARY if "BIT".equalsIgnoreCase(typeName) && size != 1 =>
+        // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
+        // byte arrays instead of longs.
+        md.putLong("binarylong", 1)
+        Some(LongType)
+      case Types.BIT if "TINYINT".equalsIgnoreCase(typeName) =>
+        Some(BooleanType)
+      case Types.VARCHAR if "TINYTEXT".equalsIgnoreCase(typeName) =>
+        // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
+        Some(StringType)
+      case Types.VARCHAR if "JSON".equalsIgnoreCase(typeName) =>
+        // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
+        // Explicitly converts it into StringType here.
+        Some(StringType)
+      case Types.TINYINT if "TINYINT".equalsIgnoreCase(typeName) =>
+        Some(ByteType)
+      case Types.TIMESTAMP if "DATETIME".equalsIgnoreCase(typeName) =>
+        // scalastyle:off line.size.limit
+        // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
+        // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
+        // scalastyle:on line.size.limit
+        Some(getTimestampType(md.build()))
+      case Types.TIMESTAMP => Some(TimestampType)
+      case _ => None
+    }
   }
 
   override def quoteIdentifier(colName: String): String = {

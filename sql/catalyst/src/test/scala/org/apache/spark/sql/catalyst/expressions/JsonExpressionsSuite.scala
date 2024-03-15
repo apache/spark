@@ -899,4 +899,11 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
         )
     }
   }
+
+  test("SPARK-46761: support ? characters") {
+    checkEvaluation(
+      GetJsonObject(Literal(s"""{"?":"QUESTION"}"""), Literal("$['?']")),
+      "QUESTION"
+    )
+  }
 }

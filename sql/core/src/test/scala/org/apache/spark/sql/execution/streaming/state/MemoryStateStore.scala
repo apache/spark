@@ -36,7 +36,8 @@ class MemoryStateStore extends StateStore() {
       keySchema: StructType,
       numColsPrefixKey: Int,
       valueSchema: StructType,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      isInternal: Boolean = false): Unit = {
     throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 

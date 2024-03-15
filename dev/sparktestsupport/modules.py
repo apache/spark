@@ -188,6 +188,15 @@ sketch = Module(
     sbt_test_goals=["sketch/test"],
 )
 
+variant = Module(
+    name="variant",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/variant/",
+    ],
+    sbt_test_goals=["variant/test"],
+)
+
 core = Module(
     name="core",
     dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
@@ -209,7 +218,7 @@ api = Module(
 
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, sketch, core, api],
+    dependencies=[tags, sketch, variant, core, api],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -966,7 +975,6 @@ pyspark_pandas_slow = Module(
     ],
 )
 
-
 pyspark_connect = Module(
     name="pyspark-connect",
     dependencies=[pyspark_sql, connect],
@@ -994,7 +1002,10 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
+        "pyspark.sql.tests.connect.test_connect_collection",
         "pyspark.sql.tests.connect.test_connect_column",
+        "pyspark.sql.tests.connect.test_connect_creation",
+        "pyspark.sql.tests.connect.test_connect_readwriter",
         "pyspark.sql.tests.connect.test_connect_session",
         "pyspark.sql.tests.connect.test_parity_arrow",
         "pyspark.sql.tests.connect.test_parity_arrow_python_udf",

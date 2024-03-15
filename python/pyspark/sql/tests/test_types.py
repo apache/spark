@@ -862,6 +862,7 @@ class TypesTestsMixin:
             if k != "varchar" and k != "char":
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(StringType(), _parse_datatype_string("string collate UTF8_BINARY"))
         self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UTF8_BINARY"))
         self.assertEqual(StringType(0), _parse_datatype_string("string"))
         self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE UTF8_BINARY"))
