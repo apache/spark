@@ -1180,26 +1180,10 @@ class Dataset[T] private[sql](
       joinType: String) = {
     val planPart1 = withPlan(
       Join(logicalPlan, right.logicalPlan,
-        JoinType(joinType), None, JoinHint.NONE))
-      .queryExecution.analyzed.asInstanceOf[Join]
-    val inputForCondn = planPart1.output
+        JoinType(joinType), None, JoinHint.NONE)).queryExecution.analyzed.asInstanceOf[Join]
 
     val leftTagIdMap = planPart1.left.getTagValue(LogicalPlan.DATASET_ID_TAG)
     val rightTagIdMap = planPart1.right.getTagValue(LogicalPlan.DATASET_ID_TAG)
-
-
-    val joinExprsRectified1 = joinExprs.map(_.expr transformUp {
-      case attr: AttributeReference if attr.metadata.contains(Dataset.DATASET_ID_KEY) =>
-        val attribTagId = attr.metadata.getLong(Dataset.DATASET_ID_KEY)
-
-        if (!planPart1.outputSet.contains(attr) ||
-          (planPart1.left.outputSet.contains(attr) && !leftTagIdMap.contains(attribTagId)) ||
-          (planPart1.right.outputSet.contains(attr) && !rightTagIdMap.contains(attribTagId))) {
-          UnresolvedAttributeWithTag(attr, attribTagId)
-        } else {
-          attr
-        }
-    })
 
     val joinExprsRectified = joinExprs.map(_.expr transformUp {
       case attr: AttributeReference if attr.metadata.contains(DATASET_ID_KEY) =>
