@@ -119,6 +119,8 @@ class PrefixKeyScanStateEncoder(
 
   import RocksDBStateEncoder._
 
+  // Note that numColsPrefixKey have to be less than the number of columns in the key schema
+  // Range scan encoder allows for equality, but prefix key scan encoder does not
   if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsNotSupported(numColsPrefixKey.toString)
   }
@@ -218,6 +220,7 @@ class RangeKeyScanStateEncoder(
   import RocksDBStateEncoder._
 
   // Verify that num cols specified for ordering are valid
+  // Note that ordering cols can be equal to number of key schema columns
   if (numOrderingCols == 0 || numOrderingCols > keySchema.length) {
     throw StateStoreErrors.incorrectNumOrderingColsNotSupported(numOrderingCols.toString)
   }
@@ -362,19 +365,29 @@ class RangeKeyScanStateEncoder(
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
     val prefixKey = extractPrefixKey(row)
     val rangeScanKeyEncoded = encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
-    val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
 
-    val encodedBytes = new Array[Byte](rangeScanKeyEncoded.length + remainingEncoded.length + 4)
-    Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
-    Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
-      encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4, rangeScanKeyEncoded.length)
-    // NOTE: We don't put the length of remainingEncoded as we can calculate later
-    // on deserialization.
-    Platform.copyMemory(remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
-      encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4 + rangeScanKeyEncoded.length,
-      remainingEncoded.length)
-
-    encodedBytes
+    val result = if (numOrderingCols < keySchema.length) {
+      val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
+      val encodedBytes = new Array[Byte](rangeScanKeyEncoded.length + remainingEncoded.length + 4)
+      Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
+      Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+        encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4, rangeScanKeyEncoded.length)
+      // NOTE: We don't put the length of remainingEncoded as we can calculate later
+      // on deserialization.
+      Platform.copyMemory(remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
+        encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4 + rangeScanKeyEncoded.length,
+        remainingEncoded.length)
+      encodedBytes
+    } else {
+      // if the num of ordering cols is same as num of key schema cols, we don't need to
+      // encode the remaining key as it's empty.
+      val encodedBytes = new Array[Byte](rangeScanKeyEncoded.length + 4)
+      Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
+      Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+        encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4, rangeScanKeyEncoded.length)
+      encodedBytes
+    }
+    result
   }
 
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
@@ -383,21 +396,28 @@ class RangeKeyScanStateEncoder(
     Platform.copyMemory(keyBytes, Platform.BYTE_ARRAY_OFFSET + 4, prefixKeyEncoded,
       Platform.BYTE_ARRAY_OFFSET, prefixKeyEncodedLen)
 
-    // Here we calculate the remainingKeyEncodedLen leveraging the length of keyBytes
-    val remainingKeyEncodedLen = keyBytes.length - 4 - prefixKeyEncodedLen
-
-    val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
-    Platform.copyMemory(keyBytes, Platform.BYTE_ARRAY_OFFSET + 4 +
-      prefixKeyEncodedLen, remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
-      remainingKeyEncodedLen)
-
     val prefixKeyDecodedForRangeScan = decodeToUnsafeRow(prefixKeyEncoded,
       numFields = numOrderingCols)
     val prefixKeyDecoded = decodePrefixKeyForRangeScan(prefixKeyDecodedForRangeScan)
-    val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
-      numFields = keySchema.length - numOrderingCols)
 
-    restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
+    if (numOrderingCols < keySchema.length) {
+      // Here we calculate the remainingKeyEncodedLen leveraging the length of keyBytes
+      val remainingKeyEncodedLen = keyBytes.length - 4 - prefixKeyEncodedLen
+
+      val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
+      Platform.copyMemory(keyBytes, Platform.BYTE_ARRAY_OFFSET + 4 +
+        prefixKeyEncodedLen, remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+        remainingKeyEncodedLen)
+
+      val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
+        numFields = keySchema.length - numOrderingCols)
+
+      restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
+    } else {
+      // if the number of ordering cols is same as the number of key schema cols, we only
+      // return the prefix key decoded unsafe row.
+      prefixKeyDecoded
+    }
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {

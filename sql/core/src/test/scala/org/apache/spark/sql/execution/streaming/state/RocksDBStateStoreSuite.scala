@@ -215,7 +215,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     )
   }
 
-  testWithColumnFamilies("rocksdb range scan",
+  testWithColumnFamilies("rocksdb range scan - fixed size non-ordering columns",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
@@ -224,6 +224,31 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
       timerTimestamps.foreach { ts =>
+        // non-timestamp col is of fixed size
+        val keyRow = dataToKeyRowWithRangeScan(ts, "a")
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow)
+        assert(valueRowToData(store.get(keyRow)) === 1)
+      }
+
+      val result = store.iterator().map { kv =>
+        val key = keyRowWithRangeScanToData(kv.key)
+        key._1
+      }.toSeq
+      assert(result === timerTimestamps.sorted)
+    }
+  }
+
+  testWithColumnFamilies("rocksdb range scan - variable size non-ordering columns",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+      RangeKeyScanStateEncoderType, 1)) { provider =>
+      val store = provider.getStore(0)
+
+      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
+      timerTimestamps.foreach { ts =>
+        // non-timestamp col is of variable size
         val keyRow = dataToKeyRowWithRangeScan(ts,
           Random.alphanumeric.take(Random.nextInt(20) + 1).mkString)
         val valueRow = dataToValueRow(1)
@@ -236,6 +261,40 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         key._1
       }.toSeq
       assert(result === timerTimestamps.sorted)
+    }
+  }
+
+  testWithColumnFamilies("rocksdb range scan - ordering cols and key schema cols are same",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    // use the same schema as value schema for single col key schema
+    tryWithProviderResource(newStoreProvider(valueSchema,
+      RangeKeyScanStateEncoderType, 1)) { provider =>
+      val store = provider.getStore(0)
+
+      val timerTimestamps = Seq(931, 8000, 452300, 4200, 90, 1, 2, 8, 3, 35, 6, 9, 5)
+      timerTimestamps.foreach { ts =>
+        // non-timestamp col is of variable size
+        val keyRow = dataToValueRow(ts)
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow)
+        assert(valueRowToData(store.get(keyRow)) === 1)
+      }
+
+      val result = store.iterator().map { kv =>
+        valueRowToData(kv.key)
+      }.toSeq
+      assert(result === timerTimestamps.sorted)
+
+      // also check for prefix scan
+      timerTimestamps.foreach { ts =>
+        val prefix = dataToValueRow(ts)
+        val result = store.prefixScan(prefix).map { kv =>
+          assert(valueRowToData(kv.value) === 1)
+          val key = valueRowToData(kv.key)
+        }.toSeq
+        assert(result.size === 1)
+      }
     }
   }
 
