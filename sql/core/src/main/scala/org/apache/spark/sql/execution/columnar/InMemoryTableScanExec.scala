@@ -45,7 +45,7 @@ trait InMemoryTableScanLike extends LeafExecNode {
   def baseCacheRDD(): RDD[CachedBatch]
 
   /**
-   * Returns the runtime statistics after shuffle materialization.
+   * Returns the runtime statistics after materialization.
    */
   def runtimeStatistics: Statistics
 }
