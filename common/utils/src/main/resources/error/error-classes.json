@@ -4545,6 +4545,13 @@
     ],
     "sqlState" : "42883"
   },
+  "VARIANT_SIZE_LIMIT" : {
+    "message" : [
+      "Cannot build variant bigger than <sizeLimit> in <functionName>.",
+      "Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big)."
+    ],
+    "sqlState" : "22023"
+  },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create view <relationName> because it already exists.",

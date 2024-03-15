@@ -2732,6 +2732,13 @@ The variable `<variableName>` cannot be found. Verify the spelling and correctne
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 
+### VARIANT_SIZE_LIMIT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot build variant bigger than `<sizeLimit>` in `<functionName>`.
+Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big).
+
 ### VIEW_ALREADY_EXISTS
 
 [SQLSTATE: 42P07](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

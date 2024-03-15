@@ -188,6 +188,15 @@ sketch = Module(
     sbt_test_goals=["sketch/test"],
 )
 
+variant = Module(
+    name="variant",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/variant/",
+    ],
+    sbt_test_goals=["variant/test"],
+)
+
 core = Module(
     name="core",
     dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
@@ -209,7 +218,7 @@ api = Module(
 
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, sketch, core, api],
+    dependencies=[tags, sketch, variant, core, api],
     source_file_regexes=[
         "sql/catalyst/",
     ],
