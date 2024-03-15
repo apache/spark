@@ -1476,15 +1476,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("Test timestamp filter") {
-
-    val df1 = sql("SELECT * FROM h2.test.datetime")
-
-    val rows = df1.collect()
-
-    val p = 3
-  }
-
   test("scan with filter push-down with date time functions") {
     val df1 = sql("SELECT name FROM h2.test.datetime WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
