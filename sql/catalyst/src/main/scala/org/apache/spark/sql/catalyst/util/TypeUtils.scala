@@ -107,6 +107,7 @@ object TypeUtils extends QueryErrorsBase {
    */
   def typeWithProperEquals(dataType: DataType): Boolean = dataType match {
     case BinaryType => false
+    case _: StringType => false
     case _: AtomicType => true
     case _ => false
   }

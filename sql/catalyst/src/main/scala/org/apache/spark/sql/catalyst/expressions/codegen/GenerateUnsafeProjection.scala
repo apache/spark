@@ -38,6 +38,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
     case NullType => true
+    case _: StringType => false
     case _: AtomicType => true
     case _: CalendarIntervalType => true
     case t: StructType => t.forall(field => canSupport(field.dataType))
