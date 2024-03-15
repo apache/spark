@@ -995,6 +995,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (StringType, BinaryType) => BinaryType
       case (st: StringType, StringType) => st
+      case (st: StringType, _: StringTypeCollated) => st
       // Cast any atomic type to string.
       case (any: AtomicType, StringType) if any != StringType => StringType
       case (any: AtomicType, _: StringTypeCollated) if any != StringType => StringType

@@ -205,9 +205,10 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (StringType, AnyTimestampType) =>
         Some(AnyTimestampType.defaultConcreteType)
 
-      // If a function expects StringType, no StringType instance should be implicitly cast to
-      // StringType with default collation.
+      // If a function expects a StringType, no StringType instance should be implicitly cast to
+      // StringType with an incompatible collation (aka. lockdown unsupported collations).
       case (st: StringType, StringType) => Some(st)
+      case (st: StringType, _: StringTypeCollated) => Some(st)
 
       case (DateType, AnyTimestampType) =>
         Some(AnyTimestampType.defaultConcreteType)
