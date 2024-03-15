@@ -1145,11 +1145,6 @@
         <version>2.3.0</version>
       </dependency>
       <dependency>
-        <groupId>jline</groupId>
-        <artifactId>jline</artifactId>
-        <version>2.14.6</version>
-      </dependency>
-      <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>3.2.18</version>
@@ -1965,6 +1960,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2021,6 +2020,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2064,6 +2067,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>jline</groupId>
+            <artifactId>jline</artifactId>
           </exclusion>
           <!-- Begin of Hive 2.3 exclusion -->
           <!--
