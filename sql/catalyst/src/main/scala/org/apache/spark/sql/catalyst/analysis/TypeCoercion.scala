@@ -956,19 +956,9 @@ object TypeCoercion extends TypeCoercionBase {
       })
   }
 
-  @tailrec
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
-    e match {
-      // Handle special cases for collation types
-      case expr: Expression if expr.dataType.isInstanceOf[StringType] &&
-        expectedType == StringType => Some(expr)
-      case expr: Expression if !expr.dataType.isInstanceOf[StringType] &&
-        (expectedType == StringTypeBinary || expectedType == StringTypeBinaryLcase ||
-          expectedType == StringTypeAnyCollation) => implicitCast(expr, StringType)
-      // Otherwise attempt regular implicit cast
-      case _ => implicitCast(e.dataType, expectedType).map { dt =>
-        if (dt == e.dataType) e else Cast(e, dt)
-      }
+    implicitCast(e.dataType, expectedType).map { dt =>
+      if (dt == e.dataType) e else Cast(e, dt)
     }
   }
 
@@ -1004,8 +994,10 @@ object TypeCoercion extends TypeCoercionBase {
       case (StringType, datetime: DatetimeType) => datetime
       case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (StringType, BinaryType) => BinaryType
+      case (st: StringType, StringType) => st
       // Cast any atomic type to string.
       case (any: AtomicType, StringType) if any != StringType => StringType
+      case (any: AtomicType, _: StringTypeCollated) if any != StringType => StringType
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.

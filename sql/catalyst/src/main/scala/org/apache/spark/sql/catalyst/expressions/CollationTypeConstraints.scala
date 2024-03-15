@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 
 object CollationTypeConstraints {
 
@@ -40,4 +40,38 @@ object CollationTypeConstraints {
     } getOrElse TypeCheckResult.TypeCheckSuccess
   }
 
+}
+
+/**
+ * StringTypeCollated is an abstract class for StringType with collation support.
+ */
+abstract class StringTypeCollated extends AbstractDataType {
+  override private[sql] def defaultConcreteType: DataType = StringType
+}
+
+/**
+ * Use StringTypeBinary for expressions supporting only binary collation.
+ */
+case object StringTypeBinary extends StringTypeCollated {
+  override private[sql] def simpleString: String = "string_binary"
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isBinaryCollation
+}
+
+/**
+ * Use StringTypeBinaryLcase for expressions supporting only binary and lowercase collation.
+ */
+case object StringTypeBinaryLcase extends StringTypeCollated {
+  override private[sql] def simpleString: String = "string_binary_lcase"
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].isBinaryCollation ||
+      other.asInstanceOf[StringType].isLowercaseCollation)
+}
+
+/**
+ * Use StringTypeAnyCollation for expressions supporting all possible collation types.
+ */
+case object StringTypeAnyCollation extends StringTypeCollated {
+  override private[sql] def simpleString: String = "string_any_collation"
+  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
 }
