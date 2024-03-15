@@ -2852,8 +2852,9 @@ def mask(
 
 mask.__doc__ = pysparkfuncs.mask.__doc__
 
+
 def collate(col: "ColumnOrName", collation: str) -> Column:
-    return _invoke_function_over_columns("collate", col, lit(collation))
+    return _invoke_function("collate", _to_java_column(col), lit(collation))
 
 
 collate.__doc__ = pysparkfuncs.collate.__doc__

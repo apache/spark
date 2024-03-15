@@ -2524,7 +2524,7 @@ setMethod("upper",
 #' @note collate since 4.0.0
 setMethod("collate",
           signature(x = "Column", collation = "character"),
-          function(x) {
+          function(x, collation) {
             jc <- callJStatic("org.apache.spark.sql.functions", "collate", x@jc, collation)
             column(jc)
           })
