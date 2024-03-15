@@ -28,6 +28,10 @@ public class PartitionMetricsWriteInfo {
     return Collections.unmodifiableMap(metrics);
   }
 
+  boolean isZero() {
+    return metrics.isEmpty();
+  }
+
   @Override
   public String toString() {
     return "PartitionMetricsWriteInfo{" +

@@ -30,6 +30,11 @@ object SQLPartitionMetrics {
 
   def postDriverMetricUpdates(sc: SparkContext, executionId: String,
                               writeInfo: PartitionMetricsWriteInfo): Unit = {
+    // Don't bother firing an event if there are no collected metrics
+    if (writeInfo.isZero) {
+      return
+    }
+
     // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
     // directly without setting an execution id. We should be tolerant to it.
     if (executionId != null) {
