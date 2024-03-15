@@ -45,6 +45,7 @@ object RocksDBStateEncoder {
       keySchema: StructType,
       keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType,
       numColsPrefixKey: Int = 0): RocksDBKeyStateEncoder = {
+    // Return the key state encoder based on the requested type
     keyStateEncoderType match {
       case NoPrefixKeyStateEncoderType =>
         new NoPrefixKeyStateEncoder(keySchema)
@@ -203,6 +204,9 @@ class PrefixKeyScanStateEncoder(
 
 /**
  * RocksDB Key Encoder for UnsafeRow that supports range scan for fixed size fields
+ * Note that for range scan, we have to encode the ordering columns using BIG_ENDIAN
+ * encoding to allow for scanning keys in sorted order using the byte-wise comparison
+ * method that RocksDB uses.
  *
  * @param keySchema - schema of the key to be encoded
  * @param numColsPrefixKey - number of columns to be used for prefix key
@@ -251,7 +255,6 @@ class RangeKeyScanStateEncoder(
     UnsafeProjection.create(refs)
   }
 
-  // This is quite simple to do - just bind sequentially, as we don't change the order.
   private val restoreKeyProjection: UnsafeProjection = UnsafeProjection.create(keySchema)
 
   // Reusable objects
@@ -261,14 +264,20 @@ class RangeKeyScanStateEncoder(
     rangeScanKeyProjection(key)
   }
 
+  // Rewrite the unsafe row by replacing fixed size fields with BIG_ENDIAN encoding
+  // using byte arrays.
   private def encodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
     writer.resetRowWriter()
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = row.get(idx, field.dataType)
       field.dataType match {
+        // endian-ness doesn't matter for single byte objects. so just write these
+        // types directly.
         case BooleanType => writer.write(idx, value.asInstanceOf[Boolean])
         case ByteType => writer.write(idx, value.asInstanceOf[Byte])
+
+        // for other multi-byte types, we need to convert to big-endian
         case ShortType =>
           val bbuf = ByteBuffer.allocate(2)
           bbuf.order(ByteOrder.BIG_ENDIAN)
@@ -303,6 +312,8 @@ class RangeKeyScanStateEncoder(
     writer.getRow().copy()
   }
 
+  // Rewrite the unsafe row by converting back from BIG_ENDIAN byte arrays to the
+  // original data types.
   private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
     writer.resetRowWriter()
@@ -314,8 +325,11 @@ class RangeKeyScanStateEncoder(
       }
 
       field.dataType match {
+        // for single byte types, read them directly
         case BooleanType => writer.write(idx, value.asInstanceOf[Boolean])
         case ByteType => writer.write(idx, value.asInstanceOf[Byte])
+
+        // for multi-byte types, convert from big-endian
         case ShortType =>
           val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
           bbuf.order(ByteOrder.BIG_ENDIAN)
