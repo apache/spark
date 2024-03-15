@@ -49,26 +49,32 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.REAL) {
-      Some(FloatType)
-    } else if (sqlType == Types.SMALLINT) {
-      Some(ShortType)
-    } else if (sqlType == Types.BIT && typeName == "bit" && size != 1) {
-      Some(BinaryType)
-    } else if (sqlType == Types.DOUBLE && typeName == "money") {
-      // money type seems to be broken but one workaround is to handle it as string.
-      // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
-      Some(StringType)
-    } else if (sqlType == Types.OTHER) {
-      Some(StringType)
-    } else if ("text".equalsIgnoreCase(typeName)) {
-      Some(StringType) // sqlType is  Types.VARCHAR
-    } else if (sqlType == Types.ARRAY) {
-      val scale = md.build().getLong("scale").toInt
-      val isTimestampNTZ = md.build().getBoolean("isTimestampNTZ")
-      // postgres array type names start with underscore
-      toCatalystType(typeName.drop(1), size, scale, isTimestampNTZ).map(ArrayType(_))
-    } else None
+    sqlType match {
+      case Types.REAL => Some(FloatType)
+      case Types.SMALLINT => Some(ShortType)
+      case Types.BIT if typeName == "bit" && size != 1 => Some(BinaryType)
+      case Types.DOUBLE if typeName == "money" =>
+        // money type seems to be broken but one workaround is to handle it as string.
+        // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
+        Some(StringType)
+      case Types.TIMESTAMP
+        if "timestamptz".equalsIgnoreCase(typeName) =>
+        // timestamptz represents timestamp with time zone, currently it maps to Types.TIMESTAMP.
+        // We need to change to Types.TIMESTAMP_WITH_TIMEZONE if the upstream changes.
+        Some(TimestampType)
+      case Types.TIME if "timetz".equalsIgnoreCase(typeName) =>
+        // timetz represents time with time zone, currently it maps to Types.TIME.
+        // We need to change to Types.TIME_WITH_TIMEZONE if the upstream changes.
+        Some(TimestampType)
+      case Types.OTHER => Some(StringType)
+      case _ if "text".equalsIgnoreCase(typeName) => Some(StringType) // sqlType is Types.VARCHAR
+      case Types.ARRAY =>
+        val scale = md.build().getLong("scale").toInt
+        val isTimestampNTZ = md.build().getBoolean("isTimestampNTZ")
+        // postgres array type names start with underscore
+        toCatalystType(typeName.drop(1), size, scale, isTimestampNTZ).map(ArrayType(_))
+      case _ => None
+    }
   }
 
   private def toCatalystType(
@@ -91,7 +97,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
          "interval" | "pg_snapshot" =>
       Some(StringType)
     case "bytea" => Some(BinaryType)
-    case "timestamp" | "timestamptz" | "time" | "timetz" =>
+    case "timestamptz" | "timetz" => Some(TimestampType)
+    case "timestamp" | "time" =>
       Some(if (isTimestampNTZ) TimestampNTZType else TimestampType)
     case "date" => Some(DateType)
     case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))

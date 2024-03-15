@@ -32,6 +32,13 @@ object StateStoreErrors {
     )
   }
 
+  def missingTimeoutValues(timeoutMode: String): SparkException = {
+    SparkException.internalError(
+      msg = s"Failed to find timeout values for timeoutMode=$timeoutMode",
+      category = "TWS"
+    )
+  }
+
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
     StateStoreUnsupportedOperationOnMissingColumnFamily = {
     new StateStoreUnsupportedOperationOnMissingColumnFamily(operationName, colFamilyName)
@@ -68,6 +75,23 @@ object StateStoreErrors {
       errorClass = "ILLEGAL_STATE_STORE_VALUE.EMPTY_LIST_VALUE",
       messageParameters = Map("stateName" -> stateName))
   }
+
+  def cannotCreateColumnFamilyWithReservedChars(colFamilyName: String):
+    StateStoreCannotCreateColumnFamilyWithReservedChars = {
+      new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
+  }
+
+  def cannotPerformOperationWithInvalidTimeoutMode(
+      operationType: String,
+      timeoutMode: String): StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode = {
+    new StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode(operationType, timeoutMode)
+  }
+
+  def cannotPerformOperationWithInvalidHandleState(
+      operationType: String,
+      handleState: String): StatefulProcessorCannotPerformOperationWithInvalidHandleState = {
+    new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -85,10 +109,33 @@ class StateStoreCannotUseColumnFamilyWithInvalidName(operationName: String, colF
     errorClass = "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME",
     messageParameters = Map("operationName" -> operationName, "colFamilyName" -> colFamilyName))
 
+class StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+    messageParameters = Map("colFamilyName" -> colFamilyName)
+  )
+
 class StateStoreUnsupportedOperationException(operationType: String, entity: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
-    messageParameters = Map("operationType" -> operationType, "entity" -> entity))
+    messageParameters = Map("operationType" -> operationType, "entity" -> entity)
+  )
+
+class StatefulProcessorCannotPerformOperationWithInvalidTimeoutMode(
+    operationType: String,
+    timeoutMode: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE",
+    messageParameters = Map("operationType" -> operationType, "timeoutMode" -> timeoutMode)
+  )
+
+class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
+    operationType: String,
+    handleState: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
+    messageParameters = Map("operationType" -> operationType, "handleState" -> handleState)
+  )
 
 class StateStoreUnsupportedOperationOnMissingColumnFamily(
     operationType: String,

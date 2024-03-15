@@ -573,6 +573,43 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithColumnFamilies(s"RocksDB: column family creation with reserved chars",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      Seq("_internal", "_test", "_test123", "__12345").foreach { colFamilyName =>
+        val ex = intercept[SparkUnsupportedOperationException] {
+          db.createColFamilyIfAbsent(colFamilyName)
+        }
+
+        if (!colFamiliesEnabled) {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+            parameters = Map(
+              "operationType" -> "create_col_family",
+              "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+            ),
+            matchPVals = true
+          )
+        } else {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+            parameters = Map(
+              "colFamilyName" -> colFamilyName
+            ),
+            matchPVals = true
+          )
+        }
+      }
+    }
+  }
+
+
   private def verifyStoreOperationUnsupported(
       operationName: String,
       colFamiliesEnabled: Boolean,

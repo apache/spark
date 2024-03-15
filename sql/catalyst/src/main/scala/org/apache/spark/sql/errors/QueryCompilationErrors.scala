@@ -1868,6 +1868,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
   }
 
+  def invalidBucketColumnDataTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+      messageParameters = Map("type" -> toSQLType(dataType)))
+  }
+
   def requestedPartitionsMismatchTablePartitionsError(
       tableName: String,
       normalizedPartSpec: Map[String, Option[String]],
@@ -3957,6 +3963,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     throw new AnalysisException(
       errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
       messageParameters = Map("varType" -> toSQLType(dataType)))
+  }
+
+  def nullSQLStringExecuteImmediate(varName: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+      messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
   def invalidStatementForExecuteInto(queryString: String): Throwable = {

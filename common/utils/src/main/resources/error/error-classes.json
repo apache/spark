@@ -40,7 +40,7 @@
   "AMBIGUOUS_COLUMN_REFERENCE" : {
     "message" : [
       "Column <name> is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.",
-      "This column points to one of the DataFrame but Spark is unable to figure out which one.",
+      "This column points to one of the DataFrames but Spark is unable to figure out which one.",
       "Please alias the DataFrames with different names via `DataFrame.alias` before joining them,",
       "and specify the column using qualified name, e.g. `df.alias(\"a\").join(df.alias(\"b\"), col(\"a.id\") > col(\"b.id\"))`."
     ],
@@ -1546,6 +1546,13 @@
           "2) You can form a valid datetime pattern with the guide from '<docroot>/sql-ref-datetime-pattern.html'."
         ]
       },
+      "DATETIME_WEEK_BASED_PATTERN" : {
+        "message" : [
+          "Spark >= 3.0:",
+          "All week-based patterns are unsupported since Spark 3.0, detected week-based character: <c>.",
+          "Please use the SQL function EXTRACT instead."
+        ]
+      },
       "PARSE_DATETIME_BY_NEW_PARSER" : {
         "message" : [
           "Spark >= 3.0:",
@@ -1775,6 +1782,12 @@
     },
     "sqlState" : "22003"
   },
+  "INVALID_BUCKET_COLUMN_DATA_TYPE" : {
+    "message" : [
+      "Cannot use <type> for bucket column. Collated data types are not supported for bucketing."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
@@ -1839,6 +1852,24 @@
       }
     },
     "sqlState" : "HY109"
+  },
+  "INVALID_DATETIME_PATTERN" : {
+    "message" : [
+      "Unrecognized datetime pattern: <pattern>."
+    ],
+    "subClass" : {
+      "ILLEGAL_CHARACTER" : {
+        "message" : [
+          "Illegal pattern character found in datetime pattern: <c>. Please provide legal character."
+        ]
+      },
+      "LENGTH" : {
+        "message" : [
+          "Too many letters in datetime pattern: <pattern>. Please reduce pattern length."
+        ]
+      }
+    },
+    "sqlState" : "22007"
   },
   "INVALID_DEFAULT_VALUE" : {
     "message" : [
@@ -2067,7 +2098,10 @@
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
-      "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
+      "The unquoted identifier <ident> is invalid and must be back quoted as: `<ident>`.",
+      "Unquoted identifiers can only contain ASCII letters ('a' - 'z', 'A' - 'Z'), digits ('0' - '9'), and underbar ('_').",
+      "Unquoted identifiers must also not start with a digit.",
+      "Different data sources and meta stores may impose additional restrictions on valid identifiers."
     ],
     "sqlState" : "42602"
   },
@@ -2105,6 +2139,74 @@
     },
     "sqlState" : "42000"
   },
+  "INVALID_INTERVAL_FORMAT" : {
+    "message" : [
+      "Error parsing '<input>' to interval. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format."
+    ],
+    "subClass" : {
+      "ARITHMETIC_EXCEPTION" : {
+        "message" : [
+          "Uncaught arithmetic exception while parsing '<input>'."
+        ]
+      },
+      "INPUT_IS_EMPTY" : {
+        "message" : [
+          "Interval string cannot be empty."
+        ]
+      },
+      "INPUT_IS_NULL" : {
+        "message" : [
+          "Interval string cannot be null."
+        ]
+      },
+      "INVALID_FRACTION" : {
+        "message" : [
+          "<unit> cannot have fractional part."
+        ]
+      },
+      "INVALID_PRECISION" : {
+        "message" : [
+          "Interval can only support nanosecond precision, <value> is out of range."
+        ]
+      },
+      "INVALID_PREFIX" : {
+        "message" : [
+          "Invalid interval prefix <prefix>."
+        ]
+      },
+      "INVALID_UNIT" : {
+        "message" : [
+          "Invalid unit <unit>."
+        ]
+      },
+      "INVALID_VALUE" : {
+        "message" : [
+          "Invalid value <value>."
+        ]
+      },
+      "MISSING_NUMBER" : {
+        "message" : [
+          "Expect a number after <word> but hit EOL."
+        ]
+      },
+      "MISSING_UNIT" : {
+        "message" : [
+          "Expect a unit name after <word> but hit EOL."
+        ]
+      },
+      "UNKNOWN_PARSING_ERROR" : {
+        "message" : [
+          "Unknown error when parsing <word>."
+        ]
+      },
+      "UNRECOGNIZED_NUMBER" : {
+        "message" : [
+          "Unrecognized number <number>."
+        ]
+      }
+    },
+    "sqlState" : "22006"
+  },
   "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
     "message" : [
       "Invalid inverse distribution function <funcName>."
@@ -2127,6 +2229,12 @@
       }
     },
     "sqlState" : "42K0K"
+  },
+  "INVALID_JSON_DATA_TYPE" : {
+    "message" : [
+      "Failed to convert the JSON string '<invalidType>' to a data type. Please enter a valid data type."
+    ],
+    "sqlState" : "2203G"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -2852,6 +2960,12 @@
     ],
     "sqlState" : "07501"
   },
+  "NONEXISTENT_FIELD_NAME_IN_LIST" : {
+    "message" : [
+      "Field(s) <nonExistFields> do(es) not exist. Available fields: <fieldNames>"
+    ],
+    "sqlState" : "HV091"
+  },
   "NON_FOLDABLE_ARGUMENT" : {
     "message" : [
       "The function <funcName> requires the parameter <paramName> to be a foldable expression of the type <paramType>, but the actual argument is a non-foldable."
@@ -3054,6 +3168,12 @@
       "Cannot use null as map key."
     ],
     "sqlState" : "2200E"
+  },
+  "NULL_QUERY_STRING_EXECUTE_IMMEDIATE" : {
+    "message" : [
+      "Execute immediate requires a non-null variable as the query string, but the provided variable <varName> is null."
+    ],
+    "sqlState" : "22004"
   },
   "NUMERIC_OUT_OF_SUPPORTED_RANGE" : {
     "message" : [
@@ -3371,6 +3491,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
+    "message" : [
+      "Failed to perform stateful processor operation=<operationType> with invalid handle state=<handleState>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE" : {
+    "message" : [
+      "Failed to perform stateful processor operation=<operationType> with invalid timeoutMode=<timeoutMode>"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
+    "message" : [
+      "Failed to create column family with unsupported starting character and name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
       "Failed to perform column family operation=<operationName> with invalid name=<colFamilyName>. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default"
@@ -3381,12 +3519,6 @@
     "message" : [
       "The handle has not been initialized for this StatefulProcessor.",
       "Please only use the StatefulProcessor within the transformWithState operator."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
-    "message" : [
-      "Store does not support multiple values per key"
     ],
     "sqlState" : "42802"
   },
@@ -3561,12 +3693,6 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
-  },
-  "TWS_VALUE_SHOULD_NOT_BE_NULL" : {
-    "message" : [
-      "New value should be non-null for <typeOfState>"
-    ],
-    "sqlState" : "22004"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -4423,6 +4549,13 @@
       "To tolerate the error on drop use DROP VARIABLE IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "VARIANT_SIZE_LIMIT" : {
+    "message" : [
+      "Cannot build variant bigger than <sizeLimit> in <functionName>.",
+      "Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big)."
+    ],
+    "sqlState" : "22023"
   },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -6189,17 +6322,17 @@
   },
   "_LEGACY_ERROR_TEMP_2109" : {
     "message" : [
-      "Cannot build HashedRelation with more than 1/3 billions unique keys."
+      "Cannot build HashedRelation with more than 1/3 billion unique keys."
     ]
   },
   "_LEGACY_ERROR_TEMP_2110" : {
     "message" : [
-      "Can not build a HashedRelation that is larger than 8G."
+      "Cannot build a HashedRelation that is larger than 8G."
     ]
   },
   "_LEGACY_ERROR_TEMP_2111" : {
     "message" : [
-      "failed to push a row into <rowQueue>."
+      "Failed to push a row into <rowQueue>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2112" : {
@@ -7618,16 +7751,6 @@
       "Datatype not supported <dt>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3193" : {
-    "message" : [
-      "Creating multiple column families with HDFSBackedStateStoreProvider is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3197" : {
-    "message" : [
-      "Failed to create column family with reserved name=<colFamilyName>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3198" : {
     "message" : [
       "Cannot grow BufferHolder by size <neededSize> because the size is negative"
@@ -7808,11 +7931,6 @@
       "cannot generate code for unsupported type: <dataType>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3234" : {
-    "message" : [
-      "Unsupported input type <other>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3235" : {
     "message" : [
       "The numbers of zipped arrays and field names should be the same"
@@ -7866,51 +7984,6 @@
   "_LEGACY_ERROR_TEMP_3250" : {
     "message" : [
       "Failed to convert the JSON string '<other>' to a field."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3251" : {
-    "message" : [
-      "Failed to convert the JSON string '<other>' to a data type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3252" : {
-    "message" : [
-      "<name> does not exist. Available: <fieldNames>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3253" : {
-    "message" : [
-      "<nonExistFields> do(es) not exist. Available: <fieldNames>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3254" : {
-    "message" : [
-      "<name> does not exist. Available: <fieldNames>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3255" : {
-    "message" : [
-      "Error parsing '<input>' to interval, <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3256" : {
-    "message" : [
-      "Unrecognized datetime pattern: <pattern>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3257" : {
-    "message" : [
-      "All week-based patterns are unsupported since Spark 3.0, detected: <c>, Please use the SQL function EXTRACT instead"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3258" : {
-    "message" : [
-      "Illegal pattern character: <c>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3259" : {
-    "message" : [
-      "Too many pattern letters: <style>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3260" : {

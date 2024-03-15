@@ -66,7 +66,7 @@ private[execution] object SparkPlanInfo {
 
     // dump the file scan metadata (e.g file path) to event log
     val metadata = plan match {
-      case fileScan: FileSourceScanExec => fileScan.metadata
+      case fileScan: FileSourceScanLike => fileScan.metadata
       case _ => Map[String, String]()
     }
     new SparkPlanInfo(
