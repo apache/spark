@@ -85,8 +85,7 @@ class TimerStateImpl(
   }
 
   val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-  store.createColFamilyIfAbsent(keyToTsCFName,
-    PrefixKeyScanStateEncoderType,
+  store.createColFamilyIfAbsent(keyToTsCFName, PrefixKeyScanStateEncoderType,
     schemaForKeyRow, numColsPrefixKey = 1,
     schemaForValueRow, useMultipleValuesPerKey = false,
     isInternal = true)
