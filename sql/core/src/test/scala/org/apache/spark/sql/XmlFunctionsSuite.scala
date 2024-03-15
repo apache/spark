@@ -30,7 +30,6 @@ import org.apache.spark.sql.types._
 class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-
   test("from_xml") {
     val df = Seq("""<ROW><a>1</a></ROW>""").toDS()
     val schema = new StructType().add("a", IntegerType)
@@ -365,7 +364,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
   test("infers schemas using options") {
     val df = spark.range(1)
       .select(schema_of_xml(lit("<ROW><a>1</a></ROW>"),
-              Map("allowUnquotedFieldNames" -> "true").asJava))
+        Map("allowUnquotedFieldNames" -> "true").asJava))
     checkAnswer(df, Seq(Row("STRUCT<a: BIGINT>")))
   }
 
