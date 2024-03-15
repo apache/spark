@@ -12598,7 +12598,7 @@ def collate(col: "ColumnOrName", collation: str) -> Column:
     :class:`~pyspark.sql.Column`
         A new column of string type, where each value has the specified collation.
     """
-    return _invoke_function("collate", _to_java_column(col), lit(collation))
+    return _invoke_function("collate", _to_java_column(col), collation)
 
 
 @_try_remote_functions

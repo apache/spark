@@ -2519,6 +2519,8 @@ setMethod("upper",
 #' @details
 #' \code{collate}: Marks a given column with specified collation.
 #'
+#' @param x a Column on which to perform collate.
+#' @param collation specified collation name.
 #' @rdname column_string_functions
 #' @aliases collate collate,Column-method
 #' @note collate since 4.0.0
@@ -2532,6 +2534,7 @@ setMethod("collate",
 #' @details
 #' \code{collation}: Returns the collation name of a given column.
 #'
+#' @param x a Column on which to return collation name.
 #' @rdname column_string_functions
 #' @aliases collation collation,Column-method
 #' @note collation since 4.0.0
