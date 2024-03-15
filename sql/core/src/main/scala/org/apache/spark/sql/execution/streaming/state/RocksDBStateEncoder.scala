@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructField, StructType}
 import org.apache.spark.unsafe.Platform
 
 sealed trait RocksDBKeyStateEncoder {
@@ -219,9 +219,15 @@ class RangeKeyScanStateEncoder(
     keySchema.zipWithIndex.take(numOrderingCols)
   }
 
+  private def isFixedSize(dataType: DataType): Boolean = dataType match {
+    case _: ByteType | _: ShortType | _: IntegerType | _: LongType | _: FloatType |
+         _: DoubleType => true
+    case _ => false
+  }
+
   // verify that only fixed sized columns are used for ordering
   rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
-    if (!UnsafeRow.isFixedLength(field.dataType)) {
+    if (!isFixedSize(field.dataType)) {
       throw new IllegalArgumentException(s"Field $field at index=$idx is not of fixed length!")
     }
   }
@@ -254,6 +260,7 @@ class RangeKeyScanStateEncoder(
 
   private def encodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
+    writer.resetRowWriter()
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = row.get(idx, field.dataType)
       field.dataType match {
@@ -295,6 +302,7 @@ class RangeKeyScanStateEncoder(
 
   private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
+    writer.resetRowWriter()
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = if (field.dataType == BooleanType || field.dataType == ByteType) {
         row.get(idx, field.dataType)
@@ -376,11 +384,11 @@ class RangeKeyScanStateEncoder(
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
-    val prefixKeyEncoded = encodeUnsafeRow(prefixKey)
-    val prefix = new Array[Byte](prefixKeyEncoded.length + 4)
-    Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET, prefixKeyEncoded.length)
-    Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefix,
-      Platform.BYTE_ARRAY_OFFSET + 4, prefixKeyEncoded.length)
+    val rangeScanKeyEncoded = encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
+    val prefix = new Array[Byte](rangeScanKeyEncoded.length + 4)
+    Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET, rangeScanKeyEncoded.length)
+    Platform.copyMemory(rangeScanKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefix,
+      Platform.BYTE_ARRAY_OFFSET + 4, rangeScanKeyEncoded.length)
     prefix
   }
 

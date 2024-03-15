@@ -915,6 +915,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       opId: Long,
       partition: Int,
       numColsPrefixKey: Int = 0,
+      keySchema: StructType = keySchema,
+      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType,
       dir: String = newDir(),
       minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
@@ -928,12 +930,17 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       numColsPrefixKey = numColsPrefixKey,
       useColumnFamilies = false,
       new StateStoreConf(sqlConf),
-      hadoopConf)
+      hadoopConf,
+      keyStateEncoderType = keyStateEncoderType)
     provider
   }
 
-  override def newStoreProvider(numPrefixCols: Int): HDFSBackedStateStoreProvider = {
-    newStoreProvider(opId = Random.nextInt(), partition = 0, numColsPrefixKey = numPrefixCols)
+  override def newStoreProvider(
+      keySchema: StructType,
+      keyStateEncoderType: KeyStateEncoderType,
+      numPrefixCols: Int): HDFSBackedStateStoreProvider = {
+    newStoreProvider(opId = Random.nextInt(), partition = 0, numColsPrefixKey = numPrefixCols,
+      keyStateEncoderType = keyStateEncoderType)
   }
 
   override def newStoreProvider(useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
@@ -1042,7 +1049,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   }
 
   testWithAllCodec("prefix scan") { colFamiliesEnabled =>
-    tryWithProviderResource(newStoreProvider(numPrefixCols = 1)) { provider =>
+    tryWithProviderResource(newStoreProvider(keySchema, PrefixKeyScanStateEncoderType,
+      numPrefixCols = 1)) { provider =>
       // Verify state before starting a new set of updates
       assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
@@ -1560,7 +1568,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   def newStoreProvider(minDeltasForSnapshot: Int, numOfVersToRetainInMemory: Int): ProviderClass
 
   /** Return a new provider with setting prefix key */
-  def newStoreProvider(numPrefixCols: Int): ProviderClass
+  def newStoreProvider(
+      keySchema: StructType,
+      keyStateEncoderType: KeyStateEncoderType,
+      numPrefixCols: Int): ProviderClass
 
   /** Return a new provider with useColumnFamilies set to true */
   def newStoreProvider(useColumnFamilies: Boolean): ProviderClass
@@ -1647,7 +1658,11 @@ object StateStoreTestsHelper {
     Seq(StructField("key1", StringType, true), StructField("key2", IntegerType, true)))
   val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
+  val keySchemaWithRangeScan = StructType(
+    Seq(StructField("key1", LongType, false), StructField("key2", StringType, true)))
+
   val keyProj = UnsafeProjection.create(Array[DataType](StringType, IntegerType))
+  val rangeScanProj = UnsafeProjection.create(Array[DataType](LongType, StringType))
   val prefixKeyProj = UnsafeProjection.create(Array[DataType](StringType))
   val valueProj = UnsafeProjection.create(Array[DataType](IntegerType))
 
@@ -1659,12 +1674,20 @@ object StateStoreTestsHelper {
     keyProj.apply(new GenericInternalRow(Array[Any](UTF8String.fromString(s), i))).copy()
   }
 
+  def dataToKeyRowWithRangeScan(ts: Long, s: String): UnsafeRow = {
+    rangeScanProj.apply(new GenericInternalRow(Array[Any](ts, UTF8String.fromString(s)))).copy()
+  }
+
   def dataToValueRow(i: Int): UnsafeRow = {
     valueProj.apply(new GenericInternalRow(Array[Any](i))).copy()
   }
 
   def keyRowToData(row: UnsafeRow): (String, Int) = {
     (row.getUTF8String(0).toString, row.getInt(1))
+  }
+
+  def keyRowWithRangeScanToData(row: UnsafeRow): (Long, String) = {
+    (row.getLong(0), row.getUTF8String(1).toString)
   }
 
   def valueRowToData(row: UnsafeRow): Int = {

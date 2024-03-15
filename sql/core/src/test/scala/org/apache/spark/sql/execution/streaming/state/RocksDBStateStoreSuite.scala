@@ -158,6 +158,28 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  testWithColumnFamilies("rocksdb range scan",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+      RangeKeyScanStateEncoderType, 1)) { provider =>
+      val store = provider.getStore(0)
+
+      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
+      timerTimestamps.foreach { ts =>
+        val keyRow = dataToKeyRowWithRangeScan(ts, "a")
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow)
+      }
+
+      val result = store.iterator().map { kv =>
+        val key = keyRowWithRangeScanToData(kv.key)
+        key._1
+      }.toSeq
+      assert(result === timerTimestamps.sorted)
+    }
+  }
+
   testWithColumnFamilies("rocksdb key and value schema encoders for column families",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     val testColFamily = "testState"
@@ -248,13 +270,19 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     newStoreProvider(storeId, numColsPrefixKey = -1, conf = conf)
   }
 
-  override def newStoreProvider(numPrefixCols: Int): RocksDBStateStoreProvider = {
-    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = numPrefixCols)
+  override def newStoreProvider(
+      keySchema: StructType,
+      keyStateEncoderType: KeyStateEncoderType,
+      numPrefixCols: Int): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = numPrefixCols,
+      keySchema = keySchema, keyStateEncoderType = keyStateEncoderType)
   }
 
   def newStoreProvider(
       storeId: StateStoreId,
       numColsPrefixKey: Int,
+      keySchema: StructType = keySchema,
+      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType,
       sqlConf: Option[SQLConf] = None,
       conf: Configuration = new Configuration,
       useColumnFamilies: Boolean = false,
@@ -268,7 +296,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useColumnFamilies,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)),
       conf,
-      useMultipleValuesPerKey
+      useMultipleValuesPerKey,
+      keyStateEncoderType = keyStateEncoderType
     )
     provider
   }
@@ -294,7 +323,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     minDeltasForSnapshot: Int,
     numOfVersToRetainInMemory: Int): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), 0,
-      Some(getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)))
+      sqlConf = Some(getDefaultSQLConf(minDeltasForSnapshot, numOfVersToRetainInMemory)))
   }
 
   override def getDefaultSQLConf(
