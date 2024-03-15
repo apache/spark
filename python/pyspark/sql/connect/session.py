@@ -946,6 +946,8 @@ class SparkSession:
     def profile(self) -> Profile:
         return Profile(self._client._profiler_collector)
 
+    profile.__doc__ = PySparkSession.profile.__doc__
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 

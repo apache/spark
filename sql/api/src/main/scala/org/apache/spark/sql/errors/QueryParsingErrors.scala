@@ -446,7 +446,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def invalidIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
+  def invalidIdentifierError(ident: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_IDENTIFIER",
       messageParameters = Map("ident" -> ident),

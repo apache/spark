@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -27,18 +28,19 @@ case class InputRow(key: String, action: String, value: String)
 class TestListStateProcessor
   extends StatefulProcessor[String, InputRow, (String, String)] {
 
-  @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _listState: ListState[String] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
-    _processorHandle = handle
-    _listState = handle.getListState("testListState")
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit = {
+    _listState = getHandle.getListState("testListState", Encoders.STRING)
   }
 
   override def handleInputRows(
       key: String,
       rows: Iterator[InputRow],
-      timerValues: TimerValues): Iterator[(String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
 
     var output = List[(String, String)]()
 
@@ -77,27 +79,26 @@ class TestListStateProcessor
 
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
 class ToggleSaveAndEmitProcessor
   extends StatefulProcessor[String, String, String] {
 
-  @transient var _processorHandle: StatefulProcessorHandle = _
   @transient var _listState: ListState[String] = _
   @transient var _valueState: ValueState[Boolean] = _
 
-  override def init(handle: StatefulProcessorHandle, outputMode: OutputMode): Unit = {
-    _processorHandle = handle
-    _listState = handle.getListState("testListState")
-    _valueState = handle.getValueState("testValueState")
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit = {
+    _listState = getHandle.getListState("testListState", Encoders.STRING)
+    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean)
   }
 
   override def handleInputRows(
       key: String,
       rows: Iterator[String],
-      timerValues: TimerValues): Iterator[String] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
     val valueStateOption = _valueState.getOption()
 
     if (valueStateOption.isEmpty || !valueStateOption.get) {
@@ -124,8 +125,6 @@ class ToggleSaveAndEmitProcessor
       }
     }
   }
-
-  override def close(): Unit = {}
 }
 
 class TransformWithListStateSuite extends StreamTest

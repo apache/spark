@@ -111,8 +111,8 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
             rowCount += 1
           }
 
-          val stats = InternalRow.fromSeq(
-            columnBuilders.flatMap(_.columnStats.collectedStatistics).toImmutableArraySeq)
+          val stats = new GenericInternalRow(
+            columnBuilders.flatMap(_.columnStats.collectedStatistics))
           DefaultCachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
@@ -403,17 +403,7 @@ case class InMemoryRelation(
 
   @volatile var statsOfPlanToCache: Statistics = null
 
-
-  override lazy val innerChildren: Seq[SparkPlan] = {
-    // The cachedPlan needs to be cloned here because it does not get cloned when SparkPlan.clone is
-    // called. This is a problem because when the explain output is generated for
-    // a plan it traverses the innerChildren and modifies their TreeNode.tags. If the plan is not
-    // cloned, there is a thread safety issue in the case that two plans with a shared cache
-    // operator have explain called at the same time. The cachedPlan cannot be cloned because
-    // it contains stateful information so we only clone it for the purpose of generating the
-    // explain output.
-    Seq(cachedPlan.clone())
-  }
+  override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
     copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),

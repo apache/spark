@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.commons.lang3.SerializationUtils
-
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Serializer
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types.{BinaryType, StructType}
@@ -41,16 +41,26 @@ object StateKeyValueRowSchema {
  *
  * @param keySerializer - serializer to serialize the grouping key of type `GK`
  *     to an [[InternalRow]]
+ * @param valEncoder - SQL encoder for value of type `S`
  * @param stateName - name of logical state partition
  * @tparam GK - grouping key type
+ * @tparam V - value type
  */
-class StateTypesEncoder[GK](
+class StateTypesEncoder[GK, V](
     keySerializer: Serializer[GK],
+    valEncoder: Encoder[V],
     stateName: String) {
   import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema._
 
+  /** Variables reused for conversions between byte array and UnsafeRow */
   private val keyProjection = UnsafeProjection.create(KEY_ROW_SCHEMA)
   private val valueProjection = UnsafeProjection.create(VALUE_ROW_SCHEMA)
+
+  /** Variables reused for value conversions between spark sql and object */
+  private val valExpressionEnc = encoderFor(valEncoder)
+  private val objToRowSerializer = valExpressionEnc.createSerializer()
+  private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
+  private val reusedValRow = new UnsafeRow(valEncoder.schema.fields.length)
 
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
@@ -66,23 +76,73 @@ class StateTypesEncoder[GK](
     keyRow
   }
 
-  def encodeValue[S](value: S): UnsafeRow = {
-    val valueByteArr = SerializationUtils.serialize(value.asInstanceOf[Serializable])
-    val valueRow = valueProjection(InternalRow(valueByteArr))
-    valueRow
+  def encodeValue(value: V): UnsafeRow = {
+    val objRow: InternalRow = objToRowSerializer.apply(value)
+    val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
+    val valRow = valueProjection(InternalRow(bytes))
+    valRow
   }
 
-  def decodeValue[S](row: UnsafeRow): S = {
-    SerializationUtils
-      .deserialize(row.getBinary(0))
-      .asInstanceOf[S]
+  def decodeValue(row: UnsafeRow): V = {
+    val bytes = row.getBinary(0)
+    reusedValRow.pointTo(bytes, bytes.length)
+    val value = rowToObjDeserializer.apply(reusedValRow)
+    value
   }
 }
 
 object StateTypesEncoder {
-  def apply[GK](
+  def apply[GK, V](
       keySerializer: Serializer[GK],
-      stateName: String): StateTypesEncoder[GK] = {
-    new StateTypesEncoder[GK](keySerializer, stateName)
+      valEncoder: Encoder[V],
+      stateName: String): StateTypesEncoder[GK, V] = {
+    new StateTypesEncoder[GK, V](keySerializer, valEncoder, stateName)
+  }
+}
+
+class CompositeKeyStateEncoder[GK, K, V](
+    keySerializer: Serializer[GK],
+    userKeyEnc: Encoder[K],
+    valEncoder: Encoder[V],
+    schemaForCompositeKeyRow: StructType,
+    stateName: String)
+  extends StateTypesEncoder[GK, V](keySerializer, valEncoder, stateName) {
+
+  private val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
+  private val reusedKeyRow = new UnsafeRow(userKeyEnc.schema.fields.length)
+  private val userKeyExpressionEnc = encoderFor(userKeyEnc)
+
+  private val userKeyRowToObjDeserializer =
+    userKeyExpressionEnc.resolveAndBind().createDeserializer()
+  private val userKeySerializer = encoderFor(userKeyEnc).createSerializer()
+
+  /**
+   * Grouping key and user key are encoded as a row of `schemaForCompositeKeyRow` schema.
+   * Grouping key will be encoded in `RocksDBStateEncoder` as the prefix column.
+   */
+  def encodeCompositeKey(userKey: K): UnsafeRow = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+    val groupingKey = keyOption.get.asInstanceOf[GK]
+    // generate grouping key byte array
+    val groupingKeyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
+    // generate user key byte array
+    val userKeyBytesArr = userKeySerializer.apply(userKey).asInstanceOf[UnsafeRow].getBytes()
+
+    val compositeKeyRow = compositeKeyProjection(InternalRow(groupingKeyByteArr, userKeyBytesArr))
+    compositeKeyRow
+  }
+
+  /**
+   * The input row is of composite Key schema.
+   * Only user key is returned though grouping key also exist in the row.
+   */
+  def decodeCompositeKey(row: UnsafeRow): K = {
+    val bytes = row.getBinary(1)
+    reusedKeyRow.pointTo(bytes, bytes.length)
+    val userKey = userKeyRowToObjDeserializer.apply(reusedKeyRow)
+    userKey
   }
 }
