@@ -296,6 +296,7 @@ class QueryExecution(
         queryExecution.stringWithStats(maxFields, append)
       case FormattedMode =>
         queryExecution.simpleString(formatted = true, maxFields = maxFields, append)
+      case SilentMode => append("== No plan generated. SILENT mode used. ==\n");
     }
   }
 

@@ -302,6 +302,7 @@ class Dataset[T] private[sql] (
       case "codegen" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
       case "cost" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_COST
       case "formatted" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
+      case "silent" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SILENT
       case _ => throw new IllegalArgumentException("Unsupported explain mode: " + mode)
     }
     explain(protoMode)

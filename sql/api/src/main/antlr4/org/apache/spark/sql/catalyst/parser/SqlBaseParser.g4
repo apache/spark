@@ -170,7 +170,7 @@ statement
     | DECLARE (OR REPLACE)? VARIABLE?
         identifierReference dataType? variableDefaultExpression?       #createVariable
     | DROP TEMPORARY VARIABLE (IF EXISTS)? identifierReference         #dropVariable
-    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
+    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST | SILENT)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showTables
@@ -1527,6 +1527,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SILENT
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -1869,6 +1870,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SILENT
     | SINGLE
     | SKEWED
     | SMALLINT
