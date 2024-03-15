@@ -27,23 +27,17 @@ object CollationTypeConstraints {
   def checkCollationCompatibility(collationId: Int, dataTypes: Seq[DataType]): TypeCheckResult = {
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     // Additional check needed for collation compatibility
-    for (dataType <- dataTypes) {
-      dataType match {
-        case stringType: StringType =>
-          if (stringType.collationId != collationId) {
-            val collation = CollationFactory.fetchCollation(stringType.collationId)
-            return DataTypeMismatch(
-              errorSubClass = "COLLATION_MISMATCH",
-              messageParameters = Map(
-                "collationNameLeft" -> collationName,
-                "collationNameRight" -> collation.collationName
-              )
-            )
-          }
-        case _ =>
-      }
-    }
-    TypeCheckResult.TypeCheckSuccess
+    dataTypes.collectFirst {
+      case stringType: StringType if stringType.collationId != collationId =>
+        val collation = CollationFactory.fetchCollation(stringType.collationId)
+        DataTypeMismatch(
+          errorSubClass = "COLLATION_MISMATCH",
+          messageParameters = Map(
+            "collationNameLeft" -> collationName,
+            "collationNameRight" -> collation.collationName
+          )
+        )
+    } getOrElse TypeCheckResult.TypeCheckSuccess
   }
 
 }
