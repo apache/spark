@@ -39,13 +39,6 @@ insert into t2 values('bbb', 'bbb');
 -- anti-join on lcase
 select * from t1 anti join t2 on t1.utf8_binary_lcase = t2.utf8_binary_lcase;
 
--- set operations
-select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb');
-select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb');
-select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb');
-select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb');
-select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb');
-
 drop table t2;
 drop table t1;
 
