@@ -219,9 +219,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.VARBINARY => BinaryType
     case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
     case java.sql.Types.VARCHAR => VarcharType(precision)
+    case java.sql.Types.NULL => NullType
     case _ =>
       // For unmatched types:
-      // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,NULL,OTHER,REF_CURSOR,
+      // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,OTHER,REF_CURSOR,
       // TIME_WITH_TIMEZONE,TIMESTAMP_WITH_TIMEZONE, and among others.
       val jdbcType = classOf[JDBCType].getEnumConstants()
         .find(_.getVendorTypeNumber == sqlType)
@@ -541,6 +542,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
           input = rs.getArray(pos + 1),
           array => new GenericArrayData(elementConversion(array.getArray)))
         row.update(pos, array)
+
+    case NullType =>
+      (_: ResultSet, row: InternalRow, pos: Int) => row.update(pos, null)
 
     case _ => throw QueryExecutionErrors.unsupportedJdbcTypeError(dt.catalogString)
   }
