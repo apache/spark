@@ -4044,6 +4044,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val USE_LOCAL_SESSION_CALENDAR = buildConf("spark.sql.useLocalSessionCalendar")
+    .doc("If the configuration property is set to true, rs.getTimestamp and rs.setTimestamp" +
+      "API calls will pass calendar with spark local session time zone as the second argument")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val UI_EXPLAIN_MODE = buildConf("spark.sql.ui.explainMode")
     .doc("Configures the query explain mode used in the Spark SQL UI. The value can be 'simple', " +
       "'extended', 'codegen', 'cost', or 'formatted'. The default value is 'formatted'.")
@@ -5716,6 +5723,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     case "TIMESTAMP_NTZ" =>
       TimestampNTZType
   }
+
+  def useLocalSessionCalendar: Boolean = getConf(USE_LOCAL_SESSION_CALENDAR)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 

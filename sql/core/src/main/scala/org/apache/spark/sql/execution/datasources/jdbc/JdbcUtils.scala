@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.{Calendar, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
@@ -500,7 +501,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val t = rs.getTimestamp(pos + 1)
+        val t = if (conf.useLocalSessionCalendar) {
+          rs.getTimestamp(pos + 1,
+            Calendar.getInstance(TimeZone.getTimeZone(conf.sessionLocalTimeZone)))
+        } else {
+          rs.getTimestamp(pos + 1)
+        }
+
         if (t != null) {
           row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
         } else {
@@ -665,10 +672,20 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case TimestampType =>
       if (conf.datetimeJava8ApiEnabled) {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
+          if (conf.useLocalSessionCalendar) {
+            stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))),
+              Calendar.getInstance(TimeZone.getTimeZone(conf.sessionLocalTimeZone)))
+          } else {
+            stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
+          }
       } else {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
+          if (conf.useLocalSessionCalendar) {
+            stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos),
+              Calendar.getInstance(TimeZone.getTimeZone(conf.sessionLocalTimeZone)))
+          } else {
+            stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
+          }
       }
 
     case TimestampNTZType =>
