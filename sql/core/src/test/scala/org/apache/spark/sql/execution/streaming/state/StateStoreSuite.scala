@@ -1664,10 +1664,15 @@ object StateStoreTestsHelper {
   val keyProj = UnsafeProjection.create(Array[DataType](StringType, IntegerType))
   val rangeScanProj = UnsafeProjection.create(Array[DataType](LongType, StringType))
   val prefixKeyProj = UnsafeProjection.create(Array[DataType](StringType))
+  val prefixKeyProjWithRangeScan = UnsafeProjection.create(Array[DataType](LongType))
   val valueProj = UnsafeProjection.create(Array[DataType](IntegerType))
 
   def dataToPrefixKeyRow(s: String): UnsafeRow = {
     prefixKeyProj.apply(new GenericInternalRow(Array[Any](UTF8String.fromString(s)))).copy()
+  }
+
+  def dataToPrefixKeyRowWithRangeScan(ts: Long): UnsafeRow = {
+    prefixKeyProjWithRangeScan.apply(new GenericInternalRow(Array[Any](ts))).copy()
   }
 
   def dataToKeyRow(s: String, i: Int): UnsafeRow = {

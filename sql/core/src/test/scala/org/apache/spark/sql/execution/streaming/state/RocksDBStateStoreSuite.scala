@@ -224,9 +224,11 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
       timerTimestamps.foreach { ts =>
-        val keyRow = dataToKeyRowWithRangeScan(ts, "a")
+        val keyRow = dataToKeyRowWithRangeScan(ts,
+          Random.alphanumeric.take(Random.nextInt(20) + 1).mkString)
         val valueRow = dataToValueRow(1)
         store.put(keyRow, valueRow)
+        assert(valueRowToData(store.get(keyRow)) === 1)
       }
 
       val result = store.iterator().map { kv =>
@@ -234,6 +236,35 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         key._1
       }.toSeq
       assert(result === timerTimestamps.sorted)
+    }
+  }
+
+  testWithColumnFamilies("rocksdb range scan - with prefix scan",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+      RangeKeyScanStateEncoderType, 1)) { provider =>
+      val store = provider.getStore(0)
+
+      val timerTimestamps = Seq(931L, 8000L, 1L)
+      timerTimestamps.foreach { ts =>
+        (1 to 5).foreach { keyVal =>
+          val keyRow = dataToKeyRowWithRangeScan(ts, keyVal.toString)
+          val valueRow = dataToValueRow(1)
+          store.put(keyRow, valueRow)
+          assert(valueRowToData(store.get(keyRow)) === 1)
+        }
+      }
+
+      timerTimestamps.foreach { ts =>
+        val prefix = dataToPrefixKeyRowWithRangeScan(ts)
+        val result = store.prefixScan(prefix).map { kv =>
+          assert(valueRowToData(kv.value) === 1)
+          val key = keyRowWithRangeScanToData(kv.key)
+          key._2
+        }.toSeq
+        assert(result.size === 5)
+      }
     }
   }
 
