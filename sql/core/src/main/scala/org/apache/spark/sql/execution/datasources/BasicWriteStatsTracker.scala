@@ -262,13 +262,16 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
 
       summary.partitionsStats.foreach(s => {
-        val path = partitionsMap.getOrElse(s._1, "")
-        val current = partitionMetrics(path)
-        driverSidePartitionMetrics(path) = BasicWritePartitionTaskStats(
-          current.numFiles + s._2.numFiles,
-          current.numBytes + s._2.numBytes,
-          current.numRows + s._2.numRows
-        )
+        // Check if we know the mapping of the internal row to a partition path
+        if (partitionsMap.contains(s._1)) {
+          val path = partitionsMap(s._1)
+          val current = partitionMetrics(path)
+          driverSidePartitionMetrics(path) = BasicWritePartitionTaskStats(
+            current.numFiles + s._2.numFiles,
+            current.numBytes + s._2.numBytes,
+            current.numRows + s._2.numRows
+          )
+        }
       })
     }
 
