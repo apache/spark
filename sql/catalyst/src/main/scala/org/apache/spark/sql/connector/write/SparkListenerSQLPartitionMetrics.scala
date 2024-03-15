@@ -28,6 +28,14 @@ case class SparkListenerSQLPartitionMetrics(executorId: Long,
 
 object SQLPartitionMetrics {
 
+  /**
+   * Post any aggregated partition write statistics to the listener bus using a
+   * [[SparkListenerSQLPartitionMetrics]] event
+   *
+   * @param sc The Spark context
+   * @param executionId The identifier for the SQL execution that resulted in the partition writes
+   * @param writeInfo The aggregated partition writes for this SQL exectuion
+   */
   def postDriverMetricUpdates(sc: SparkContext, executionId: String,
                               writeInfo: PartitionMetricsWriteInfo): Unit = {
     // Don't bother firing an event if there are no collected metrics

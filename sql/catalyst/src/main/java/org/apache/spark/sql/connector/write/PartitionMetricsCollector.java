@@ -17,8 +17,21 @@
 
 package org.apache.spark.sql.connector.write;
 
+/**
+ * A logical representation of a data source which collects written partition metrics
+ * <p>
+ * Data sources must implement the corresponding methods in this interface to collect and report
+ * metrics specific to each partition.
+ */
 public interface PartitionMetricsCollector {
 
+  /**
+   * Record the partition metrics into {@code PartitionMetricsWriteInfo} which were collected during
+   * commit.
+   *
+   * @param metrics The stats for each written partition
+   * @param messages The commit messages returned by {@code DataWriter.commit()}
+   */
   void partitionMetrics(PartitionMetricsWriteInfo metrics, WriterCommitMessage[] messages);
 
 }

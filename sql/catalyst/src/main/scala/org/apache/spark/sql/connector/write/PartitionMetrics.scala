@@ -17,15 +17,34 @@
 
 package org.apache.spark.sql.connector.write
 
+/**
+ * The metrics collected for an individual partition
+ *
+ * @param numBytes the number of bytes
+ * @param numRecords the number of records (rows)
+ * @param numFiles the number of files
+ */
 case class PartitionMetrics(var numBytes: Long = 0, var numRecords: Long = 0, var numFiles: Int = 0)
   extends Serializable {
 
+  /**
+   * Updates the metrics for an individual file.
+   *
+   * @param bytes the number of bytes
+   * @param records the number of records (rows)
+   */
   def updateFile(bytes: Long, records: Long): Unit = {
     numBytes += bytes
     numRecords += records
     numFiles += 1
   }
 
+  /**
+   * Merges another same-type accumulator into this one and update its state, i.e. this should be
+   * merge-in-place.
+
+   * @param other Another set of metrics for the same partition
+   */
   def merge (other: PartitionMetrics): Unit = {
     numBytes += other.numBytes
     numRecords += other.numRecords
