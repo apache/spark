@@ -276,10 +276,6 @@ private[sql] class RocksDBStateStoreProvider
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
 
-    require((keySchema.length == 0 && numColsPrefixKey == 0) ||
-      (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
-      "greater than the number of columns for prefix key!")
-
     if (useMultipleValuesPerKey) {
       require(numColsPrefixKey == 0, "Both multiple values per key, and prefix key are not " +
         "supported simultaneously.")

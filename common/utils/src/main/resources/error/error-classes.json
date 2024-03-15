@@ -3501,6 +3501,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Incorrect number of ordering columns=<numOrderingCols> for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
     "message" : [
       "Store does not support multiple values per key"
@@ -3516,6 +3522,12 @@
   "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
     "message" : [
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Variable size ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
   },

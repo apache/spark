@@ -118,8 +118,9 @@ class PrefixKeyScanStateEncoder(
 
   import RocksDBStateEncoder._
 
-  require(keySchema.length > numColsPrefixKey, "The number of columns in the key must be " +
-    "greater than the number of columns for prefix key!")
+  if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
+    throw StateStoreErrors.incorrectNumOrderingColsNotSupported(numColsPrefixKey.toString)
+  }
 
   private val prefixKeyFieldsWithIdx: Seq[(StructField, Int)] = {
     keySchema.zipWithIndex.take(numColsPrefixKey)
@@ -212,23 +213,25 @@ class RangeKeyScanStateEncoder(
 
   import RocksDBStateEncoder._
 
-  require(numOrderingCols <= keySchema.length, "The number of columns in the key schema " +
-    "cannot be lower than the number of ordering columns!")
+  // Verify that num cols specified for ordering are valid
+  if (numOrderingCols == 0 || numOrderingCols > keySchema.length) {
+    throw StateStoreErrors.incorrectNumOrderingColsNotSupported(numOrderingCols.toString)
+  }
 
   private val rangeScanKeyFieldsWithIdx: Seq[(StructField, Int)] = {
     keySchema.zipWithIndex.take(numOrderingCols)
   }
 
   private def isFixedSize(dataType: DataType): Boolean = dataType match {
-    case _: ByteType | _: ShortType | _: IntegerType | _: LongType | _: FloatType |
-         _: DoubleType => true
+    case _: ByteType | _: BooleanType | _: ShortType | _: IntegerType | _: LongType |
+      _: FloatType | _: DoubleType => true
     case _ => false
   }
 
   // verify that only fixed sized columns are used for ordering
   rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
     if (!isFixedSize(field.dataType)) {
-      throw new IllegalArgumentException(s"Field $field at index=$idx is not of fixed length!")
+      throw StateStoreErrors.variableSizeOrderingColsNotSupported(field.name, idx.toString)
     }
   }
 

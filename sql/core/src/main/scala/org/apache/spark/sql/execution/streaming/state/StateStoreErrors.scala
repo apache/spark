@@ -68,6 +68,16 @@ object StateStoreErrors {
       errorClass = "ILLEGAL_STATE_STORE_VALUE.EMPTY_LIST_VALUE",
       messageParameters = Map("stateName" -> stateName))
   }
+
+  def incorrectNumOrderingColsNotSupported(numOrderingCols: String):
+    StateStoreIncorrectNumOrderingColsNotSupported = {
+    new StateStoreIncorrectNumOrderingColsNotSupported(numOrderingCols)
+  }
+
+  def variableSizeOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreVariableSizeOrderingColsNotSupported = {
+    new StateStoreVariableSizeOrderingColsNotSupported(fieldName, index)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -95,3 +105,13 @@ class StateStoreUnsupportedOperationOnMissingColumnFamily(
     colFamilyName: String) extends SparkUnsupportedOperationException(
   errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
   messageParameters = Map("operationType" -> operationType, "colFamilyName" -> colFamilyName))
+
+class StateStoreIncorrectNumOrderingColsNotSupported(numOrderingCols: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("numOrderingCols" -> numOrderingCols))
+
+class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))

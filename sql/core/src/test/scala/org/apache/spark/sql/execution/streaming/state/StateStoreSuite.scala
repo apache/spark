@@ -1658,8 +1658,8 @@ object StateStoreTestsHelper {
     Seq(StructField("key1", StringType, true), StructField("key2", IntegerType, true)))
   val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
-  val keySchemaWithRangeScan = StructType(
-    Seq(StructField("key1", LongType, false), StructField("key2", StringType, true)))
+  val keySchemaWithRangeScan: StructType = StructType(
+    Seq(StructField("key1", LongType, false), StructField("key2", StringType, false)))
 
   val keyProj = UnsafeProjection.create(Array[DataType](StringType, IntegerType))
   val rangeScanProj = UnsafeProjection.create(Array[DataType](LongType, StringType))
