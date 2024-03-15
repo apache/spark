@@ -308,17 +308,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
 
     if (keyStateEncoderType == RangeKeyScanStateEncoderType) {
-      throw StateStoreErrors.unsupportedOperationException("range key scan", providerName)
+      throw StateStoreErrors.unsupportedOperationException("Range scan", providerName)
     }
 
     if (keyStateEncoderType == NoPrefixKeyStateEncoderType && numColsPrefixKey > 0) {
-      throw StateStoreErrors.unsupportedOperationException("incorrect encoder type for prefix scan",
+      throw StateStoreErrors.unsupportedOperationException("Incorrect encoder type for prefix scan",
         providerName)
     }
 
-    require((keySchema.length == 0 && numColsPrefixKey == 0) ||
-      (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
-      "greater than the number of columns for prefix key!")
     this.numColsPrefixKey = numColsPrefixKey
 
     fm.mkdirs(baseDir)

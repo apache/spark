@@ -3528,12 +3528,6 @@
     ],
     "sqlState" : "42802"
   },
-  "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
-    "message" : [
-      "Store does not support multiple values per key"
-    ],
-    "sqlState" : "42802"
-  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"

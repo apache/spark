@@ -2185,12 +2185,6 @@ Please only use the StatefulProcessor within the transformWithState operator.
 
 Incorrect number of ordering columns=`<numOrderingCols>` for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns.
 
-### STATE_STORE_MULTIPLE_VALUES_PER_KEY
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Store does not support multiple values per key
-
 ### STATE_STORE_UNSUPPORTED_OPERATION
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)

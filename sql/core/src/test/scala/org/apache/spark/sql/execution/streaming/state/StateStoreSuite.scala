@@ -198,6 +198,42 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  test("running with range scan encoder should fail") {
+    val ex = intercept[SparkUnsupportedOperationException] {
+      tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+        keyStateEncoderType = RangeKeyScanStateEncoderType, numPrefixCols = 1)) { provider =>
+        provider.getStore(0)
+      }
+    }
+    checkError(
+      ex,
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Range scan",
+        "entity" -> "HDFSBackedStateStoreProvider"
+      ),
+      matchPVals = true
+    )
+  }
+
+  test("running with no prefix encoder and non-zero numPrefixCols should fail") {
+    val ex = intercept[SparkUnsupportedOperationException] {
+      tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+        keyStateEncoderType = NoPrefixKeyStateEncoderType, numPrefixCols = 1)) { provider =>
+        provider.getStore(0)
+      }
+    }
+    checkError(
+      ex,
+      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Incorrect encoder type for prefix scan",
+        "entity" -> "HDFSBackedStateStoreProvider"
+      ),
+      matchPVals = true
+    )
+  }
+
   test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       numOfVersToRetainInMemory = 1)) { provider =>
