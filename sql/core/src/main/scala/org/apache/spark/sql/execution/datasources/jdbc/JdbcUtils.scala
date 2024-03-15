@@ -167,6 +167,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
       throw QueryExecutionErrors.cannotGetJdbcTypeError(dt))
   }
 
+  def getTimestampType(isTimestampNTZ: Boolean): DataType = {
+    if (isTimestampNTZ) TimestampNTZType else TimestampType
+  }
+
   /**
    * Maps a JDBC type to a Catalyst type.  This function is called only when
    * the JdbcDialect class corresponding to your database driver returns null.
@@ -211,10 +215,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.SMALLINT => IntegerType
     case java.sql.Types.SQLXML => StringType
     case java.sql.Types.STRUCT => StringType
-    case java.sql.Types.TIME if isTimestampNTZ => TimestampNTZType
-    case java.sql.Types.TIME => TimestampType
-    case java.sql.Types.TIMESTAMP if isTimestampNTZ => TimestampNTZType
-    case java.sql.Types.TIMESTAMP => TimestampType
+    case java.sql.Types.TIME => getTimestampType(isTimestampNTZ)
+    case java.sql.Types.TIMESTAMP => getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
     case java.sql.Types.VARCHAR if conf.charVarcharAsString => StringType
