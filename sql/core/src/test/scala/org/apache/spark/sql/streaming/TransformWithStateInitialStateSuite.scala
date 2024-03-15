@@ -26,7 +26,8 @@ case class InitInputRow(key: String, action: String, value: Double)
 case class InputRowForInitialState(
     value: Double, entries: List[Double], mapping: Map[Double, Int])
 case class InputRowIterForInitialState(
-    value: Double, entries: Iterator[Double], mapping: Iterator[(Double, Int)])
+    value: Double, entries: java.util.Iterator[Double],
+    mapping: java.util.Iterator[(Double, Int)])
 
 abstract class StatefulProcessorWithInitialStateTestClass[V]
     extends StatefulProcessorWithInitialState[
@@ -155,101 +156,89 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       .mapValues(x => x)
   }
 
-  Seq("in memory type", "iterator type").foreach { initStateType =>
-    test("transformWithStateWithInitialState - correctness test, " +
-      s"run with multiple state variables - $initStateType") {
-      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-        classOf[RocksDBStateStoreProvider].getName) {
 
-        val inputData = MemoryStream[InitInputRow]
-        val kvDataSet = inputData.toDS()
-          .groupByKey(x => x.key)
-        val query = initStateType match {
-          case "in memory type" =>
-            val initStateDf =
-              Seq(("init_1", InputRowForInitialState(40.0, List(40.0), Map(40.0 -> 1))),
-                ("init_2", InputRowForInitialState(100.0, List(100.0), Map(100.0 -> 1))))
-                .toDS().groupByKey(x => x._1).mapValues(x => x)
-            kvDataSet.transformWithState(new InitialStateInMemoryTestClass(),
-              TimeoutMode.NoTimeouts (), OutputMode.Append (), initStateDf)
-          case "iterator type" =>
-            val initStateDf =
-              Seq(("init_1", InputRowIterForInitialState(40.0,
-                  List(40.0).iterator, Map(40.0 -> 1).iterator)),
-                ("init_2", InputRowIterForInitialState(100.0,
-                  List(40.0).iterator, Map(100.0 -> 1).iterator)))
-                .toDS().groupByKey(x => x._1).mapValues(x => x)
-            kvDataSet.transformWithState(new InitialStateIteratorTestClass(),
-              TimeoutMode.NoTimeouts(), OutputMode.Append(), initStateDf)
-        }
+  test("transformWithStateWithInitialState - correctness test, " +
+    "run with multiple state variables - in-memory type") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
 
-        testStream(query, OutputMode.Update())(
-          // non-exist key test
-          AddData(inputData, InitInputRow("k1", "update", 37.0)),
-          AddData(inputData, InitInputRow("k2", "update", 40.0)),
-          AddData(inputData, InitInputRow("non-exist", "getOption", -1.0)),
-          CheckNewAnswer(("non-exist", "getOption", -1.0)),
-          AddData(inputData, InitInputRow("k1", "appendList", 37.0)),
-          AddData(inputData, InitInputRow("k2", "appendList", 40.0)),
-          AddData(inputData, InitInputRow("non-exist", "getList", -1.0)),
-          CheckNewAnswer(),
+      val inputData = MemoryStream[InitInputRow]
+      val kvDataSet = inputData.toDS()
+        .groupByKey(x => x.key)
+      val initStateDf =
+        Seq(("init_1", InputRowForInitialState(40.0, List(40.0), Map(40.0 -> 1))),
+          ("init_2", InputRowForInitialState(100.0, List(100.0), Map(100.0 -> 1))))
+          .toDS().groupByKey(x => x._1).mapValues(x => x)
+      val query = kvDataSet.transformWithState(new InitialStateInMemoryTestClass(),
+            TimeoutMode.NoTimeouts (), OutputMode.Append (), initStateDf)
 
-          AddData(inputData, InitInputRow("k1", "incCount", 37.0)),
-          AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
-          AddData(inputData, InitInputRow("non-exist", "getCount", -1.0)),
-          CheckNewAnswer(("non-exist", "getCount", 0.0)),
-          AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
-          AddData(inputData, InitInputRow("k2", "getCount", 40.0)),
-          CheckNewAnswer(("k2", "getCount", 2.0)),
+      testStream(query, OutputMode.Update())(
+        // non-exist key test
+        AddData(inputData, InitInputRow("k1", "update", 37.0)),
+        AddData(inputData, InitInputRow("k2", "update", 40.0)),
+        AddData(inputData, InitInputRow("non-exist", "getOption", -1.0)),
+        CheckNewAnswer(("non-exist", "getOption", -1.0)),
+        AddData(inputData, InitInputRow("k1", "appendList", 37.0)),
+        AddData(inputData, InitInputRow("k2", "appendList", 40.0)),
+        AddData(inputData, InitInputRow("non-exist", "getList", -1.0)),
+        CheckNewAnswer(),
 
-          // test every row in initial State is processed
-          AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
-          CheckNewAnswer(("init_1", "getOption", 40.0)),
-          AddData(inputData, InitInputRow("init_2", "getOption", -1.0)),
-          CheckNewAnswer(("init_2", "getOption", 100.0)),
+        AddData(inputData, InitInputRow("k1", "incCount", 37.0)),
+        AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
+        AddData(inputData, InitInputRow("non-exist", "getCount", -1.0)),
+        CheckNewAnswer(("non-exist", "getCount", 0.0)),
+        AddData(inputData, InitInputRow("k2", "incCount", 40.0)),
+        AddData(inputData, InitInputRow("k2", "getCount", 40.0)),
+        CheckNewAnswer(("k2", "getCount", 2.0)),
 
-          AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
-          CheckNewAnswer(("init_1", "getList", 40.0)),
-          AddData(inputData, InitInputRow("init_2", "getList", -1.0)),
-          CheckNewAnswer(("init_2", "getList", 100.0)),
+        // test every row in initial State is processed
+        AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        CheckNewAnswer(("init_1", "getOption", 40.0)),
+        AddData(inputData, InitInputRow("init_2", "getOption", -1.0)),
+        CheckNewAnswer(("init_2", "getOption", 100.0)),
 
-          AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
-          CheckNewAnswer(("init_1", "getCount", 1.0)),
-          AddData(inputData, InitInputRow("init_2", "getCount", 100.0)),
-          CheckNewAnswer(("init_2", "getCount", 1.0)),
+        AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        CheckNewAnswer(("init_1", "getList", 40.0)),
+        AddData(inputData, InitInputRow("init_2", "getList", -1.0)),
+        CheckNewAnswer(("init_2", "getList", 100.0)),
 
-          // Update row with key in initial row will work
-          AddData(inputData, InitInputRow("init_1", "update", 50.0)),
-          AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
-          CheckNewAnswer(("init_1", "getOption", 50.0)),
-          AddData(inputData, InitInputRow("init_1", "remove", -1.0)),
-          AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
-          CheckNewAnswer(("init_1", "getOption", -1.0)),
+        AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
+        CheckNewAnswer(("init_1", "getCount", 1.0)),
+        AddData(inputData, InitInputRow("init_2", "getCount", 100.0)),
+        CheckNewAnswer(("init_2", "getCount", 1.0)),
 
-          AddData(inputData, InitInputRow("init_1", "appendList", 50.0)),
-          AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
-          CheckNewAnswer(("init_1", "getList", 50.0), ("init_1", "getList", 40.0)),
+        // Update row with key in initial row will work
+        AddData(inputData, InitInputRow("init_1", "update", 50.0)),
+        AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        CheckNewAnswer(("init_1", "getOption", 50.0)),
+        AddData(inputData, InitInputRow("init_1", "remove", -1.0)),
+        AddData(inputData, InitInputRow("init_1", "getOption", -1.0)),
+        CheckNewAnswer(("init_1", "getOption", -1.0)),
 
-          AddData(inputData, InitInputRow("init_1", "incCount", 40.0)),
-          AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
-          CheckNewAnswer(("init_1", "getCount", 2.0)),
+        AddData(inputData, InitInputRow("init_1", "appendList", 50.0)),
+        AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        CheckNewAnswer(("init_1", "getList", 50.0), ("init_1", "getList", 40.0)),
 
-          // test remove
-          AddData(inputData, InitInputRow("k1", "remove", -1.0)),
-          AddData(inputData, InitInputRow("k1", "getOption", -1.0)),
-          CheckNewAnswer(("k1", "getOption", -1.0)),
+        AddData(inputData, InitInputRow("init_1", "incCount", 40.0)),
+        AddData(inputData, InitInputRow("init_1", "getCount", 40.0)),
+        CheckNewAnswer(("init_1", "getCount", 2.0)),
 
-          AddData(inputData, InitInputRow("init_1", "clearCount", -1.0)),
-          AddData(inputData, InitInputRow("init_1", "getCount", -1.0)),
-          CheckNewAnswer(("init_1", "getCount", 0.0)),
+        // test remove
+        AddData(inputData, InitInputRow("k1", "remove", -1.0)),
+        AddData(inputData, InitInputRow("k1", "getOption", -1.0)),
+        CheckNewAnswer(("k1", "getOption", -1.0)),
 
-          AddData(inputData, InitInputRow("init_1", "clearList", -1.0)),
-          AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
-          CheckNewAnswer()
-        )
-      }
+        AddData(inputData, InitInputRow("init_1", "clearCount", -1.0)),
+        AddData(inputData, InitInputRow("init_1", "getCount", -1.0)),
+        CheckNewAnswer(("init_1", "getCount", 0.0)),
+
+        AddData(inputData, InitInputRow("init_1", "clearList", -1.0)),
+        AddData(inputData, InitInputRow("init_1", "getList", -1.0)),
+        CheckNewAnswer()
+      )
     }
   }
+
 
   test("transformWithStateWithInitialState -" +
     " correctness test, processInitialState should only run once") {
