@@ -295,11 +295,6 @@ class PandasConversionMixin:
 
         assert isinstance(self, DataFrame)
 
-        from pyspark.sql.pandas.types import to_arrow_schema
-        from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
-
-        require_minimum_pyarrow_version()
-
         with SCCallSiteSync(self._sc):
             (
                 port,
@@ -346,6 +341,7 @@ class PandasConversionMixin:
             # Re-order the batch list using the correct order
             return [batches[i] for i in batch_order]
         else:
+            from pyspark.sql.pandas.types import to_arrow_schema
             schema = to_arrow_schema(self.schema)
             empty_arrays = [pa.array([], type=field.type) for field in schema]
             return [pa.RecordBatch.from_arrays(empty_arrays, schema=schema)]
