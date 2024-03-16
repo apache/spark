@@ -150,6 +150,57 @@ DropTable false, false
 
 
 -- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Except false
+:- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+:  +- LocalRelation [col1#x]
++- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Except All true
+:- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+:  +- LocalRelation [col1#x]
++- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Distinct
++- Union false, false
+   :- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   :  +- LocalRelation [col1#x]
+   +- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Union false, false
+:- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+:  +- LocalRelation [col1#x]
++- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
+select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate utf8_binary_lcase from values ('aaa'), ('bbb')
+-- !query analysis
+Intersect false
+:- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+:  +- LocalRelation [col1#x]
++- Project [collate(col1#x, utf8_binary_lcase) AS collate(col1)#x]
+   +- LocalRelation [col1#x]
+
+
+-- !query
 create table t1 (c1 struct<utf8_binary: string collate utf8_binary, utf8_binary_lcase: string collate utf8_binary_lcase>) USING PARQUET
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
