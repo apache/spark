@@ -1193,7 +1193,7 @@ class Dataset[T] private[sql](
         val rightLegWrong = isIncorrectlyResolved(attr, planPart1.right.outputSet,
           rightTagIdMap.getOrElse(HashSet.empty[Long]))
         if (!planPart1.outputSet.contains(attr) || leftLegWrong || rightLegWrong) {
-          val ua = UnresolvedAttribute(attr.name)
+          val ua = UnresolvedAttribute(Seq(attr.name))
           ua.copyTagsFrom(attr)
           ua.setTagValue(LogicalPlan.ATTRIBUTE_DATASET_ID_TAG,
             attr.metadata.getLong(DATASET_ID_KEY))
@@ -1341,7 +1341,7 @@ class Dataset[T] private[sql](
         joined.left.output(index)
 
       case a: AttributeReference if a.metadata.contains(Dataset.DATASET_ID_KEY) =>
-        val ua = UnresolvedAttribute(a.name)
+        val ua = UnresolvedAttribute(Seq(a.name))
         ua.copyTagsFrom(a)
         ua.setTagValue(LogicalPlan.ATTRIBUTE_DATASET_ID_TAG, a.metadata.getLong(DATASET_ID_KEY))
         ua
@@ -1352,7 +1352,7 @@ class Dataset[T] private[sql](
         joined.right.output(index)
 
       case a: AttributeReference if a.metadata.contains(Dataset.DATASET_ID_KEY) =>
-        val ua = UnresolvedAttribute(a.name)
+        val ua = UnresolvedAttribute(Seq(a.name))
         ua.copyTagsFrom(a)
         ua.setTagValue(LogicalPlan.ATTRIBUTE_DATASET_ID_TAG, a.metadata.getLong(DATASET_ID_KEY))
         ua
@@ -1624,7 +1624,7 @@ class Dataset[T] private[sql](
       case attr: AttributeReference if attr.metadata.contains(DATASET_ID_KEY) &&
         (!inputForProj.contains(attr) ||
           isIncorrectlyResolved(attr, inputForProj, HashSet(id))) =>
-        val ua = UnresolvedAttribute(attr.name)
+        val ua = UnresolvedAttribute(Seq(attr.name))
         ua.copyTagsFrom(attr)
         ua.setTagValue(LogicalPlan.ATTRIBUTE_DATASET_ID_TAG, attr.metadata.getLong(DATASET_ID_KEY))
         ua
