@@ -37,7 +37,7 @@ public class PartitionMetricsWriteInfo {
    *
    * @param otherAccumulator Another object containing aggregated partition metrics
    */
-  public void merge (PartitionMetricsWriteInfo otherAccumulator) {
+  public void merge(PartitionMetricsWriteInfo otherAccumulator) {
     otherAccumulator.metrics.forEach((p, m) ->
         metrics.computeIfAbsent(p, key -> new PartitionMetrics(0L, 0L, 0))
             .merge(m));
@@ -66,7 +66,7 @@ public class PartitionMetricsWriteInfo {
    * @param records the number of addition records
    */
   public void updateFile(String partitionPath, long bytes, long records) {
-    update (partitionPath, bytes, records, 1);
+    update(partitionPath, bytes, records, 1);
   }
 
   /**
