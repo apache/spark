@@ -30,6 +30,7 @@ private object KafkaExceptionsHelper {
       // hence why the name of the JSON file different. We will address this inconsistency as part
       // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
       Seq(getClass.getClassLoader.getResource("error/kafka-error-conditions.json")))
+}
 
 object KafkaExceptions {
   def mismatchedTopicPartitionsBetweenEndOffsetAndPrefetched(
