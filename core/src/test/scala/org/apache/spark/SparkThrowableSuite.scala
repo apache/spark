@@ -60,8 +60,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   private val errorJsonFilePath = getWorkspaceFilePath(
     // Note that though we call them "error classes" here, the proper name is "error conditions",
-    // hence why the name of the JSON file different.
-    // For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
+    // hence why the name of the JSON file different. We will address this inconsistency as part
+    // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
     "common", "utils", "src", "main", "resources", "error", "error-conditions.json")
 
   private val errorReader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL))
@@ -130,8 +130,8 @@ class SparkThrowableSuite extends SparkFunSuite {
 
   test("Error class and error state / SQLSTATE invariants") {
     // Unlike in the rest of the codebase, the term "error class" is used here as it is in our
-    // documentation as well as in the SQL standard.
-    // For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
+    // documentation as well as in the SQL standard. We can remove this comment as part of this
+    // ticket: https://issues.apache.org/jira/browse/SPARK-47429
     val errorClassesJson = Utils.getSparkClassLoader.getResource("error/error-classes.json")
     val errorStatesJson = Utils.getSparkClassLoader.getResource("error/error-states.json")
     val mapper = JsonMapper.builder()
