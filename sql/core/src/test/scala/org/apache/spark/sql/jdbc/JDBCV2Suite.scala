@@ -140,7 +140,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     .set("spark.sql.catalog.h2.pushDownAggregate", "true")
     .set("spark.sql.catalog.h2.pushDownLimit", "true")
     .set("spark.sql.catalog.h2.pushDownOffset", "true")
-    .set("spark.sql.useLocalSessionCalendar", "true")
+
   private def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
     try {
@@ -3115,7 +3115,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     withSQLConf(SQLConf.USE_LOCAL_SESSION_CALENDAR.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "EET") {
       // value pushed down should be 2022-03-02 02:00:00+02
-      val df = sql("SELECT * from h2.test.timestamps where timestamptz = '2022-03-02 02:00:00+02:00'")
+      val df = sql("SELECT * from h2.test.timestamps " +
+        "where timestamptz = '2022-03-02 02:00:00+02:00'")
       val df2 = sql("SELECT * from h2.test.timestamps " +
         "where timestamptz = '2022-03-02 04:00:00+04:00'")
 
