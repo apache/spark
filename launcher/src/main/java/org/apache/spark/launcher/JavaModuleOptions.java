@@ -20,7 +20,7 @@ package org.apache.spark.launcher;
 /**
  * This helper class is used to place the all `--add-opens` options
  * required by Spark when using Java 17. `DEFAULT_MODULE_OPTIONS` has added
- * `-XX:+IgnoreUnrecognizedVMOptions` to be compatible with Java 8 and Java 11.
+ * `-XX:+IgnoreUnrecognizedVMOptions` to be robust.
  *
  * @since 3.3.0
  */

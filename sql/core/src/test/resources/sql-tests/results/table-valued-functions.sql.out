@@ -112,7 +112,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`range`",
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BIGINT\""
   },
   "queryContext" : [ {
@@ -138,7 +138,7 @@ org.apache.spark.sql.AnalysisException
     "functionName" : "`range`",
     "inputSql" : "\"array(1, 2, 3)\"",
     "inputType" : "\"ARRAY<INT>\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"BIGINT\""
   },
   "queryContext" : [ {
@@ -311,7 +311,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"ARRAY\" or \"MAP\")",
     "sqlExpr" : "\"explode(NULL)\""
   },
@@ -337,7 +337,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"ARRAY\" or \"MAP\")",
     "sqlExpr" : "\"explode(NULL)\""
   },
@@ -363,7 +363,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"ARRAY\" or \"MAP\")",
     "sqlExpr" : "\"explode(1)\""
   },
@@ -540,7 +540,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"NULL\"",
     "inputType" : "\"VOID\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"ARRAY<STRUCT>\"",
     "sqlExpr" : "\"inline(NULL)\""
   },
@@ -659,7 +659,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"ARRAY\" or \"MAP\")",
     "sqlExpr" : "\"posexplode(1)\""
   },

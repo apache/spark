@@ -120,6 +120,7 @@ class DataFrame:
         # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
+        self._cached_schema: Optional[StructType] = None
 
     def __repr__(self) -> str:
         if not self._support_repr_html:
@@ -1782,8 +1783,15 @@ class DataFrame:
 
     @property
     def schema(self) -> StructType:
-        query = self._plan.to_proto(self._session.client)
-        return self._session.client.schema(query)
+        # Schema caching is correct in most cases. Connect is lazy by nature. This means that
+        # we only resolve the plan when it is submitted for execution or analysis. We do not
+        # cache intermediate resolved plan. If the input (changes table, view redefinition,
+        # etc...) of the plan changes between the schema() call, and a subsequent action, the
+        # cached schema might be inconsistent with the end schema.
+        if self._cached_schema is None:
+            query = self._plan.to_proto(self._session.client)
+            self._cached_schema = self._session.client.schema(query)
+        return self._cached_schema
 
     schema.__doc__ = PySparkDataFrame.schema.__doc__
 
@@ -2105,6 +2113,11 @@ class DataFrame:
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def sameSemantics(self, other: "DataFrame") -> bool:
+        if not isinstance(other, DataFrame):
+            raise PySparkTypeError(
+                error_class="NOT_DATAFRAME",
+                message_parameters={"arg_name": "other", "arg_type": type(other).__name__},
+            )
         self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),

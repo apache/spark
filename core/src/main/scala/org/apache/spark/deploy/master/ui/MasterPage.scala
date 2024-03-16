@@ -17,10 +17,9 @@
 
 package org.apache.spark.deploy.master.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
@@ -41,6 +40,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   override def renderJson(request: HttpServletRequest): JValue = {
     jsonFieldPattern.findFirstMatchIn(request.getRequestURI()) match {
       case None => JsonProtocol.writeMasterState(getMasterState)
+      case Some(m) if m.group(1) == "clusterutilization" =>
+        JsonProtocol.writeClusterUtilization(getMasterState)
       case Some(m) => JsonProtocol.writeMasterState(getMasterState, Some(m.group(1)))
     }
   }

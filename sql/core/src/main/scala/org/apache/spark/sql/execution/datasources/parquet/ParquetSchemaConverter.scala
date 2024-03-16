@@ -73,13 +73,6 @@ class ParquetToSparkSchemaConverter(
     nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean)
 
   /**
-   * Returns true if TIMESTAMP_NTZ type is enabled in this ParquetToSparkSchemaConverter.
-   */
-  def isTimestampNTZEnabled(): Boolean = {
-    inferTimestampNTZ
-  }
-
-  /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
    */
   def convert(parquetSchema: MessageType): StructType = {
@@ -544,7 +537,7 @@ class SparkToParquetSchemaConverter(
       case DoubleType =>
         Types.primitive(DOUBLE, repetition).named(field.name)
 
-      case StringType =>
+      case _: StringType =>
         Types.primitive(BINARY, repetition)
           .as(LogicalTypeAnnotation.stringType()).named(field.name)
 

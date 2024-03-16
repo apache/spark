@@ -21,7 +21,7 @@ import org.openqa.selenium.WebDriver
 import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
 
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
-import org.apache.spark.tags.{ChromeUITest, ExtendedLevelDBTest}
+import org.apache.spark.tags.{ChromeUITest, ExtendedLevelDBTest, WebBrowserTest}
 
 
 /**
@@ -50,12 +50,14 @@ abstract class ChromeUIHistoryServerSuite
   }
 }
 
+@WebBrowserTest
 @ChromeUITest
 @ExtendedLevelDBTest
 class LevelDBBackendChromeUIHistoryServerSuite extends ChromeUIHistoryServerSuite {
   override protected def diskBackend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.LEVELDB
 }
 
+@WebBrowserTest
 @ChromeUITest
 class RocksDBBackendChromeUIHistoryServerSuite extends ChromeUIHistoryServerSuite {
   override protected def diskBackend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.ROCKSDB

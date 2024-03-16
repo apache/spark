@@ -26,6 +26,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -36,7 +37,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
-  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
+  val defaultMetadata = new MetadataBuilder()
+    .putLong("scale", 0)
+    .putBoolean("isTimestampNTZ", false)
+    .build()
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.h2", classOf[JDBCTableCatalog].getName)
@@ -382,6 +386,61 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
       checkErrorTableNotFound(e, expected,
         ExpectedContext(table, 12, 11 + table.length))
+    }
+  }
+
+  test("CREATE NAMESPACE with LOCATION for JDBC catalog should throw an error") {
+    withTempDir { tempDir =>
+      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+      Utils.classForName("org.h2.Driver")
+      withSQLConf(
+        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2.url" -> url,
+        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
+          },
+          errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND",
+          sqlState = "0A000",
+          parameters = Map("cmd" -> toSQLStmt("CREATE NAMESPACE ... LOCATION ...")))
+      }
+    }
+  }
+
+  test("ALTER NAMESPACE with property other than COMMENT " +
+    "for JDBC catalog should throw an exception") {
+    withTempDir { tempDir =>
+      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+      Utils.classForName("org.h2.Driver")
+      withSQLConf(
+        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2.url" -> url,
+        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+        val namespace = "h2.test_namespace"
+        withNamespace(namespace) {
+          sql(s"CREATE NAMESPACE $namespace")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
+            },
+            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+            sqlState = "0A000",
+            parameters = Map(
+              "cmd" -> toSQLStmt("SET NAMESPACE"),
+              "property" -> toSQLConf("location")))
+
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
+            },
+            errorClass = "NOT_SUPPORTED_IN_JDBC_CATALOG.COMMAND_WITH_PROPERTY",
+            sqlState = "0A000",
+            parameters = Map(
+              "cmd" -> toSQLStmt("SET NAMESPACE"),
+              "property" -> toSQLConf("a")))
+        }
+      }
     }
   }
 

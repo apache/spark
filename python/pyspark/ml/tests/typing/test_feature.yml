@@ -45,11 +45,11 @@
     StringIndexer(inputCols=["foo"], outputCol="bar")
 
   out: |
-    main:14: error: No overload variant of "StringIndexer" matches argument types "str", "List[str]"  [call-overload]
+    main:14: error: No overload variant of "StringIndexer" matches argument types "str", "list[str]"  [call-overload]
     main:14: note: Possible overload variants:
     main:14: note:     def StringIndexer(self, *, inputCol: Optional[str] = ..., outputCol: Optional[str] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
-    main:14: note:     def StringIndexer(self, *, inputCols: Optional[List[str]] = ..., outputCols: Optional[List[str]] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
-    main:15: error: No overload variant of "StringIndexer" matches argument types "List[str]", "str"  [call-overload]
+    main:14: note:     def StringIndexer(self, *, inputCols: Optional[list[str]] = ..., outputCols: Optional[list[str]] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
+    main:15: error: No overload variant of "StringIndexer" matches argument types "list[str]", "str"  [call-overload]
     main:15: note: Possible overload variants:
     main:15: note:     def StringIndexer(self, *, inputCol: Optional[str] = ..., outputCol: Optional[str] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
-    main:15: note:     def StringIndexer(self, *, inputCols: Optional[List[str]] = ..., outputCols: Optional[List[str]] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer
+    main:15: note:     def StringIndexer(self, *, inputCols: Optional[list[str]] = ..., outputCols: Optional[list[str]] = ..., handleInvalid: str = ..., stringOrderType: str = ...) -> StringIndexer

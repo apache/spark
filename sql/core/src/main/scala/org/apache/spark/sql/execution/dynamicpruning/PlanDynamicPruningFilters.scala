@@ -51,7 +51,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
       case DynamicPruningSubquery(
-          value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId, _) =>
+          value, buildPlan, buildKeys, broadcastKeyIndices, onlyInBroadcast, exprId, _) =>
         val sparkPlan = QueryExecution.createSparkPlan(
           sparkSession, sparkSession.sessionState.planner, buildPlan)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
@@ -73,15 +73,16 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
           val name = s"dynamicpruning#${exprId.id}"
           // place the broadcast adaptor for reusing the broadcast results on the probe side
           val broadcastValues =
-            SubqueryBroadcastExec(name, broadcastKeyIndex, buildKeys, exchange)
+            SubqueryBroadcastExec(name, broadcastKeyIndices, buildKeys, exchange)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
         } else if (onlyInBroadcast) {
           // it is not worthwhile to execute the query, so we fall-back to a true literal
           DynamicPruningExpression(Literal.TrueLiteral)
         } else {
           // we need to apply an aggregate on the buildPlan in order to be column pruned
-          val alias = Alias(buildKeys(broadcastKeyIndex), buildKeys(broadcastKeyIndex).toString)()
-          val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
+          val aliases = broadcastKeyIndices.map(idx =>
+            Alias(buildKeys(idx), buildKeys(idx).toString)())
+          val aggregate = Aggregate(aliases, aliases, buildPlan)
           DynamicPruningExpression(expressions.InSubquery(
             Seq(value), ListQuery(aggregate, numCols = aggregate.output.length)))
         }

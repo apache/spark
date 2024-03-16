@@ -59,7 +59,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
-import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
 import org.apache.spark.util.ArrayImplicits._
@@ -76,7 +75,6 @@ private[spark] class Client(
   private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
-
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private val statCachePreloadEnabled = sparkConf.get(YARN_CLIENT_STAT_CACHE_PRELOAD_ENABLED)
   private val statCachePreloadDirectoryCountThreshold: Int =
@@ -96,12 +94,21 @@ private[spark] class Client(
   } else {
     sparkConf.get(AM_MEMORY).toInt
   }
+
+  private val driverMinimumMemoryOverhead =
+    if (isClusterMode) {
+      sparkConf.get(DRIVER_MIN_MEMORY_OVERHEAD)
+    } else {
+      384L
+    }
+
   private val amMemoryOverhead = {
     val amMemoryOverheadEntry = if (isClusterMode) DRIVER_MEMORY_OVERHEAD else AM_MEMORY_OVERHEAD
     sparkConf.get(amMemoryOverheadEntry).getOrElse(
       math.max((amMemoryOverheadFactor * amMemory).toLong,
-        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
+        driverMinimumMemoryOverhead)).toInt
   }
+
   private val amCores = if (isClusterMode) {
     sparkConf.get(DRIVER_CORES)
   } else {
@@ -114,9 +121,10 @@ private[spark] class Client(
   protected val executorOffHeapMemory = Utils.executorOffHeapMemorySizeAsMb(sparkConf)
 
   private val executorMemoryOvereadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
+  private val minMemoryOverhead = sparkConf.get(EXECUTOR_MIN_MEMORY_OVERHEAD)
   private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((executorMemoryOvereadFactor * executorMemory).toLong,
-      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
+      minMemoryOverhead)).toInt
 
   private val isPython = sparkConf.get(IS_PYTHON_APP)
   private val pysparkWorkerMemory: Int = if (isPython) {
@@ -535,7 +543,7 @@ private[spark] class Client(
     // If preload is enabled, preload the statCache with the files in the directories
     val statCache = if (statCachePreloadEnabled) {
       // Consider only following configurations, as they involve the distribution of multiple files
-      var files = sparkConf.get(SPARK_JARS).getOrElse(Nil) ++ sparkConf.get(JARS_TO_DISTRIBUTE) ++
+      val files = sparkConf.get(SPARK_JARS).getOrElse(Nil) ++ sparkConf.get(JARS_TO_DISTRIBUTE) ++
         sparkConf.get(FILES_TO_DISTRIBUTE) ++ sparkConf.get(ARCHIVES_TO_DISTRIBUTE) ++
         sparkConf.get(PY_FILES) ++ pySparkArchives
 
@@ -1031,8 +1039,7 @@ private[spark] class Client(
     javaOpts += s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
 
     // SPARK-37106: To start AM with Java 17, `JavaModuleOptions.defaultModuleOptions`
-    // is added by default. It will not affect Java 8 and Java 11 due to existence of
-    // `-XX:+IgnoreUnrecognizedVMOptions`.
+    // is added by default.
     javaOpts += JavaModuleOptions.defaultModuleOptions()
 
     // Set the environment variable through a command prefix

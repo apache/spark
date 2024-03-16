@@ -23,7 +23,6 @@ import java.util.{Properties, TimeZone}
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
@@ -68,6 +67,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   override val db = new OracleDatabaseOnDocker
 
   override val connectionTimeout = timeout(7.minutes)
+
+  private val rsOfTsWithTimezone = Seq(
+    Row(BigDecimal.valueOf(1), new Timestamp(944046000000L)),
+    Row(BigDecimal.valueOf(2), new Timestamp(944078400000L))
+  )
 
   override def dataPreparation(conn: Connection): Unit = {
     // In 18.4.0 Express Edition auto commit is enabled by default.
@@ -144,6 +148,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       """INSERT INTO datetimePartitionTest VALUES
         |(4, {d '2018-07-12'}, {ts '2018-07-12 09:51:15'})
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE test_ltz(t TIMESTAMP WITH LOCAL TIME ZONE)")
+      .executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO test_ltz (t) VALUES (TIMESTAMP '2018-11-17 13:33:33')")
+      .executeUpdate()
     conn.commit()
   }
 
@@ -268,7 +279,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(types(1).equals("class java.sql.Timestamp"))
   }
 
-  test("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
+  test("SPARK-47280: Remove timezone limitation for ORACLE TIMESTAMP WITH TIMEZONE") {
     val defaultJVMTimeZone = TimeZone.getDefault
     // Pick the timezone different from the current default time zone of JVM
     val sofiaTimeZone = TimeZone.getTimeZone("Europe/Sofia")
@@ -277,35 +288,20 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
-      checkError(
-        exception = intercept[SparkSQLException] {
-          sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties).collect()
-        },
-        errorClass = "UNRECOGNIZED_SQL_TYPE",
-        parameters = Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "-101"))
+      checkAnswer(
+        sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties),
+        rsOfTsWithTimezone)
     }
   }
 
   test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
-    def checkRow(row: Row, ts: String): Unit = {
-      assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
-    }
-
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
       val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-      withDefaultTimeZone(PST) {
-        assert(dfRead.collect().toSet ===
-          Set(
-            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
-            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
-      }
-
-      withDefaultTimeZone(UTC) {
-        assert(dfRead.collect().toSet ===
-          Set(
-            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
-            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
-      }
+      Seq(PST, UTC).foreach(timeZone => {
+        withDefaultTimeZone(timeZone) {
+          checkAnswer(dfRead, rsOfTsWithTimezone)
+        }
+      })
     }
   }
 
@@ -359,10 +355,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
 
   test("SPARK-20427/SPARK-20921: read table use custom schema by jdbc api") {
     // default will throw IllegalArgumentException
-    val e = intercept[org.apache.spark.SparkException] {
+    val e = intercept[org.apache.spark.SparkArithmeticException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
-    assert(e.getCause().isInstanceOf[ArithmeticException])
     assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
 
     // custom schema can read data
@@ -524,5 +519,25 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .collect()
     assert(rows(0).getString(0).nonEmpty)
     assert(rows(1).getString(0) == null)
+  }
+
+  test("SPARK-42627: Support ORACLE TIMESTAMP WITH LOCAL TIME ZONE") {
+    val reader = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "test_ltz")
+    val df = reader.load()
+    val row1 = df.collect().head.getTimestamp(0)
+    assert(df.count() === 1)
+    assert(row1 === Timestamp.valueOf("2018-11-17 13:33:33"))
+
+    df.write.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "test_ltz")
+      .mode("append")
+      .save()
+
+    val df2 = reader.load()
+    assert(df.count() === 2)
+    assert(df2.collect().forall(_.getTimestamp(0) === row1))
   }
 }

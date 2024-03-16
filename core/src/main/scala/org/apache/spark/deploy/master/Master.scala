@@ -35,6 +35,7 @@ import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
+import org.apache.spark.internal.config.Deploy.WorkerSelectionPolicy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
@@ -118,6 +119,8 @@ private[deploy] class Master(
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
   private val spreadOutApps = conf.get(SPREAD_OUT_APPS)
+  private val workerSelectionPolicy =
+    WorkerSelectionPolicy.withName(conf.get(WORKER_SELECTION_POLICY))
 
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.get(DEFAULT_CORES)
@@ -824,9 +827,15 @@ private[deploy] class Master(
         // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
         if (app.coresLeft >= coresPerExecutor) {
           // Filter out workers that don't have enough resources to launch an executor
-          val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+          val aliveWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
             .filter(canLaunchExecutor(_, resourceDesc))
-            .sortBy(_.coresFree).reverse
+          val usableWorkers = workerSelectionPolicy match {
+            case CORES_FREE_ASC => aliveWorkers.sortBy(w => (w.coresFree, w.id))
+            case CORES_FREE_DESC => aliveWorkers.sortBy(w => (w.coresFree, w.id)).reverse
+            case MEMORY_FREE_ASC => aliveWorkers.sortBy(w => (w.memoryFree, w.id))
+            case MEMORY_FREE_DESC => aliveWorkers.sortBy(w => (w.memoryFree, w.id)).reverse
+            case WORKER_ID => aliveWorkers.sortBy(_.id)
+          }
           val appMayHang = waitingApps.length == 1 &&
             waitingApps.head.executors.isEmpty && usableWorkers.isEmpty
           if (appMayHang) {

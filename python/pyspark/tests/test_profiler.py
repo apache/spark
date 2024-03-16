@@ -54,9 +54,9 @@ class ProfilerTests(PySparkTestCase):
         self.assertTrue("heavy_foo" in io.getvalue())
         sys.stdout = old_stdout
 
-        d = tempfile.gettempdir()
-        self.sc.dump_profiles(d)
-        self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
+        with tempfile.TemporaryDirectory(prefix="test_profiler") as d:
+            self.sc.dump_profiles(d)
+            self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
 
     def test_custom_profiler(self):
         class TestCustomProfiler(BasicProfiler):

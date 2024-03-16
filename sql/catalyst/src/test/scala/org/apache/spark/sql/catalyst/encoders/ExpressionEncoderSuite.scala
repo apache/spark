@@ -248,77 +248,6 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       useFallback = true)
   }
 
-  object OuterLevelWithVeryVeryVeryLongClassName1 {
-    object OuterLevelWithVeryVeryVeryLongClassName2 {
-      object OuterLevelWithVeryVeryVeryLongClassName3 {
-        object OuterLevelWithVeryVeryVeryLongClassName4 {
-          object OuterLevelWithVeryVeryVeryLongClassName5 {
-            object OuterLevelWithVeryVeryVeryLongClassName6 {
-              object OuterLevelWithVeryVeryVeryLongClassName7 {
-                object OuterLevelWithVeryVeryVeryLongClassName8 {
-                  object OuterLevelWithVeryVeryVeryLongClassName9 {
-                    object OuterLevelWithVeryVeryVeryLongClassName10 {
-                      object OuterLevelWithVeryVeryVeryLongClassName11 {
-                        object OuterLevelWithVeryVeryVeryLongClassName12 {
-                          object OuterLevelWithVeryVeryVeryLongClassName13 {
-                            object OuterLevelWithVeryVeryVeryLongClassName14 {
-                              object OuterLevelWithVeryVeryVeryLongClassName15 {
-                                object OuterLevelWithVeryVeryVeryLongClassName16 {
-                                  object OuterLevelWithVeryVeryVeryLongClassName17 {
-                                    object OuterLevelWithVeryVeryVeryLongClassName18 {
-                                      object OuterLevelWithVeryVeryVeryLongClassName19 {
-                                        object OuterLevelWithVeryVeryVeryLongClassName20 {
-                                          case class MalformedNameExample(x: Int)
-                                        }}}}}}}}}}}}}}}}}}}}
-
-  {
-    OuterScopes.addOuterScope(
-      OuterLevelWithVeryVeryVeryLongClassName1
-        .OuterLevelWithVeryVeryVeryLongClassName2
-        .OuterLevelWithVeryVeryVeryLongClassName3
-        .OuterLevelWithVeryVeryVeryLongClassName4
-        .OuterLevelWithVeryVeryVeryLongClassName5
-        .OuterLevelWithVeryVeryVeryLongClassName6
-        .OuterLevelWithVeryVeryVeryLongClassName7
-        .OuterLevelWithVeryVeryVeryLongClassName8
-        .OuterLevelWithVeryVeryVeryLongClassName9
-        .OuterLevelWithVeryVeryVeryLongClassName10
-        .OuterLevelWithVeryVeryVeryLongClassName11
-        .OuterLevelWithVeryVeryVeryLongClassName12
-        .OuterLevelWithVeryVeryVeryLongClassName13
-        .OuterLevelWithVeryVeryVeryLongClassName14
-        .OuterLevelWithVeryVeryVeryLongClassName15
-        .OuterLevelWithVeryVeryVeryLongClassName16
-        .OuterLevelWithVeryVeryVeryLongClassName17
-        .OuterLevelWithVeryVeryVeryLongClassName18
-        .OuterLevelWithVeryVeryVeryLongClassName19
-        .OuterLevelWithVeryVeryVeryLongClassName20)
-    encodeDecodeTest(
-      OuterLevelWithVeryVeryVeryLongClassName1
-        .OuterLevelWithVeryVeryVeryLongClassName2
-        .OuterLevelWithVeryVeryVeryLongClassName3
-        .OuterLevelWithVeryVeryVeryLongClassName4
-        .OuterLevelWithVeryVeryVeryLongClassName5
-        .OuterLevelWithVeryVeryVeryLongClassName6
-        .OuterLevelWithVeryVeryVeryLongClassName7
-        .OuterLevelWithVeryVeryVeryLongClassName8
-        .OuterLevelWithVeryVeryVeryLongClassName9
-        .OuterLevelWithVeryVeryVeryLongClassName10
-        .OuterLevelWithVeryVeryVeryLongClassName11
-        .OuterLevelWithVeryVeryVeryLongClassName12
-        .OuterLevelWithVeryVeryVeryLongClassName13
-        .OuterLevelWithVeryVeryVeryLongClassName14
-        .OuterLevelWithVeryVeryVeryLongClassName15
-        .OuterLevelWithVeryVeryVeryLongClassName16
-        .OuterLevelWithVeryVeryVeryLongClassName17
-        .OuterLevelWithVeryVeryVeryLongClassName18
-        .OuterLevelWithVeryVeryVeryLongClassName19
-        .OuterLevelWithVeryVeryVeryLongClassName20
-        .MalformedNameExample(42),
-      "deeply nested Scala class should work",
-      useFallback = true)
-  }
-
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
   productTest(
@@ -584,10 +513,12 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   test("throw exception for tuples with more than 22 elements") {
     val encoders = (0 to 22).map(_ => Encoders.scalaInt.asInstanceOf[ExpressionEncoder[_]])
 
-    val e = intercept[UnsupportedOperationException] {
-      ExpressionEncoder.tuple(encoders)
-    }
-    assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        ExpressionEncoder.tuple(encoders)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2150",
+      parameters = Map.empty)
   }
 
   test("throw exception for unexpected serializer") {

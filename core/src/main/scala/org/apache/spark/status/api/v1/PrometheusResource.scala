@@ -16,9 +16,8 @@
  */
 package org.apache.spark.status.api.v1
 
-import javax.ws.rs._
-import javax.ws.rs.core.MediaType
-
+import jakarta.ws.rs._
+import jakarta.ws.rs.core.MediaType
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
 import org.glassfish.jersey.servlet.ServletContainer
@@ -31,7 +30,7 @@ import org.apache.spark.ui.SparkUI
  * :: Experimental ::
  * This aims to expose Executor metrics like REST API which is documented in
  *
- *    https://spark.apache.org/docs/3.0.0/monitoring.html#executor-metrics
+ *    https://spark.apache.org/docs/latest/monitoring.html#executor-metrics
  *
  * Note that this is based on ExecutorSummary which is different from ExecutorSource.
  */
