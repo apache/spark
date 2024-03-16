@@ -128,7 +128,7 @@ EXPLAIN FORMATTED select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k
  Input: [k#19, sum#24L]
 |
 +----------------------------------------------------+
-EXPLAIN FORMATTED select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
+EXPLAIN SILENT select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
 +----------------------------------------------------+
 |                                                plan|
 +----------------------------------------------------+
