@@ -155,22 +155,27 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         // Ensure all executors have been launched.
         assert(sc.getExecutorIds().length == 1)
       }
-      // Each executor can only launch one task since `spark.task.cpus` is 2.
+      // The concurrent tasks should be min {20/1, 4 * (1/0.2)}
       assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 20)
 
+      val gpuTaskAmountToExpectedTasks = Map(
+        0.3 -> 12,  // 4 * (1/0.3).toInt
+        0.4 -> 8,   // 4 * (1/0.4).toInt
+        0.5 -> 8,   // 4 * (1/0.5).toInt
+        0.8 -> 4,   // 4 * (1/0.8).toInt
+        1.0 -> 4,   // 4 / 1
+        2.0 -> 2,   // 4 / 2
+        3.0 -> 1,   // 4 / 3
+        4.0 -> 1    // 4 / 4
+      )
+
       // GPU resources limits the concurrent number
-      Seq(0.3, 0.4, 0.5, 0.8, 1.0, 2.0, 3.0, 4.0).foreach { taskGpu =>
+      gpuTaskAmountToExpectedTasks.keys.foreach { taskGpu =>
         // GPU resources limits the concurrent number
         val treqs = new TaskResourceRequests().cpus(1).resource(GPU, taskGpu)
         val rp: ResourceProfile = new ResourceProfileBuilder().require(treqs).build()
         sc.resourceProfileManager.addResourceProfile(rp)
-
-        val expected = if (taskGpu >= 1.0) {
-          4 / taskGpu.ceil.toInt
-        } else {
-          4 * Math.floor(1.0 / taskGpu).toInt
-        }
-        assert(sc.maxNumConcurrentTasks(rp) == expected)
+        assert(sc.maxNumConcurrentTasks(rp) == gpuTaskAmountToExpectedTasks(taskGpu))
       }
     }
   }

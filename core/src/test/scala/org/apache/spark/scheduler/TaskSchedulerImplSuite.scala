@@ -2723,13 +2723,18 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         assert(taskNum === taskDescriptions.length)
         assert(!failedTaskSet)
 
+        // The key is gpuTaskAmount
+        // The values are the gpu addresses of each task.
+        val gpuTaskAmountToExpected = Map(
+          1 -> Seq(Array("0"), Array("1"), Array("2"), Array("3")),
+          2 -> Seq(Array("0", "1"), Array("2", "3")),
+          3 -> Seq(Array("0", "1", "2")),
+          4 -> Seq(Array("0", "1", "2", "3"))
+        )
+
         taskDescriptions.foreach { task =>
           val taskResources = task.resources(GPU).keys.toArray.sorted
-          val expected = if (gpuTaskAmount == 2) {
-            (task.index * 2 until task.index * 2 + gpuTaskAmount).map(_.toString).toArray
-          } else { // gpuTaskAmount = 1, 3, 4
-            (task.index until task.index + gpuTaskAmount).map(_.toString).toArray
-          }
+          val expected = gpuTaskAmountToExpected(gpuTaskAmount)(task.index)
           assert(taskResources sameElements expected)
         }
       }
