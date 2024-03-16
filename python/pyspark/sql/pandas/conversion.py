@@ -342,6 +342,7 @@ class PandasConversionMixin:
             return [batches[i] for i in batch_order]
         else:
             from pyspark.sql.pandas.types import to_arrow_schema
+
             schema = to_arrow_schema(self.schema)
             empty_arrays = [pa.array([], type=field.type) for field in schema]
             return [pa.RecordBatch.from_arrays(empty_arrays, schema=schema)]
