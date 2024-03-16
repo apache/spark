@@ -267,7 +267,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
     nameParts.length == 1 && nameParts.head.equalsIgnoreCase(token)
   }
 }
-
+/*
 case class UnresolvedAttributeWithTag(attribute: Attribute, datasetId: Long) extends Attribute with
   Unevaluable {
   def name: String = attribute.name
@@ -308,6 +308,8 @@ case class UnresolvedAttributeWithTag(attribute: Attribute, datasetId: Long) ext
    */
   def equalsIgnoreCase(token: String): Boolean = token.equalsIgnoreCase(attribute.name)
 }
+
+ */
 
 object UnresolvedAttribute extends AttributeNameParser {
   /**
