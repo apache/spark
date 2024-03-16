@@ -267,49 +267,6 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
     nameParts.length == 1 && nameParts.head.equalsIgnoreCase(token)
   }
 }
-/*
-case class UnresolvedAttributeWithTag(attribute: Attribute, datasetId: Long) extends Attribute with
-  Unevaluable {
-  def name: String = attribute.name
-
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
-
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
-
-  override lazy val resolved = false
-
-  override def newInstance(): UnresolvedAttributeWithTag = this
-
-  override def withNullability(newNullability: Boolean): UnresolvedAttributeWithTag = this
-
-  override def withQualifier(newQualifier: Seq[String]): UnresolvedAttributeWithTag = this
-
-  override def withName(newName: String): UnresolvedAttributeWithTag = this
-
-  override def withMetadata(newMetadata: Metadata): Attribute = this
-
-  override def withExprId(newExprId: ExprId): UnresolvedAttributeWithTag = this
-
-  override def withDataType(newType: DataType): Attribute = this
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ATTRIBUTE)
-
-  override def toString: String = s"'$name"
-
-  override def sql: String = attribute.sql
-
-  /**
-   * Returns true if this matches the token. This requires the attribute to only have one part in
-   * its name and that matches the given token in a case insensitive way.
-   */
-  def equalsIgnoreCase(token: String): Boolean = token.equalsIgnoreCase(attribute.name)
-}
-
- */
 
 object UnresolvedAttribute extends AttributeNameParser {
   /**
