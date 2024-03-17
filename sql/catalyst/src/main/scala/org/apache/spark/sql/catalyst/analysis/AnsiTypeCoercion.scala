@@ -206,9 +206,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         Some(AnyTimestampType.defaultConcreteType)
 
       // If a function expects a StringType, no StringType instance should be implicitly cast to
-      // StringType with an incompatible collation (aka. lockdown unsupported collations).
-      case (st: StringType, StringType) => Some(st)
-      case (st: StringType, _: StringTypeCollated) => Some(st)
+      // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
+      case (StringType, StringType) => None
+      case (StringType, _: StringTypeCollated) => None
 
       case (DateType, AnyTimestampType) =>
         Some(AnyTimestampType.defaultConcreteType)
@@ -219,6 +219,10 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         } else {
           None
         }
+
+      // "canANSIStoreAssign" doesn't account for targets extending StringTypeCollated, but
+      // ANSIStoreAssign is generally expected to return "true" for (AtomicType, StringType)
+      case (_: AtomicType, _: StringTypeCollated) => Some(StringType)
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
