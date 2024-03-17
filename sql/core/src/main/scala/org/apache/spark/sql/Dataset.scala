@@ -250,7 +250,7 @@ class Dataset[T] private[sql](
     this(sqlContext.sparkSession, logicalPlan, encoder)
   }
 
-  @transient private[sql] val logicalPlan: LogicalPlan = {
+  @transient private[sql] def logicalPlan: LogicalPlan = {
     val plan = queryExecution.commandExecuted
     if (sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
       val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
