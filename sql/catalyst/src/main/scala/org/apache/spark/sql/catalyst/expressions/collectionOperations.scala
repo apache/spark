@@ -921,7 +921,7 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> "2",
+              "paramIndex" -> ordinalNumber(1),
               "requiredType" -> toSQLType(BooleanType),
               "inputSql" -> toSQLExpr(ascendingOrder),
               "inputType" -> toSQLType(ascendingOrder.dataType))
@@ -939,8 +939,8 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
-          "requiredType" -> toSQLType(ArrayType),
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(MapType),
           "inputSql" -> toSQLExpr(base),
           "inputType" -> toSQLType(base.dataType))
       )

@@ -6993,7 +6993,6 @@ object functions {
    * @since 4.0.0
    */
   def map_sort(e: Column): Column = map_sort(e, asc = true)
-  // TODO: add test for this
 
   /**
    * Sorts the input map in ascending or descending order according to the natural ordering
