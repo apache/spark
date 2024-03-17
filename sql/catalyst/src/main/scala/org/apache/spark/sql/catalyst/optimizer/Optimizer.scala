@@ -196,6 +196,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceDeduplicateWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
+      InsertMapSortInGroupingExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
     Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :+
@@ -2467,5 +2468,27 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       } else {
         a.copy(groupingExpressions = newGrouping)
       }
+  }
+}
+
+/**
+ * Adds MapSort to group expressions containing map columns, as the key/value paris need to be
+ * in the correct order before grouping:
+ * SELECT COUNT(*) FROM TABLE GROUP BY map_column =>
+ * SELECT COUNT(*) FROM TABLE GROUP BY map_sort(map_column)
+ */
+object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(AGGREGATE), ruleId) {
+    case a @ Aggregate(groupingExpr, x, b) =>
+      val newGrouping = groupingExpr.map { expr =>
+        (expr, expr.dataType) match {
+          case (_: MapSort, _) => expr
+          case (_, _: MapType) =>
+            MapSort(expr, Literal.TrueLiteral)
+          case _ => expr
+        }
+      }
+      a.copy(groupingExpressions = newGrouping)
   }
 }

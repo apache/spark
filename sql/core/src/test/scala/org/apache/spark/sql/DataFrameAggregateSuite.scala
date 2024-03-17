@@ -2155,47 +2155,8 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("Support GROUP BY for MapType") {
-    val numRows = 10
-    val configurations = Seq(
-      // Seq.empty[(String, String)], // hash aggregate is used by default
-      // Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
-      //   "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 10"),
-      // Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
-      // Seq(
-      //   "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
-      //  SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
-      // "spark.sql.test.forceApplySortAggregate" -> "true",
-      "spark.sql.codegen.wholeStage" -> "false"
-    )
-
-    // val dfSame = (0 until numRows)
-    //  .map(_ => Tuple1(new MapType(IntegerType, IntegerType, false)))
-    //  .toDF("c0")
-
-    val tableName = "temp" + scala.util.Random.between(1, 10000)
-
-    // for (conf <- configurations) {
-    //  withSQLConf(conf: _*) {
-        sql(s"CREATE TABLE $tableName(id INT, arr ARRAY<INT>) USING PARQUET;");
-        sql(s"INSERT INTO $tableName VALUES(1, ARRAY(1,2))")
-        sql(s"INSERT INTO $tableName VALUES(2, ARRAY(1,2))")
-        val res = sql(s"select count(*) from $tableName group by arr")
-        res.foreach { row =>
-          println(row);
-
-        }
-
-
-        // assert(createAggregate(dfSame).count() == 1)
-      // }
-    // }
-
-    def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
-  }
-
-  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
-    val numRows = 50
+  private def assertAggregateOnDataframe(dfSeq: Seq[DataFrame],
+    expected: Seq[Int], aggregateColumn: String): Unit = {
     val configurations = Seq(
       Seq.empty[(String, String)], // hash aggregate is used by default
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
@@ -2207,6 +2168,34 @@ class DataFrameAggregateSuite extends QueryTest
       Seq("spark.sql.test.forceApplySortAggregate" -> "true")
     )
 
+    for ((df, index) <- dfSeq.zipWithIndex) {
+      for (conf <- configurations) {
+        withSQLConf(conf: _*) {
+          assert(createAggregate(df).count() == expected(index))
+        }
+      }
+    }
+
+    def createAggregate(df: DataFrame): DataFrame = df.groupBy(aggregateColumn).agg(count("*"))
+  }
+
+  test("SPARK-47430 Support GROUP BY MapType") {
+    val numRows = 50
+
+    val dfSame = (0 until numRows)
+      .map(_ => Tuple1(Map(1 -> 1)))
+      .toDF("m0")
+
+    val dfDifferent = (0 until numRows)
+      .map(i => Tuple1(Map(i -> i)))
+      .toDF("m0")
+
+    assertAggregateOnDataframe(Seq(dfSame, dfDifferent), Seq(1, numRows), "m0")
+  }
+
+  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
+    val numRows = 50
+
     val dfSame = (0 until numRows)
       .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
       .toDF("c0")
@@ -2215,14 +2204,7 @@ class DataFrameAggregateSuite extends QueryTest
       .map(i => Tuple1(new CalendarInterval(i, i, i)))
       .toDF("c0")
 
-    for (conf <- configurations) {
-      withSQLConf(conf: _*) {
-        assert(createAggregate(dfSame).count() == 1)
-        assert(createAggregate(dfDifferent).count() == numRows)
-      }
-    }
-
-    def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
+    assertAggregateOnDataframe(Seq(dfSame, dfDifferent), Seq(1, numRows), "c0")
   }
 
   test("SPARK-46779: Group by subquery with a cached relation") {

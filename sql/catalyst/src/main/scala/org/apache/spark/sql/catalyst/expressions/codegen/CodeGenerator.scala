@@ -657,7 +657,6 @@ class CodegenContext extends Logging {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
     case CalendarIntervalType => s"$c1.compareTo($c2)"
-    case map : MapType => "0"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -723,10 +722,72 @@ class CodegenContext extends Logging {
           }
         """
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
+    case map: MapType =>
+      val compareFunc = freshName("compareMapData")
+      val funcCode = genCompMapData(map.keyType, map.valueType, compareFunc)
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("compare", dataType)
+  }
+
+  private def genCompMapData(keyType: DataType,
+    valueType: DataType, compareFunc : String): String = {
+    val keyArrayA = freshName("keyArrayA")
+    val keyArrayB = freshName("keyArrayB")
+    val valueArrayA = freshName("valueArrayA")
+    val valueArrayB = freshName("valueArrayB")
+    val minLength = freshName("minLength")
+    s"""
+      public int $compareFunc(MapData a, MapData b) {
+        int lengthA = a.numElements();
+        int lengthB = b.numElements();
+        ArrayData $keyArrayA = a.keyArray();
+        ArrayData $valueArrayA = a.valueArray();
+        ArrayData $keyArrayB = b.keyArray();
+        ArrayData $valueArrayB = b.valueArray();
+        int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
+        for (int i = 0; i < $minLength; i++) {
+          ${genCompElementsAt(keyArrayA, keyArrayB, "i", keyType)}
+          ${genCompElementsAt(valueArrayA, valueArrayB, "i", valueType)}
+        }
+
+        if (lengthA < lengthB) {
+          return -1;
+        } else if (lengthA > lengthB) {
+          return 1;
+        }
+        return 0;
+      }
+    """
+  }
+
+  private def genCompElementsAt(arrayA: String, arrayB: String, i: String,
+    elementType : DataType): String = {
+    val elementA = freshName("elementA")
+    val isNullA = freshName("isNullA")
+    val elementB = freshName("elementB")
+    val isNullB = freshName("isNullB")
+    val jt = javaType(elementType);
+    s"""
+    boolean $isNullA = $arrayA.isNullAt($i);
+    boolean $isNullB = $arrayB.isNullAt($i);
+    if ($isNullA && $isNullB) {
+      // Nothing
+    } else if ($isNullA) {
+      return -1;
+    } else if ($isNullB) {
+      return 1;
+    } else {
+      $jt $elementA = ${getValue(arrayA, elementType, i)};
+      $jt $elementB = ${getValue(arrayB, elementType, i)};
+      int comp = ${genComp(elementType, elementA, elementB)};
+      if (comp != 0) {
+        return comp;
+      }
+    }
+    """
   }
 
   /**

@@ -349,23 +349,6 @@ object LogicalPlanIntegrity {
   }
 
   /**
-   * Validate that the grouping key types in Aggregate plans are valid.
-   * Returns an error message if the check fails, or None if it succeeds.
-   */
-  def validateGroupByTypes(plan: LogicalPlan): Option[String] = {
-    plan.collectFirst {
-      case a @ Aggregate(groupingExprs, _, _) =>
-        val badExprs = groupingExprs.filter(_.dataType.isInstanceOf[MapType]).map(_.toString)
-        if (badExprs.nonEmpty) {
-          Some(s"Grouping expressions ${badExprs.mkString(", ")} cannot be of type Map " +
-            s"for plan:\n ${a.treeString}")
-        } else {
-          None
-        }
-    }.flatten
-  }
-
-  /**
    * Validate that the aggregation expressions in Aggregate plans are valid.
    * Returns an error message if the check fails, or None if it succeeds.
    */
