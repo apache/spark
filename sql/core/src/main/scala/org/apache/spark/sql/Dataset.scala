@@ -193,16 +193,16 @@ private[sql] object Dataset {
  */
 @Stable
 class Dataset[T] private[sql](
-    @DeveloperApi @Unstable @transient val queryUnpersisted: QueryExecution,
+    @Unstable @transient val queryUnpersisted: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
 
   @volatile private var queryPersisted: Option[(Array[Boolean], QueryExecution)] = None
 
+  @DeveloperApi @Unstable
   def queryExecution: QueryExecution = {
     val cacheStatesSign = queryUnpersisted.computeCacheStateSignature()
-    // If all children aren't cached, directly return the queryUnpersisted
-    if (cacheStatesSign.forall(b => !b)) {
+    if (cacheStatesSign.forall(_ == false)) {
       queryPersisted = None
       queryUnpersisted
     } else {
