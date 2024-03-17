@@ -1240,7 +1240,10 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The identifier `<ident>` is invalid. Please, consider quoting it with back-quotes as ``<ident>``.
+The unquoted identifier `<ident>` is invalid and must be back quoted as: ``<ident>``.
+Unquoted identifiers can only contain ASCII letters ('a' - 'z', 'A' - 'Z'), digits ('0' - '9'), and underbar ('_').
+Unquoted identifiers must also not start with a digit.
+Different data sources and meta stores may impose additional restrictions on valid identifiers.
 
 ### INVALID_INDEX_OF_ZERO
 
@@ -2145,6 +2148,24 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform stateful processor operation=`<operationType>` with invalid handle state=`<handleState>`.
+
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
+
+### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to create column family with unsupported starting character and name=`<colFamilyName>`.
+
 ### STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2157,12 +2178,6 @@ Failed to perform column family operation=`<operationName>` with invalid name=`<
 
 The handle has not been initialized for this StatefulProcessor.
 Please only use the StatefulProcessor within the transformWithState operator.
-
-### STATE_STORE_MULTIPLE_VALUES_PER_KEY
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Store does not support multiple values per key
 
 ### STATE_STORE_UNSUPPORTED_OPERATION
 
@@ -2320,12 +2335,6 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
-
-### TWS_VALUE_SHOULD_NOT_BE_NULL
-
-[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-New value should be non-null for `<typeOfState>`
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
@@ -2722,6 +2731,13 @@ Choose a different name, or drop or replace the existing variable.
 The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VARIABLE IF EXISTS.
+
+### VARIANT_SIZE_LIMIT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot build variant bigger than `<sizeLimit>` in `<functionName>`.
+Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big).
 
 ### VIEW_ALREADY_EXISTS
 

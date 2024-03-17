@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
-import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParallelizable
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
@@ -413,19 +412,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("test concurrently generating collation keys") {
-    // generating ICU sort keys is not thread-safe by default so this should fail
-    // if we don't handle the concurrency properly on Collator level
-
-    (0 to 10).foreach(_ => {
-      val collator = CollationFactory.fetchCollation("UNICODE").collator
-
-      (0 to 100).par.foreach { _ =>
-        collator.getCollationKey("aaa")
-      }
-    })
-  }
-
   test("text writing to parquet with collation enclosed with backticks") {
     withTempPath{ path =>
       sql(s"select 'a' COLLATE `UNICODE`").write.parquet(path.getAbsolutePath)
@@ -621,5 +607,58 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         .queryExecution.executedPlan) {
       case _: SortMergeJoinExec => ()
     }.nonEmpty)
+  }
+
+  test("Generated column expressions using collations - errors out") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (SUBSTRING(c1, 0, 1))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "SUBSTRING(c1, 0, 1)",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (c1 || 'a' COLLATE UNICODE)
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "c1 || 'a' COLLATE UNICODE",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  struct1 STRUCT<a: STRING COLLATE UNICODE>,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (SUBSTRING(struct1.a, 0, 1))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
   }
 }

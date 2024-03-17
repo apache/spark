@@ -169,6 +169,8 @@ private[yarn] class YarnAllocator(
 
   private val isPythonApp = sparkConf.get(IS_PYTHON_APP)
 
+  private val minMemoryOverhead = sparkConf.get(EXECUTOR_MIN_MEMORY_OVERHEAD)
+
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
@@ -313,7 +315,7 @@ private[yarn] class YarnAllocator(
 
       val resourcesWithDefaults =
         ResourceProfile.getResourcesForClusterManager(rp.id, rp.executorResources,
-          memoryOverheadFactor, sparkConf, isPythonApp, resourceNameMapping)
+          minMemoryOverhead, memoryOverheadFactor, sparkConf, isPythonApp, resourceNameMapping)
       val customSparkResources =
         resourcesWithDefaults.customResources.map { case (name, execReq) =>
           (name, execReq.amount.toString)

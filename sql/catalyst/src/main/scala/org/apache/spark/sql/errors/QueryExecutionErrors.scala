@@ -2710,6 +2710,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "invalidValue" -> pos.toString))
   }
 
+  def variantSizeLimitError(sizeLimit: Int, functionName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "VARIANT_SIZE_LIMIT",
+      messageParameters = Map(
+        "sizeLimit" -> Utils.bytesToString(sizeLimit),
+        "functionName" -> toSQLId(functionName)))
+  }
+
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_PARAMETER_VALUE.CHARSET",

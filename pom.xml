@@ -82,6 +82,7 @@
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>
     <module>common/utils</module>
+    <module>common/variant</module>
     <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
@@ -127,7 +128,7 @@
     <protobuf.version>3.25.1</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.9.1</zookeeper.version>
+    <zookeeper.version>3.9.2</zookeeper.version>
     <curator.version>5.6.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
@@ -163,7 +164,7 @@
     <aws.java.sdk.v2.version>2.20.160</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.18</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.20</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -171,7 +172,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.12</scala.version>
+    <scala.version>2.13.13</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <!-- don't upgrade scala-maven-plugin to version 4.7.2 or higher, see SPARK-45144 for details -->
@@ -225,7 +226,7 @@
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
     <arrow.version>15.0.0</arrow.version>
-    <ammonite.version>2.5.11</ammonite.version>
+    <ammonite.version>3.0.0-M1</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
@@ -812,7 +813,7 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>1.0.1</version>
+        <version>1.0.5</version>
       </dependency>
 
       <!-- Netty Begin -->

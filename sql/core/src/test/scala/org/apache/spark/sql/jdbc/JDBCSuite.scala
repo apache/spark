@@ -700,6 +700,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
   }
 
+  test("SPARK-47396: TIME WITHOUT TIME ZONE preferTimestampNTZ") {
+    spark.catalog.clearCache()
+    val df = spark.read.format("jdbc")
+      .option("preferTimestampNTZ", true)
+      .option("url", urlWithUserAndPass)
+      .option("query", "SELECT A FROM TEST.TIMETYPES limit 1")
+      .load()
+    assert(df.head().get(0).isInstanceOf[LocalDateTime])
+  }
+
   test("test DATE types") {
     val rows = spark.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
@@ -903,8 +913,6 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("DB2Dialect type mapping") {
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
-    val metadata = new MetadataBuilder().putBoolean("isTimestampNTZ", false)
-
     assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
     assert(db2Dialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -914,11 +922,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "DECFLOAT", 1, null) ==
       Option(DecimalType(38, 18)))
     assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "XML", 1, null) == Option(StringType))
-    assert(db2Dialect.getCatalystType(
-      java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, metadata) === Option(TimestampType))
-    metadata.putBoolean("isTimestampNTZ", true)
-    assert(db2Dialect.getCatalystType(
-      java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, metadata) === Option(TimestampNTZType))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, null) ==
+      Option(TimestampType))
   }
 
   test("MySQLDialect catalyst type mapping") {
@@ -1474,17 +1479,21 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("unsupported types") {
     checkError(
       exception = intercept[SparkSQLException] {
-        spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
-      },
-      errorClass = "UNRECOGNIZED_SQL_TYPE",
-      parameters =
-        Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "TIMESTAMP_WITH_TIMEZONE"))
-    checkError(
-      exception = intercept[SparkSQLException] {
         spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
       },
       errorClass = "UNRECOGNIZED_SQL_TYPE",
       parameters = Map("typeName" -> "INTEGER ARRAY", "jdbcType" -> "ARRAY"))
+  }
+
+
+  test("SPARK-47394: Convert TIMESTAMP WITH TIME ZONE to TimestampType") {
+    Seq(true, false).foreach { prefer =>
+      val df = spark.read
+        .option("preferTimestampNTZ", prefer)
+        .jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties())
+      val expected = sql("select timestamp'1999-01-08 04:05:06.543544-08:00'")
+      checkAnswer(df, expected)
+    }
   }
 
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {

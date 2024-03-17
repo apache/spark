@@ -53,11 +53,12 @@ private[sql] class RocksDBStateStoreProvider
         keySchema: StructType,
         numColsPrefixKey: Int,
         valueSchema: StructType,
-        useMultipleValuesPerKey: Boolean = false): Unit = {
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
         s"Failed to create column family with reserved_name=$colFamilyName")
       verify(useColumnFamilies, "Column families are not supported in this store")
-      rocksDB.createColFamilyIfAbsent(colFamilyName)
+      rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))

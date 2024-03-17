@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
+import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.sql.Row
@@ -131,6 +132,19 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
       assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
       assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
+    }
+  }
+
+  test("SPARK-47406: MySQL datetime types with preferTimestampNTZ") {
+    withDefaultTimeZone(UTC) {
+      val df = sqlContext.read.option("preferTimestampNTZ", true)
+        .jdbc(jdbcUrl, "dates", new Properties)
+      checkAnswer(df, Row(
+        Date.valueOf("1991-11-09"),
+        LocalDateTime.of(1970, 1, 1, 13, 31, 24),
+        LocalDateTime.of(1996, 1, 1, 1, 23, 45),
+        Timestamp.valueOf("2009-02-13 23:31:30"),
+        Date.valueOf("2001-01-01")))
     }
   }
 

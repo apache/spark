@@ -352,8 +352,6 @@ object ResourceProfile extends Logging {
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
 
-  private[spark] val MEMORY_OVERHEAD_MIN_MIB = 384L
-
   private lazy val nextProfileId = new AtomicInteger(0)
   private val DEFAULT_PROFILE_LOCK = new Object()
 
@@ -489,10 +487,11 @@ object ResourceProfile extends Logging {
 
   private[spark] def calculateOverHeadMemory(
       overHeadMemFromConf: Option[Long],
+      minimumOverHeadMemoryFromConf: Long,
       executorMemoryMiB: Long,
       overheadFactor: Double): Long = {
     overHeadMemFromConf.getOrElse(math.max((overheadFactor * executorMemoryMiB).toInt,
-        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
+      minimumOverHeadMemoryFromConf))
   }
 
   /**
@@ -504,6 +503,7 @@ object ResourceProfile extends Logging {
   private[spark] def getResourcesForClusterManager(
       rpId: Int,
       execResources: Map[String, ExecutorResourceRequest],
+      minimumOverheadMemory: Long,
       overheadFactor: Double,
       conf: SparkConf,
       isPythonApp: Boolean,
@@ -515,7 +515,7 @@ object ResourceProfile extends Logging {
     var memoryOffHeapMiB = defaultResources.memoryOffHeapMiB
     var pysparkMemoryMiB = defaultResources.pysparkMemoryMiB.getOrElse(0L)
     var memoryOverheadMiB = calculateOverHeadMemory(defaultResources.memoryOverheadMiB,
-      executorMemoryMiB, overheadFactor)
+      minimumOverheadMemory, executorMemoryMiB, overheadFactor)
 
     val finalCustomResources = if (rpId != DEFAULT_RESOURCE_PROFILE_ID) {
       val customResources = new mutable.HashMap[String, ExecutorResourceRequest]

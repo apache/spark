@@ -116,7 +116,7 @@ object SparkException {
   def require(
       requirement: Boolean,
       errorClass: String,
-      messageParameters: Map[String, String]): Unit = {
+      messageParameters: => Map[String, String]): Unit = {
     if (!requirement) {
       throw new SparkIllegalArgumentException(errorClass, messageParameters)
     }
