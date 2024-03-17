@@ -3,7 +3,7 @@ py4j
 
 # PySpark dependencies (optional)
 numpy
-pyarrow
+pyarrow<13.0.0
 pandas
 scipy
 plotly
