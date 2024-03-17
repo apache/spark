@@ -521,10 +521,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       // collate c1 to UTF8_BINARY because it is explicitly set
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 = COLLATE('a', 'UTF8_BINARY')"),
         Seq(Row("a")))
-      checkAnswer(
-        sql(s"SELECT c1 FROM $tableName " +
-          s"WHERE c1 = SUBSTR(COLLATE('a', 'UTF8_BINARY'), 0)"),
-        Seq(Row("a")))
+
+      // fail with implicit mismatch, as function return should be considered implicit
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT c1 FROM $tableName " +
+            s"WHERE c1 = SUBSTR(COLLATE('a', 'UNICODE'), 0)")
+        },
+        errorClass = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map.empty
+      )
 
       // in operator
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('a')"),
@@ -611,19 +617,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       )
 
       // concat + in
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE('a', 'UTF8_BINARY') IN " +
-            s"(COLLATE('a', 'UNICODE'))")
-        },
-        errorClass = "COLLATION_MISMATCH.EXPLICIT",
-        parameters = Map(
-          "explicitTypes" -> "`string`.`string collate UNICODE`"
-        )
-      )
+      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE('a', 'UTF8_BINARY') IN " +
+        s"(COLLATE('aa', 'UNICODE'))"),
+        Seq(Row("a")))
+
+      // ImplicitInputTypeCast test
+      checkAnswer(sql(s"SELECT REPEAT('aa' collate unicode_ci, MONTH(\"2024-02-02\" COLLATE UNICODE));"),
+        Seq(Row("aaaa")))
     }
-
-
   }
 
   test("cast of default collated string in IN expression") {
