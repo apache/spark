@@ -108,7 +108,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
     expectedSchema = new StructType()
-      .add("ID", DecimalType(19, 0), true, super.defaultMetadata(DecimalType(10, 0)))
+      .add("ID", DecimalType(19, 0), true, super.defaultMetadata(DecimalType(19, 0)))
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
