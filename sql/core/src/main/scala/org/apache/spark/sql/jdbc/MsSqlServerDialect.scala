@@ -100,8 +100,7 @@ private object MsSqlServerDialect extends JdbcDialect {
 
       expr match {
         case e: GeneralScalarExpression =>
-          val name = e.name()
-          name match {
+          e.name() match {
             case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
               if (isChildLikeExpression(e.children()(0))
                 || isChildLikeExpression(e.children()(1))) {
