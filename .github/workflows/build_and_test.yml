@@ -27,13 +27,13 @@ on:
       java:
         required: false
         type: string
-        default: 17
+        default: 8
       branch:
         description: Branch to run the build against
         required: false
         type: string
         # Change 'master' to 'branch-4.0' in branch-4.0 branch after cutting it.
-        default: master
+        default: branch-3.5
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
         required: false
@@ -43,14 +43,14 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{}'
+        default: '{"SCALA_PROFILE": "scala2.13", "PYTHON_TO_TEST": "", "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-xe:21.3.0"}'
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
           in this file, e.g., build. See precondition job below.
         required: false
         type: string
-        default: ''
+        default: '{"build": "true","pyspark": "true","sparkr": "true","tpcds-1g": "true","docker-integration-tests": "true","lint" : "true"}'
 jobs:
   precondition:
     name: Check changes
