@@ -26,6 +26,7 @@ from pyspark.serializers import (
     read_bool,
     read_int,
     read_long,
+    write_int,
     SpecialLengths,
 )
 from pyspark.sql.datasource import DataSource, WriterCommitMessage
