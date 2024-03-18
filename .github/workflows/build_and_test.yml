@@ -288,10 +288,10 @@ jobs:
           echo "Python Packaging Tests Enabled!"
         fi
         if [ ! -z "$PYTHON_TO_TEST" ]; then
-          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
+          ./dev/run-tests --parallelism 1 --python-executables "$PYTHON_TO_TEST"
         else
           # For branch-3.5 and below, it uses the default Python versions.
-          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+          ./dev/run-tests --parallelism 1
         fi
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
