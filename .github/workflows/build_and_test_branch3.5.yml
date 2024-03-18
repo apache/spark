@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: Build and test
+name: Build and test X
 
 on:
   workflow_call:
