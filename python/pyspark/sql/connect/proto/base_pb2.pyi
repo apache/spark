@@ -205,7 +205,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         """
         EXPLAIN_MODE_CODEGEN: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 3
         """Generates code for the statement, if any and a physical plan."""
-        EXPLAIN_MODE_COST: AnalyzePlanRequest.Explain.ExpainMode.ValueType  # 4
+        EXPLAIN_MODE_COST: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 4
         """If plan node statistics are available, generates a logical plan and also the statistics."""
         EXPLAIN_MODE_FORMATTED: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 5
         """Generates a physical plan outline and also node details."""

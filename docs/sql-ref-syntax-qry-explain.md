@@ -53,7 +53,7 @@ EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED | SILENT ] statement
  
 * **SILENT**
 
-  Generates an empty plan.
+    Generates an empty plan.
 
 * **statement**
 
@@ -127,6 +127,8 @@ EXPLAIN FORMATTED select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k
  (4) HashAggregate [codegen id : 2]
  Input: [k#19, sum#24L]
 |
+
+-- Using Silent 
 +----------------------------------------------------+
 EXPLAIN SILENT select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
 +----------------------------------------------------+
