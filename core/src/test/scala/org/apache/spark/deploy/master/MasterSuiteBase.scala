@@ -49,7 +49,7 @@ object MockWorker {
 class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extends RpcEndpoint {
   val seq = MockWorker.counter.incrementAndGet()
   val id = seq.toString
-  override val rpcEnv: RpcEnv = RpcEnv.create("worker", "localhost", seq,
+  override val rpcEnv: RpcEnv = RpcEnv.create("worker", "localhost", 0,
     conf, new SecurityManager(conf))
   val apps = new mutable.HashMap[String, String]()
   val driverIdToAppId = new mutable.HashMap[String, String]()
