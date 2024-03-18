@@ -349,6 +349,11 @@ private class UserDefinedPythonDataSourceReadRunner(
     // Receive the list of partitions, if any.
     val pickledPartitions = ArrayBuffer.empty[Array[Byte]]
     val numPartitions = dataIn.readInt()
+    if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "plan", tpe = "read", msg = msg)
+    }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
       pickledPartitions.append(pickledPartition)
