@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.window
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, InterpretedOrdering, JoinedRow, NamedExpression, SortOrder, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
