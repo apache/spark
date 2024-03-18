@@ -185,7 +185,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-36182: read TimestampLTZ as TimestampNTZ") {
+  test("SPARK-47447: read TimestampLTZ as TimestampNTZ") {
     val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
 
     Seq("INT96", "TIMESTAMP_MICROS", "TIMESTAMP_MILLIS").foreach { tsType =>
