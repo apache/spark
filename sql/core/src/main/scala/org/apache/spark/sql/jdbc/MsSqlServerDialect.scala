@@ -22,10 +22,11 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
@@ -85,6 +86,35 @@ private object MsSqlServerDialect extends JdbcDialect {
       case "STDDEV_POP" => "STDEVP"
       case "STDDEV_SAMP" => "STDEV"
       case _ => super.dialectFunctionName(funcName)
+    }
+
+    override def build(expr: Expression): String = {
+      def isChildLikeExpression(child: Expression): Boolean = child match {
+        case gse: GeneralScalarExpression =>
+          gse.name() match {
+            case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" => true
+            case _ => false
+          }
+        case _ => false
+      }
+
+      expr match {
+        case e: GeneralScalarExpression =>
+          val name = e.name()
+          name match {
+            case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
+              if (isChildLikeExpression(e.children()(0))
+                || isChildLikeExpression(e.children()(1))) {
+                throw new SparkUnsupportedOperationException(
+                  errorClass = "UNSUPPORTED_BINARY_COMPARISON_LIKE_OPERATOR")
+              } else {
+                super.build(expr)
+              }
+            case _ => super.build(expr)
+          }
+        case _ =>
+          super.build(expr)
+      }
     }
   }
 

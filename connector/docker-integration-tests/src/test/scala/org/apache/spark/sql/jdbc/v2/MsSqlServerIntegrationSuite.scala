@@ -125,4 +125,10 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       },
       errorClass = "_LEGACY_ERROR_TEMP_2271")
   }
+
+  test("SQLServer does not support LIKE in binary comparison") {
+    val df = sql(s"SELECT name FROM " +
+      s"$catalogName.employee WHERE ((name LIKE 'am%') = (name LIKE '%y'))")
+    assert(df.collect().length == 4)
+  }
 }
