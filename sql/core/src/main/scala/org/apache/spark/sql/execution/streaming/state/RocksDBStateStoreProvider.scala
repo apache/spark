@@ -257,6 +257,13 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.removeColFamilyIfExists(colFamilyName)
       keyValueEncoderMap.remove(colFamilyName)
     }
+
+    /** Return a list of column family names */
+    override def listColumnFamilies(): Seq[String] = {
+      verify(useColumnFamilies, "Column families are not supported in this store")
+      // turn keys of keyValueEncoderMap to Seq
+      rocksDB.listColumnFamilies()
+    }
   }
 
   override def init(

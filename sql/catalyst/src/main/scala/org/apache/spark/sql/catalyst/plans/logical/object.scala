@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode, TTLMode}
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -574,6 +574,7 @@ object TransformWithState {
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       statefulProcessor: StatefulProcessor[K, V, U],
+      ttlMode: TTLMode,
       timeoutMode: TimeoutMode,
       outputMode: OutputMode,
       child: LogicalPlan): LogicalPlan = {
@@ -584,6 +585,7 @@ object TransformWithState {
       groupingAttributes,
       dataAttributes,
       statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
+      ttlMode,
       timeoutMode,
       outputMode,
       keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
@@ -600,6 +602,7 @@ case class TransformWithState(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     statefulProcessor: StatefulProcessor[Any, Any, Any],
+    ttlMode: TTLMode,
     timeoutMode: TimeoutMode,
     outputMode: OutputMode,
     keyEncoder: ExpressionEncoder[Any],

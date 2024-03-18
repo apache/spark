@@ -202,6 +202,10 @@ Creating multiple column families with `<stateStoreProvider>` is not supported.
 
 Removing column families with `<stateStoreProvider>` is not supported.
 
+## STATE_STORE_TTL
+
+State TTL with `<stateStoreProvider>` is not supported. Please use RocksDBStateStoreProvider.
+
 ## TABLE_OPERATION
 
 Table `<tableName>` does not support `<operation>`. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by "spark.sql.catalog".
