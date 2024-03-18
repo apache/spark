@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import java.nio.file.Path
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, CountDownLatch, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -91,6 +91,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Handles Python process clean up for streaming queries. Initialized on first use in a query.
   private[connect] lazy val streamingForeachBatchRunnerCleanerCache =
     new StreamingForeachBatchHelper.CleanerCache(this)
+
+  private[connect] lazy val streamingServersideListenerHolder = new ServerSideListenerHolder(this)
 
   def key: SessionKey = SessionKey(userId, sessionId)
 
@@ -266,6 +268,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this)
     streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
     removeAllListeners() // removes all listener and stop python listener processes if necessary.
+
+    // if there is a server side listener, clean up related resources
+    if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
+      streamingServersideListenerHolder.cleanUp()
+    }
 
     // Clean up all executions.
     // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new executions
