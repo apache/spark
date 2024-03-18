@@ -20,41 +20,8 @@
 name: "Build (branch-3.5, Scala 2.13, Hadoop 3, JDK 8)"
 
 on:
-  workflow_call:
-    inputs:
-      java:
-        required: false
-        type: string
-        default: 8
-      branch:
-        description: Branch to run the build against
-        required: false
-        type: string
-        default: branch-3.5
-      hadoop:
-        description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
-        required: false
-        type: string
-        default: hadoop3
-      envs:
-        description: Additional environment variables to set when running the tests. Should be in JSON format.
-        required: false
-        type: string
-        default: '{"SCALA_PROFILE": "scala2.13", "PYTHON_TO_TEST": "", "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-xe:21.3.0"}'
-      jobs:
-        description: >-
-          Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
-          in this file, e.g., build. See precondition job below.
-        required: false
-        type: string
-        default: '{
-          "build": "true",
-          "pyspark": "true",
-          "sparkr": "true",
-          "tpcds-1g": "true",
-          "docker-integration-tests": "true",
-          "lint" : "true"
-        }'
+  schedule:
+    - cron: '0 11 * * *'
 
 jobs:
   run-build:

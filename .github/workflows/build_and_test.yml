@@ -27,13 +27,13 @@ on:
       java:
         required: false
         type: string
-        default: 8
+        default: 17
       branch:
         description: Branch to run the build against
         required: false
         type: string
         # Change 'master' to 'branch-4.0' in branch-4.0 branch after cutting it.
-        default: branch-3.5
+        default: master
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
         required: false
@@ -43,14 +43,14 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{"SCALA_PROFILE": "scala2.13", "PYTHON_TO_TEST": "", "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-xe:21.3.0"}'
+        default: '{}'
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
           in this file, e.g., build. See precondition job below.
         required: false
         type: string
-        default: '{"build": "true","pyspark": "true","sparkr": "true","tpcds-1g": "true","docker-integration-tests": "true","lint" : "true"}'
+        default: ''
 jobs:
   precondition:
     name: Check changes
@@ -376,7 +376,8 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
-      BRANCH: ${{ inputs.branch }}
+      BRANCH: branch-3.5
+      java: 8
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -384,17 +385,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        ref: branch-3.5
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v4
@@ -424,7 +415,7 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: zulu
-        java-version: ${{ matrix.java }}
+        java-version: 8
     - name: List Python packages (${{ env.PYTHON_TO_TEST }})
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
