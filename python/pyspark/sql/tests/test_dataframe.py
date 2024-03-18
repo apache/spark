@@ -210,6 +210,12 @@ class DataFrameTestsMixin:
             ],
         )
 
+    def test_with_collation(self):
+        schema = StructType([StructField("name", StringType("UNICODE_CI"), True)])
+
+        df = self.spark.createDataFrame(["Alice"], schema)
+        self.assertEqual(df.first().name, "Alice")
+
     def test_with_columns_renamed(self):
         df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
 

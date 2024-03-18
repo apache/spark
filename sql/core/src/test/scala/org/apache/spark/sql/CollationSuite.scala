@@ -639,4 +639,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
   }
+
+  test("Create dataframe with non utf8 binary collation") {
+    val schema = StructType(Seq(StructField("Name", StringType("UNICODE_CI"))))
+
+    spark
+      .createDataFrame(sparkContext.parallelize(Seq(Row("Alice"))), schema)
+      .show()
+  }
 }
