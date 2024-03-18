@@ -891,16 +891,16 @@ case class MapFromEntries(child: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(map[, ascendingOrder]) - Sorts the input map in ascending or descending order
-      according to the natural ordering of the map keys. The sorting algorithm used is
-      an adaptive, stable and iterative merge sort algorithm. If the input map is empty,
-      function returns an empty map.
+      according to the natural ordering of the map keys. The algorithm used for sorting is
+      an adaptive, stable and iterative algorithm. If the input map is empty, function
+      returns an empty map.
   """,
   arguments =
     """
     Arguments:
-      * map - an expression. The map that will be sorted.
-      * ascendingOrder - an expression. The ordering in which the map will be sorted.
-          This can be either ascending or descending element order.
+      * map - The map that will be sorted.
+      * ascendingOrder - A boolean value describing the order in which the map will be sorted.
+          This can be either be ascending (true) or descending (false).
   """,
   examples = """
     Examples:
