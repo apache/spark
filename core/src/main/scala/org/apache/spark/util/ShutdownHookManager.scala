@@ -19,12 +19,16 @@ package org.apache.spark.util
 
 import java.io.File
 import java.util.PriorityQueue
+import java.util.concurrent.TimeUnit
 
 import scala.util.Try
 
 import org.apache.hadoop.fs.FileSystem
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPARK_SHUTDOWN_TIMEOUT_MS
+
 
 /**
  * Various utility methods used by Spark.
@@ -177,8 +181,19 @@ private [util] class SparkShutdownHookManager {
     val hookTask = new Runnable() {
       override def run(): Unit = runAll()
     }
-    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
-      hookTask, FileSystem.SHUTDOWN_HOOK_PRIORITY + 30)
+    val priority = FileSystem.SHUTDOWN_HOOK_PRIORITY + 30
+    // The timeout property must be passed as a Java system property because this
+    // is initialized before Spark configurations are registered as system
+    // properties later in initialization.
+    val timeout = new SparkConf().get(SPARK_SHUTDOWN_TIMEOUT_MS)
+
+    timeout.fold {
+      org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
+        hookTask, priority)
+    } { t =>
+      org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
+        hookTask, priority, t, TimeUnit.MILLISECONDS)
+    }
   }
 
   def runAll(): Unit = {
