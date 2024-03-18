@@ -29,4 +29,4 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/build_branch35.yml
+    uses: ./.github/workflows/build_and_test_branch3.5.yml.yml
