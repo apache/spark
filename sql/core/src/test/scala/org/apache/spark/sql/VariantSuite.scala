@@ -30,10 +30,7 @@ import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
 class VariantSuite extends QueryTest with SharedSparkSession {
-  // TODO(SPARK-45891): We need to ignore some tests for now because the `toString` implementation
-  // doesn't match the `parse_json` implementation yet. We will shortly add a new `toString`
-  // implementation and re-enable the tests.
-  ignore("basic tests") {
+  test("basic tests") {
     def verifyResult(df: DataFrame): Unit = {
       val result = df.collect()
         .map(_.get(0).asInstanceOf[VariantVal].toString)
@@ -43,8 +40,6 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       assert(result == expected)
     }
 
-    // At this point, JSON parsing logic is not really implemented. We just construct some number
-    // inputs that are also valid JSON. This exercises passing VariantVal throughout the system.
     val query = spark.sql("select parse_json(repeat('1', id)) as v from range(1, 10)")
     verifyResult(query)
 
@@ -142,7 +137,7 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  ignore("write partitioned file") {
+  test("write partitioned file") {
     def verifyResult(df: DataFrame): Unit = {
       val result = df.selectExpr("v").collect()
         .map(_.get(0).asInstanceOf[VariantVal].toString)
