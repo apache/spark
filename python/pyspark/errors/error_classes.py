@@ -347,11 +347,6 @@ ERROR_CLASSES_JSON = '''
       "Index must be positive, got '<index>'."
     ]
   },
-  "INDEX_NOT_ZERO": {
-    "message": [
-      "Index must be non-zero."
-    ]
-  },
   "INDEX_OUT_OF_RANGE": {
     "message": [
       "<arg_name> index out of range, got '<index>'."
@@ -1166,6 +1161,11 @@ ERROR_CLASSES_JSON = '''
   "WRONG_NUM_COLUMNS": {
     "message": [
       "Function `<func_name>` should take at least <num_cols> columns."
+    ]
+  },
+  "ZERO_INDEX": {
+    "message": [
+      "Index must be non-zero."
     ]
   }
 }

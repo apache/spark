@@ -701,7 +701,7 @@ class DataFrame:
                     _c = self[-c - 1].desc()
                 else:
                     raise PySparkIndexError(
-                        error_class="INDEX_NOT_ZERO",
+                        error_class="ZERO_INDEX",
                         message_parameters={},
                     )
             else:
