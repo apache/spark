@@ -25,9 +25,6 @@ import org.apache.spark.sql.internal.SQLConf
 case class InitInputRow(key: String, action: String, value: Double)
 case class InputRowForInitialState(
     value: Double, entries: List[Double], mapping: Map[Double, Int])
-case class InputRowIterForInitialState(
-    value: Double, entries: java.util.Iterator[Double],
-    mapping: java.util.Iterator[(Double, Int)])
 
 abstract class StatefulProcessorWithInitialStateTestClass[V]
     extends StatefulProcessorWithInitialState[
@@ -118,20 +115,6 @@ class InitialStateInMemoryTestClass
   override def handleInitialState(
       key: String,
       initialState: (String, InputRowForInitialState)): Unit = {
-    _valState.update(initialState._2.value)
-    _listState.appendList(initialState._2.entries.toArray)
-    val inMemoryMap = initialState._2.mapping
-    inMemoryMap.foreach { kvPair =>
-      _mapState.updateValue(kvPair._1, kvPair._2)
-    }
-  }
-}
-
-class InitialStateIteratorTestClass
-  extends StatefulProcessorWithInitialStateTestClass[InputRowIterForInitialState] {
-  override def handleInitialState(
-      key: String,
-      initialState: (String, InputRowIterForInitialState)): Unit = {
     _valState.update(initialState._2.value)
     _listState.appendList(initialState._2.entries.toArray)
     val inMemoryMap = initialState._2.mapping
