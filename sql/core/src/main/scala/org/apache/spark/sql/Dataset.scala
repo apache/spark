@@ -201,6 +201,9 @@ class Dataset[T] private[sql](
 
   @DeveloperApi @Unstable
   def queryExecution: QueryExecution = {
+    if (queryUnpersisted == null) {
+      return null
+    }
     val cacheStatesSign = queryUnpersisted.computeCacheStateSignature()
     if (cacheStatesSign.forall(_ == false)) {
       queryPersisted = None
