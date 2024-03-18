@@ -341,9 +341,7 @@ jobs:
       fail-fast: false
       matrix:
         java:
-          - 8
-        branch:
-          - branch-3.5
+          - ${{ inputs.java }}
         modules:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
