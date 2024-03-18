@@ -98,6 +98,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case FloatType | DoubleType => true
     case StructType(fields) => fields.exists(f => needNormalize(f.dataType))
     case ArrayType(et, _) => needNormalize(et)
+    case MapType(kt, vt, _) => needNormalize(kt) && needNormalize(vt)
     case _ => false
   }
 
@@ -140,6 +141,19 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val lv = NamedLambdaVariable("arg", et, containsNull)
       val function = normalize(lv)
       KnownFloatingPointNormalized(ArrayTransform(expr, LambdaFunction(function, Seq(lv))))
+
+    case _ if expr.dataType.isInstanceOf[MapType] =>
+      val MapType(kt, vt, containsNull) = expr.dataType
+      val lv1 = NamedLambdaVariable("arg", kt, containsNull)
+      val lv2 = NamedLambdaVariable("arg", vt, containsNull)
+      val functionL1 = normalize(lv1)
+      val functionL2 = normalize(lv2)
+      KnownFloatingPointNormalized(
+        ArrayTransform(
+          ArrayTransform(expr, LambdaFunction(functionL1, Seq(lv1))),
+          LambdaFunction(functionL2, Seq(lv2)),
+        )
+      )
 
     case _ => throw SparkException.internalError(s"fail to normalize $expr")
   }
