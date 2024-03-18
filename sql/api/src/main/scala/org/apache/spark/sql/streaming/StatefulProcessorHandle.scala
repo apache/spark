@@ -30,15 +30,20 @@ import org.apache.spark.sql.Encoder
 private[sql] trait StatefulProcessorHandle extends Serializable {
 
   /**
-   * Function to create new or return existing single value state variable of given type
+   * Function to create new or return existing single value state variable of given type.
+   * The state will be eventually cleaned up after the specified ttl.
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
-   * @param stateName - name of the state variable
+   *
+   * @param stateName  - name of the state variable
    * @param valEncoder - SQL encoder for state variable
+   * @param ttlMode - ttl mode for the state
    * @tparam T - type of state variable
    * @return - instance of ValueState of type T that can be used to store state persistently
    */
-  def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T]
+  def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T]): ValueState[T]
 
   /**
    * Creates new or returns existing list state associated with stateName.

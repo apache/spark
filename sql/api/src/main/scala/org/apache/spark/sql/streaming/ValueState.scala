@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.Serializable
+import java.time.Duration
 
 import org.apache.spark.annotation.{Evolving, Experimental}
 
@@ -43,7 +44,8 @@ private[sql] trait ValueState[S] extends Serializable {
   def getOption(): Option[S]
 
   /** Update the value of the state. */
-  def update(newState: S): Unit
+  // TODO(sahnib) confirm if this should be scala or Java type of Duration
+  def update(newState: S, ttlDuration: Duration = Duration.ZERO): Unit
 
   /** Remove this state. */
   def clear(): Unit

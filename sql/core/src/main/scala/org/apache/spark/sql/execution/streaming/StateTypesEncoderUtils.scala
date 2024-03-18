@@ -23,11 +23,19 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Serializer
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
-import org.apache.spark.sql.types.{BinaryType, StructType}
+import org.apache.spark.sql.types.{BinaryType, LongType, StructType}
 
 object StateKeyValueRowSchema {
   val KEY_ROW_SCHEMA: StructType = new StructType().add("key", BinaryType)
-  val VALUE_ROW_SCHEMA: StructType = new StructType().add("value", BinaryType)
+  val VALUE_ROW_SCHEMA: StructType = new StructType()
+    .add("value", BinaryType)
+    .add("ttlExpirationMs", LongType)
+
+  def encodeGroupingKeyBytes(keyBytes: Array[Byte]): UnsafeRow = {
+    val keyProjection = UnsafeProjection.create(KEY_ROW_SCHEMA)
+    val keyRow = keyProjection(InternalRow(keyBytes))
+    keyRow
+  }
 }
 
 /**
@@ -65,22 +73,37 @@ class StateTypesEncoder[GK, V](
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
   def encodeGroupingKey(): UnsafeRow = {
+    val keyRow = keyProjection(InternalRow(serializeGroupingKey()))
+    keyRow
+  }
+
+  def encodeSerializedGroupingKey(
+      groupingKeyBytes: Array[Byte]): UnsafeRow = {
+    val keyRow = keyProjection(InternalRow(groupingKeyBytes))
+    keyRow
+  }
+
+  def serializeGroupingKey(): Array[Byte] = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
     if (keyOption.isEmpty) {
       throw StateStoreErrors.implicitKeyNotFound(stateName)
     }
-
     val groupingKey = keyOption.get.asInstanceOf[GK]
-    val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
-    val keyRow = keyProjection(InternalRow(keyByteArr))
-    keyRow
+    keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
   }
 
   def encodeValue(value: V): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
     val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
-    val valRow = valueProjection(InternalRow(bytes))
+    val valRow = valueProjection(InternalRow(bytes, 0L))
     valRow
+  }
+
+  def encodeValue(value: V, expirationMs: Long = -1): UnsafeRow = {
+    val objRow: InternalRow = objToRowSerializer.apply(value)
+    val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
+    val valueRow = valueProjection(InternalRow(bytes, expirationMs))
+    valueRow
   }
 
   def decodeValue(row: UnsafeRow): V = {
@@ -88,6 +111,11 @@ class StateTypesEncoder[GK, V](
     reusedValRow.pointTo(bytes, bytes.length)
     val value = rowToObjDeserializer.apply(reusedValRow)
     value
+  }
+
+  def decodeTtlExpirationMs(row: UnsafeRow): Long = {
+    val expirationMs = row.getLong(1)
+    expirationMs
   }
 }
 

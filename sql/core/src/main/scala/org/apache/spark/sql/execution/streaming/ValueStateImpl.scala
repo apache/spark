@@ -16,39 +16,59 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import java.time.Duration
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
-import org.apache.spark.sql.streaming.ValueState
+import org.apache.spark.sql.streaming.{TTLMode, ValueState}
 
 /**
  * Class that provides a concrete implementation for a single value state associated with state
  * variables used in the streaming transformWithState operator.
  * @param store - reference to the StateStore instance to be used for storing state
  * @param stateName - name of logical state partition
- * @param keyEnc - Spark SQL encoder for key
+ * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
+ * @param ttlMode ttl Mode to evict expired values from state
+ * @param batchTimestampMs processing timestamp of the current batch.
+ * @param eventTimeWatermarkMs event time watermark for state eviction
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S]) extends ValueState[S] with Logging {
+    valEncoder: Encoder[S],
+    ttlMode: TTLMode,
+    batchTimestampMs: Option[Long],
+    eventTimeWatermarkMs: Option[Long])
+  extends ValueState[S]
+    with Logging
+    with StateVariableTTLSupport {
 
   private val keySerializer = keyExprEnc.createSerializer()
-
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
+  private[sql] var ttlState: Option[SingleKeyTTLState] = None
 
-  store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
-    NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+  initialize()
+
+  private def initialize(): Unit = {
+    store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
+      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
+
+    if (ttlMode != TTLMode.NoTTL()) {
+      val _ttlState = new SingleKeyTTLState(ttlMode, stateName, store,
+        batchTimestampMs, eventTimeWatermarkMs, this)
+      ttlState = Some(_ttlState)
+    }
+  }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
   override def exists(): Boolean = {
-    getImpl() != null
+    get() != null
   }
 
   /** Function to return Option of value if exists and None otherwise */
@@ -58,26 +78,66 @@ class ValueStateImpl[S](
 
   /** Function to return associated value with key if exists and null otherwise */
   override def get(): S = {
-    val retRow = getImpl()
+    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
+    val retRow = store.get(encodedGroupingKey, stateName)
+
     if (retRow != null) {
-      stateTypesEncoder.decodeValue(retRow)
+      val resState = stateTypesEncoder.decodeValue(retRow)
+
+      val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(retRow)
+      val isExpired = StateTTL.isExpired(ttlMode,
+        expirationMs, batchTimestampMs, eventTimeWatermarkMs)
+
+      if (!isExpired) {
+        resState
+      } else {
+        null.asInstanceOf[S]
+      }
     } else {
       null.asInstanceOf[S]
     }
   }
 
-  private def getImpl(): UnsafeRow = {
-    store.get(stateTypesEncoder.encodeGroupingKey(), stateName)
-  }
-
   /** Function to update and overwrite state associated with given key */
-  override def update(newState: S): Unit = {
-    store.put(stateTypesEncoder.encodeGroupingKey(),
-      stateTypesEncoder.encodeValue(newState), stateName)
+  override def update(
+      newState: S,
+      ttlDuration: Duration = Duration.ZERO): Unit = {
+
+    if (ttlDuration != Duration.ZERO && ttlState.isEmpty) {
+      // TODO(sahnib) throw a StateStoreError here
+      throw new RuntimeException()
+    }
+
+    var expirationMs: Long = -1
+    if (ttlDuration != Duration.ZERO) {
+      expirationMs = StateTTL.calculateExpirationTimeForDuration(
+        ttlMode, ttlDuration, batchTimestampMs, eventTimeWatermarkMs)
+    }
+
+    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
+    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
+      stateTypesEncoder.encodeValue(newState, expirationMs), stateName)
+
+    ttlState.foreach(_.upsertTTLForStateKey(expirationMs, serializedGroupingKey))
   }
 
   /** Function to remove state for given key */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+  }
+
+  def clearIfExpired(groupingKey: Array[Byte]): Unit = {
+    val encodedGroupingKey = stateTypesEncoder.encodeSerializedGroupingKey(groupingKey)
+    val retRow = store.get(encodedGroupingKey, stateName)
+
+    if (retRow != null) {
+      val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(retRow)
+      val isExpired = StateTTL.isExpired(ttlMode,
+        expirationMs, batchTimestampMs, eventTimeWatermarkMs)
+
+      if (!isExpired) {
+        store.remove(encodedGroupingKey, stateName)
+      }
+    }
   }
 }

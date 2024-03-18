@@ -27,11 +27,11 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expressi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeoutMode}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
@@ -42,6 +42,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  * @param groupingAttributes used to group the data
  * @param dataAttributes used to read the data
  * @param statefulProcessor processor methods called on underlying data
+ * @param ttlMode defines the ttl Mode
  * @param timeoutMode defines the timeout mode
  * @param outputMode defines the output mode for the statefulProcessor
  * @param keyEncoder expression encoder for the key type
@@ -58,6 +59,7 @@ case class TransformWithStateExec(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     statefulProcessor: StatefulProcessor[Any, Any, Any],
+    ttlMode: TTLMode,
     timeoutMode: TimeoutMode,
     outputMode: OutputMode,
     keyEncoder: ExpressionEncoder[Any],
@@ -101,10 +103,6 @@ case class TransformWithStateExec(
     copy(child = newLeft, initialState = newRight)
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
-
-  protected val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-
-  protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
   /**
    * Distribute by grouping attributes - We need the underlying data and the initial state data
@@ -284,6 +282,8 @@ case class TransformWithStateExec(
       allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
       commitTimeMs += timeTakenMs {
         if (isStreaming) {
+          // join ttlBackgroundThread forkjoinpool
+          processorHandle.doTtlCleanup()
           store.commit()
         } else {
           store.abort()
@@ -332,9 +332,9 @@ case class TransformWithStateExec(
             val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
             val store = StateStore.get(
               storeProviderId = storeProviderId,
-              keySchema = schemaForKeyRow,
-              valueSchema = schemaForValueRow,
-              NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+              KEY_ROW_SCHEMA,
+              VALUE_ROW_SCHEMA,
+              NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
               version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
               storeConf = storeConf,
@@ -352,9 +352,9 @@ case class TransformWithStateExec(
       if (isStreaming) {
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
-          schemaForKeyRow,
-          schemaForValueRow,
-          NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+          KEY_ROW_SCHEMA,
+          VALUE_ROW_SCHEMA,
+          NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
           session.sqlContext.sessionState,
           Some(session.sqlContext.streams.stateStoreCoordinator),
           useColumnFamilies = true
@@ -402,9 +402,9 @@ case class TransformWithStateExec(
     // Create StateStoreProvider for this partition
     val stateStoreProvider = StateStoreProvider.createAndInit(
       providerId,
-      schemaForKeyRow,
-      schemaForValueRow,
-      NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+      KEY_ROW_SCHEMA,
+      VALUE_ROW_SCHEMA,
+      NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA),
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,
@@ -427,7 +427,8 @@ case class TransformWithStateExec(
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
-      store, getStateInfo.queryRunId, keyEncoder, timeoutMode, isStreaming)
+      store, getStateInfo.queryRunId, keyEncoder, ttlMode, timeoutMode,
+      isStreaming, batchTimestampMs, eventTimeWatermarkForEviction)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeoutMode)
@@ -441,7 +442,7 @@ case class TransformWithStateExec(
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeoutMode, isStreaming)
+      keyEncoder, ttlMode, timeoutMode, isStreaming)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeoutMode)
@@ -464,7 +465,7 @@ case class TransformWithStateExec(
   }
 }
 
-// scalastyle:off
+// scalastyle:off argcount
 object TransformWithStateExec {
 
   // Plan logical transformWithState for batch queries
@@ -474,6 +475,7 @@ object TransformWithStateExec {
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       statefulProcessor: StatefulProcessor[Any, Any, Any],
+      ttlMode: TTLMode,
       timeoutMode: TimeoutMode,
       outputMode: OutputMode,
       keyEncoder: ExpressionEncoder[Any],
@@ -499,6 +501,7 @@ object TransformWithStateExec {
       groupingAttributes,
       dataAttributes,
       statefulProcessor,
+      ttlMode,
       timeoutMode,
       outputMode,
       keyEncoder,
@@ -516,4 +519,5 @@ object TransformWithStateExec {
       initialState)
   }
 }
-// scalastyle:on
+// scalastyle:on argcount
+

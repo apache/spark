@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.TypedAggUtils
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeoutMode}
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeoutMode, TTLMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
@@ -662,6 +662,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode): Dataset[U] = {
     Dataset[U](
       sparkSession,
@@ -669,6 +670,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         groupingAttributes,
         dataAttributes,
         statefulProcessor,
+        ttlMode,
         timeoutMode,
         outputMode,
         child = logicalPlan
@@ -697,9 +699,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode,
       outputEncoder: Encoder[U]): Dataset[U] = {
-    transformWithState(statefulProcessor, timeoutMode, outputMode)(outputEncoder)
+    transformWithState(statefulProcessor, timeoutMode, ttlMode, outputMode)(outputEncoder)
   }
 
   /**
@@ -721,6 +724,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
     Dataset[U](
@@ -729,6 +733,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         groupingAttributes,
         dataAttributes,
         statefulProcessor,
+        ttlMode,
         timeoutMode,
         outputMode,
         child = logicalPlan,
@@ -760,11 +765,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode,
       initialState: KeyValueGroupedDataset[K, S],
       outputEncoder: Encoder[U],
       initialStateEncoder: Encoder[S]): Dataset[U] = {
-    transformWithState(statefulProcessor, timeoutMode,
+    transformWithState(statefulProcessor, timeoutMode, ttlMode,
       outputMode, initialState)(outputEncoder, initialStateEncoder)
   }
 

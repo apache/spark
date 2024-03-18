@@ -45,7 +45,7 @@ class MapStateImpl[K, V](
 
   /** Whether state exists or not. */
   override def exists(): Boolean = {
-    !store.prefixScan(stateTypesEncoder.encodeGroupingKey(), stateName).isEmpty
+    store.prefixScan(stateTypesEncoder.encodeGroupingKey(), stateName).nonEmpty
   }
 
   /** Get the state value if it exists */

@@ -348,6 +348,10 @@ class RocksDB(
     }
   }
 
+  def listColumnFamilies(): Seq[String] = {
+    Seq()
+  }
+
   /**
    * Remove RocksDB column family, if exists
    */

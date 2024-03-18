@@ -4372,6 +4372,11 @@
           "Removing column families with <stateStoreProvider> is not supported."
         ]
       },
+      "STATE_STORE_TTL" : {
+        "message" : [
+          "State TTL with <stateStoreProvider> is not supported. Please use RocksDBStateStoreProvider."
+        ]
+      },
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."

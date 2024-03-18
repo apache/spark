@@ -123,6 +123,11 @@ trait StateStore extends ReadStateStore {
   def removeColFamilyIfExists(colFamilyName: String): Unit
 
   /**
+   * Return list of column family names.
+   */
+  def listColumnFamilies(): Seq[String] = Seq(StateStore.DEFAULT_COL_FAMILY_NAME)
+
+  /**
    * Create column family with given name, if absent.
    */
   def createColFamilyIfAbsent(
