@@ -6,6 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -23,7 +24,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{ImplicitCastInputTypes, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -707,7 +708,7 @@ abstract class TypeCoercionBase {
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
-          case (expr: Expression, st2: StringType) if expr.dataType.isInstanceOf[StringType] => expr
+          case (expr: Expression, t) if CollationTypeCasts.hasStringType(t) => expr
           // If we cannot do the implicit cast, just use the original input.
           case (in, expected) => implicitCast(in, expected).getOrElse(in)
         }
@@ -779,30 +780,53 @@ abstract class TypeCoercionBase {
           collateToSingleType(checkCastWithIndeterminate.children, failOnIndeterminate = false)
         checkCastWithIndeterminate.withNewChildren(newChildren)
 
-      case checkCastWithoutIndeterminate @ (_: BinaryExpression | _: In | _: SortOrder)
+      case checkCastWithoutIndeterminate@(_: BinaryExpression | _: In | _: SortOrder)
         if shouldCast(checkCastWithoutIndeterminate.children) =>
         val newChildren = collateToSingleType(checkCastWithoutIndeterminate.children)
         checkCastWithoutIndeterminate.withNewChildren(newChildren)
 
-      case checkIndeterminate @ (_: BinaryExpression | _: In | _: SortOrder)
+      case checkIndeterminate@(_: BinaryExpression | _: In | _: SortOrder)
         if hasIndeterminate(checkIndeterminate.children
           .filter(e => hasStringType(e.dataType))
           .map(e => extractStringType(e.dataType))) =>
         throw QueryCompilationErrors.indeterminateCollationError()
 
+      case checkImplicitCastInputTypes: ImplicitCastInputTypes
+        if checkImplicitCastInputTypes.children.exists(e => hasStringType(e.dataType))
+          && checkImplicitCastInputTypes.inputTypes.nonEmpty =>
+        val collationId: Int =
+          getOutputCollation(checkImplicitCastInputTypes
+            .children.filter { e => hasStringType(e.dataType) })
+        val children: Seq[Expression] = checkImplicitCastInputTypes
+          .children.zip(checkImplicitCastInputTypes.inputTypes).map {
+            case (e, st) if hasStringType(st) =>
+              castStringType(e, collationId).getOrElse(e)
+            case (nt, t) if hasStringType(t.defaultConcreteType) && nt.dataType == NullType =>
+              castStringType(nt, collationId, t.defaultConcreteType).getOrElse(nt)
+            case (e, TypeCollection(types)) if types.exists(hasStringType) =>
+              types.flatMap{ dt =>
+                if (hasStringType(dt)) {
+                  castStringType(e, collationId, dt)
+                } else {
+                  TypeCoercion.implicitCast(e, dt)
+                }
+              }.headOption.getOrElse(e)
+            case (in, _) => in
+          }
+        checkImplicitCastInputTypes.withNewChildren(children)
+
       case checkExpectsInputType: ExpectsInputTypes
-        if checkExpectsInputType.inputTypes.exists(hasStringType) =>
+        if checkExpectsInputType.children.exists(e => hasStringType(e.dataType))
+          && checkExpectsInputType.inputTypes.nonEmpty =>
           val collationId: Int = getOutputCollation(
-            checkExpectsInputType.children.zip(checkExpectsInputType.inputTypes)
-              .filter {case (e, t) => hasStringType(t)}
-              .map {case (e, _) => e})
+            checkExpectsInputType.children.filter {e => hasStringType(e.dataType)})
           val children: Seq[Expression] = checkExpectsInputType
             .children.zip(checkExpectsInputType.inputTypes).map {
-            case (in, expected)
-            => if (hasStringType(expected)) {
-              castStringType(in, collationId)
-            }
-            else in
+            case (st, _) if hasStringType(st.dataType) =>
+              castStringType(st, collationId).getOrElse(st)
+            case (nt, e) if hasStringType(e.defaultConcreteType) && nt.dataType == NullType =>
+              castStringType(nt, collationId, e.defaultConcreteType).getOrElse(nt)
+            case (in, _) => in
             }
           checkExpectsInputType.withNewChildren(children)
     }
@@ -819,8 +843,6 @@ abstract class TypeCoercionBase {
     def hasStringType(dt: AbstractDataType): Boolean = dt match {
       case _: StringType => true
       case ArrayType(et, _) => hasStringType(et)
-      case tc: TypeCollection
-      => hasStringType(tc.defaultConcreteType)
       case _ => false
     }
 
@@ -831,26 +853,31 @@ abstract class TypeCoercionBase {
     private def extractStringType(dt: AbstractDataType): StringType = dt match {
       case st: StringType => st
       case ArrayType(et, _) => extractStringType(et)
-      case tc: TypeCollection
-        => extractStringType(tc.defaultConcreteType)
     }
 
-    /**
-     * Casts to StringType expressions filtered from hasStringType
-     */
-    private def castStringType(expr: Expression, collationId: Int): Expression =
-      expr.dataType match {
-        case st: StringType if st.collationId == collationId =>
-          expr
-        case _: StringType =>
-          Cast(expr, StringType(collationId))
-        case at: ArrayType if at.elementType.isInstanceOf[StringType]
-          && at.elementType.asInstanceOf[StringType].collationId != collationId =>
-          Cast(expr, ArrayType(StringType(collationId), at.containsNull))
-        case at: ArrayType if at.elementType.isInstanceOf[StringType] =>
-          expr
-        case _ => expr
+    private def castStringType(expr: Expression,
+                               collationId: Int,
+                               expected: AbstractDataType = NullType): Option[Expression] =
+      castStringType(expr.dataType, collationId, expected).map { dt =>
+        if (dt == expr.dataType) expr else Cast(expr, dt)
       }
+
+    private def castStringType(inType: DataType,
+                               collationId: Int,
+                               expected: AbstractDataType): Option[DataType] = {
+      @Nullable val ret: DataType = inType match {
+        case st: StringType if st.collationId == collationId =>
+          st
+        case _: AtomicType =>
+          StringType(collationId)
+        case ArrayType(arrType, nullable) =>
+          castStringType(arrType, collationId, expected).map(ArrayType(_, nullable)).orNull
+        case _: NullType =>
+          castStringType(expected.defaultConcreteType, collationId, expected).orNull
+        case _ => null
+      }
+      Option(ret)
+    }
 
     /**
      *  Collates the input expressions to a single collation.
@@ -859,7 +886,7 @@ abstract class TypeCoercionBase {
                             failOnIndeterminate: Boolean = true): Seq[Expression] = {
       val collationId = getOutputCollation(exprs, failOnIndeterminate)
 
-      exprs.map(castStringType(_, collationId))
+      exprs.map(e => castStringType(e, collationId).getOrElse(e))
     }
 
     /**
@@ -1117,7 +1144,6 @@ object TypeCoercion extends TypeCoercionBase {
     // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
     // We wrap immediately an Option after this.
     @Nullable val ret: DataType = (inType, expectedType) match {
-      case (st1: StringType, st2: StringType) if st1 != st2 => st2
       // If the expected type is already a parent of the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => inType
 

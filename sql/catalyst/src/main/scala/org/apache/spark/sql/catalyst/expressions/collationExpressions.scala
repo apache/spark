@@ -112,7 +112,8 @@ case class Collate(child: Expression, collationName: String)
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on line.contains.tab
-case class Collation(child: Expression) extends UnaryExpression with RuntimeReplaceable {
+case class Collation(child: Expression)
+  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override def dataType: DataType = StringType
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
   override def replacement: Expression = {
@@ -120,4 +121,5 @@ case class Collation(child: Expression) extends UnaryExpression with RuntimeRepl
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, StringType)
   }
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 }

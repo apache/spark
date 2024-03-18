@@ -626,6 +626,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql("SELECT REPEAT('aa' collate unicode_ci, MONTH(\"2024-02-02\" COLLATE UNICODE));"),
         Seq(Row("aaaa")))
     }
+
+    sql("select elt(4, 'aaa', 'bbb', 'ccc' COLLATE UNICODE, 'ddd')")
   }
 
   test("cast of default collated string in IN expression") {
