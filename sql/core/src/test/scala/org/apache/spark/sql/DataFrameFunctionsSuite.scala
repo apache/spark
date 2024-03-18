@@ -862,7 +862,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"map_sort(map(1, 1, 2, 2), asc)\"",
-        "paramIndex" -> "second", "inputSql" -> "\"asc\"",
+        "paramIndex" -> "second",
+        "inputSql" -> "\"asc\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"BOOLEAN\""
       ),
