@@ -18,7 +18,8 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.{Properties, TimeZone}
+import java.time.ZoneId
+import java.util.Properties
 
 import scala.util.control.NonFatal
 
@@ -29,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Q
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
@@ -3047,7 +3049,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("Test timestamp scan roundtrip with calendar feature flag") {
     // Test roundtrip with spark session time zone being equal to JVM time zone
     withSQLConf(SQLConf.USE_LOCAL_SESSION_CALENDAR.key -> "true",
-      SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       withConnection { conn =>
         conn.prepareStatement(
             "CREATE TABLE \"test\".\"timestampstemp\" (timestampntz TIMESTAMP," +
@@ -3094,7 +3096,34 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       assert(displayedResults.contains("2022-03-01 02:00:00|2022-03-01 01:00:00"))
 
       withConnection { conn =>
-        conn.prepareStatement("DROP TABLE \"test\".\"timestampstemp\"")
+        conn.prepareStatement("DROP TABLE \"test\".\"timestampstemp\"").executeUpdate()
+      }
+    }
+
+    // Same as first test but with different JVM time zone
+    withDefaultTimeZone(ZoneId.of("Europe/Belgrade")) {
+      withSQLConf(SQLConf.USE_LOCAL_SESSION_CALENDAR.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        withConnection { conn =>
+          conn.prepareStatement(
+              "CREATE TABLE \"test\".\"timestampstemp\" (timestampntz TIMESTAMP," +
+                " timestamptz TIMESTAMP WITH TIME ZONE)")
+            .executeUpdate()
+        }
+
+        sql("INSERT INTO h2.test.timestampstemp SELECT * FROM h2.test.timestamps")
+        val df = sql("SELECT * from h2.test.timestamps")
+        val displayedResults = df.showString(20, 20)
+
+        assert(df.collect().length == 3)
+        // assert that the values shown to user are same as the values stored in table
+        assert(displayedResults.contains("2022-03-03 02:00:00|2022-03-02 18:00:00"))
+        assert(displayedResults.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
+        assert(displayedResults.contains("2022-03-01 02:00:00|2022-02-28 15:00:00"))
+
+        withConnection { conn =>
+          conn.prepareStatement("DROP TABLE \"test\".\"timestampstemp\"").executeUpdate()
+        }
       }
     }
   }
@@ -3102,8 +3131,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("Test timestamp filtering with calendar feature flag") {
     // Test timestamp filter with spark session time zone being equal to JVM time zone
     withSQLConf(SQLConf.USE_LOCAL_SESSION_CALENDAR.key -> "true",
-      SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
-      val df = sql("SELECT * from h2.test.timestamps where timestampntz = '2022-03-03 02:00:00'")
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      val df = sql("SELECT * FROM h2.test.timestamps where timestampntz = '2022-03-03 02:00:00'")
       val displayedResults = df.showString(20, 20)
 
       assert(df.collect().length == 1)
@@ -3114,10 +3143,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     // being different than JVM time zone
     withSQLConf(SQLConf.USE_LOCAL_SESSION_CALENDAR.key -> "true",
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "EET") {
-      // value pushed down should be 2022-03-02 02:00:00+02
-      val df = sql("SELECT * from h2.test.timestamps " +
+
+      // value pushed down will be "2022-02-02 16:00:00" because
+      // JVM time zone is America/Los_Angeles
+      val df = sql("SELECT * FROM h2.test.timestamps " +
         "where timestamptz = '2022-03-02 02:00:00+02:00'")
-      val df2 = sql("SELECT * from h2.test.timestamps " +
+      val df2 = sql("SELECT * FROM h2.test.timestamps " +
         "where timestamptz = '2022-03-02 04:00:00+04:00'")
 
       val displayedResults = df.showString(20, 20)
@@ -3128,6 +3159,32 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       assert(df2.collect().length == 1)
       assert(displayedResults.contains("2022-03-02 02:00:00|2022-03-02 02:00:00"))
       assert(displayedResults2.contains("2022-03-02 02:00:00|2022-03-02 02:00:00"))
+    }
+
+    // Similar to the previous test but with JVM time zone changed
+    withDefaultTimeZone(ZoneId.of("Europe/Belgrade")) {
+      withSQLConf(SQLConf.USE_LOCAL_SESSION_CALENDAR.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        // h2 driver node is still in America/Los_Angeles even though JVM time zone is changed.
+        // Therefore, in order to get same result set as in first test case, the value that
+        // is pushed down should be "2022-02-02 16:00:00". Since local JVM time zone is
+        // Europe/Belgrade, in filter we put is "2022-03-01 17:00:00+02:00". This will be
+        // equal to "2022-03-01 16:00:00+01:00" and only "2022-03-01 16:00:00" will be
+        // pushed down
+        val df = sql("SELECT * FROM h2.test.timestamps " +
+          "where timestamptz = '2022-03-01 17:00:00+02:00'")
+        val df2 = sql("SELECT * FROM h2.test.timestamps " +
+          "where timestamptz = '2022-03-01 19:00:00+04:00'")
+
+        val displayedResults = df.showString(20, 20)
+        val displayedResults2 = df.showString(20, 20)
+
+        // Both queries have to return same result
+        assert(df.collect().length == 1)
+        assert(df2.collect().length == 1)
+        assert(displayedResults.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
+        assert(displayedResults2.contains("2022-03-02 02:00:00|2022-03-01 16:00:00"))
+      }
     }
   }
 }

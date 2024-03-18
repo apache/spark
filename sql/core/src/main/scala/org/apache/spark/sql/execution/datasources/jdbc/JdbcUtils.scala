@@ -500,19 +500,24 @@ object JdbcUtils extends Logging with SQLConfHelper {
       }
 
     case TimestampType =>
-      (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val t = if (conf.useLocalSessionCalendar) {
-          rs.getTimestamp(pos + 1,
+      if (conf.useLocalSessionCalendar) {
+        (rs: ResultSet, row: InternalRow, pos: Int) =>
+          val t = rs.getTimestamp(pos + 1,
             Calendar.getInstance(TimeZone.getTimeZone(conf.sessionLocalTimeZone)))
-        } else {
-          rs.getTimestamp(pos + 1)
-        }
-
-        if (t != null) {
-          row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
-        } else {
-          row.update(pos, null)
-        }
+          if (t != null) {
+            row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
+          } else {
+            row.update(pos, null)
+          }
+      } else {
+        (rs: ResultSet, row: InternalRow, pos: Int) =>
+          val t = rs.getTimestamp(pos + 1)
+          if (t != null) {
+            row.setLong(pos, fromJavaTimestamp(dialect.convertJavaTimestampToTimestamp(t)))
+          } else {
+            row.update(pos, null)
+          }
+      }
 
     case TimestampNTZType if metadata.contains("logical_time_type") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -671,21 +676,23 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case TimestampType =>
       if (conf.datetimeJava8ApiEnabled) {
-        (stmt: PreparedStatement, row: Row, pos: Int) =>
-          if (conf.useLocalSessionCalendar) {
+        if (conf.useLocalSessionCalendar) {
+          (stmt: PreparedStatement, row: Row, pos: Int) =>
             stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))),
               Calendar.getInstance(TimeZone.getTimeZone(conf.sessionLocalTimeZone)))
-          } else {
+        } else {
+          (stmt: PreparedStatement, row: Row, pos: Int) =>
             stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
-          }
+        }
       } else {
-        (stmt: PreparedStatement, row: Row, pos: Int) =>
-          if (conf.useLocalSessionCalendar) {
+        if (conf.useLocalSessionCalendar) {
+          (stmt: PreparedStatement, row: Row, pos: Int) =>
             stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos),
               Calendar.getInstance(TimeZone.getTimeZone(conf.sessionLocalTimeZone)))
-          } else {
+        } else {
+          (stmt: PreparedStatement, row: Row, pos: Int) =>
             stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
-          }
+        }
       }
 
     case TimestampNTZType =>
