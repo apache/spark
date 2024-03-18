@@ -640,4 +640,11 @@ private[xml] trait TestXmlData {
       |
       |</ROW>
       |""".stripMargin :: Nil
+
+  val valueTagIsNullValue =
+    """
+      |<ROW>
+      |    1
+      |</ROW>
+      |""".stripMargin :: Nil
 }

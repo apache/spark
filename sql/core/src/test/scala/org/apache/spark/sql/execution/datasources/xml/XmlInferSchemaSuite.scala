@@ -613,4 +613,15 @@ class XmlInferSchemaSuite extends QueryTest with SharedSparkSession with TestXml
     assert(xmlDF.schema === expectedSchema)
     checkAnswer(xmlDF, expectedAns)
   }
+
+  test("value tag - equals to null value") {
+    // we don't consider options.nullValue during schema inference
+    val xmlDF = readData(valueTagIsNullValue, Map("nullValue" -> "1"))
+    val expectedSchema = new StructType()
+      .add(valueTagName, LongType)
+    val expectedAns = Seq(Row(null))
+    // nullValue option is used during parsing
+    assert(xmlDF.schema === expectedSchema)
+    checkAnswer(xmlDF, expectedAns)
+  }
 }
