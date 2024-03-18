@@ -20,6 +20,8 @@
 name: Build and test
 
 on:
+  schedule:
+    - cron: '0 15 * * *'
   workflow_call:
     inputs:
       java:
