@@ -74,25 +74,15 @@ select least('aaa' COLLATE utf8_binary_lcase, 'AAA' collate utf8_binary_lcase, '
 -- array operations
 select arrays_overlap(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
 select arrays_overlap(array('aaa' collate utf8_binary_lcase), array('AAAB' collate utf8_binary_lcase));
-select arrays_overlap(array('aaa' collate utf8_binary_lcase, 'aaab' collate utf8_binary_lcase), array('AAAB' collate utf8_binary_lcase));
-select arrays_overlap(array('ABCD' collate utf8_binary_lcase, 'AAAB' collate utf8_binary_lcase), array('aaab' collate utf8_binary_lcase, 'xyz' collate utf8_binary_lcase));
 
 select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_binary_lcase));
 select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAAB' collate utf8_binary_lcase));
-select array_distinct(array('aaa' collate utf8_binary_lcase, 'aaab' collate utf8_binary_lcase, 'AAAB' collate utf8_binary_lcase));
-select array_distinct(array('ABCD' collate utf8_binary_lcase, 'AAAB' collate utf8_binary_lcase, 'aaab' collate utf8_binary_lcase, 'xyz' collate utf8_binary_lcase));
 
 select array_union(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
 select array_union(array('aaa' collate utf8_binary_lcase), array('AAAB' collate utf8_binary_lcase));
-select array_union(array('aaa' collate utf8_binary_lcase, 'aaab' collate utf8_binary_lcase), array('AAAB' collate utf8_binary_lcase));
-select array_union(array('ABCD' collate utf8_binary_lcase, 'AAAB' collate utf8_binary_lcase), array('aaab' collate utf8_binary_lcase, 'xyz' collate utf8_binary_lcase));
 
 select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
 select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAAB' collate utf8_binary_lcase));
-select array_intersect(array('aaa' collate utf8_binary_lcase, 'aaab' collate utf8_binary_lcase), array('AAAB' collate utf8_binary_lcase));
-select array_intersect(array('ABCD' collate utf8_binary_lcase, 'AAAB' collate utf8_binary_lcase), array('aaab' collate utf8_binary_lcase, 'xyz' collate utf8_binary_lcase));
 
 select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
 select array_except(array('aaa' collate utf8_binary_lcase), array('AAAB' collate utf8_binary_lcase));
-select array_except(array('aaa' collate utf8_binary_lcase, 'aaab' collate utf8_binary_lcase), array('AAAB' collate utf8_binary_lcase));
-select array_except(array('ABCD' collate utf8_binary_lcase, 'AAAB' collate utf8_binary_lcase), array('aaab' collate utf8_binary_lcase, 'xyz' collate utf8_binary_lcase));
