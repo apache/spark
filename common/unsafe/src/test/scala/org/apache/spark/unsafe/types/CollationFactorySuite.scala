@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.types
 
+import scala.collection.parallel.immutable.ParSeq
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.SparkException
@@ -136,6 +137,19 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
         }
       }
       assert(result == testCase.expectedResult)
+    })
+  }
+
+  test("test concurrently generating collation keys") {
+    // generating ICU sort keys is not thread-safe by default so this should fail
+    // if we don't handle the concurrency properly on Collator level
+
+    (0 to 10).foreach(_ => {
+      val collator = fetchCollation("UNICODE").collator
+
+      ParSeq(0 to 100).foreach { _ =>
+        collator.getCollationKey("aaa")
+      }
     })
   }
 }

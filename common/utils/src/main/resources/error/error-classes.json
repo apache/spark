@@ -3522,12 +3522,6 @@
     ],
     "sqlState" : "42802"
   },
-  "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
-    "message" : [
-      "Store does not support multiple values per key"
-    ],
-    "sqlState" : "42802"
-  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -3699,12 +3693,6 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
-  },
-  "TWS_VALUE_SHOULD_NOT_BE_NULL" : {
-    "message" : [
-      "New value should be non-null for <typeOfState>"
-    ],
-    "sqlState" : "22004"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -4556,6 +4544,13 @@
       "To tolerate the error on drop use DROP VARIABLE IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "VARIANT_SIZE_LIMIT" : {
+    "message" : [
+      "Cannot build variant bigger than <sizeLimit> in <functionName>.",
+      "Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big)."
+    ],
+    "sqlState" : "22023"
   },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -7751,16 +7746,6 @@
       "Datatype not supported <dt>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3193" : {
-    "message" : [
-      "Creating multiple column families with HDFSBackedStateStoreProvider is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3197" : {
-    "message" : [
-      "Failed to create column family with reserved name=<colFamilyName>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3198" : {
     "message" : [
       "Cannot grow BufferHolder by size <neededSize> because the size is negative"
@@ -7939,11 +7924,6 @@
   "_LEGACY_ERROR_TEMP_3233" : {
     "message" : [
       "cannot generate code for unsupported type: <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3234" : {
-    "message" : [
-      "Unsupported input type <other>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3235" : {

@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
+import org.apache.spark.variant._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -43,10 +48,16 @@ case class ParseJson(child: Expression) extends UnaryExpression
   override def prettyName: String = "parse_json"
 
   protected override def nullSafeEval(input: Any): Any = {
-    // A dummy implementation: the value is the raw bytes of the input string. This is not the final
-    // implementation, but only intended for debugging.
-    // TODO(SPARK-45891): Have an actual parse_json implementation.
-    new VariantVal(input.asInstanceOf[UTF8String].toString.getBytes, Array())
+    try {
+      val v = VariantBuilder.parseJson(input.toString)
+      new VariantVal(v.getValue, v.getMetadata)
+    } catch {
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json")
+      case NonFatal(e) =>
+        throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+        input.toString, BadRecordException(() => input.asInstanceOf[UTF8String], cause = e))
+    }
   }
 
   override protected def withNewChildInternal(newChild: Expression): ParseJson =

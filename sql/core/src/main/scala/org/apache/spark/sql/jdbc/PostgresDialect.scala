@@ -58,10 +58,15 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
         // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
         Some(StringType)
       case Types.TIMESTAMP
-        if "timestamptz".equalsIgnoreCase(typeName) || "timetz".equalsIgnoreCase(typeName) =>
+        if "timestamptz".equalsIgnoreCase(typeName) =>
         // timestamptz represents timestamp with time zone, currently it maps to Types.TIMESTAMP.
         // We need to change to Types.TIMESTAMP_WITH_TIMEZONE if the upstream changes.
         Some(TimestampType)
+      case Types.TIME if "timetz".equalsIgnoreCase(typeName) =>
+        // timetz represents time with time zone, currently it maps to Types.TIME.
+        // We need to change to Types.TIME_WITH_TIMEZONE if the upstream changes.
+        Some(TimestampType)
+      case Types.OTHER if "void".equalsIgnoreCase(typeName) => Some(NullType)
       case Types.OTHER => Some(StringType)
       case _ if "text".equalsIgnoreCase(typeName) => Some(StringType) // sqlType is Types.VARCHAR
       case Types.ARRAY =>

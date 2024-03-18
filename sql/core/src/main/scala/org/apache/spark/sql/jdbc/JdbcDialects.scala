@@ -781,6 +781,13 @@ abstract class JdbcDialect extends Serializable with Logging {
   def getFullyQualifiedQuotedTableName(ident: Identifier): String = {
     (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
   }
+
+  /**
+   * Return TimestampType/TimestampNTZType based on the metadata.
+   */
+  protected final def getTimestampType(md: Metadata): DataType = {
+    JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
+  }
 }
 
 /**

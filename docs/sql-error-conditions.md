@@ -2179,12 +2179,6 @@ Failed to perform column family operation=`<operationName>` with invalid name=`<
 The handle has not been initialized for this StatefulProcessor.
 Please only use the StatefulProcessor within the transformWithState operator.
 
-### STATE_STORE_MULTIPLE_VALUES_PER_KEY
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Store does not support multiple values per key
-
 ### STATE_STORE_UNSUPPORTED_OPERATION
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -2341,12 +2335,6 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
-
-### TWS_VALUE_SHOULD_NOT_BE_NULL
-
-[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-New value should be non-null for `<typeOfState>`
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
@@ -2743,6 +2731,13 @@ Choose a different name, or drop or replace the existing variable.
 The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VARIABLE IF EXISTS.
+
+### VARIANT_SIZE_LIMIT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot build variant bigger than `<sizeLimit>` in `<functionName>`.
+Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big).
 
 ### VIEW_ALREADY_EXISTS
 
