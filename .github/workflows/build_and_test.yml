@@ -282,7 +282,7 @@ jobs:
       shell: 'script -q -e -c "bash {0}"'
       run: |
         export SCALA_PROFILE="scala2.13"
-        export GITHUB_PREV_SHA=""
+        unset GITHUB_ACTIONS
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
           export PATH=$PATH:$HOME/miniconda/bin
           export SKIP_PACKAGING=false
