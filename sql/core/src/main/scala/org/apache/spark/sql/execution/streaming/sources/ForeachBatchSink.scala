@@ -45,13 +45,19 @@ class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: Expr
     } catch {
       // The user code can throw any type of exception.
       case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
-        throw new SparkException(
-          errorClass = "FOREACH_BATCH_USER_FUNCTION_ERROR",
-          messageParameters = Map.empty,
-          cause = e)
+        throw ForeachBatchUserFuncException(e)
     }
   }
 }
+
+/**
+ * Exception that wraps the exception thrown in the user provided function in ForeachBatch sink.
+ */
+private[streaming] case class ForeachBatchUserFuncException(cause: Throwable)
+  extends SparkException(
+    errorClass = "FOREACH_BATCH_USER_FUNCTION_ERROR",
+    messageParameters = Map("reason" -> Option(cause.getMessage).getOrElse("")),
+    cause = cause)
 
 /**
  * Interface that is meant to be extended by Python classes via Py4J.

@@ -296,15 +296,15 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson(""""abcd"""")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3251",
-      parameters = Map("other" -> "abcd"))
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> "abcd"))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         DataType.fromJson("""{"abcd":"a"}""")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3251",
-      parameters = Map("other" -> """{"abcd":"a"}"""))
+      errorClass = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> """{"abcd":"a"}"""))
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {

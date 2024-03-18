@@ -379,10 +379,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private boolean matchAt(final UTF8String s, int pos, int collationId) {
-    if (s.numBytes + pos > numBytes || pos < 0) {
+    if (s.numChars() + pos > this.numChars() || pos < 0) {
       return false;
     }
-    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
+    if (s.numBytes == 0 || this.numBytes == 0) {
+      return s.numBytes == 0;
+    }
+    return CollationFactory.getStringSearch(this.substring(pos, pos + s.numChars()),
+      s, collationId).last() == 0;
   }
 
   public boolean startsWith(final UTF8String prefix) {
@@ -1456,7 +1460,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Binary comparison of two UTF8String. Can only be used for default UCS_BASIC collation.
+   * Binary comparison of two UTF8String. Can only be used for default UTF8_BINARY collation.
    */
   public int binaryCompare(final UTF8String other) {
     return ByteArray.compareBinary(
