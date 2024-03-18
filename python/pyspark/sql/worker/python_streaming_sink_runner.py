@@ -113,7 +113,7 @@ def main(infile: IO, outfile: IO) -> None:
                 write_int(0, outfile)
                 outfile.flush()
         except Exception as e:
-            error_msg = 'data source {} throw exception: {}'.format(data_source.name, e)
+            error_msg = "data source {} throw exception: {}".format(data_source.name, e)
             raise PySparkRuntimeError(
                 error_class="PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
                 message_parameters={"action": "commitOrAbort", "error": error_msg},

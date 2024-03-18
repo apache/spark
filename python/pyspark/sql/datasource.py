@@ -527,6 +527,7 @@ class DataSourceWriter(ABC):
         """
         ...
 
+
 class DataSourceStreamWriter(ABC):
     """
     A base class for data stream writers. Data stream writers are responsible for writing
