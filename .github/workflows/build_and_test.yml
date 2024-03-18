@@ -181,7 +181,25 @@ jobs:
           - branch-3.5
         modules:
           - >-
+            pyspark-sql, pyspark-resource, pyspark-testing
+          - >-
+            pyspark-core, pyspark-errors, pyspark-streaming
+          - >-
+            pyspark-mllib, pyspark-ml, pyspark-ml-connect
+          - >-
+            pyspark-pandas
+          - >-
             pyspark-pandas-slow
+          - >-
+            pyspark-connect
+          - >-
+            pyspark-pandas-connect-part0
+          - >-
+            pyspark-pandas-connect-part1
+          - >-
+            pyspark-pandas-connect-part2
+          - >-
+            pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       PYTHON_TO_TEST: ''
@@ -270,10 +288,10 @@ jobs:
           echo "Python Packaging Tests Enabled!"
         fi
         if [ ! -z "$PYTHON_TO_TEST" ]; then
-          ./dev/run-tests --parallelism 1 --python-executables "$PYTHON_TO_TEST"
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
         else
           # For branch-3.5 and below, it uses the default Python versions.
-          ./dev/run-tests --parallelism 1
+          ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
         fi
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
