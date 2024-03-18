@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.text.{DecimalFormat, DecimalFormatSymbols, SimpleDateFormat}
 import java.util.{Calendar, Locale, TimeZone}
+
 import org.scalatest.exceptions.TestFailedException
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
