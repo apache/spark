@@ -2853,6 +2853,20 @@ def mask(
 mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
+def collate(col: "ColumnOrName", collation: str) -> Column:
+    return _invoke_function("collate", _to_col(col), lit(collation))
+
+
+collate.__doc__ = pysparkfuncs.collate.__doc__
+
+
+def collation(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("collation", col)
+
+
+collation.__doc__ = pysparkfuncs.collation.__doc__
+
+
 # Date/Timestamp functions
 
 

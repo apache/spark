@@ -25,7 +25,7 @@ import java.util.Properties
 
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
+import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, NullType, ShortType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -160,6 +160,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "type not_null_text)").executeUpdate()
     conn.prepareStatement("INSERT INTO custom_type (type_array, type) VALUES" +
       "('{1,fds,fdsa}','fdasfasdf')").executeUpdate()
+
+    conn.prepareStatement(
+      "CREATE FUNCTION test_null() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE plpgsql")
+      .executeUpdate()
 
   }
 
@@ -456,5 +460,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(negativeInfinity.getTime == minTimeStamp)
     assert(infinitySeq.head.getTime == maxTimestamp)
     assert(negativeInfinitySeq.head.getTime == minTimeStamp)
+  }
+
+
+  test("SPARK-47407: Support java.sql.Types.NULL for NullType") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT test_null()")
+      .load()
+    assert(df.schema.head.dataType === NullType)
+    checkAnswer(df, Seq(Row(null)))
   }
 }
