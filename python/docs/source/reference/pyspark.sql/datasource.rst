@@ -16,36 +16,29 @@
     under the License.
 
 
-============
-Core Classes
-============
-.. currentmodule:: pyspark.sql
+==================
+Python Data Source
+==================
+
+.. currentmodule:: pyspark.sql.datasource
 
 .. autosummary::
     :toctree: api/
 
-    SparkSession
-    Catalog
-    DataFrame
-    Column
-    Observation
-    Row
-    GroupedData
-    PandasCogroupedOps
-    DataFrameNaFunctions
-    DataFrameStatFunctions
-    Window
-    DataFrameReader
-    DataFrameWriter
-    DataFrameWriterV2
-    UDFRegistration
-    UDTFRegistration
-    udf.UserDefinedFunction
-    udtf.UserDefinedTableFunction
-    datasource.DataSource
-    datasource.DataSourceReader
-    datasource.DataSourceStreamReader
-    datasource.DataSourceWriter
-    datasource.DataSourceRegistration
-    datasource.InputPartition
-    datasource.WriterCommitMessage
+    DataSource.name
+    DataSource.reader
+    DataSource.schema
+    DataSource.streamReader
+    DataSource.writer
+    DataSourceReader.partitions
+    DataSourceReader.read
+    DataSourceRegistration.register
+    DataSourceStreamReader.commit
+    DataSourceStreamReader.initialOffset
+    DataSourceStreamReader.latestOffset
+    DataSourceStreamReader.partitions
+    DataSourceStreamReader.read
+    DataSourceStreamReader.stop
+    DataSourceWriter.abort
+    DataSourceWriter.commit
+    DataSourceWriter.write
