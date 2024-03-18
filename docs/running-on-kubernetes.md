@@ -1927,10 +1927,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.4.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.5.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.4.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.5.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

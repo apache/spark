@@ -117,7 +117,7 @@ public final class CollationFactory {
     // No custom comparators will be used for this collation.
     // Instead, we rely on byte for byte comparison.
     collationTable[0] = new Collation(
-      "UCS_BASIC",
+      "UTF8_BINARY",
       null,
       UTF8String::binaryCompare,
       "1.0",
@@ -127,7 +127,7 @@ public final class CollationFactory {
     // Case-insensitive UTF8 binary collation.
     // TODO: Do in place comparisons instead of creating new strings.
     collationTable[1] = new Collation(
-      "UCS_BASIC_LCASE",
+      "UTF8_BINARY_LCASE",
       null,
       (s1, s2) -> s1.toLowerCase().binaryCompare(s2.toLowerCase()),
       "1.0",
@@ -138,11 +138,13 @@ public final class CollationFactory {
     collationTable[2] = new Collation(
       "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true);
     collationTable[2].collator.setStrength(Collator.TERTIARY);
+    collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
       "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
     collationTable[3].collator.setStrength(Collator.SECONDARY);
+    collationTable[3].collator.freeze();
 
     for (int i = 0; i < collationTable.length; i++) {
       collationNameToIdMap.put(collationTable[i].collationName, i);

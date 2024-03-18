@@ -701,7 +701,8 @@ class DataFrame:
                     _c = self[-c - 1].desc()
                 else:
                     raise PySparkIndexError(
-                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                        error_class="ZERO_INDEX",
+                        message_parameters={},
                     )
             else:
                 _c = c  # type: ignore[assignment]
@@ -2247,9 +2248,6 @@ def _test() -> None:
 
     # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
     del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
-
-    # TODO(SPARK-43435): should reenable this test
-    del pyspark.sql.connect.dataframe.DataFrame.writeStream.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

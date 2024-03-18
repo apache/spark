@@ -42,7 +42,7 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
         exception = intercept[SparkIllegalArgumentException] {
           convertIncompatiblePattern(s"yyyy-MM-dd $l G")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3257",
+        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
         parameters = Map("c" -> l.toString))
     }
     unsupportedLetters.foreach { l =>
@@ -50,30 +50,34 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
         exception = intercept[SparkIllegalArgumentException] {
           convertIncompatiblePattern(s"yyyy-MM-dd $l G")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3258",
-        parameters = Map("c" -> l.toString))
+        errorClass = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+        parameters = Map(
+          "c" -> l.toString,
+          "pattern" -> s"yyyy-MM-dd $l G"))
     }
     unsupportedLettersForParsing.foreach { l =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
           DateTimeFormatterHelper.convertIncompatiblePattern(s"$l", isParsing = true)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3258",
-        parameters = Map("c" -> l.toString))
+        errorClass = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+        parameters = Map(
+          "c" -> l.toString,
+          "pattern" -> s"$l"))
     }
     unsupportedPatternLengths.foreach { style =>
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
           convertIncompatiblePattern(s"yyyy-MM-dd $style")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3259",
-        parameters = Map("style" -> style.head.toString))
+        errorClass = "INVALID_DATETIME_PATTERN.LENGTH",
+        parameters = Map("pattern" -> style))
       checkError(
         exception = intercept[SparkIllegalArgumentException] {
           convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3259",
-        parameters = Map("style" -> style.head.toString))
+        errorClass = "INVALID_DATETIME_PATTERN.LENGTH",
+        parameters = Map("pattern" -> style))
     }
     assert(convertIncompatiblePattern("yyyy-MM-dd EEEE") === "uuuu-MM-dd EEEE")
     assert(convertIncompatiblePattern("yyyy-MM-dd'e'HH:mm:ss") === "uuuu-MM-dd'e'HH:mm:ss")
