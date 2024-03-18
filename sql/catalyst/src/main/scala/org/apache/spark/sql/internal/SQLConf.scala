@@ -757,6 +757,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  val DEFAULT_COLLATION =
+    buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
+      .doc("Default collation when considering casting rules.")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("UTF8_BINARY")
+
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
       .internal()
@@ -4990,6 +4997,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def collationEnabled: Boolean = getConf(COLLATION_ENABLED)
+
+  def defaultCollation: String = getConf(DEFAULT_COLLATION)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 

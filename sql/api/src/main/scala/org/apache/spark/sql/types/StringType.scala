@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -31,7 +32,8 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   /**
    * Returns whether assigned collation is the default spark collation (UTF8_BINARY).
    */
-  def isDefaultCollation: Boolean = collationId == CollationFactory.DEFAULT_COLLATION_ID
+  def isDefaultCollation: Boolean =
+    collationId == CollationFactory.collationNameToId(SqlApiConf.get.defaultCollation)
 
   /**
    * Binary collation implies that strings are considered equal only if they are
@@ -42,11 +44,21 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   def isBinaryCollation: Boolean = CollationFactory.fetchCollation(collationId).isBinaryCollation
 
   /**
+   * Spark internal collation implies that strings are considered equal only if they are
+   * byte for byte equal. E.g. all accent or case-insensitive collations are considered non-binary.
+   * Also their comparison does not require ICU library calls, as ordering follows
+   * spark internal implementation. If this field is true, byte level operations can be
+   * used against this datatype (e.g. for equality, hashing and sorting).
+   */
+  def isSparkInternalCollation: Boolean =
+    collationId == CollationFactory.SPARK_INTERNAL_COLLATION_ID
+
+  /**
    * Type name that is shown to the customer.
    * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (isDefaultCollation) "string"
+    if (isSparkInternalCollation) "string"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
   override def equals(obj: Any): Boolean =

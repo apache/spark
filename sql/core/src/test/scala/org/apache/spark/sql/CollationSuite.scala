@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -660,5 +661,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
+  }
+
+  test("SPARK-47431: Default collation set to UNICODE") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      // scalastyle:off println
+        println(SqlApiConf.get.defaultCollation)
+      // scalastyle:on println
+      checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UNICODE")))
+    }
   }
 }
