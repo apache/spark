@@ -891,7 +891,16 @@ case class MapFromEntries(child: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(map[, ascendingOrder]) - Sorts the input map in ascending or descending order
-      according to the natural ordering of the map keys.
+      according to the natural ordering of the map keys. The sorting algorithm used is
+      an adaptive, stable and iterative merge sort algorithm. If the input map is empty,
+      function returns an empty map.
+  """,
+  arguments =
+    """
+    Arguments:
+      * map - an expression. The map that will be sorted.
+      * ascendingOrder - an expression. The ordering in which the map will be sorted.
+          This can be either ascending or descending element order.
   """,
   examples = """
     Examples:
@@ -961,19 +970,13 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
       PhysicalDataType.ordering(keyType).reverse
     }
 
-    val sortedKeys = Array
-      .tabulate(numElements)(i => (keys.get(i, keyType).asInstanceOf[Any], i))
+    val sortedMap = Array
+      .tabulate(numElements)(i => (keys.get(i, keyType).asInstanceOf[Any],
+        values.get(i, valueType).asInstanceOf[Any]))
       .sortBy(_._1)(ordering)
 
-    val newKeys = new Array[Any](numElements)
-    val newValues = new Array[Any](numElements)
-
-    sortedKeys.zipWithIndex.foreach { case (elem, index) =>
-      newKeys(index) = keys.get(elem._2, keyType)
-      newValues(index) = values.get(elem._2, valueType)
-    }
-
-    new ArrayBasedMapData(new GenericArrayData(newKeys), new GenericArrayData(newValues))
+    new ArrayBasedMapData(new GenericArrayData(sortedMap.map(_._1)),
+      new GenericArrayData(sortedMap.map(_._2)))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
