@@ -3211,7 +3211,7 @@ class DataSourceV2SQLSuiteV1Filter
            |)
            |using parquet
            |OPTIONS (
-           |  from = 0,
+           |  'from' = 0,
            |  to = 1)
            |COMMENT 'This is a comment'
            |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2')

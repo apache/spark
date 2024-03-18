@@ -121,7 +121,7 @@ struct<>
 
 
 -- !query
-SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1, "value")
+SELECT nvl(st.col1, "value"), count(*) FROM tempView1 GROUP BY nvl(st.col1, "value")
 -- !query schema
 struct<nvl(st.col1, value):string,FROM:bigint>
 -- !query output

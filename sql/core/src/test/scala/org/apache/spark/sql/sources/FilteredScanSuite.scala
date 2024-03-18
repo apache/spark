@@ -143,7 +143,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
         |CREATE TEMPORARY VIEW oneToTenFiltered
         |USING org.apache.spark.sql.sources.FilteredScanSource
         |OPTIONS (
-        |  from '1',
+        |  'from' '1',
         |  to '10'
         |)
       """.stripMargin)

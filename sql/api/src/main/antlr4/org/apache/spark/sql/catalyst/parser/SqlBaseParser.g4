@@ -906,7 +906,7 @@ namedExpression
     ;
 
 namedExpressionSeq
-    : namedExpression (COMMA namedExpression)*
+    : namedExpression (COMMA namedExpression)* COMMA?
     ;
 
 partitionFieldList
@@ -1734,7 +1734,6 @@ nonReserved
     | FOREIGN
     | FORMAT
     | FORMATTED
-    | FROM
     | FUNCTION
     | FUNCTIONS
     | GENERATED

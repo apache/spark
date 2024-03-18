@@ -78,7 +78,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
            |)
            |$defaultUsing
            |OPTIONS (
-           |  from = 0,
+           |  'from' = 0,
            |  to = 1,
            |  via = 2)
            |COMMENT 'This is a comment'

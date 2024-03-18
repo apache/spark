@@ -269,7 +269,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
            |WHERE
            | id NOT IN (SELECT * FROM deleted_id WHERE value IS NOT NULL)
            | AND
-           | EXISTS (SELECT 1 FROM FROM deleted_dep WHERE dep = deleted_dep.value)
+           | EXISTS (SELECT 1 FROM deleted_dep WHERE dep = deleted_dep.value)
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(5, 2, "hardware") :: Nil)
@@ -279,7 +279,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
            |WHERE
            | t.id NOT IN (SELECT * FROM deleted_id WHERE value IS NOT NULL)
            | OR
-           | EXISTS (SELECT 1 FROM FROM deleted_dep WHERE t.dep = deleted_dep.value)
+           | EXISTS (SELECT 1 FROM deleted_dep WHERE t.dep = deleted_dep.value)
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)

@@ -108,7 +108,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           |CREATE TEMPORARY VIEW t1
           |USING org.apache.spark.sql.sources.SimpleScanSource
           |OPTIONS (
-          |  From '1',
+          |  'From' '1',
           |  To '10')
         """.stripMargin)
       sparkContext.parallelize(1 to 10).toDF("a").createOrReplaceTempView("t2")
@@ -144,7 +144,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           |CREATE TEMPORARY VIEW t1
           |USING org.apache.spark.sql.sources.SimpleScanSource
           |OPTIONS (
-          |  From '1',
+          |  'From' '1',
           |  To '10')
         """.stripMargin)
       checkError(
@@ -404,7 +404,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         |CREATE TEMPORARY VIEW oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
-        |  From '1',
+        |  'From' '1',
         |  To '10'
         |)
       """.stripMargin)

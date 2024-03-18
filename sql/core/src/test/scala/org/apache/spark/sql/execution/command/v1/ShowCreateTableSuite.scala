@@ -51,7 +51,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |)
            |using parquet
            |OPTIONS (
-           |  from = 0,
+           |  'from' = 0,
            |  to = 1,
            |  via = 2)
            |COMMENT 'This is a comment'

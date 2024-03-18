@@ -63,7 +63,7 @@ class PrunedScanSuite extends DataSourceTest with SharedSparkSession {
         |CREATE TEMPORARY VIEW oneToTenPruned
         |USING org.apache.spark.sql.sources.PrunedScanSource
         |OPTIONS (
-        |  from '1',
+        |  'from' '1',
         |  to '10'
         |)
       """.stripMargin)

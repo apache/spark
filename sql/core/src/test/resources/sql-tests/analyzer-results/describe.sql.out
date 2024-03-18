@@ -22,7 +22,7 @@ CreateViewCommand `temp_v`, SELECT * FROM t, false, false, LocalTempView, true
 CREATE TEMPORARY VIEW temp_Data_Source_View
   USING org.apache.spark.sql.sources.DDLScanSource
   OPTIONS (
-    From '1',
+    'From' '1',
     To '10',
     Table 'test1')
 -- !query analysis

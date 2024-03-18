@@ -157,7 +157,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
         |CREATE TEMPORARY VIEW oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
-        |  From '1',
+        |  'From' '1',
         |  To '10',
         |  option_with_underscores 'someval',
         |  option.with.dots 'someval'
@@ -191,7 +191,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
         |)
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
-        |  From '1',
+        |  'From' '1',
         |  To '10',
         |  option_with_underscores 'someval',
         |  option.with.dots 'someval'
@@ -355,7 +355,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
         |CREATE TEMPORARY VIEW oneToTenDef
         |USING org.apache.spark.sql.sources
         |OPTIONS (
-        |  from '1',
+        |  'from' '1',
         |  to '10'
         |)
       """.stripMargin)
@@ -375,7 +375,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
              |CREATE $tableType relationProviderWithSchema (i string)
              |USING org.apache.spark.sql.sources.SimpleScanSource
              |OPTIONS (
-             |  From '1',
+             |  'From' '1',
              |  To '10'
              |)
            """.stripMargin)
@@ -389,7 +389,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
              |CREATE $tableType schemaRelationProviderWithoutSchema
              |USING org.apache.spark.sql.sources.AllDataTypesScanSource
              |OPTIONS (
-             |  From '1',
+             |  'From' '1',
              |  To '10'
              |)
            """.stripMargin)
@@ -407,7 +407,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
              |CREATE $tableType $tableName
              |USING org.apache.spark.sql.sources.SimpleScanSource
              |OPTIONS (
-             |  From '1',
+             |  'From' '1',
              |  To '10'
              |)
            """.stripMargin)
@@ -422,7 +422,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
        |CREATE TEMPORARY VIEW student(name string comment "SN", age int comment "SA", grade int)
        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
        |OPTIONS (
-       |  from '1',
+       |  'from' '1',
        |  to '10',
        |  option_with_underscores 'someval',
        |  option.with.dots 'someval'

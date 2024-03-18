@@ -9,7 +9,7 @@ CREATE TEMPORARY VIEW temp_v AS SELECT * FROM t;
 CREATE TEMPORARY VIEW temp_Data_Source_View
   USING org.apache.spark.sql.sources.DDLScanSource
   OPTIONS (
-    From '1',
+    'From' '1',
     To '10',
     Table 'test1');
 

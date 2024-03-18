@@ -833,7 +833,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           |CREATE TEMPORARY TABLE tab1
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
-          |  From '1',
+          |  'From' '1',
           |  To '10',
           |  Table 'test1'
           |)
@@ -862,7 +862,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           |CREATE TEMPORARY VIEW view1
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
-          |  From '1',
+          |  'From' '1',
           |  To '10',
           |  Table 'test1'
           |)
@@ -907,7 +907,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           |CREATE TEMPORARY TABLE tab1
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
-          |  From '1',
+          |  'From' '1',
           |  To '10',
           |  Table 'test1'
           |)
@@ -918,7 +918,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           |CREATE TEMPORARY TABLE tab2
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
-          |  From '1',
+          |  'From' '1',
           |  To '10',
           |  Table 'test1'
           |)
@@ -943,7 +943,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           |CREATE TEMPORARY VIEW view1
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
-          |  From '1',
+          |  'From' '1',
           |  To '10',
           |  Table 'test1'
           |)
@@ -954,7 +954,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
           |CREATE TEMPORARY VIEW view2
           |USING org.apache.spark.sql.sources.DDLScanSource
           |OPTIONS (
-          |  From '1',
+          |  'From' '1',
           |  To '10',
           |  Table 'test1'
           |)
@@ -1086,7 +1086,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
        |CREATE TEMPORARY VIEW tab1
        |USING org.apache.spark.sql.sources.DDLScanSource
        |OPTIONS (
-       |  From '1',
+       |  'From' '1',
        |  To '10',
        |  Table 'test1'
        |)
