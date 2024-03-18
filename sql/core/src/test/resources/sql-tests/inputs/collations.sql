@@ -63,6 +63,10 @@ select count(*) from t1 group by c1.utf8_binary_lcase;
 
 drop table t1;
 
+-- array function tests
+select array_contains(ARRAY('aaa' collate utf8_binary_lcase),'AAA' collate utf8_binary_lcase);
+select array_position(ARRAY('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase),'BBB' collate utf8_binary_lcase);
+
 -- utility
 select nullif('aaa' COLLATE utf8_binary_lcase, 'AAA' COLLATE utf8_binary_lcase);
 select least('aaa' COLLATE utf8_binary_lcase, 'AAA' collate utf8_binary_lcase, 'a' collate utf8_binary_lcase);

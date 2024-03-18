@@ -252,6 +252,20 @@ DropTable false, false
 
 
 -- !query
+select array_contains(ARRAY('aaa' collate utf8_binary_lcase),'AAA' collate utf8_binary_lcase)
+-- !query analysis
+Project [array_contains(array(collate(aaa, utf8_binary_lcase)), collate(AAA, utf8_binary_lcase)) AS array_contains(array(collate(aaa)), collate(AAA))#x]
++- OneRowRelation
+
+
+-- !query
+select array_position(ARRAY('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase),'BBB' collate utf8_binary_lcase)
+-- !query analysis
+Project [array_position(array(collate(aaa, utf8_binary_lcase), collate(bbb, utf8_binary_lcase)), collate(BBB, utf8_binary_lcase)) AS array_position(array(collate(aaa), collate(bbb)), collate(BBB))#xL]
++- OneRowRelation
+
+
+-- !query
 select nullif('aaa' COLLATE utf8_binary_lcase, 'AAA' COLLATE utf8_binary_lcase)
 -- !query analysis
 Project [nullif(collate(aaa, utf8_binary_lcase), collate(AAA, utf8_binary_lcase)) AS nullif(collate(aaa), collate(AAA))#x]
