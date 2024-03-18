@@ -436,6 +436,17 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      // INT96 timestamp doesn't have a logical type, here we check the physical type instead.
+      case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT96 =>
+        new ParquetPrimitiveConverter(updater) {
+          // Converts nanosecond timestamps stored as INT96.
+          // TimestampNTZ type does not require rebasing due to its lack of time zone context.
+          override def addBinary(value: Binary): Unit = {
+            val julianMicros = ParquetRowConverter.binaryToSQLTimestamp(value)
+            this.updater.setLong(julianMicros)
+          }
+        }
+
       case TimestampNTZType
         if canReadAsTimestampNTZ(parquetType) &&
           parquetType.getLogicalTypeAnnotation

@@ -176,7 +176,8 @@ public class ParquetVectorUpdaterFactory {
       }
       case INT96 -> {
         if (sparkType == DataTypes.TimestampNTZType) {
-          convertErrorForTimestampNTZ(typeName.name());
+          // TimestampNTZ type does not require rebasing due to its lack of time zone context.
+          return new BinaryToSQLTimestampUpdater();
         } else if (sparkType == DataTypes.TimestampType) {
           final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
           if (!shouldConvertTimestamps()) {

@@ -185,7 +185,25 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-36182: can't read TimestampLTZ as TimestampNTZ") {
+  test("Allow reading INT96 timestamp type as TimestampNTZ") {
+    Seq(true, false).foreach { enableVectorizedReader =>
+      withSQLConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> enableVectorizedReader.toString,
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        withTempPath { dir =>
+          sql("select timestamp_ntz'2021-02-03 00:00:00' as ts").write.parquet(dir.getCanonicalPath)
+          sql("select timestamp'2021-02-02 16:00:00' as ts")
+            .write.mode("append").parquet(dir.getCanonicalPath)
+          val df = spark.read.schema("ts timestamp_ntz").parquet(dir.getCanonicalPath)
+          checkAnswer(df,
+            Seq(Row(LocalDateTime.parse("2021-02-03T00:00:00")),
+              Row(LocalDateTime.parse("2021-02-03T00:00:00"))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-36182: can't read INT64 TimestampLTZ as TimestampNTZ") {
     val data = (1 to 1000).map { i =>
       val ts = new java.sql.Timestamp(i)
       Row(ts)
@@ -193,7 +211,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     val actualSchema = StructType(Seq(StructField("time", TimestampType, false)))
     val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
 
-    Seq("INT96", "TIMESTAMP_MICROS", "TIMESTAMP_MILLIS").foreach { tsType =>
+    Seq("TIMESTAMP_MICROS", "TIMESTAMP_MILLIS").foreach { tsType =>
       Seq(true, false).foreach { dictionaryEnabled =>
         withSQLConf(
             SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType,
