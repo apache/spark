@@ -98,84 +98,12 @@ class ForeachBatchSinkSuite extends StreamTest {
       check(in = 2)(out = (0, 2L), (1, 1L)))
   }
 
-  test("foreachBatch with stateful query and batch operations in complete mode") {
-    val mem = MemoryStream[Int]
-    val ds = mem.toDF()
-      .select($"value" as "key")
-      .groupBy("key")
-      .agg(count("*") as "value")
-      .select(col("value").cast("int").as("value"))
-      .as[Int]
-
-    val tester = new ForeachBatchTester[Int](mem)
-
-    val writer: (Dataset[Int], Long) => Unit = { case (df, batchId) =>
-      // verify that the input dataframe is cached for stateful query
-      assert(spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isDefined)
-
-      val newDF = df
-        .map(_ + 1)
-        .repartition(1)
-        .sort(Column("value").desc)
-      tester.record(batchId, newDF)
-
-      // just run another simple query against cached DF to confirm they don't conflict each other
-      val curValues = df.collect()
-      val newValues = df.map(_ + 2).collect()
-      assert(curValues.map(_ + 2) === newValues)
-    }
-
-    import tester._
-    testWriter(ds, writer, outputMode = OutputMode.Complete())(
-      // out = count in query and increment 1 in writer
-      check(in = 1)(out = 2),
-      check(in = 2, 2)(out = 3, 2),
-      check(in = 3, 3, 3)(out = 4, 3, 2))
-  }
-
-  test("foreachBatch with stateful query and batch operations in update mode") {
-    val mem = MemoryStream[Int]
-    val ds = mem.toDF()
-      .select($"value" as "key")
-      .groupBy("key")
-      .agg(count("*") as "value")
-      .select(col("value").cast("int").as("value"))
-      .as[Int]
-
-    val tester = new ForeachBatchTester[Int](mem)
-
-    val writer: (Dataset[Int], Long) => Unit = { case (df, batchId) =>
-      // verify that the input dataframe is cached for stateful query
-      assert(spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isDefined)
-
-      val newDF = df
-        .map(_ + 1)
-        .repartition(1)
-        .sort(Column("value").desc)
-      tester.record(batchId, newDF)
-
-      // just run another simple query against cached DF to confirm they don't conflict each other
-      val curValues = df.collect()
-      val newValues = df.map(_ + 2).collect()
-      assert(curValues.map(_ + 2) === newValues)
-    }
-
-    import tester._
-    testWriter(ds, writer, outputMode = OutputMode.Update())(
-      // out = count in query and increment 1 in writer
-      check(in = 1)(out = 2),
-      check(in = 2, 2)(out = 3),
-      check(in = 3, 3, 3)(out = 4))
-  }
-
   test("foreachBatch with batch specific operations") {
     val mem = MemoryStream[Int]
     val ds = mem.toDS().map(_ + 1)
 
     val tester = new ForeachBatchTester[Int](mem)
     val writer: (Dataset[Int], Long) => Unit = { case (df, batchId) =>
-      // verify that the input dataframe is not cached for stateless query
-      assert(spark.sharedState.cacheManager.lookupCachedData(df.logicalPlan).isEmpty)
       df.persist()
 
       val newDF = df

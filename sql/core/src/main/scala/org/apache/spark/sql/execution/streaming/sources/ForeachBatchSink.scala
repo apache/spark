@@ -22,7 +22,6 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LogicalPlan, TransformWithState}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
@@ -30,33 +29,22 @@ import org.apache.spark.sql.streaming.DataStreamWriter
 class ForeachBatchSink[T](batchWriter: (Dataset[T], Long) => Unit, encoder: ExpressionEncoder[T])
   extends Sink {
 
-  private def isQueryStateful(logicalPlan: LogicalPlan): Boolean = {
-    logicalPlan.collect {
-      case node @ (_: Aggregate | _: Distinct | _: FlatMapGroupsWithState
-                   | _: FlatMapGroupsInPandasWithState | _: TransformWithState | _: Deduplicate
-                   | _: DeduplicateWithinWatermark | _: GlobalLimit) if node.isStreaming => node
-      case node @ Join(left, right, _, _, _) if left.isStreaming && right.isStreaming => node
-    }.nonEmpty
-  }
-
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     val node = LogicalRDD.fromDataset(rdd = data.queryExecution.toRdd, originDataset = data,
       isStreaming = false)
     implicit val enc = encoder
     val ds = Dataset.ofRows(data.sparkSession, node).as[T]
-    // SPARK-47329 - persist the dataframe for stateful queries to prevent state stores
-    // from reloading state multiple times in each batch
-    val isStateful = isQueryStateful(data.logicalPlan)
-    if (isStateful) {
-      try {
-        ds.persist()
-        callBatchWriter(ds, batchId)
-      } finally {
-        ds.unpersist()
-      }
-    } else {
-      callBatchWriter(ds, batchId)
-    }
+    // SPARK-47329 - for stateful queries that perform multiple operations on the dataframe, it is
+    // highly recommended to persist the dataframe to prevent state stores from reloading
+    // state multiple times in each batch. We cannot however always call `persist` on the dataframe
+    // here since we do not know in advance whether multiple operations(actions) will be performed
+    // on the dataframe or not. There are side effects to `persist` that could be detrimental to the
+    // overall performance of the system such as increased cache memory usage,
+    // possible disk writes (with the default storage level) and unwanted cache block eviction.
+    // It is therefore the responsibility of the user to call `persist` on the dataframe if they
+    // know that multiple operations (actions) will be performed on the dataframe within
+    // the foreachbatch UDF (user defined function).
+    callBatchWriter(ds, batchId)
   }
 
   override def toString(): String = "ForeachBatchSink"
