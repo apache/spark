@@ -30,14 +30,17 @@ class TestMapStateProcessor
 
   @transient var _mapState: MapState[String, String] = _
 
-  override def init(outputMode: OutputMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit = {
     _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputMapRow],
-      timerValues: TimerValues): Iterator[(String, String, String)] = {
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
 
     var output = List[(String, String, String)]()
 

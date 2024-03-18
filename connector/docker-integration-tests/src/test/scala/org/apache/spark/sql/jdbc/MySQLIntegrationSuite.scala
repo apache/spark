@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
+import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.sql.Row
@@ -56,10 +57,11 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
-      + "dbl DOUBLE, tiny TINYINT)").executeUpdate()
+      + "dbl DOUBLE, tiny TINYINT, u_tiny TINYINT UNSIGNED)").executeUpdate()
+
     conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
-      + "42.75, 1.0000000000000002, -128)").executeUpdate()
+      + "42.75, 1.0000000000000002, -128, 255)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
       + "yr YEAR)").executeUpdate()
@@ -89,7 +91,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 10)
+    assert(types.length == 11)
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
     assert(types(2).equals("class java.lang.Integer"))
@@ -100,6 +102,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(7).equals("class java.lang.Double"))
     assert(types(8).equals("class java.lang.Double"))
     assert(types(9).equals("class java.lang.Byte"))
+    assert(types(10).equals("class java.lang.Short"))
     assert(rows(0).getBoolean(0) == false)
     assert(rows(0).getLong(1) == 0x225)
     assert(rows(0).getInt(2) == 17)
@@ -111,6 +114,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDouble(7) == 42.75)
     assert(rows(0).getDouble(8) == 1.0000000000000002)
     assert(rows(0).getByte(9) == 0x80.toByte)
+    assert(rows(0).getShort(10) == 0xff.toShort)
   }
 
   test("Date types") {
@@ -131,6 +135,19 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
       assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
       assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
+    }
+  }
+
+  test("SPARK-47406: MySQL datetime types with preferTimestampNTZ") {
+    withDefaultTimeZone(UTC) {
+      val df = sqlContext.read.option("preferTimestampNTZ", true)
+        .jdbc(jdbcUrl, "dates", new Properties)
+      checkAnswer(df, Row(
+        Date.valueOf("1991-11-09"),
+        LocalDateTime.of(1970, 1, 1, 13, 31, 24),
+        LocalDateTime.of(1996, 1, 1, 1, 23, 45),
+        Timestamp.valueOf("2009-02-13 23:31:30"),
+        Date.valueOf("2001-01-01")))
     }
   }
 

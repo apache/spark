@@ -2098,7 +2098,10 @@
   },
   "INVALID_IDENTIFIER" : {
     "message" : [
-      "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
+      "The unquoted identifier <ident> is invalid and must be back quoted as: `<ident>`.",
+      "Unquoted identifiers can only contain ASCII letters ('a' - 'z', 'A' - 'Z'), digits ('0' - '9'), and underbar ('_').",
+      "Unquoted identifiers must also not start with a digit.",
+      "Different data sources and meta stores may impose additional restrictions on valid identifiers."
     ],
     "sqlState" : "42602"
   },
@@ -3488,6 +3491,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
+    "message" : [
+      "Failed to perform stateful processor operation=<operationType> with invalid handle state=<handleState>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE" : {
+    "message" : [
+      "Failed to perform stateful processor operation=<operationType> with invalid timeoutMode=<timeoutMode>"
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
+    "message" : [
+      "Failed to create column family with unsupported starting character and name=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME" : {
     "message" : [
       "Failed to perform column family operation=<operationName> with invalid name=<colFamilyName>. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default"
@@ -3498,12 +3519,6 @@
     "message" : [
       "The handle has not been initialized for this StatefulProcessor.",
       "Please only use the StatefulProcessor within the transformWithState operator."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATE_STORE_MULTIPLE_VALUES_PER_KEY" : {
-    "message" : [
-      "Store does not support multiple values per key"
     ],
     "sqlState" : "42802"
   },
@@ -3678,12 +3693,6 @@
       "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
     ],
     "sqlState" : "428EK"
-  },
-  "TWS_VALUE_SHOULD_NOT_BE_NULL" : {
-    "message" : [
-      "New value should be non-null for <typeOfState>"
-    ],
-    "sqlState" : "22004"
   },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
@@ -4535,6 +4544,13 @@
       "To tolerate the error on drop use DROP VARIABLE IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "VARIANT_SIZE_LIMIT" : {
+    "message" : [
+      "Cannot build variant bigger than <sizeLimit> in <functionName>.",
+      "Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big)."
+    ],
+    "sqlState" : "22023"
   },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -7730,16 +7746,6 @@
       "Datatype not supported <dt>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3193" : {
-    "message" : [
-      "Creating multiple column families with HDFSBackedStateStoreProvider is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3197" : {
-    "message" : [
-      "Failed to create column family with reserved name=<colFamilyName>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3198" : {
     "message" : [
       "Cannot grow BufferHolder by size <neededSize> because the size is negative"
@@ -7918,11 +7924,6 @@
   "_LEGACY_ERROR_TEMP_3233" : {
     "message" : [
       "cannot generate code for unsupported type: <dataType>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3234" : {
-    "message" : [
-      "Unsupported input type <other>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3235" : {

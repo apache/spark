@@ -444,7 +444,7 @@ class ChannelBuilderTests(unittest.TestCase):
         md = chan.metadata()
         self.assertEqual([("param1", "120 21"), ("x-my-header", "abcd")], md)
 
-    def test_metadata(self):
+    def test_metadata_with_session_id(self):
         id = str(uuid.uuid4())
         chan = DefaultChannelBuilder(f"sc://host/;session_id={id}")
         self.assertEqual(id, chan.session_id)
