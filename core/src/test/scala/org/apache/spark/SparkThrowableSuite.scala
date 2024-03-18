@@ -59,7 +59,10 @@ class SparkThrowableSuite extends SparkFunSuite {
     "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error classes match with document\\\"\""
 
   private val errorJsonFilePath = getWorkspaceFilePath(
-    "common", "utils", "src", "main", "resources", "error", "error-classes.json")
+    // Note that though we call them "error classes" here, the proper name is "error conditions",
+    // hence why the name of the JSON file different. We will address this inconsistency as part
+    // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
+    "common", "utils", "src", "main", "resources", "error", "error-conditions.json")
 
   private val errorReader = new ErrorClassesJsonReader(Seq(errorJsonFilePath.toUri.toURL))
 
@@ -125,23 +128,26 @@ class SparkThrowableSuite extends SparkFunSuite {
       s"Error classes without SQLSTATE: ${errorClassesNoSqlState.mkString(", ")}")
   }
 
-  test("Error category and error state / SQLSTATE invariants") {
-    val errorCategoriesJson = Utils.getSparkClassLoader.getResource("error/error-categories.json")
+  test("Error class and error state / SQLSTATE invariants") {
+    // Unlike in the rest of the codebase, the term "error class" is used here as it is in our
+    // documentation as well as in the SQL standard. We can remove this comment as part of this
+    // ticket: https://issues.apache.org/jira/browse/SPARK-47429
+    val errorClassesJson = Utils.getSparkClassLoader.getResource("error/error-classes.json")
     val errorStatesJson = Utils.getSparkClassLoader.getResource("error/error-states.json")
     val mapper = JsonMapper.builder()
       .addModule(DefaultScalaModule)
       .enable(STRICT_DUPLICATE_DETECTION)
       .build()
-    val errorCategories = mapper.readValue(
-      errorCategoriesJson, new TypeReference[Map[String, String]]() {})
+    val errorClasses = mapper.readValue(
+      errorClassesJson, new TypeReference[Map[String, String]]() {})
     val errorStates = mapper.readValue(
       errorStatesJson, new TypeReference[Map[String, ErrorStateInfo]]() {})
-    val errorClassStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
+    val errorConditionStates = errorReader.errorInfoMap.values.toSeq.flatMap(_.sqlState).toSet
     assert(Set("22012", "22003", "42601").subsetOf(errorStates.keySet))
-    assert(errorCategories.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
+    assert(errorClasses.keySet.filter(!_.matches("[A-Z0-9]{2}")).isEmpty)
     assert(errorStates.keySet.filter(!_.matches("[A-Z0-9]{5}")).isEmpty)
-    assert(errorStates.keySet.map(_.substring(0, 2)).diff(errorCategories.keySet).isEmpty)
-    assert(errorClassStates.diff(errorStates.keySet).isEmpty)
+    assert(errorStates.keySet.map(_.substring(0, 2)).diff(errorClasses.keySet).isEmpty)
+    assert(errorConditionStates.diff(errorStates.keySet).isEmpty)
   }
 
   test("Message invariants") {

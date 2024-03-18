@@ -26,7 +26,10 @@ import org.apache.spark.{ErrorClassesJsonReader, SparkException, SparkThrowable}
 private object KafkaExceptionsHelper {
   val errorClassesJsonReader: ErrorClassesJsonReader =
     new ErrorClassesJsonReader(
-      Seq(getClass.getClassLoader.getResource("error/kafka-error-classes.json")))
+      // Note that though we call them "error classes" here, the proper name is "error conditions",
+      // hence why the name of the JSON file different. We will address this inconsistency as part
+      // of this ticket: https://issues.apache.org/jira/browse/SPARK-47429
+      Seq(getClass.getClassLoader.getResource("error/kafka-error-conditions.json")))
 }
 
 object KafkaExceptions {
