@@ -212,7 +212,8 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
-      SCALA_PROFILE: "scala2.13",
+      SCALA_PROFILE: scala2.13,
+      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
