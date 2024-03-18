@@ -58,7 +58,6 @@ jobs:
               ref: context.payload.pull_request.head.ref,
             }
 
-            console.log('Branch: ' + context.payload.pull_request.head.ref)
             console.log('Ref: ' + context.payload.pull_request.head.ref)
             console.log('SHA: ' + context.payload.pull_request.head.sha)
 
