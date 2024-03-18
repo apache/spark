@@ -17,7 +17,6 @@
 
 import os
 import sys
-import json
 from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
@@ -27,11 +26,9 @@ from pyspark.serializers import (
     read_bool,
     read_int,
     read_long,
-    write_int,
-    write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource, DataSourceStreamWriter, WriterCommitMessage
+from pyspark.sql.datasource import DataSource, WriterCommitMessage
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
