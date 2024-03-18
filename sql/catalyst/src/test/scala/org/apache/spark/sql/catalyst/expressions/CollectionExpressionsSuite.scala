@@ -2837,7 +2837,7 @@ class CollectionExpressionsSuite
       (Seq("a"), Seq("A"), true, "UTF8_BINARY_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), true, "UTF8_BINARY_LCASE"),
       (Seq("a"), Seq("A"), false, "UNICODE"),
-      (Seq("a", "B"), Seq("A", "b"), true, "UNICODE_CI"),
+      (Seq("a", "B"), Seq("A", "b"), true, "UNICODE_CI")
     )
     for ((inLeft, inRight, out, collName) <- overlap) {
       val left = arrayLiteral(inLeft, collName)
@@ -2852,7 +2852,7 @@ class CollectionExpressionsSuite
       (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa", "AAA", "Aaa", "aAa"), "UTF8_BINARY"),
       (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa"), "UTF8_BINARY_LCASE"),
       (Seq("aaa", "AAA", "Aaa", "aAa", "b"), Seq("aaa", "b"), "UTF8_BINARY_LCASE"),
-      (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa"), "UNICODE_CI"),
+      (Seq("aaa", "AAA", "Aaa", "aAa"), Seq("aaa"), "UNICODE_CI")
     )
     for ((in, out, collName) <- distinct)
       checkEvaluation(ArrayDistinct(arrayLiteral(in, collName)), out)
@@ -2865,7 +2865,7 @@ class CollectionExpressionsSuite
       (Seq("a"), Seq("A"), Seq("a"), "UTF8_BINARY_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UTF8_BINARY_LCASE"),
       (Seq("a"), Seq("A"), Seq("a", "A"), "UNICODE"),
-      (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UNICODE_CI"),
+      (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UNICODE_CI")
     )
     for ((inLeft, inRight, out, collName) <- union) {
       val left = arrayLiteral(inLeft, collName)
@@ -2881,7 +2881,7 @@ class CollectionExpressionsSuite
       (Seq("a"), Seq("A"), Seq("a"), "UTF8_BINARY_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UTF8_BINARY_LCASE"),
       (Seq("a"), Seq("A"), Seq.empty, "UNICODE"),
-      (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UNICODE_CI"),
+      (Seq("a", "B"), Seq("A", "b"), Seq("a", "B"), "UNICODE_CI")
     )
     for ((inLeft, inRight, out, collName) <- intersect) {
       val left = arrayLiteral(inLeft, collName)
@@ -2897,7 +2897,7 @@ class CollectionExpressionsSuite
       (Seq("a"), Seq("A"), Seq.empty, "UTF8_BINARY_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), Seq.empty, "UTF8_BINARY_LCASE"),
       (Seq("a"), Seq("A"), Seq("a"), "UNICODE"),
-      (Seq("a", "B"), Seq("A", "b"), Seq.empty, "UNICODE_CI"),
+      (Seq("a", "B"), Seq("A", "b"), Seq.empty, "UNICODE_CI")
     )
     for ((inLeft, inRight, out, collName) <- except) {
       val left = arrayLiteral(inLeft, collName)
