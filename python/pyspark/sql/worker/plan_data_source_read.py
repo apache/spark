@@ -131,7 +131,11 @@ def main(infile: IO, outfile: IO) -> None:
         is_streaming = read_bool(infile)
 
         # Instantiate data source reader.
-        reader = data_source.streamReader(schema=schema) if is_streaming else data_source.reader(schema=schema)
+        reader = (
+            data_source.streamReader(schema=schema)
+            if is_streaming
+            else data_source.reader(schema=schema)
+        )
 
         # Wrap the data source read logic in an mapInArrow UDF.
         import pyarrow as pa
