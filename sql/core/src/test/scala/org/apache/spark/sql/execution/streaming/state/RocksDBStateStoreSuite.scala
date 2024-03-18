@@ -28,6 +28,7 @@ import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -35,6 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 @ExtendedSQLTest
@@ -273,6 +275,89 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val result = store.iterator(cfName).map { kv =>
         val key = keyRowWithRangeScanToData(kv.key)
         key._1
+      }.toSeq
+      assert(result === timerTimestamps.sorted)
+    }
+  }
+
+  testWithColumnFamilies("rocksdb range scan multiple ordering columns - variable size " +
+    s"non-ordering columns",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    val testSchema: StructType = StructType(
+      Seq(StructField("key1", LongType, false),
+        StructField("key2", IntegerType, false),
+        StructField("key3", StringType, false)))
+
+    val schemaProj = UnsafeProjection.create(Array[DataType](LongType, IntegerType, StringType))
+
+    tryWithProviderResource(newStoreProvider(testSchema,
+      RangeKeyScanStateEncoderType, 2, colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(cfName, RangeKeyScanStateEncoderType,
+          testSchema, numColsPrefixKey = 2, valueSchema)
+      }
+
+      val timerTimestamps = Seq((931L, 10), (8000L, 40), (452300L, 1), (4200L, 68), (90L, 2000),
+        (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112), (6L, 90118), (9L, 95118), (6L, 87210))
+      timerTimestamps.foreach { ts =>
+        // order by long col first and then by int col
+        val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
+          UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+      }
+
+      val result = store.iterator(cfName).map { kv =>
+        val keyRow = kv.key
+        val key = (keyRow.getLong(0), keyRow.getInt(1), keyRow.getString(2))
+        (key._1, key._2)
+      }.toSeq
+      assert(result === timerTimestamps.sorted)
+    }
+  }
+
+  testWithColumnFamilies("rocksdb range scan byte ordering column - variable size " +
+    s"non-ordering columns",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    val testSchema: StructType = StructType(
+      Seq(StructField("key1", ByteType, false),
+        StructField("key2", IntegerType, false),
+        StructField("key3", StringType, false)))
+
+    val schemaProj = UnsafeProjection.create(Array[DataType](ByteType, IntegerType, StringType))
+
+    tryWithProviderResource(newStoreProvider(testSchema,
+      RangeKeyScanStateEncoderType, 2, colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(cfName, RangeKeyScanStateEncoderType,
+          testSchema, numColsPrefixKey = 2, valueSchema)
+      }
+
+      val timerTimestamps: Seq[(Byte, Int)] = Seq((0x33, 10), (0x1A, 40), (0x1F, 1), (0x01, 68),
+        (0x7F, 2000), (0x01, 27), (0x01, 394), (0x01, 5), (0x03, 980), (0x35, 2112),
+        (0x06, 90118), (0x09, 95118), (0x06, 87210))
+      timerTimestamps.foreach { ts =>
+        // order by byte col first and then by int col
+        val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
+          UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+      }
+
+      val result: Seq[(Byte, Int)] = store.iterator(cfName).map { kv =>
+        val keyRow = kv.key
+        val key = (keyRow.getByte(0), keyRow.getInt(1), keyRow.getString(2))
+        (key._1, key._2)
       }.toSeq
       assert(result === timerTimestamps.sorted)
     }
