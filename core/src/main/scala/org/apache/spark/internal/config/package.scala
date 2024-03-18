@@ -2669,6 +2669,7 @@ package object config {
 
   private[spark] val SPARK_SHUTDOWN_TIMEOUT_MS =
     ConfigBuilder("spark.shutdown.timeout")
+      .internal()
       .doc("Defines the timeout period to wait for all shutdown hooks to be executed. " +
         "This must be passed as a system property argument in the Java options, for example " +
         "spark.driver.extraJavaOptions=\"-Dspark.shutdown.timeout=60s\".")
