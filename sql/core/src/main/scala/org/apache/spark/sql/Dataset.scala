@@ -197,7 +197,7 @@ class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
 
-  @volatile private var queryPersisted: Option[(Array[Boolean], QueryExecution)] = None
+  @volatile @transient private var queryPersisted: Option[(Array[Boolean], QueryExecution)] = None
 
   @DeveloperApi @Unstable
   def queryExecution: QueryExecution = {
