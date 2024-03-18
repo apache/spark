@@ -221,7 +221,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ matrix.branch }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -278,11 +278,11 @@ jobs:
         bash miniconda.sh -b -p $HOME/miniconda
         rm miniconda.sh
     - name: Install Python test dependencies for branch-3.4
-      if: inputs.branch == 'branch-3.4'
+      if: matrix.branch == 'branch-3.4'
       run: |
         python3.9 -m pip install 'numpy==1.24.4' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2'
     - name: Install Python test dependencies for branch-3.5
-      if: inputs.branch == 'branch-3.5'
+      if: matrix.branch == 'branch-3.5'
       run: |
         python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2'
     # Run the tests.
@@ -290,6 +290,7 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
+        export SCALA_PROFILE="scala2.13"
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
           export PATH=$PATH:$HOME/miniconda/bin
           export SKIP_PACKAGING=false
