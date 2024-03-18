@@ -329,6 +329,8 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
   protected var schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
   protected var schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
+  protected var useMultipleValuesPerKey = false
+
   protected def newStoreProviderWithStateVariable(
       useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
     newStoreProviderWithStateVariable(StateStoreId(newDir(), Random.nextInt(), 0),
@@ -346,7 +348,7 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
       useColumnFamilies,
-      new StateStoreConf(sqlConf), conf)
+      new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey)
     provider
   }
 
