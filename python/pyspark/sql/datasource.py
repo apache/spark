@@ -162,10 +162,21 @@ class DataSource(ABC):
 
     def streamWriter(self, schema: StructType, overwrite: bool) -> "DataSourceStreamWriter":
         """
+        Returns a :class:`DataSourceStreamWriter` instance for writing data into a streaming sink.
 
-        :param schema:
-        :param overwrite:
-        :return:
+        The implementation is required for writable streaming data sources.
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            The schema of the data to be written.
+        overwrite : bool
+            A flag indicating whether to overwrite existing data when writing current microbatch.
+
+        Returns
+        -------
+        writer : :class:`DataSourceStreamWriter`
+            A writer instance for writing data into a streaming sink.
         """
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",

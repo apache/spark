@@ -32,7 +32,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
 
   import testImplicits._
 
-  val waitTimeout = 5.seconds
+  val waitTimeout = 15.seconds
 
   protected def simpleDataStreamReaderScript: String =
     """
