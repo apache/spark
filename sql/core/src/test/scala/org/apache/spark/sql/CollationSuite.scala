@@ -622,7 +622,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         Seq(Row("a")))
 
       // ImplicitInputTypeCast test
-      checkAnswer(sql(s"SELECT REPEAT('aa' collate unicode_ci, MONTH(\"2024-02-02\" COLLATE UNICODE));"),
+      checkAnswer(
+        sql("SELECT REPEAT('aa' collate unicode_ci, MONTH(\"2024-02-02\" COLLATE UNICODE));"),
         Seq(Row("aaaa")))
     }
   }
