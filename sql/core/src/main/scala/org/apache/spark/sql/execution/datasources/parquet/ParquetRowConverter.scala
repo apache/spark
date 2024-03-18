@@ -547,10 +547,7 @@ private[parquet] class ParquetRowConverter(
   // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
   // values.
   private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
-    parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
-    parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-    !parquetType.getLogicalTypeAnnotation
-      .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
+    parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation]
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
