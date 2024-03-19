@@ -17,23 +17,34 @@
 package org.apache.spark.sql.connector.catalog.functions;
 
 import org.apache.spark.annotation.Evolving;
-import scala.Option;
 
 /**
  * Base class for user-defined functions that can be 'reduced' on another function.
  *
  * A function f_source(x) is 'reducible' on another function f_target(x) if
- * there exists a reducer function r(x) such that r(f_source(x)) = f_target(x) for all input x.
- *
+ * <ul>
+ *   <li> There exists a reducer function r(x) such that r(f_source(x)) = f_target(x) for all input x. </li>
+ *   <li> More generally, there exists two reducer functions r1(x) and r2(x) such that
+ *        r1(f_source(x)) = r2(f_target(x)) for all input x. </li>
+ * </ul>
  * <p>
  * Examples:
  * <ul>
- *    <li>Bucket functions
+ *    <li>Bucket functions where one side has reducer
  *    <ul>
  *        <li>f_source(x) = bucket(4, x)</li>
  *        <li>f_target(x) = bucket(2, x)</li>
- *        <li>r(x) = x / 2</li>
+ *        <li>r(x) = x % 2</li>
  *    </ul>
+ *
+ *    <li>Bucket functions where both sides have reducer
+ *    <ul>
+ *        <li>f_source(x) = bucket(16, x)</li>
+ *        <li>f_target(x) = bucket(12, x)</li>
+ *        <li>r1(x) = x % 4</li>
+ *        <li>r2(x) = x % 4</li>
+ *    </ul>
+ *
  *    <li>Date functions
  *    <ul>
  *        <li>f_source(x) = days(x)</li>
@@ -49,24 +60,42 @@ import scala.Option;
 public interface ReducibleFunction<I, O> {
 
     /**
+     * This method is for bucket functions.
+     *
+     * If this bucket function is 'reducible' on another bucket function, return the {@link Reducer} function.
+     * <p>
+     * Example to return reducer for reducing f_source = bucket(4, x) on f_target = bucket(2, x)
+     * <ul>
+     *     <li>thisFunction = bucket</li>
+     *     <li>otherFunction = bucket</li>
+     *     <li>thisNumBuckets = Int(4)</li>
+     *     <li>otherNumBuckets = Int(2)</li>
+     * </ul>
+     *
+     * @param otherFunction the other bucket function
+     * @param thisNumBuckets number of buckets for this bucket function
+     * @param otherNumBuckets number of buckets for the other bucket function
+     * @return a reduction function if it is reducible, null if not
+     */
+    default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction, int thisNumBuckets, int otherNumBuckets) {
+        return reducer(otherFunction);
+    }
+
+    /**
+     * This method is for all other functions.
+     *
      * If this function is 'reducible' on another function, return the {@link Reducer} function.
      * <p>
-     * Example:
+     * Example of reducing f_source = days(x) on f_target = hours(x)
      * <ul>
-     *     <li>this_function = bucket(4, x)
-     *     <li>other function = bucket(2, x)
+     *     <li>thisFunction = days</li>
+     *     <li>otherFunction = hours</li>
      * </ul>
-     * Invoke with arguments
-     * <ul>
-     *     <li>other = bucket</li>
-     *     <li>this param = Int(4)</li>
-     *     <li>other param = Int(2)</li>
-     * </ul>
-     * @param other the other function
-     * @param thisParam param for this function
-     * @param otherParam param for the other function
-     * @return a reduction function if it is reducible, none if not
+     *
+     * @param otherFunction the other function
+     * @return a reduction function if it is reducible, null if not.
      */
-    Option<Reducer<I, O>> reducer(ReducibleFunction<?, ?> other, Option<?> thisParam,
-                               Option<?> otherParam);
+    default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
+        return reducer(otherFunction, 0, 0);
+    }
 }

@@ -87,21 +87,31 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
   }
 
   override def reducer(func: ReducibleFunction[_, _],
-                       thisNumBuckets: Option[_],
-                       otherNumBuckets: Option[_]): Option[Reducer[Int, Int]] = {
-    (thisNumBuckets, otherNumBuckets) match {
-      case (Some(thisNumBucketsVal: Int), Some(otherNumBucketsVal: Int))
-        if func == BucketFunction &&
-          ((thisNumBucketsVal > otherNumBucketsVal) &&
-            (thisNumBucketsVal % otherNumBucketsVal == 0)) =>
-        Some(BucketReducer(thisNumBucketsVal, otherNumBucketsVal))
-      case _ => None
+    thisNumBuckets: Int,
+    otherNumBuckets: Int): Reducer[Int, Int] = {
+
+    if (func == BucketFunction) {
+      if ((thisNumBuckets > otherNumBuckets)
+        && (thisNumBuckets % otherNumBuckets == 0)) {
+        BucketReducer(thisNumBuckets, otherNumBuckets)
+      } else {
+        val gcd = this.gcd(thisNumBuckets, otherNumBuckets)
+        if (gcd != thisNumBuckets) {
+          BucketReducer(thisNumBuckets, gcd)
+        } else {
+          null
+        }
+      }
+    } else {
+      null
     }
   }
+
+  private def gcd(a: Int, b: Int): Int = BigInt(a).gcd(BigInt(b)).toInt
 }
 
-case class BucketReducer(thisNumBuckets: Int, otherNumBuckets: Int) extends Reducer[Int, Int] {
-  override def reduce(bucket: Int): Int = bucket % otherNumBuckets
+case class BucketReducer(thisNumBuckets: Int, divisor: Int) extends Reducer[Int, Int] {
+  override def reduce(bucket: Int): Int = bucket % divisor
 }
 
 object UnboundStringSelfFunction extends UnboundFunction {

@@ -851,25 +851,23 @@ case class KeyGroupedShuffleSpec(
    * A [[Reducer]] exists for a partition expression function of this shuffle spec if it is
    * 'reducible' on the corresponding partition expression function of the other shuffle spec.
    * <p>
-   * If a value is returned, there must be one Option[[Reducer]] per partition expression.
+   * If a value is returned, there must be one [[Reducer]] per partition expression.
    * A None value in the set indicates that the particular partition expression is not reducible
    * on the corresponding expression on the other shuffle spec.
    * <p>
    * Returning none also indicates that none of the partition expressions can be reduced on the
    * corresponding expression on the other shuffle spec.
+   *
+   * @param other other key-grouped shuffle spec
    */
-  def reducers(other: ShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
-    other match {
-      case otherSpec: KeyGroupedShuffleSpec =>
-        val results = partitioning.expressions.zip(otherSpec.partitioning.expressions).map {
-          case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
-          case (_, _) => None
-        }
+  def reducers(other: KeyGroupedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
+     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
+       case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+       case (_, _) => None
+     }
 
-        // optimize to not return a value, if none of the partition expressions are reducible
-        if (results.forall(p => p.isEmpty)) None else Some(results)
-      case _ => None
-    }
+    // optimize to not return a value, if none of the partition expressions are reducible
+    if (results.forall(p => p.isEmpty)) None else Some(results)
   }
 
   override def canCreatePartitioning: Boolean = SQLConf.get.v2BucketingShuffleEnabled &&
@@ -883,8 +881,8 @@ case class KeyGroupedShuffleSpec(
 
 object KeyGroupedShuffleSpec {
   def reducePartitionValue(row: InternalRow,
-                           expressions: Seq[Expression],
-                           reducers: Seq[Option[Reducer[_, _]]]):
+    expressions: Seq[Expression],
+    reducers: Seq[Option[Reducer[_, _]]]):
     InternalRowComparableWrapper = {
     val partitionVals = row.toSeq(expressions.map(_.dataType))
     val reducedRow = partitionVals.zip(reducers).map{
