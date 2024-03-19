@@ -31,7 +31,7 @@ import org.apache.spark.sql.streaming.{ListState, TimeoutMode, ValueState}
  */
 class ListStateSuite extends StateVariableSuiteBase {
   // overwrite useMultipleValuesPerKey in base suite to be true for list state
-  useMultipleValuesPerKey = true
+  override def useMultipleValuesPerKey: Boolean = true
 
   private def testMapStateWithNullUserKey()(runListOps: ListState[Long] => Unit): Unit = {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
