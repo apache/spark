@@ -99,7 +99,7 @@ case class TransformWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
+    newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
     copy(child = newLeft, initialState = newRight)
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
@@ -110,7 +110,7 @@ case class TransformWithStateExec(
 
   /**
    * Distribute by grouping attributes - We need the underlying data and the initial state data
-   * to have the same grouping so that the data are co-lacated on the same task.
+   * to have the same grouping so that the data are co-located on the same task.
    */
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(
@@ -158,12 +158,12 @@ case class TransformWithStateExec(
     val getKeyObj =
       ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
 
-    val getStateValueObj =
+    val getInitStateValueObj =
       ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
 
     val keyObj = getKeyObj(keyRow) // convert key to objects
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
-    val initStateObjIter = initStateIter.map(getStateValueObj.apply)
+    val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
 
     initStateObjIter.foreach { initState =>
       statefulProcessor
@@ -180,7 +180,7 @@ case class TransformWithStateExec(
       handleInputRows(keyUnsafeRow, valueRowIter)
     }
   }
-// TODO double check this
+
   private def processNewDataWithInitialState(
       dataIter: Iterator[InternalRow],
       initStateIter: Iterator[InternalRow]): Iterator[InternalRow] = {
@@ -357,13 +357,14 @@ case class TransformWithStateExec(
               stateInfo.get.operatorId, partitionId)
             val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
             val store = StateStore.get(
-              storeProviderId,
-              schemaForKeyRow,
-              schemaForValueRow,
-              0,
-              stateInfo.get.storeVersion,
+              storeProviderId = storeProviderId,
+              keySchema = schemaForKeyRow,
+              valueSchema = schemaForValueRow,
+              numColsPrefixKey = 0,
+              version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
-              storeConf, hadoopConfBroadcast.value.value
+              storeConf = storeConf,
+              hadoopConf = hadoopConfBroadcast.value.value
             )
 
             processDataWithInitialState(store, childDataIterator, initStateIterator)
@@ -371,16 +372,13 @@ case class TransformWithStateExec(
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in zipPartitionsWithIndex.
-        val broadcastedHadoopConf =
+        val broadcastHadoopConf =
           new SerializableConfiguration(session.sessionState.newHadoopConf())
-        child.execute().zipPartitionsWithIndex(
-          initialState.execute()
-        ) {
+        child.execute().zipPartitionsWithIndex(initialState.execute()) {
           case (partitionId, childDataIterator, initStateIterator) =>
             val providerId = {
               val tempDirPath = Utils.createTempDir().getAbsolutePath
               new StateStoreProviderId(
-                // TODO how to get partitionId
                 StateStoreId(tempDirPath, 0, partitionId), getStateInfo.queryRunId)
             }
 
@@ -397,7 +395,7 @@ case class TransformWithStateExec(
               numColsPrefixKey = 0,
               useColumnFamilies = true,
               storeConf = storeConf,
-              hadoopConf = broadcastedHadoopConf.value,
+              hadoopConf = broadcastHadoopConf.value,
               useMultipleValuesPerKey = true)
             val store = stateStoreProvider.getStore(0)
 

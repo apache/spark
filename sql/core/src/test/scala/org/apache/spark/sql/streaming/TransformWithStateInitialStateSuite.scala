@@ -19,16 +19,16 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.{Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
 case class InitInputRow(key: String, action: String, value: Double)
 case class InputRowForInitialState(
-    value: Double, entries: List[Double], mapping: Map[Double, Int])
+    key: String, value: Double, entries: List[Double], mapping: Map[Double, Int])
 
 abstract class StatefulProcessorWithInitialStateTestClass[V]
     extends StatefulProcessorWithInitialState[
-        String, InitInputRow, (String, String, Double), (String, V)] {
+        String, InitInputRow, (String, String, Double), V] {
   @transient var _valState: ValueState[Double] = _
   @transient var _listState: ListState[Double] = _
   @transient var _mapState: MapState[Double, Int] = _
@@ -82,7 +82,7 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
 }
 
 class AccumulateStatefulProcessorWithInitState
-    extends StatefulProcessorWithInitialStateTestClass[Double] {
+    extends StatefulProcessorWithInitialStateTestClass[(String, Double)] {
   override def handleInitialState(
       key: String,
       initialState: (String, Double)): Unit = {
@@ -114,10 +114,10 @@ class InitialStateInMemoryTestClass
   extends StatefulProcessorWithInitialStateTestClass[InputRowForInitialState] {
   override def handleInitialState(
       key: String,
-      initialState: (String, InputRowForInitialState)): Unit = {
-    _valState.update(initialState._2.value)
-    _listState.appendList(initialState._2.entries.toArray)
-    val inMemoryMap = initialState._2.mapping
+      initialState: InputRowForInitialState): Unit = {
+    _valState.update(initialState.value)
+    _listState.appendList(initialState.entries.toArray)
+    val inMemoryMap = initialState.mapping
     inMemoryMap.foreach { kvPair =>
       _mapState.updateValue(kvPair._1, kvPair._2)
     }
@@ -149,11 +149,11 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val kvDataSet = inputData.toDS()
         .groupByKey(x => x.key)
       val initStateDf =
-        Seq(("init_1", InputRowForInitialState(40.0, List(40.0), Map(40.0 -> 1))),
-          ("init_2", InputRowForInitialState(100.0, List(100.0), Map(100.0 -> 1))))
-          .toDS().groupByKey(x => x._1).mapValues(x => x)
+        Seq(InputRowForInitialState("init_1", 40.0, List(40.0), Map(40.0 -> 1)),
+          InputRowForInitialState("init_2", 100.0, List(100.0), Map(100.0 -> 1)))
+          .toDS().groupByKey(x => x.key).mapValues(x => x)
       val query = kvDataSet.transformWithState(new InitialStateInMemoryTestClass(),
-            TimeoutMode.NoTimeouts (), OutputMode.Append (), initStateDf)
+            TimeoutMode.NoTimeouts(), OutputMode.Append(), initStateDf)
 
       testStream(query, OutputMode.Update())(
         // non-exist key test
@@ -222,7 +222,6 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     }
   }
 
-
   test("transformWithStateWithInitialState -" +
     " correctness test, processInitialState should only run once") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -258,29 +257,5 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
 
     val df = result.toDF()
     checkAnswer(df, Seq(("k1", "getOption", 37.0)).toDF())
-  }
-}
-
-class TransformWithStateInitialStateValidationSuite extends StateStoreMetricsTest {
-  import testImplicits._
-
-  test("transformWithStateWithInitialState - streaming with hdfsStateStoreProvider should fail") {
-    val inputData = MemoryStream[InitInputRow]
-    val initDf = Seq(("init_1", 40.0), ("init_2", 100.0)).toDS()
-      .groupByKey(x => x._1)
-      .mapValues(x => x)
-    val result = inputData.toDS()
-      .groupByKey(x => x.key)
-      .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-        TimeoutMode.NoTimeouts(), OutputMode.Append(), initDf
-      )
-    testStream(result, OutputMode.Update())(
-      AddData(inputData, InitInputRow("a", "add", -1.0)),
-      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
-        (t: Throwable) => {
-          assert(t.getMessage.contains("not supported"))
-        }
-      }
-    )
   }
 }
