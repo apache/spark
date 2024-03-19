@@ -85,7 +85,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
 
   override def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
-    .putBoolean("isTimestampNTZ", false)
     .putBoolean("isSigned", true)
     .build()
 
