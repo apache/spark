@@ -181,6 +181,7 @@ class ArrowTestsMixin:
 
     def create_arrow_table(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
         data_dict = {}
         for j, name in enumerate(self.schema.names):
@@ -197,7 +198,15 @@ class ArrowTestsMixin:
             new_schema.get_field_index("6_decimal_t"),
             pa.field("6_decimal_t", pa.decimal128(38, 18)),
         )
-        return t.cast(new_schema)
+        t = t.cast(new_schema)
+        # convert timestamp to local timezone
+        timezone = self.spark.conf.get("spark.sql.session.timeZone")
+        t = t.set_column(
+            t.schema.get_field_index("8_timestamp_t"),
+            "8_timestamp_t",
+            pc.assume_timezone(t["8_timestamp_t"], timezone),
+        )
+        return t
 
     @property
     def create_np_arrs(self):
