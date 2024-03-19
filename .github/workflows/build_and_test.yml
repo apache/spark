@@ -178,7 +178,7 @@ jobs:
         java:
           - 8
         branch:
-          - branch-3.5
+          - branch-3.4
         modules:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
@@ -377,7 +377,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: branch-3.5
+        ref: branch-3.4
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
