@@ -16867,7 +16867,7 @@ def map_sort(col: "ColumnOrName", asc: bool = True) -> Column:
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as data")
-    >>> df.select(sf.map_sort(df.data)).show()
+    >>> df.select(sf.map_sort(df.data)).show(truncate=False)
     +--------------------+
     |map_sort(data, true)|
     +--------------------+
