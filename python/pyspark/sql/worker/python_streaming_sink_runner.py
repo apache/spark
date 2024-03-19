@@ -104,10 +104,12 @@ def main(infile: IO, outfile: IO) -> None:
                     commit_messages.append(message)
                 batch_id = read_long(infile)
                 abort = read_bool(infile)
+                # Commit or abort the Python data source write.
+                # Note the commit messages can be None if there are failed tasks.
                 if abort:
-                    writer.abort(commit_messages, batch_id)
+                    writer.abort(commit_messages, batch_id)  # type: ignore[arg-type]
                 else:
-                    writer.commit(commit_messages, batch_id)
+                    writer.commit(commit_messages, batch_id)  # type: ignore[arg-type]
                 write_int(0, outfile)
                 outfile.flush()
         except Exception as e:
