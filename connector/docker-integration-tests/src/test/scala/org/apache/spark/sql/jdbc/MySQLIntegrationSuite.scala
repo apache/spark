@@ -103,7 +103,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(9).equals("class java.lang.Byte"))
     assert(rows(0).getBoolean(0) == false)
     assert(rows(0).getLong(1) == 0x225)
-    assert(rows(0).getInt(2) == 17)
+    assert(rows(0).getShort(2) == 17)
     assert(rows(0).getInt(3) == 77777)
     assert(rows(0).getInt(4) == 123456789)
     assert(rows(0).getLong(5) == 123456789012345L)
