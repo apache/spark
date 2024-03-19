@@ -263,7 +263,7 @@ def main(infile: IO, outfile: IO) -> None:
                     raise PySparkRuntimeError(
                         error_class="DATA_SOURCE_TYPE_MISMATCH",
                         message_parameters={
-                            "expected": "all elements in 'partitions' to be of type 'InputPartition'",
+                            "expected": "elements in 'partitions' to be of type 'InputPartition'",
                             "actual": partition_types,
                         },
                     )
@@ -277,8 +277,8 @@ def main(infile: IO, outfile: IO) -> None:
             for partition in partitions:
                 pickleSer._write_with_length(partition, outfile)
         else:
-            # Send an empty list of partition for stream reader because partitions are planned in each microbatch
-            # during query execution.
+            # Send an empty list of partition for stream reader because partitions are planned
+            # in each microbatch during query execution.
             write_int(0, outfile)
     except BaseException as e:
         handle_worker_exception(e, outfile)
