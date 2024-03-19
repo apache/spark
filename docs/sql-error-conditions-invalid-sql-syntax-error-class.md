@@ -102,10 +102,6 @@ The transform`<transform>` requires `<expectedNum>` parameters but the actual nu
 
 Cannot resolve window reference `<windowName>`.
 
-## UNSUPPORTED_BINARY_COMPARISON_LIKE_OPERATOR
-
-Unsupported binary comparison with LIKE operator.
-
 ## UNSUPPORTED_FUNC_NAME
 
 Unsupported function name `<funcName>`.

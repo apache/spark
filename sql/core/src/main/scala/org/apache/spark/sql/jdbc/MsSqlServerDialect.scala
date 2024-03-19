@@ -22,7 +22,6 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -98,14 +97,15 @@ private object MsSqlServerDialect extends JdbcDialect {
         case _ => false
       }
 
+      // MsSqlServer does not support boolean comparison using standard comparison operators
+      // LIKE operator has a boolean result, hence we don't propagate these queries to MsSqlServer
       expr match {
         case e: GeneralScalarExpression =>
           e.name() match {
             case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
               if (isChildLikeExpression(e.children()(0))
                 || isChildLikeExpression(e.children()(1))) {
-                throw new SparkUnsupportedOperationException(
-                  errorClass = "UNSUPPORTED_BINARY_COMPARISON_LIKE_OPERATOR")
+                super.visitUnexpectedExpr(expr)
               } else {
                 super.build(expr)
               }

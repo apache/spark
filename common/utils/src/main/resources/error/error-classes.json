@@ -2648,11 +2648,6 @@
           "Cannot resolve window reference <windowName>."
         ]
       },
-      "UNSUPPORTED_BINARY_COMPARISON_LIKE_OPERATOR" : {
-        "message" : [
-          "Unsupported binary comparison with LIKE operator."
-        ]
-      },
       "UNSUPPORTED_FUNC_NAME" : {
         "message" : [
           "Unsupported function name <funcName>."
