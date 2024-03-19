@@ -2692,7 +2692,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "in barrier" else ""
     Seq(1, 2, 3, 4).foreach { gpuTaskAmount =>
-      test(s"SPARK-45527 GPU fraction resource should work when " +
+      test(s"SPARK-47458 GPU fraction resource should work when " +
         s"gpu task amount = ${gpuTaskAmount} $barrier") {
 
         val executorCpus = 10 // cpu will not limit the concurrent tasks number

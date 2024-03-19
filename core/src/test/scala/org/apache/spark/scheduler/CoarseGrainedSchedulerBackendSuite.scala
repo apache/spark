@@ -138,7 +138,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
   }
 
-  test("SPARK-45527 compute max number of concurrent tasks with resources limiting") {
+  test("SPARK-47458 compute max number of concurrent tasks with resources limiting") {
     withTempDir { dir =>
       val discoveryScript = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
@@ -155,7 +155,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         // Ensure all executors have been launched.
         assert(sc.getExecutorIds().length == 1)
       }
-      // The concurrent tasks should be min {20/1, 4 * (1/0.2)}
+      // The concurrent tasks should be min of {20/1, 4 * (1/0.2)}
       assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 20)
 
       val gpuTaskAmountToExpectedTasks = Map(
@@ -169,9 +169,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         4.0 -> 1    // 4 / 4
       )
 
-      // GPU resources limits the concurrent number
+      // It's the GPU resource that limits the concurrent number
       gpuTaskAmountToExpectedTasks.keys.foreach { taskGpu =>
-        // GPU resources limits the concurrent number
         val treqs = new TaskResourceRequests().cpus(1).resource(GPU, taskGpu)
         val rp: ResourceProfile = new ResourceProfileBuilder().require(treqs).build()
         sc.resourceProfileManager.addResourceProfile(rp)
