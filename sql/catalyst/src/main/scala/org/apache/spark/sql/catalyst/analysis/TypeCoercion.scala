@@ -998,7 +998,8 @@ object TypeCoercion extends TypeCoercionBase {
       case (st: StringType, _: StringTypeCollated) => st
       // Cast any atomic type to string.
       case (any: AtomicType, StringType) if any != StringType => StringType
-      case (any: AtomicType, _: StringTypeCollated) if any != StringType => StringType
+      case (any: AtomicType, st: StringTypeCollated)
+        if any != st.defaultConcreteType => st.defaultConcreteType
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.

@@ -427,8 +427,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 
   def convert(v: UTF8String): UTF8String
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = child.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   protected override def nullSafeEval(input: Any): Any =
     convert(input.asInstanceOf[UTF8String])
@@ -1965,7 +1965,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   override def dataType: DataType = str.dataType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
+    Seq(TypeCollection(StringTypeAnyCollation, BinaryType), IntegerType, IntegerType)
 
   override def first: Expression = str
   override def second: Expression = pos
