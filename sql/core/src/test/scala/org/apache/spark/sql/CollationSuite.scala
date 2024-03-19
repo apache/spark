@@ -642,11 +642,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
   test("Create dataframe with non utf8 binary collation") {
     val schema = StructType(Seq(StructField("Name", StringType("UNICODE_CI"))))
-    val df = sparkContext.parallelize(Seq(Row("Alice"), Row("Bob")))
+    val data = Seq(Row("Alice"), Row("Bob"), Row("bob"))
+    val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
 
     checkAnswer(
-      spark.createDataFrame(df, schema),
-      Seq(Row("Alice"), Row("Bob"))
+      df.groupBy("name").count(),
+      Seq(Row("Alice", 1), Row("Bob", 2))
     )
   }
 }
