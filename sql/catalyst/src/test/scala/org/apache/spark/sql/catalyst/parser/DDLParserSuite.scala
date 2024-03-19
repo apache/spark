@@ -3050,6 +3050,16 @@ class DDLParserSuite extends AnalysisTest {
         |USING parquet
         |""".stripMargin
 
+    val createSql2 =
+      """
+        |CREATE TABLE my_tbl (
+        |   a INT,
+        |   b STRING,
+        |--   c STRING,
+        |)
+        |USING parquet
+        |""".stripMargin
+
     val expectedPlan = CreateTable(
       UnresolvedIdentifier(Seq("my_tbl")),
       Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType)),
@@ -3065,5 +3075,6 @@ class DDLParserSuite extends AnalysisTest {
       false)
 
     parseCompare(createSql, expectedPlan)
+    parseCompare(createSql2, expectedPlan)
   }
 }
