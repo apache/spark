@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 
 sealed trait RocksDBKeyStateEncoder {
@@ -282,31 +282,31 @@ class RangeKeyScanStateEncoder(
 
         // for other multi-byte types, we need to convert to big-endian
         case ShortType =>
-          val bbuf = ByteBuffer.allocate(2)
+          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
           bbuf.order(ByteOrder.BIG_ENDIAN)
           bbuf.putShort(value.asInstanceOf[Short])
           writer.write(idx, bbuf.array())
 
         case IntegerType =>
-          val bbuf = ByteBuffer.allocate(4)
+          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
           bbuf.order(ByteOrder.BIG_ENDIAN)
           bbuf.putInt(value.asInstanceOf[Int])
           writer.write(idx, bbuf.array())
 
         case LongType =>
-          val bbuf = ByteBuffer.allocate(8)
+          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
           bbuf.order(ByteOrder.BIG_ENDIAN)
           bbuf.putLong(value.asInstanceOf[Long])
           writer.write(idx, bbuf.array())
 
         case FloatType =>
-          val bbuf = ByteBuffer.allocate(4)
+          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
           bbuf.order(ByteOrder.BIG_ENDIAN)
           bbuf.putFloat(value.asInstanceOf[Float])
           writer.write(idx, bbuf.array())
 
         case DoubleType =>
-          val bbuf = ByteBuffer.allocate(8)
+          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
           bbuf.order(ByteOrder.BIG_ENDIAN)
           bbuf.putDouble(value.asInstanceOf[Double])
           writer.write(idx, bbuf.array())
