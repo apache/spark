@@ -1769,8 +1769,8 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def _toArrow(self) -> "pa.Table":
-        query = self._plan.to_proto(self._session.client)
-        return self._session.client.to_table(query, self._plan.observations)
+        table = self._to_table()[0]
+        return table
 
     _toArrow.__doc__ = PySparkDataFrame._toArrow.__doc__
 
