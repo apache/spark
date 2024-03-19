@@ -652,6 +652,30 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 }
 
+class TransformWithStateTriggerSuite extends StateStoreMetricsTest {
+  import testImplicits._
+
+  test("transformWithState - availableNow trigger mode respects read limit ") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        /*
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessor(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update()) */
+
+      testStream(result, extraOptions = Map("maxBytesPerTrigger" -> "2b"))(
+        StartStream(trigger = Trigger.AvailableNow()),
+        AddData(inputData, "a"),
+        AddData(inputData, "b"),
+        CheckLastBatch("b")
+      )
+    }
+  }
+}
+
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
   import testImplicits._
 
