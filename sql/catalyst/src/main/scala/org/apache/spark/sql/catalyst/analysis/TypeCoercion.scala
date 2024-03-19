@@ -706,15 +706,16 @@ abstract class TypeCoercionBase {
         }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
-          case (expr: Expression, t)
-            if CollationTypeCasts.hasStringType(t)
-              && CollationTypeCasts.hasStringType(expr.dataType)
-          => expr
-          // If we cannot do the implicit cast, just use the original input.
-          case (in, expected) => implicitCast(in, expected).getOrElse(in)
+        if (!e.children.exists(e => CollationTypeCasts.hasStringType(e.dataType))) {
+          val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
+            // If we cannot do the implicit cast, just use the original input.
+            case (in, expected) => implicitCast(in, expected).getOrElse(in)
+          }
+          e.withNewChildren(children)
         }
-        e.withNewChildren(children)
+        else {
+          e
+        }
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
@@ -808,10 +809,10 @@ abstract class TypeCoercionBase {
                 if (hasStringType(dt)) {
                   castStringType(e, collationId, Some(dt))
                 } else {
-                  TypeCoercion.implicitCast(e, dt)
+                  implicitCast(e, dt)
                 }
               }.headOption.getOrElse(e)
-            case (in, _) => in
+            case (in, expected) => implicitCast(in, expected).getOrElse(in)
           }
         checkImplicitCastInputTypes.withNewChildren(children)
 
