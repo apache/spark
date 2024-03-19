@@ -269,7 +269,11 @@ jobs:
         bash miniconda.sh -b -p $HOME/miniconda
         rm miniconda.sh
     - name: Install Python test dependencies for branch-3.4, branch-3.5
-      if: matrix.branch == 'branch-3.4' || matrix.branch == 'branch-3.5'
+      if: matrix.branch == 'branch-3.4'
+      run: |
+        python3.9 -m pip install 'numpy==1.25.1' 'pandas<=1.5.3' 'pyarrow==12.0.1' 'matplotlib<3.3.0' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
+    - name: Install Python test dependencies for branch-3.4, branch-3.5
+      if: matrix.branch == 'branch-3.5'
       run: |
         python3.9 -m pip install 'numpy==1.25.1' 'pandas<=2.0.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
     # Run the tests.
