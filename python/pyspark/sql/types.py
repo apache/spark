@@ -266,6 +266,10 @@ class StringType(AtomicType):
                 f"Collation parameter expected to be string but got {type(collation)}"
             )
 
+    @classmethod
+    def fromCollationId(self, collationId: int) -> 'StringType':
+        return StringType(StringType.collationNames[collationId])
+
     def collationIdToName(self) -> str:
         return (
             " collate %s" % StringType.collationNames[self.collationId]
@@ -1661,7 +1665,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return CalendarIntervalType()
         elif _COLLATED_STRING.match(json_value):
             m = _COLLATED_STRING.match(json_value)
-            return StringType(StringType.collationNameToId(m.group(1)))  # type: ignore[union-attr]
+            return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
