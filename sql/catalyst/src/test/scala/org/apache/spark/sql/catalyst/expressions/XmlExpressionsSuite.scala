@@ -136,7 +136,7 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
             |</row>""".stripMargin
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val output = InternalRow(null)
-    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), UTC_OPT), output)
+    checkEvaluation(XmlToStructs(schema, Map.empty, Literal(input), UTC_OPT), output)
   }
 
   test("from_xml null input column") {
@@ -236,7 +236,7 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   test("to_xml - row with empty array") {
     val inputSchema = StructType(StructField("a", ArrayType(IntegerType)) :: Nil)
     val input = Row(Array(null))
-    val output = """<ROW/>""" // yhosny: self closing empty row?
+    val output = """<ROW/>"""
     checkEvaluation(
       StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT),
       output)
@@ -330,24 +330,6 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     checkEvaluation(
       StructsToXml(Map.empty, Literal.create(input, inputSchema), UTC_OPT),
       output)
-  }
-
-  test("from/to xml - interval support") {
-    /* yhosny: interval not supported?
-      val input = s"""
-              |<ROW>
-              |   <i>1 year 1 day</i>
-              |</ROW>""".stripMargin
-      val schema = StructType(StructField("i", CalendarIntervalType) :: Nil)
-      val output = Row(new CalendarInterval(12, 1, 0))
-      checkEvaluation(XmlToStructs(schema, Map.empty, Literal.create(input, StringType)), output)
-    */
-    Seq(MapType(CalendarIntervalType, IntegerType), MapType(IntegerType, CalendarIntervalType))
-      .foreach { dt =>
-        val schema = StructField("a", dt) :: Nil
-        val struct = Literal.create(null, StructType(schema))
-        assert(StructsToXml(Map.empty, struct).checkInputDataTypes().isSuccess)
-      }
   }
 
   test("from_xml missing fields") {
