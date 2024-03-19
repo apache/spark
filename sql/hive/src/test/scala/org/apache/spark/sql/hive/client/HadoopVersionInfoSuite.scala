@@ -72,12 +72,12 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
   }
 
   test("SPARK-32212: test supportHadoopShadedClient()") {
-    Seq("3.2.2", "3.2.3", "3.2.2.1", "3.2.2-XYZ", "3.2.2.4-SNAPSHOT").foreach { version =>
+    Seq("4", "3.2.2", "3.2.3", "3.2.2.1", "3.2.2-XYZ", "3.2.2.4-SNAPSHOT").foreach { version =>
       assert(IsolatedClientLoader.supportsHadoopShadedClient(version), s"version $version")
     }
 
     // negative cases
-    Seq("3.1.3", "3.2", "3.2.1", "4").foreach { version =>
+    Seq("3.1.3", "3.2", "3.2.1").foreach { version =>
       assert(!IsolatedClientLoader.supportsHadoopShadedClient(version), s"version $version")
     }
   }
