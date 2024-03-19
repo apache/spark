@@ -34,7 +34,8 @@ public enum OrcCompressionCodec {
   SNAPPY(CompressionKind.SNAPPY),
   LZO(CompressionKind.LZO),
   LZ4(CompressionKind.LZ4),
-  ZSTD(CompressionKind.ZSTD);
+  ZSTD(CompressionKind.ZSTD),
+  BROTLI(CompressionKind.BROTLI);
 
   private final CompressionKind compressionKind;
 

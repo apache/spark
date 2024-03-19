@@ -34,6 +34,7 @@ import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkDateTimeUtils, TimestampFormatter, UDTUtils}
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -611,11 +612,11 @@ trait Row extends Serializable {
       case (v: Any, udt: UserDefinedType[Any @unchecked]) =>
         toJson(UDTUtils.toRow(v, udt), udt.sqlType)
       case _ => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3249",
+        errorClass = "FAILED_ROW_TO_JSON",
         messageParameters = Map(
-          "value" -> value.toString,
-          "valueClass" -> value.getClass.toString,
-          "dataType" -> dataType.toString)
+          "value" -> toSQLValue(value.toString),
+          "class" -> value.getClass.toString,
+          "sqlType" -> toSQLType(dataType.toString))
       )
     }
     toJson(this, schema)

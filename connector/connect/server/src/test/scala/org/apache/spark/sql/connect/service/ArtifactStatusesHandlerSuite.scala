@@ -48,6 +48,7 @@ class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelpe
       override protected def cacheExists(
           userId: String,
           sessionId: String,
+          previoslySeenSessionId: Option[String],
           hash: String): Boolean = {
         exist.contains(hash)
       }

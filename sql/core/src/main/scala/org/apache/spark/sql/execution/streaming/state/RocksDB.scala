@@ -34,7 +34,7 @@ import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
-import org.apache.spark.{SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -221,7 +221,7 @@ class RocksDB(
         changelogReader = fileManager.getChangelogReader(v, useColumnFamilies)
         changelogReader.foreach { case (recordType, key, value, colFamilyName) =>
           if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
-            createColFamilyIfAbsent(colFamilyName)
+            createColFamilyIfAbsent(colFamilyName, checkInternalColumnFamilies(colFamilyName))
           }
 
           recordType match {
@@ -242,26 +242,88 @@ class RocksDB(
     loadedVersion = endVersion
   }
 
+  /**
+   * Function to check if the column family exists in the state store instance.
+   * @param colFamilyName - name of the column family
+   * @return - true if the column family exists, false otherwise
+   */
   private def checkColFamilyExists(colFamilyName: String): Boolean = {
     colFamilyNameToHandleMap.contains(colFamilyName)
   }
 
-  private def verifyColFamilyExists(colFamilyName: String): Unit = {
-    if (useColumnFamilies && !checkColFamilyExists(colFamilyName)) {
-      throw new RuntimeException(s"Column family with name=$colFamilyName does not exist")
+  private val multColFamiliesDisabledStr = "multiple column families disabled in " +
+    "RocksDBStateStoreProvider"
+
+  /**
+   * Function to verify invariants for column family based operations such as get, put, remove etc.
+   * @param operationName - name of the store operation
+   * @param colFamilyName - name of the column family
+   */
+  private def verifyColFamilyOperations(
+      operationName: String,
+      colFamilyName: String): Unit = {
+    if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
+      // if the state store instance does not support multiple column families, throw an exception
+      if (!useColumnFamilies) {
+        throw StateStoreErrors.unsupportedOperationException(operationName,
+          multColFamiliesDisabledStr)
+      }
+
+      // if the column family name is empty or contains leading/trailing whitespaces, throw an
+      // exception
+      if (colFamilyName.isEmpty || colFamilyName.trim != colFamilyName) {
+        throw StateStoreErrors.cannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
+      }
+
+      // if the column family does not exist, throw an exception
+      if (!checkColFamilyExists(colFamilyName)) {
+        throw StateStoreErrors.unsupportedOperationOnMissingColumnFamily(operationName,
+          colFamilyName)
+      }
     }
   }
 
   /**
-   * Create RocksDB column family, if not created already
+   * Function to verify invariants for column family creation or deletion operations.
+   * @param operationName - name of the store operation
+   * @param colFamilyName - name of the column family
    */
-  def createColFamilyIfAbsent(colFamilyName: String): Unit = {
-    if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
-      throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3197",
-        messageParameters = Map("colFamilyName" -> colFamilyName).toMap)
+  private def verifyColFamilyCreationOrDeletion(
+      operationName: String,
+      colFamilyName: String,
+      isInternal: Boolean = false): Unit = {
+    // if the state store instance does not support multiple column families, throw an exception
+    if (!useColumnFamilies) {
+      throw StateStoreErrors.unsupportedOperationException(operationName,
+        multColFamiliesDisabledStr)
     }
 
+    // if the column family name is empty or contains leading/trailing whitespaces
+    // or using the reserved "default" column family, throw an exception
+    if (colFamilyName.isEmpty
+      || colFamilyName.trim != colFamilyName
+      || colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
+      throw StateStoreErrors.cannotUseColumnFamilyWithInvalidName(operationName, colFamilyName)
+    }
+
+    // if the column family is not internal and uses reserved characters, throw an exception
+    if (!isInternal && colFamilyName.charAt(0) == '_') {
+      throw StateStoreErrors.cannotCreateColumnFamilyWithReservedChars(colFamilyName)
+    }
+  }
+
+  /**
+   * Check whether the column family name is for internal column families.
+   * @param cfName - column family name
+   * @return - true if the column family is for internal use, false otherwise
+   */
+  private def checkInternalColumnFamilies(cfName: String): Boolean = cfName.charAt(0) == '_'
+
+  /**
+   * Create RocksDB column family, if not created already
+   */
+  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean = false): Unit = {
+    verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
     if (!checkColFamilyExists(colFamilyName)) {
       assert(db != null)
       val descriptor = new ColumnFamilyDescriptor(colFamilyName.getBytes, columnFamilyOptions)
@@ -274,10 +336,7 @@ class RocksDB(
    * Remove RocksDB column family, if exists
    */
   def removeColFamilyIfExists(colFamilyName: String): Unit = {
-    if (colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME) {
-      throw StateStoreErrors.cannotRemoveDefaultColumnFamily(colFamilyName)
-    }
-
+    verifyColFamilyCreationOrDeletion("remove_col_family", colFamilyName)
     if (checkColFamilyExists(colFamilyName)) {
       assert(db != null)
       val handle = colFamilyNameToHandleMap(colFamilyName)
@@ -293,7 +352,7 @@ class RocksDB(
   def get(
       key: Array[Byte],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
-    verifyColFamilyExists(colFamilyName)
+    verifyColFamilyOperations("get", colFamilyName)
     db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
   }
 
@@ -305,7 +364,7 @@ class RocksDB(
       key: Array[Byte],
       value: Array[Byte],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    verifyColFamilyExists(colFamilyName)
+    verifyColFamilyOperations("put", colFamilyName)
     if (conf.trackTotalNumberOfRows) {
       val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
       if (oldValue == null) {
@@ -337,10 +396,10 @@ class RocksDB(
       value: Array[Byte],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     if (!useColumnFamilies) {
-      throw new RuntimeException("Merge operation uses changelog checkpointing v2 which" +
-        " requires column families to be enabled.")
+      throw StateStoreErrors.unsupportedOperationException("merge",
+        multColFamiliesDisabledStr)
     }
-    verifyColFamilyExists(colFamilyName)
+    verifyColFamilyOperations("merge", colFamilyName)
 
     if (conf.trackTotalNumberOfRows) {
       val oldValue = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
@@ -360,7 +419,7 @@ class RocksDB(
   def remove(
       key: Array[Byte],
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-    verifyColFamilyExists(colFamilyName)
+    verifyColFamilyOperations("remove", colFamilyName)
     if (conf.trackTotalNumberOfRows) {
       val value = db.get(colFamilyNameToHandleMap(colFamilyName), readOptions, key)
       if (value != null) {
@@ -380,7 +439,7 @@ class RocksDB(
    */
   def iterator(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
     Iterator[ByteArrayPair] = {
-    verifyColFamilyExists(colFamilyName)
+    verifyColFamilyOperations("iterator", colFamilyName)
 
     val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
     logInfo(s"Getting iterator from version $loadedVersion")
@@ -409,7 +468,7 @@ class RocksDB(
   }
 
   private def countKeys(colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Long = {
-    verifyColFamilyExists(colFamilyName)
+    verifyColFamilyOperations("countKeys", colFamilyName)
     val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
 
     try {
@@ -431,7 +490,7 @@ class RocksDB(
 
   def prefixScan(prefix: Array[Byte], colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME):
     Iterator[ByteArrayPair] = {
-    verifyColFamilyExists(colFamilyName)
+    verifyColFamilyOperations("prefixScan", colFamilyName)
     val iter = db.newIterator(colFamilyNameToHandleMap(colFamilyName))
     iter.seek(prefix)
 

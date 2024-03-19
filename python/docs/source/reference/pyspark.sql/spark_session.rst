@@ -47,6 +47,7 @@ See also :class:`SparkSession`.
     SparkSession.catalog
     SparkSession.conf
     SparkSession.createDataFrame
+    SparkSession.dataSource
     SparkSession.getActiveSession
     SparkSession.newSession
     SparkSession.profile
