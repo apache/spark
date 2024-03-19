@@ -626,7 +626,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(c1, 0, 1)",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain collated string type other than UTF8_BINARY"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -643,7 +644,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "c1 || 'a' COLLATE UNICODE",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain collated string type other than UTF8_BINARY"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -660,14 +662,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain collated string type other than UTF8_BINARY"))
   }
 
   test("SPARK-47431: Default collation set to UNICODE") {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      // scalastyle:off println
-        println(SqlApiConf.get.defaultCollation)
-      // scalastyle:on println
       checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UNICODE")))
     }
   }

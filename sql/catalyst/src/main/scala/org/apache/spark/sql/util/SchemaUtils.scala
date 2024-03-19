@@ -297,9 +297,9 @@ private[spark] object SchemaUtils {
   /**
    * Checks if a given data type has a non-default collation string type.
    */
-  def hasNonDefaultCollatedString(dt: DataType): Boolean = {
+  def hasNonInternallyCollatedString(dt: DataType): Boolean = {
     dt.existsRecursively {
-      case st: StringType => !st.isDefaultCollation
+      case st: StringType => !st.isSparkInternalCollation
       case _ => false
     }
   }
