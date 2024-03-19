@@ -112,9 +112,9 @@ case class TransformWithStateExec(
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getCompatibleDistribution(
       groupingAttributes, getStateInfo, conf) ::
-      StatefulOperatorPartitioning.getCompatibleDistribution(
+    StatefulOperatorPartitioning.getCompatibleDistribution(
         initialStateGroupingAttrs, getStateInfo, conf) ::
-      Nil
+    Nil
   }
 
   /**
@@ -255,7 +255,7 @@ case class TransformWithStateExec(
         // it separately from the overall processing time.
         timeoutProcessingStartTimeNs = System.nanoTime
         processorHandle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
-      })
+    })
 
     // Late-bind the timeout processing iterator so it is created *after* the input is
     // processed (the input iterator is exhausted) and the state updates are written into the
