@@ -543,7 +543,12 @@ class XmlInferSchemaSuite extends QueryTest with SharedSparkSession with TestXml
               "array2",
               ArrayType(new StructType()
                 // The value tag is not of long type due to:
-                // When determining
+                // 1. when we infer the type for the array2 in the second array1,
+                // it combines a struct type and a primitive type and results in a string type
+                // 2. when we merge the inferred type for the first array2 and the second,
+                // we are merging a struct with longtype value tag and a string type.
+                // It results in merging the long type value tag with the primitive type
+                // and thus finally we got a struct with string type value tag.
                 .add(valueTagName, ArrayType(StringType))
                 .add("num", LongType)))))
     assert(xmlDF.schema === expectedSchema)
