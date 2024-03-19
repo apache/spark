@@ -24,6 +24,7 @@ import org.apache.spark.SparkRuntimeException;
 
 public class MalformedVariantException extends SparkRuntimeException {
   public MalformedVariantException() {
-    super("MALFORMED_VARIANT", Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
+    super("MALFORMED_VARIANT",
+        Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
   }
 }
