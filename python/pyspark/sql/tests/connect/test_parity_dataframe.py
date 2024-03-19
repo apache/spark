@@ -26,11 +26,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_help_command(self):
         super().test_help_command()
 
-    # TODO(SPARK-41625): Support Structured Streaming
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_observe_str(self):
-        super().test_observe_str()
-
     # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
     def test_sample(self):
         super().test_sample()
