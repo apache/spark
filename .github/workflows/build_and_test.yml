@@ -178,7 +178,7 @@ jobs:
         java:
           - 8
         branch:
-          - branch-3.4
+          - branch-3.5
         modules:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
@@ -268,10 +268,10 @@ jobs:
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
         rm miniconda.sh
-    - name: Install Python test dependencies for branch-3.4
+    - name: Install Python test dependencies for branch-3.4, branch-3.5
       if: matrix.branch == 'branch-3.4' || matrix.branch == 'branch-3.5'
       run: |
-        python3.9 -m pip install 'numpy==1.25.1' 'pandas<=2.0.3''pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
+        python3.9 -m pip install 'numpy==1.25.1' 'pandas<=2.0.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -377,7 +377,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: branch-3.4
+        ref: branch-3.5
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
