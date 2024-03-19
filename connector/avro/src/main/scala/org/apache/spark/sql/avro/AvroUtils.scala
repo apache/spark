@@ -197,19 +197,19 @@ private[sql] object AvroUtils extends Logging {
 
     def hasNextRow: Boolean = {
       while (!completed && currentRow.isEmpty) {
-        if (fileReader.pastSync(stopPosition)) {
+        // In some cases of empty blocks in an Avro file, `fileReader.hasNext()` returns false but
+        // advances the cursor to the next block, so we need to call `fileReader.hasNext()` again
+        // to correctly report whether the next record exists.
+        val r = (fileReader.hasNext || fileReader.hasNext) && !fileReader.pastSync(stopPosition)
+        if (!r) {
           fileReader.close()
           completed = true
           currentRow = None
-        } else if (fileReader.hasNext()) {
+        } else {
           val record = fileReader.next()
           // the row must be deserialized in hasNextRow, because AvroDeserializer#deserialize
           // potentially filters rows
           currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
-        } else {
-          // In this case, `fileReader.hasNext()` returns false but we are not past sync point yet.
-          // This means empty blocks, we need to continue reading the file in case there are non
-          // empty blocks or we are past sync point.
         }
       }
       currentRow.isDefined
