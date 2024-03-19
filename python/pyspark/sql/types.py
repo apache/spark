@@ -267,7 +267,7 @@ class StringType(AtomicType):
             )
 
     @classmethod
-    def fromCollationId(self, collationId: int) -> 'StringType':
+    def fromCollationId(self, collationId: int) -> "StringType":
         return StringType(StringType.collationNames[collationId])
 
     def collationIdToName(self) -> str:
