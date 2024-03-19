@@ -438,6 +438,10 @@ jobs:
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
         rm miniconda.sh
+    - name: Install Python test dependencies for branch-3.4, branch-3.5
+      if: inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
+      run: |
+        python3.9 -m pip install 'numpy==1.24.4' 'pandas<=2.0.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -684,6 +688,7 @@ jobs:
       run: |
         # SPARK-44554: Copy from https://github.com/apache/spark/blob/a05c27e85829fe742c1828507a1fd180cdc84b54/.github/workflows/build_and_test.yml#L571-L578
         # Should delete this section after SPARK 3.4 EOL.
+        python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2'
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.920' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.48.1' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Install Python linter dependencies for branch-3.5
@@ -691,6 +696,7 @@ jobs:
       run: |
         # SPARK-45212: Copy from https://github.com/apache/spark/blob/555c8def51e5951c7bf5165a332795e9e330ec9d/.github/workflows/build_and_test.yml#L631-L638
         # Should delete this section after SPARK 3.5 EOL.
+        python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2'
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Install Python dependencies for python linter and documentation generation
@@ -753,10 +759,11 @@ jobs:
         Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
         Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
         # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
-        python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' 'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
+        python3.9 -m pip install 'sphinx==3.0.4' mkdocs 'docutils==0.17.1' 'pydata-sphinx-theme==0.8.0' 'alabaster==0.7.12' sphinx-copybutton 'nbsphinx==0.9.2' 'numpydoc==1.4.0' 'jinja2==2.11.3' 'markupsafe==2.0.1' 'pyzmq<24.0.0' 'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
         python3.9 -m pip install 'docutils<0.18.0' # See SPARK-39421
+        python3.9 -m pip list
     - name: Install dependencies for documentation generation
       run: |
         gem install bundler -v 2.4.22
