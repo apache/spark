@@ -43,9 +43,9 @@ class DataSource(ABC):
 
     This class represents a custom data source that allows for reading from and/or
     writing to it. The data source provides methods to create readers and writers
-    for reading and writing data, respectively. At least one of the methods ``reader``
-    or ``writer`` must be implemented by any subclass to make the data source either
-    readable or writable (or both).
+    for reading and writing data, respectively. At least one of the methods
+    :meth:`DataSource.reader` or :meth:`DataSource.writer` must be implemented
+    by any subclass to make the data source either readable or writable (or both).
 
     After implementing this interface, you can start to load your data source using
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
@@ -87,16 +87,16 @@ class DataSource(ABC):
         """
         Returns the schema of the data source.
 
-        It can refer any field initialized in the ``__init__`` method to infer the
-        data source's schema when users do not explicitly specify it. This method is
-        invoked once when calling ``spark.read.format(...).load()`` to get the schema
-        for a data source read operation. If this method is not implemented, and a
-        user does not provide a schema when reading the data source, an exception will
-        be thrown.
+        It can refer any field initialized in the :meth:`DataSource.__init__` method
+        to infer the data source's schema when users do not explicitly specify it.
+        This method is invoked once when calling ``spark.read.format(...).load()``
+        to get the schema for a data source read operation. If this method is not
+        implemented, and a user does not provide a schema when reading the data source,
+        an exception will be thrown.
 
         Returns
         -------
-        schema : StructType or str
+        schema : :class:`StructType` or str
             The schema of this data source or a DDL string represents the schema
 
         Examples
@@ -106,7 +106,7 @@ class DataSource(ABC):
         >>> def schema(self):
         ...    return "a INT, b STRING"
 
-        Returns a StructType:
+        Returns a :class:`StructType`:
 
         >>> def schema(self):
         ...   return StructType().add("a", "int").add("b", "string")
@@ -118,18 +118,18 @@ class DataSource(ABC):
 
     def reader(self, schema: StructType) -> "DataSourceReader":
         """
-        Returns a ``DataSourceReader`` instance for reading data.
+        Returns a :class:`DataSourceReader` instance for reading data.
 
         The implementation is required for readable data sources.
 
         Parameters
         ----------
-        schema : StructType
+        schema : :class:`StructType`
             The schema of the data to be read.
 
         Returns
         -------
-        reader : DataSourceReader
+        reader : :class:`DataSourceReader`
             A reader instance for this data source.
         """
         raise PySparkNotImplementedError(
@@ -139,20 +139,20 @@ class DataSource(ABC):
 
     def writer(self, schema: StructType, overwrite: bool) -> "DataSourceWriter":
         """
-        Returns a ``DataSourceWriter`` instance for writing data.
+        Returns a :class:`DataSourceWriter` instance for writing data.
 
         The implementation is required for writable data sources.
 
         Parameters
         ----------
-        schema : StructType
+        schema : :class:`StructType`
             The schema of the data to be written.
         overwrite : bool
             A flag indicating whether to overwrite existing data when writing to the data source.
 
         Returns
         -------
-        writer : DataSourceWriter
+        writer : :class:`DataSourceWriter`
             A writer instance for this data source.
         """
         raise PySparkNotImplementedError(
@@ -162,18 +162,18 @@ class DataSource(ABC):
 
     def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
         """
-        Returns a ``DataSourceStreamReader`` instance for reading streaming data.
+        Returns a :class:`DataSourceStreamReader` instance for reading streaming data.
 
         The implementation is required for readable streaming data sources.
 
         Parameters
         ----------
-        schema : StructType
+        schema : :class:`StructType`
             The schema of the data to be read.
 
         Returns
         -------
-        reader : DataSourceStreamReader
+        reader : :class:`DataSourceStreamReader`
             A reader instance for this streaming data source.
         """
         raise PySparkNotImplementedError(
@@ -185,7 +185,7 @@ class DataSource(ABC):
 class InputPartition:
     """
     A base class representing an input partition returned by the `partitions()`
-    method of `DataSourceReader`.
+    method of :class:`DataSourceReader`.
 
     .. versionadded: 4.0.0
 
@@ -234,7 +234,7 @@ class DataSourceReader(ABC):
 
         Partitions are used to split data reading operations into parallel tasks.
         If this method returns N partitions, the query planner will create N tasks.
-        Each task will execute ``read(partition)`` in parallel, using the respective
+        Each task will execute :meth:`DataSourceReader.read` in parallel, using the respective
         partition value to read the data.
 
         This method is called once during query planning. By default, it returns a
@@ -246,7 +246,7 @@ class DataSourceReader(ABC):
 
         Returns
         -------
-        Sequence[InputPartition]
+        sequence of :class:`InputPartition`\\s
             A sequence of partitions for this data source. Each partition value
             must be an instance of `InputPartition` or a subclass of it.
 
@@ -282,7 +282,7 @@ class DataSourceReader(ABC):
         )
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Iterator[Union[Tuple, Row]]:
+    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator[Row]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -295,11 +295,11 @@ class DataSourceReader(ABC):
         ----------
         partition : object
             The partition to read. It must be one of the partition values returned by
-            ``partitions()``.
+            :meth:`DataSourceReader.partitions`.
 
         Returns
         -------
-        Iterator[Tuple] or Iterator[Row]
+        iterator of tuples or :class:`Row`\\s
             An iterator of tuples or rows. Each tuple or row will be converted to a row
             in the final DataFrame.
 
@@ -346,8 +346,6 @@ class DataSourceStreamReader(ABC):
         >>> def initialOffset(self):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
-
-        ...
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "initialOffset"},
@@ -368,7 +366,6 @@ class DataSourceStreamReader(ABC):
         >>> def latestOffset(self):
         ...     return {"parititon-1": {"index": 3, "closed": True}, "partition-2": {"index": 5}}
         """
-        ...
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "latestOffset"},
@@ -388,18 +385,17 @@ class DataSourceStreamReader(ABC):
 
         Returns
         -------
-        Sequence[InputPartition]
+        sequence of :class:`InputPartition`\\s
             A sequence of partitions for this data source. Each partition value
             must be an instance of `InputPartition` or a subclass of it.
         """
-        ...
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "partitions"},
         )
 
     @abstractmethod
-    def read(self, partition: InputPartition) -> Iterator[Union[Tuple, Row]]:
+    def read(self, partition: InputPartition) -> Union[Iterator[Tuple], Iterator[Row]]:
         """
         Generates data for a given partition and returns an iterator of tuples or rows.
 
@@ -415,17 +411,16 @@ class DataSourceStreamReader(ABC):
 
         Parameters
         ----------
-        partition : InputPartition
+        partition : :class:`InputPartition`
             The partition to read. It must be one of the partition values returned by
-            ``partitions()``.
+            :meth:`DataSourceStreamReader.partitions`.
 
         Returns
         -------
-        Iterator[Tuple] or Iterator[Row]
+        iterator of tuples or :class:`Row`\\s
             An iterator of tuples or rows. Each tuple or row will be converted to a row
             in the final DataFrame.
         """
-        ...
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "read"},
@@ -469,17 +464,19 @@ class DataSourceWriter(ABC):
         commit message, or None if there is no commit message.
 
         The driver collects commit messages, if any, from all executors and passes them
-        to the ``commit`` method if all tasks run successfully. If any task fails, the
-        ``abort`` method will be called with the collected commit messages.
+        to the :class:`DataSourceWriter.commit` method if all tasks run successfully. If any
+        task fails, the :class:`DataSourceWriter.abort` method will be called with the
+        collected commit messages.
 
         Parameters
         ----------
-        iterator : Iterator[Row]
+        iterator : iterator of :class:`Row`\\s
             An iterator of input data.
 
         Returns
         -------
-        WriterCommitMessage : a serializable commit message
+        :class:`WriterCommitMessage`
+            a serializable commit message
         """
         ...
 
@@ -488,13 +485,13 @@ class DataSourceWriter(ABC):
         Commits this writing job with a list of commit messages.
 
         This method is invoked on the driver when all tasks run successfully. The
-        commit messages are collected from the ``write`` method call from each task,
-        and are passed to this method. The implementation should use the commit messages
-        to commit the writing job to the data source.
+        commit messages are collected from the :meth:`DataSourceWriter.write` method call
+        from each task, and are passed to this method. The implementation should use the
+        commit messages to commit the writing job to the data source.
 
         Parameters
         ----------
-        messages : List[WriterCommitMessage]
+        messages : list of :class:`WriterCommitMessage`\\s
             A list of commit messages.
         """
         ...
@@ -504,13 +501,13 @@ class DataSourceWriter(ABC):
         Aborts this writing job due to task failures.
 
         This method is invoked on the driver when one or more tasks failed. The commit
-        messages are collected from the ``write`` method call from each task, and are
-        passed to this method. The implementation should use the commit messages to
-        abort the writing job to the data source.
+        messages are collected from the :meth:`DataSourceWriter.write` method call from
+        each task, and are passed to this method. The implementation should use the
+        commit messages to abort the writing job to the data source.
 
         Parameters
         ----------
-        messages : List[WriterCommitMessage]
+        messages : list of :class:`WriterCommitMessage`\\s
             A list of commit messages.
         """
         ...
@@ -518,8 +515,9 @@ class DataSourceWriter(ABC):
 
 class WriterCommitMessage:
     """
-    A commit message returned by the ``write`` method of ``DataSourceWriter`` and will be
-    sent back to the driver side as input parameter of ``commit`` or ``abort`` method.
+    A commit message returned by the :meth:`DataSourceWriter.write` and will be
+    sent back to the driver side as input parameter of :meth:`DataSourceWriter.commit`
+    or :meth:`DataSourceWriter.abort` method.
 
     .. versionadded: 4.0.0
 

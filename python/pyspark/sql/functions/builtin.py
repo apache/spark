@@ -12579,6 +12579,58 @@ def mask(
     )
 
 
+@_try_remote_functions
+def collate(col: "ColumnOrName", collation: str) -> Column:
+    """
+    Marks a given column with specified collation.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Target string column to work on.
+    collation : str
+        Target collation name.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of string type, where each value has the specified collation.
+    """
+    return _invoke_function("collate", _to_java_column(col), collation)
+
+
+@_try_remote_functions
+def collation(col: "ColumnOrName") -> Column:
+    """
+    Returns the collation name of a given column.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Target string column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        collation name of a given expression.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('name',)], ['dt'])
+    >>> df.select(collation('dt').alias('collation')).show()
+    +-----------+
+    |  collation|
+    +-----------+
+    |UTF8_BINARY|
+    +-----------+
+    """
+    return _invoke_function_over_columns("collation", col)
+
+
 # ---------------------- Collection functions ------------------------------
 
 

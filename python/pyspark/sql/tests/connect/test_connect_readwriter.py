@@ -26,7 +26,14 @@ from pyspark.sql.types import (
     LongType,
     StringType,
     IntegerType,
+    ArrayType,
+    MapType,
     Row,
+)
+from pyspark.testing.sqlutils import (
+    PythonOnlyUDT,
+    ExamplePoint,
+    PythonOnlyPoint,
 )
 
 from pyspark.testing.connectutils import should_test_connect
@@ -270,6 +277,62 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
         self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
         self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
         self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours("ts")), DataFrameWriterV2)
+
+    def test_simple_udt_from_read(self):
+        from pyspark.ml.linalg import Matrices, Vectors
+
+        with tempfile.TemporaryDirectory(prefix="test_simple_udt_from_read") as d:
+            path1 = f"{d}/df1.parquet"
+            self.spark.createDataFrame(
+                [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
+                schema=StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            ).write.parquet(path1)
+
+            path2 = f"{d}/df2.parquet"
+            self.spark.createDataFrame(
+                [(i % 3, [PythonOnlyPoint(float(i), float(i))]) for i in range(10)],
+                schema=StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT())),
+            ).write.parquet(path2)
+
+            path3 = f"{d}/df3.parquet"
+            self.spark.createDataFrame(
+                [(i % 3, {i % 3: PythonOnlyPoint(float(i + 1), float(i + 1))}) for i in range(10)],
+                schema=StructType()
+                .add("key", LongType())
+                .add("val", MapType(LongType(), PythonOnlyUDT())),
+            ).write.parquet(path3)
+
+            path4 = f"{d}/df4.parquet"
+            self.spark.createDataFrame(
+                [(i % 3, PythonOnlyPoint(float(i), float(i))) for i in range(10)],
+                schema=StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            ).write.parquet(path4)
+
+            path5 = f"{d}/df5.parquet"
+            self.spark.createDataFrame(
+                [Row(label=1.0, point=ExamplePoint(1.0, 2.0))]
+            ).write.parquet(path5)
+
+            path6 = f"{d}/df6.parquet"
+            self.spark.createDataFrame(
+                [(Vectors.dense(1.0, 2.0, 3.0),), (Vectors.sparse(3, {1: 1.0, 2: 5.5}),)],
+                ["vec"],
+            ).write.parquet(path6)
+
+            path7 = f"{d}/df7.parquet"
+            self.spark.createDataFrame(
+                [
+                    (Matrices.dense(3, 2, [0, 1, 4, 5, 9, 10]),),
+                    (Matrices.sparse(1, 1, [0, 1], [0], [2.0]),),
+                ],
+                ["mat"],
+            ).write.parquet(path7)
+
+            for path in [path1, path2, path3, path4, path5, path6, path7]:
+                self.assertEqual(
+                    self.connect.read.parquet(path).schema,
+                    self.spark.read.parquet(path).schema,
+                )
 
 
 if __name__ == "__main__":
