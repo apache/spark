@@ -268,11 +268,11 @@ jobs:
         curl -s https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
         bash miniconda.sh -b -p $HOME/miniconda
         rm miniconda.sh
-    - name: Install Python test dependencies for branch-3.4, branch-3.5
+    - name: Install Python test dependencies for branch-3.4
       if: matrix.branch == 'branch-3.4'
       run: |
-        python3.9 -m pip install 'numpy==1.25.1' 'pandas<=1.5.3' 'pyarrow==12.0.1' 'matplotlib<3.3.0' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
-    - name: Install Python test dependencies for branch-3.4, branch-3.5
+        python3.9 -m pip install 'numpy==1.25.1' 'pandas<=1.5.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
+    - name: Install Python test dependencies for branch-3.5
       if: matrix.branch == 'branch-3.5'
       run: |
         python3.9 -m pip install 'numpy==1.25.1' 'pandas<=2.0.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
@@ -450,6 +450,7 @@ jobs:
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     # Should delete this section after SPARK 3.5 EOL.
     - name: Install dependencies for Python code generation check for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
         curl -LO https://github.com/bufbuild/buf/releases/download/v1.28.1/buf-Linux-x86_64.tar.gz
@@ -459,6 +460,7 @@ jobs:
         python3.9 -m pip install 'protobuf==4.25.1' 'mypy-protobuf==3.3.0'
     # Should delete this section after SPARK 3.5 EOL.
     - name: Python code generation check for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
     # Should delete this section after SPARK 3.5 EOL.
     - name: Install JavaScript linter dependencies for branch-3.4, branch-3.5
