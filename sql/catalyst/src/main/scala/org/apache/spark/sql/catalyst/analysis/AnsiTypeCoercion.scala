@@ -186,6 +186,11 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
         Some(target.defaultConcreteType)
 
+      // If a function expects a StringType, no StringType instance should be implicitly cast to
+      // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
+      case (_: StringType, StringType) => None
+      case (_: StringType, _: StringTypeCollated) => None
+
       // This type coercion system will allow implicit converting String type as other
       // primitive types, in case of breaking too many existing Spark SQL queries.
       case (StringType, a: AtomicType) =>
@@ -205,11 +210,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (StringType, AnyTimestampType) =>
         Some(AnyTimestampType.defaultConcreteType)
 
-      // If a function expects a StringType, no StringType instance should be implicitly cast to
-      // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
-      case (StringType, StringType) => None
-      case (StringType, _: StringTypeCollated) => None
-
       case (DateType, AnyTimestampType) =>
         Some(AnyTimestampType.defaultConcreteType)
 
@@ -222,7 +222,13 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // "canANSIStoreAssign" doesn't account for targets extending StringTypeCollated, but
       // ANSIStoreAssign is generally expected to return "true" for (AtomicType, StringType)
-      case (_: AtomicType, _: StringTypeCollated) => Some(StringType)
+      case (_, st: StringTypeCollated) =>
+        if (Cast.canANSIStoreAssign(inType, st.defaultConcreteType)) {
+          Some(st.defaultConcreteType)
+        }
+        else {
+          None
+        }
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
