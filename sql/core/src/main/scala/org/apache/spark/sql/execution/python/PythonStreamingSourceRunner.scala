@@ -81,7 +81,7 @@ class PythonStreamingSourceRunner(
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
 
     val workerFactory =
-      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
+      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
     val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)

@@ -2083,6 +2083,11 @@
           "Operation not found."
         ]
       },
+      "SESSION_CHANGED" : {
+        "message" : [
+          "The existing Spark server driver instance has restarted. Please reconnect."
+        ]
+      },
       "SESSION_CLOSED" : {
         "message" : [
           "Session was closed."

@@ -3331,7 +3331,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jcols = []
         for c in cols:
             if isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 # ordinal is 1-based
                 if c > 0:
                     _c = self[c - 1]
@@ -3340,7 +3339,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     _c = self[-c - 1].desc()
                 else:
                     raise PySparkIndexError(
-                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                        error_class="ZERO_INDEX",
+                        message_parameters={},
                     )
             else:
                 _c = c  # type: ignore[assignment]

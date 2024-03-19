@@ -63,6 +63,14 @@ private[sql] class SparkConnectClient(
   // a new client will create a new session ID.
   private[sql] val sessionId: String = configuration.sessionId.getOrElse(UUID.randomUUID.toString)
 
+  /**
+   * Hijacks the stored server side session ID with the given suffix. Used for testing to make
+   * sure that server is validating the session ID.
+   */
+  private[sql] def hijackServerSideSessionIdForTesting(suffix: String) = {
+    stubState.responseValidator.hijackServerSideSessionIdForTesting(suffix)
+  }
+
   private[sql] val artifactManager: ArtifactManager = {
     new ArtifactManager(configuration, sessionId, bstub, stub)
   }
@@ -72,6 +80,14 @@ private[sql] class SparkConnectClient(
    */
   private[sql] def uploadAllClassFileArtifacts(): Unit =
     artifactManager.uploadAllClassFileArtifacts()
+
+  /**
+   * Returns the server-side session id obtained from the first request, if there was a request
+   * already.
+   */
+  private def serverSideSessionId: Option[String] = {
+    stubState.responseValidator.getServerSideSessionId
+  }
 
   /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
@@ -99,11 +115,11 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .addAllTags(tags.get.toSeq.asJava)
-      .build()
+    serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
     if (configuration.useReattachableExecute) {
-      bstub.executePlanReattachable(request)
+      bstub.executePlanReattachable(request.build())
     } else {
-      bstub.executePlan(request)
+      bstub.executePlan(request.build())
     }
   }
 
@@ -119,8 +135,8 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .setUserContext(userContext)
-      .build()
-    bstub.config(request)
+    serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
+    bstub.config(request.build())
   }
 
   /**
@@ -207,8 +223,8 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
-      .build()
-    analyze(request)
+    serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
+    analyze(request.build())
   }
 
   private[sql] def interruptAll(): proto.InterruptResponse = {
@@ -218,8 +234,8 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
-      .build()
-    bstub.interrupt(request)
+    serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
+    bstub.interrupt(request.build())
   }
 
   private[sql] def interruptTag(tag: String): proto.InterruptResponse = {
@@ -230,8 +246,8 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_TAG)
       .setOperationTag(tag)
-      .build()
-    bstub.interrupt(request)
+    serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
+    bstub.interrupt(request.build())
   }
 
   private[sql] def interruptOperation(id: String): proto.InterruptResponse = {
@@ -242,8 +258,8 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_OPERATION_ID)
       .setOperationId(id)
-      .build()
-    bstub.interrupt(request)
+    serverSideSessionId.foreach(session => request.setClientObservedServerSideSessionId(session))
+    bstub.interrupt(request.build())
   }
 
   private[sql] def releaseSession(): proto.ReleaseSessionResponse = {
@@ -252,8 +268,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
-      .build()
-    bstub.releaseSession(request)
+    bstub.releaseSession(request.build())
   }
 
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {

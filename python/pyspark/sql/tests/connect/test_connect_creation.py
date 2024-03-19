@@ -27,12 +27,13 @@ from pyspark.sql.types import (
     StructField,
     StringType,
     IntegerType,
+    LongType,
     MapType,
     ArrayType,
     Row,
 )
+from pyspark.testing.sqlutils import MyObject, PythonOnlyUDT
 
-from pyspark.testing.sqlutils import MyObject
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.errors.exceptions.connect import ParseException
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
@@ -688,6 +689,22 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
         row_count = 100 * 1000
         rows = [cols] * row_count
         self.assertEqual(row_count, self.connect.createDataFrame(data=rows).count())
+
+    def test_simple_udt(self):
+        from pyspark.ml.linalg import MatrixUDT, VectorUDT
+
+        for schema in [
+            StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            StructType().add("key", LongType()).add("val", ArrayType(PythonOnlyUDT())),
+            StructType().add("key", LongType()).add("val", MapType(LongType(), PythonOnlyUDT())),
+            StructType().add("key", LongType()).add("val", PythonOnlyUDT()),
+            StructType().add("key", LongType()).add("vec", VectorUDT()),
+            StructType().add("key", LongType()).add("mat", MatrixUDT()),
+        ]:
+            cdf = self.connect.createDataFrame(data=[], schema=schema)
+            sdf = self.spark.createDataFrame(data=[], schema=schema)
+
+            self.assertEqual(cdf.schema, sdf.schema)
 
 
 if __name__ == "__main__":

@@ -21,14 +21,26 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 
-// This is common logic to be shared between different stub instances to validate responses as
-// seen by the client.
+// This is common logic to be shared between different stub instances to keep the server-side
+// session id and to validate responses as seen by the client.
 class ResponseValidator extends Logging {
 
   // Server side session ID, used to detect if the server side session changed. This is set upon
   // receiving the first response from the server. This value is used only for executions that
   // do not use server-side streaming.
   private var serverSideSessionId: Option[String] = None
+
+  // Returns the server side session ID, used to send it back to the server in the follow-up
+  // requests so the server can validate it session id against the previous requests.
+  def getServerSideSessionId: Option[String] = serverSideSessionId
+
+  /**
+   * Hijacks the stored server side session ID with the given suffix. Used for testing to make
+   * sure that server is validating the session ID.
+   */
+  private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {
+    serverSideSessionId = Some(serverSideSessionId.getOrElse("") + suffix)
+  }
 
   def verifyResponse[RespT <: GeneratedMessageV3](fn: => RespT): RespT = {
     val response = fn

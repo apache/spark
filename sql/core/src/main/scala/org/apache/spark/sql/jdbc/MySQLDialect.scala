@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, FloatType, LongType, MetadataBuilder, StringType, TimestampType}
+import org.apache.spark.sql.types._
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
@@ -107,8 +107,12 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
         // Explicitly converts it into StringType here.
         Some(StringType)
-      case Types.TINYINT if "TINYINT".equalsIgnoreCase(typeName) =>
-        Some(ByteType)
+      case Types.TINYINT =>
+        if (md.build().getBoolean("isSigned")) {
+          Some(ByteType)
+        } else {
+          Some(ShortType)
+        }
       case Types.TIMESTAMP if "DATETIME".equalsIgnoreCase(typeName) =>
         // scalastyle:off line.size.limit
         // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE

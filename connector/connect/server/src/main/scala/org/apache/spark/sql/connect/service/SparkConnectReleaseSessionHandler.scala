@@ -33,8 +33,10 @@ class SparkConnectReleaseSessionHandler(
     // If the session doesn't exist, this will just be a noop.
     val key = SessionKey(v.getUserContext.getUserId, v.getSessionId)
     // if the session is present, update the server-side session ID.
+    // Note we do not validate the previously seen server-side session id.
     val maybeSession = SparkConnectService.sessionManager.getIsolatedSessionIfPresent(key)
     maybeSession.foreach(f => responseBuilder.setServerSideSessionId(f.serverSessionId))
+
     SparkConnectService.sessionManager.closeSession(key)
 
     responseObserver.onNext(responseBuilder.build())
