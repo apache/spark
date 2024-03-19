@@ -3039,4 +3039,31 @@ class DDLParserSuite extends AnalysisTest {
       errorClass = "INTERNAL_ERROR",
       parameters = Map("message" -> "INSERT OVERWRITE DIRECTORY is not supported."))
   }
+
+  test("create table with trailing comma in column list") {
+    val createSql =
+      """
+        |CREATE TABLE my_tbl (
+        |   a INT,
+        |   b STRING,
+        |)
+        |USING parquet
+        |""".stripMargin
+
+    val expectedPlan = CreateTable(
+      UnresolvedIdentifier(Seq("my_tbl")),
+      Seq(ColumnDefinition("a", IntegerType), ColumnDefinition("b", StringType)),
+      Seq.empty[Transform],
+      UnresolvedTableSpec(
+        Map.empty[String, String],
+        Some("parquet"),
+        OptionList(Seq.empty),
+        None,
+        None,
+        None,
+        false),
+      false)
+
+    parseCompare(createSql, expectedPlan)
+  }
 }

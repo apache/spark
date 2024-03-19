@@ -1165,7 +1165,7 @@ colType
     ;
 
 createOrReplaceTableColTypeList
-    : createOrReplaceTableColType (COMMA createOrReplaceTableColType)*
+    : createOrReplaceTableColType (COMMA createOrReplaceTableColType)* COMMA?
     ;
 
 createOrReplaceTableColType
