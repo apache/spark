@@ -209,7 +209,13 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       } else {
         None
       }
-    case iff: If => generateExpressionWithName("CASE_WHEN", iff.children)
+    case iff: If =>
+      val childrenExpressions = iff.children.flatMap(generateExpression(_))
+      if (iff.children.length == childrenExpressions.length) {
+        Some(new V2Predicate("CASE_WHEN", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
     case substring: Substring =>
       val children = if (substring.len == Literal(Integer.MAX_VALUE)) {
         Seq(substring.str, substring.pos)
