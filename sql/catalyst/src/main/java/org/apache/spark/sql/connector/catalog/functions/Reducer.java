@@ -23,11 +23,13 @@ import org.apache.spark.annotation.Evolving;
  *
  * @see ReducibleFunction
  *
- * A user defined function f_source(x) is 'reducible' on another user_defined function f_target(x) if
+ * A user defined function f_source(x) is 'reducible' on another user_defined function
+ * f_target(x) if
  * <ul>
- *   <li> There exists a reducer function r(x) such that r(f_source(x)) = f_target(x) for all input x. </li>
- *   <li> More generally, there exists two reducer functions r1(x) and r2(x) such that
- *     r1(f_source(x)) = r2(f_target(x)) for all input x. </li>
+ *   <li> There exists a reducer function r(x) such that r(f_source(x)) = f_target(x) for
+ *        all input x, or </li>
+ *   <li> More generally, there exists reducer functions r1(x) and r2(x) such that
+ *        r1(f_source(x)) = r2(f_target(x)) for all input x. </li>
  * </ul>
  *
  * @param <I> reducer input type
@@ -36,5 +38,5 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface Reducer<I, O> {
-    O reduce(I arg);
+  O reduce(I arg);
 }

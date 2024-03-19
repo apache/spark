@@ -23,8 +23,9 @@ import org.apache.spark.annotation.Evolving;
  *
  * A function f_source(x) is 'reducible' on another function f_target(x) if
  * <ul>
- *   <li> There exists a reducer function r(x) such that r(f_source(x)) = f_target(x) for all input x. </li>
- *   <li> More generally, there exists two reducer functions r1(x) and r2(x) such that
+ *   <li> There exists a reducer function r(x) such that r(f_source(x)) = f_target(x)
+ *        for all input x, or </li>
+ *   <li> More generally, there exists reducer functions r1(x) and r2(x) such that
  *        r1(f_source(x)) = r2(f_target(x)) for all input x. </li>
  * </ul>
  * <p>
@@ -62,7 +63,8 @@ public interface ReducibleFunction<I, O> {
     /**
      * This method is for bucket functions.
      *
-     * If this bucket function is 'reducible' on another bucket function, return the {@link Reducer} function.
+     * If this bucket function is 'reducible' on another bucket function,
+     * return the {@link Reducer} function.
      * <p>
      * Example to return reducer for reducing f_source = bucket(4, x) on f_target = bucket(2, x)
      * <ul>
@@ -77,8 +79,10 @@ public interface ReducibleFunction<I, O> {
      * @param otherNumBuckets number of buckets for the other bucket function
      * @return a reduction function if it is reducible, null if not
      */
-    default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction, int thisNumBuckets, int otherNumBuckets) {
-        return reducer(otherFunction);
+    default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction,
+      int thisNumBuckets,
+      int otherNumBuckets) {
+      return reducer(otherFunction);
     }
 
     /**
@@ -96,6 +100,6 @@ public interface ReducibleFunction<I, O> {
      * @return a reduction function if it is reducible, null if not.
      */
     default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
-        return reducer(otherFunction, 0, 0);
+      return reducer(otherFunction, 0, 0);
     }
 }
