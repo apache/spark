@@ -799,13 +799,11 @@ abstract class TypeCoercionBase {
         val children: Seq[Expression] = checkImplicitCastInputTypes
           .children.zip(checkImplicitCastInputTypes.inputTypes).map {
             case (e, st) if hasStringType(st) =>
-              castStringType(e, collationId).getOrElse(e)
-            case (nt, t) if hasStringType(t.defaultConcreteType) && nt.dataType == NullType =>
-              castStringType(nt, collationId, t.defaultConcreteType).getOrElse(nt)
+              castStringType(e, collationId, Some(st)).getOrElse(e)
             case (e, TypeCollection(types)) if types.exists(hasStringType) =>
               types.flatMap{ dt =>
                 if (hasStringType(dt)) {
-                  castStringType(e, collationId, dt)
+                  castStringType(e, collationId, Some(dt))
                 } else {
                   TypeCoercion.implicitCast(e, dt)
                 }
@@ -824,7 +822,7 @@ abstract class TypeCoercionBase {
             case (st, _) if hasStringType(st.dataType) =>
               castStringType(st, collationId).getOrElse(st)
             case (nt, e) if hasStringType(e.defaultConcreteType) && nt.dataType == NullType =>
-              castStringType(nt, collationId, e.defaultConcreteType).getOrElse(nt)
+              castStringType(nt, collationId, Some(e.defaultConcreteType)).getOrElse(nt)
             case (in, _) => in
             }
           checkExpectsInputType.withNewChildren(children)
@@ -856,23 +854,28 @@ abstract class TypeCoercionBase {
 
     private def castStringType(expr: Expression,
                                collationId: Int,
-                               expected: AbstractDataType = NullType): Option[Expression] =
+                               expected: Option[AbstractDataType] = None): Option[Expression] =
       castStringType(expr.dataType, collationId, expected).map { dt =>
         if (dt == expr.dataType) expr else Cast(expr, dt)
       }
 
-    private def castStringType(inType: DataType,
+    private def castStringType(inType: AbstractDataType,
                                collationId: Int,
-                               expected: AbstractDataType): Option[DataType] = {
+                               expected: Option[AbstractDataType]): Option[DataType] = {
       @Nullable val ret: DataType = inType match {
         case st: StringType if st.collationId == collationId =>
           st
-        case _: AtomicType =>
+        case _: AtomicType
+          if expected.isEmpty || expected.get.defaultConcreteType.isInstanceOf[StringType] =>
           StringType(collationId)
-        case ArrayType(arrType, nullable) =>
+        case ArrayType(arrType, nullable)
+          if expected.isEmpty || expected.get.defaultConcreteType.isInstanceOf[ArrayType] =>
           castStringType(arrType, collationId, expected).map(ArrayType(_, nullable)).orNull
-        case _: NullType =>
-          castStringType(expected.defaultConcreteType, collationId, expected).orNull
+        case _: NullType if expected.nonEmpty =>
+          castStringType(
+            expected.get.defaultConcreteType,
+            collationId,
+            expected).orNull
         case _ => null
       }
       Option(ret)
