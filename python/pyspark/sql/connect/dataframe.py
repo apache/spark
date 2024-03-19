@@ -1768,6 +1768,12 @@ class DataFrame(ParentDataFrame):
         assert table is not None
         return (table, schema)
 
+    def _toArrow(self) -> "pa.Table":
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client.to_table(query, self._plan.observations)
+
+    _toArrow.__doc__ = PySparkDataFrame._toArrow.__doc__
+
     def toPandas(self) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
         return self._session.client.to_pandas(query, self._plan.observations)
