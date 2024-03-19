@@ -489,7 +489,7 @@ jobs:
         Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
         Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
         # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
-        python3.9 -m pip install 'Sphinx==3.0.4' mkdocs 'docutils==0.17.1' 'pydata-sphinx-theme==0.8.0' sphinx-copybutton 'nbsphinx==0.9.2' 'numpydoc==1.4.0' 'jinja2==2.11.3' markupsafe 'pyzmq<24.0.0' 'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
+        python3.9 -m pip install 'Sphinx==3.0.4' mkdocs 'docutils==0.17.1' 'pydata-sphinx-theme==0.8.0' sphinx-copybutton 'nbsphinx==0.9.2' 'numpydoc==1.4.0' 'jinja2==2.11.3' 'markupsafe==2.0.1' 'pyzmq<24.0.0' 'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
         python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
     - name: Install dependencies for documentation generation
