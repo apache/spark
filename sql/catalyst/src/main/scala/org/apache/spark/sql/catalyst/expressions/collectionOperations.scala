@@ -956,8 +956,8 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
   }
 
   override def nullSafeEval(array: Any, ascending: Any): Any = {
-    // put keys and their respective indices inside a tuple
-    // and sort them to extract new order k/v pairs
+    // put keys and their respective values inside a tuple and sort them
+    // according to the key ordering. Extract the new sorted k/v pairs to form a sorted map
 
     val mapData = array.asInstanceOf[MapData]
     val numElements = mapData.numElements()
@@ -1004,9 +1004,10 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
     val originalIndex = ctx.freshName("originalIndex")
 
     val boxedKeyType = CodeGenerator.boxedType(keyType)
+    val boxedValueType = CodeGenerator.boxedType(valueType)
     val javaKeyType = CodeGenerator.javaType(keyType)
 
-    val simpleEntryType = s"java.util.AbstractMap.SimpleEntry<$boxedKeyType, Integer>"
+    val simpleEntryType = s"java.util.AbstractMap.SimpleEntry<$boxedKeyType, $boxedValueType>"
 
     val comp = if (CodeGenerator.isPrimitiveType(keyType)) {
       val v1 = ctx.freshName("v1")
@@ -1029,7 +1030,8 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
        |
        |for (int $i = 0; $i < $numElements; $i++) {
        |  $sortArray[$i] = new $simpleEntryType(
-       |    ${CodeGenerator.getValue(keys, keyType, i)}, $i);
+       |    ${CodeGenerator.getValue(keys, keyType, i)},
+       |    ${CodeGenerator.getValue(values, valueType, i)});
        |}
        |
        |java.util.Arrays.sort($sortArray, new java.util.Comparator<Object>() {
@@ -1045,9 +1047,8 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
        |Object[] $newValues = new Object[$numElements];
        |
        |for (int $i = 0; $i < $numElements; $i++) {
-       |  int $originalIndex = (Integer) ((($simpleEntryType) $sortArray[$i]).getValue());
-       |  $newKeys[$i] = ${CodeGenerator.getValue(keys, keyType, originalIndex)};
-       |  $newValues[$i] = ${CodeGenerator.getValue(values, valueType, originalIndex)};
+       |  $newKeys[$i] = (($simpleEntryType) $sortArray[$i]).getKey();
+       |  $newValues[$i] = (($simpleEntryType) $sortArray[$i]).getValue();
        |}
        |
        |${ev.value} = new $arrayBasedMapData(

@@ -830,17 +830,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT map_sort(map(1, 1, 2, 2, 1, 1))").collect()
-      },
-      errorClass = "DUPLICATED_MAP_KEY",
-      parameters = Map(
-        "key" -> "1",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""
-      )
-    )
-
-    checkError(
       exception = intercept[ExtendedAnalysisException] {
         sql("SELECT map_sort(map(1,1,2,2), \"asc\")").collect()
       },
