@@ -145,7 +145,7 @@ object EvaluatePython {
         case c: Int => c.toLong
       }
 
-    case StringType => (obj: Any) => nullSafeConvert(obj) {
+    case _: StringType => (obj: Any) => nullSafeConvert(obj) {
       case _ => UTF8String.fromString(obj.toString)
     }
 
