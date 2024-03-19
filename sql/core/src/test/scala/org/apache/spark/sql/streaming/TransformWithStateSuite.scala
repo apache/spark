@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException}
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
@@ -59,7 +61,6 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
   private def handleProcessingTimeBasedTimers(
       key: String,
       expiryTimestampMs: Long): Iterator[(String, String)] = {
-    println("clear expiry for key: " + key)
     _countState.clear()
     Iterator((key, "-1"))
   }
@@ -69,16 +70,14 @@ class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefu
       inputRows: Iterator[String],
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    println("inputRows here: " + inputRows.toSeq)
-    println("timerValues here: " + timerValues.getCurrentProcessingTimeInMs())
+
     if (expiredTimerInfo.isValid()) {
-      println("expiredTimerInfo here: " + expiredTimerInfo.getExpiryTimeInMs())
       handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
     } else {
       val currCount = _countState.getOption().getOrElse(0L)
       if (currCount == 0 && (key == "a" || key == "c")) {
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
-        println("timerValues here inside: " + timerValues.getCurrentProcessingTimeInMs())
+        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
+          + 5000)
       }
 
       val count = currCount + 1
@@ -296,7 +295,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   with AlsoTestWithChangelogCheckpointingEnabled {
 
   import testImplicits._
-/*
+
   test("transformWithState - streaming with rocksdb and invalid processor should fail") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -345,7 +344,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("a", "1"), ("c", "1"))
       )
     }
-  } */
+  }
 
   test("transformWithState - streaming with rocksdb and processing time timer " +
    "should succeed") {
@@ -363,15 +362,15 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       testStream(result, OutputMode.Update())(
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, "a"),
-        AdvanceManualClock(1 * 1000), // 1000
-        CheckNewAnswer(("a", "1")), //
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "1")),
 
         AddData(inputData, "b"),
-        AdvanceManualClock(1 * 1000), // b, 7000
+        AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("b", "1")),
 
         AddData(inputData, "b"),
-        AdvanceManualClock(10 * 1000), // 12000
+        AdvanceManualClock(10 * 1000),
         CheckNewAnswer(("a", "-1"), ("b", "2")),
 
         StopStream,
@@ -388,7 +387,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       )
     }
   }
-/*
+
   test("transformWithState - streaming with rocksdb and processing time timer " +
    "and updating timers should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -650,7 +649,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         StopStream
       )
     }
-  } */
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
