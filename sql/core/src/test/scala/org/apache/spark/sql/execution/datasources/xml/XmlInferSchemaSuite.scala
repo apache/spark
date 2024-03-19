@@ -415,7 +415,7 @@ class XmlInferSchemaSuite extends QueryTest with SharedSparkSession with TestXml
           "abc"
         )
 
-        // root/dt=1/col1=abd
+        // root/d1=1/col1=abd
         makePartition(
           sparkContext.parallelize(6 to 10).map(i => s"""<ROW><a>1</a><c>str$i</c></ROW>"""),
           d1,
