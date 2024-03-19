@@ -65,7 +65,7 @@ abstract class TypeCoercionBase {
    * is larger than decimal, and yet decimal is more precise than double, but in
    * union we would cast the decimal into double.
    */
-  def findWiderCommonType(children: Seq[DataType]): Option[DataType]
+  def findWiderCommonType(types: Seq[DataType]): Option[DataType]
 
   /**
    * Given an expected data type, try to cast the expression and return the cast expression.
