@@ -86,11 +86,15 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
     (input.getLong(1) % input.getInt(0)).toInt
   }
 
-  override def reducer(func: ReducibleFunction[_, _],
-    thisNumBuckets: Int,
-    otherNumBuckets: Int): Reducer[Int, Int] = {
+  override def reducer(
+    thisNumBucketsArg: Object,
+    otherFunc: ReducibleFunction[_, _],
+    otherNumBucketsArg: Object): Reducer[Int, Int] = {
 
-    if (func == BucketFunction) {
+    val thisNumBuckets = thisNumBucketsArg.asInstanceOf[Int]
+    val otherNumBuckets = otherNumBucketsArg.asInstanceOf[Int]
+
+    if (otherFunc == BucketFunction) {
       if ((thisNumBuckets > otherNumBuckets)
         && (thisNumBuckets % otherNumBuckets == 0)) {
         BucketReducer(thisNumBuckets, otherNumBuckets)

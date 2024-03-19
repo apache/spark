@@ -60,46 +60,47 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public interface ReducibleFunction<I, O> {
 
-    /**
-     * This method is for bucket functions.
-     *
-     * If this bucket function is 'reducible' on another bucket function,
-     * return the {@link Reducer} function.
-     * <p>
-     * Example to return reducer for reducing f_source = bucket(4, x) on f_target = bucket(2, x)
-     * <ul>
-     *     <li>thisFunction = bucket</li>
-     *     <li>otherFunction = bucket</li>
-     *     <li>thisNumBuckets = Int(4)</li>
-     *     <li>otherNumBuckets = Int(2)</li>
-     * </ul>
-     *
-     * @param otherFunction the other bucket function
-     * @param thisNumBuckets number of buckets for this bucket function
-     * @param otherNumBuckets number of buckets for the other bucket function
-     * @return a reduction function if it is reducible, null if not
-     */
-    default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction,
-      int thisNumBuckets,
-      int otherNumBuckets) {
-      return reducer(otherFunction);
-    }
+  /**
+   * This method is for parameterized functions.
+   *
+   * If this parameterized function is 'reducible' on another bucket function,
+   * return the {@link Reducer} function.
+   * <p>
+   * Example to return reducer for reducing f_source = bucket(4, x) on f_target = bucket(2, x)
+   * <ul>
+   *     <li>thisFunction = bucket</li>
+   *     <li>thisParam = Int(4)</li>
+   *     <li>otherFunction = bucket</li>
+   *     <li>otherParam = Int(2)</li>
+   * </ul>
+   *
+   * @param thisParam parameter for this function
+   * @param otherFunction the other parameterized function
+   * @param otherParam parameter for the other function
+   * @return a reduction function if it is reducible, null if not
+   */
+  default Reducer<I, O> reducer(
+    Object thisParam,
+    ReducibleFunction<?, ?> otherFunction,
+    Object otherParam) {
+    throw new UnsupportedOperationException();
+  }
 
-    /**
-     * This method is for all other functions.
-     *
-     * If this function is 'reducible' on another function, return the {@link Reducer} function.
-     * <p>
-     * Example of reducing f_source = days(x) on f_target = hours(x)
-     * <ul>
-     *     <li>thisFunction = days</li>
-     *     <li>otherFunction = hours</li>
-     * </ul>
-     *
-     * @param otherFunction the other function
-     * @return a reduction function if it is reducible, null if not.
-     */
-    default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
-      return reducer(otherFunction, 0, 0);
-    }
+  /**
+   * This method is for all other functions.
+   *
+   * If this function is 'reducible' on another function, return the {@link Reducer} function.
+   * <p>
+   * Example of reducing f_source = days(x) on f_target = hours(x)
+   * <ul>
+   *     <li>thisFunction = days</li>
+   *     <li>otherFunction = hours</li>
+   * </ul>
+   *
+   * @param otherFunction the other function
+   * @return a reduction function if it is reducible, null if not.
+   */
+  default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
+    throw new UnsupportedOperationException();
+  }
 }

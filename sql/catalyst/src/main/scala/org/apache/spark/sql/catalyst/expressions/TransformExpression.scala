@@ -70,10 +70,9 @@ case class TransformExpression(
     } else {
       (function, other.function) match {
         case (f: ReducibleFunction[_, _], o: ReducibleFunction[_, _]) =>
-          val reducer = f.reducer(o, numBucketsOpt.getOrElse(0), other.numBucketsOpt.getOrElse(0))
-          val otherReducer =
-            o.reducer(f, other.numBucketsOpt.getOrElse(0), numBucketsOpt.getOrElse(0))
-          reducer != null || otherReducer != null
+          val thisReducer = reducer(f, numBucketsOpt, o, other.numBucketsOpt)
+          val otherReducer = reducer(o, other.numBucketsOpt, f, numBucketsOpt)
+          thisReducer.isDefined || otherReducer.isDefined
         case _ => false
       }
     }
@@ -91,12 +90,22 @@ case class TransformExpression(
   def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
     (function, other.function) match {
       case(e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _]) =>
-        val reducer = e1.reducer(e2,
-          numBucketsOpt.getOrElse(0),
-          other.numBucketsOpt.getOrElse(0))
-        Option(reducer)
+        reducer(e1, numBucketsOpt, e2, other.numBucketsOpt)
       case _ => None
     }
+  }
+
+  // Return a Reducer for a reducible function on another reducible function
+  private def reducer(thisFunction: ReducibleFunction[_, _],
+    thisNumBucketsOpt: Option[Int],
+    otherFunction: ReducibleFunction[_, _],
+    otherNumBucketsOpt: Option[Int]): Option[Reducer[_, _]] = {
+    val res = (thisNumBucketsOpt, otherNumBucketsOpt) match {
+      case (Some(numBuckets), Some(otherNumBuckets)) =>
+        thisFunction.reducer(numBuckets, otherFunction, otherNumBuckets)
+      case _ => thisFunction.reducer(otherFunction)
+    }
+    Option(res)
   }
 
   override def dataType: DataType = function.resultType()
