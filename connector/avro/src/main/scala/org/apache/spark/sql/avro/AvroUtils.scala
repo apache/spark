@@ -200,8 +200,9 @@ private[sql] object AvroUtils extends Logging {
         // In some cases of empty blocks in an Avro file, `fileReader.hasNext()` returns false but
         // advances the cursor to the next block, so we need to call `fileReader.hasNext()` again
         // to correctly report whether the next record exists.
-        val r = (fileReader.hasNext || fileReader.hasNext) && !fileReader.pastSync(stopPosition)
-        if (!r) {
+        val moreData =
+          !(fileReader.hasNext || fileReader.hasNext) && !fileReader.pastSync(stopPosition)
+        if (!moreData) {
           fileReader.close()
           completed = true
           currentRow = None
