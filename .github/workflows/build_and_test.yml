@@ -178,7 +178,7 @@ jobs:
         java:
           - 8
         branch:
-          - branch-3.5
+          - branch-3.4
         modules:
           - >-
             pyspark-sql, pyspark-resource, pyspark-testing
@@ -377,7 +377,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: branch-3.5
+        ref: branch-3.4
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -430,13 +430,13 @@ jobs:
     - name: Spark connect jvm client mima check
       run: ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies for branch-3.4
-      if: inputs.branch == 'branch-3.4'
       run: |
         # SPARK-44554: Copy from https://github.com/apache/spark/blob/a05c27e85829fe742c1828507a1fd180cdc84b54/.github/workflows/build_and_test.yml#L571-L578
         # Should delete this section after SPARK 3.4 EOL.
         python3.9 -m pip install 'flake8==3.9.0' pydata-sphinx-theme 'mypy==0.920' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'numpy==1.25.1' 'pyarrow==12.0.1' numpydoc 'jinja2<3.0.0' 'black==22.6.0' 'pandas<=2.0.3' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.48.1' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Install Python linter dependencies for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: |
         # SPARK-45212: Copy from https://github.com/apache/spark/blob/555c8def51e5951c7bf5165a332795e9e330ec9d/.github/workflows/build_and_test.yml#L631-L638
         # Should delete this section after SPARK 3.5 EOL.
