@@ -16868,22 +16868,22 @@ def map_sort(col: "ColumnOrName", asc: bool = True) -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as data")
     >>> df.select(sf.map_sort(df.data)).show(truncate=False)
-    +--------------------+
-    |map_sort(data, true)|
-    +--------------------+
-    |{1 -> a, 2 -> b, ...|
-    +--------------------+
+    +------------------------+
+    |map_sort(data, true)    |
+    +------------------------+
+    |{1 -> a, 2 -> b, 3 -> c}|
+    +------------------------+
 
     Example 2: Sorting a map in descending order
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as data")
     >>> df.select(sf.map_sort(df.data, False)).show(truncate=False)
-    +---------------------+
-    |map_sort(data, false)|
-    +---------------------+
-    | {3 -> c, 2 -> b, ...|
-    +---------------------+
+    +------------------------+
+    |map_sort(data, false)   |
+    +------------------------+
+    |{3 -> c, 2 -> b, 1 -> a}|
+    +------------------------+
     """
     return _invoke_function("map_sort", _to_java_column(col), asc)
 

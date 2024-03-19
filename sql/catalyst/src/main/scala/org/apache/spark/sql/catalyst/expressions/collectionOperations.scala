@@ -922,7 +922,7 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
   override def dataType: DataType = base.dataType
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
-    case MapType(kt, _, _) if RowOrdering.isOrderable(kt) =>
+    case m: MapType if RowOrdering.isOrderable(m.keyType) =>
       ascendingOrder match {
         case Literal(_: Boolean, BooleanType) =>
           TypeCheckResult.TypeCheckSuccess
@@ -936,7 +936,7 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
               "inputType" -> toSQLType(ascendingOrder.dataType))
           )
       }
-    case MapType(_, _, _) =>
+    case _: MapType =>
       DataTypeMismatch(
         errorSubClass = "INVALID_ORDERING_TYPE",
         messageParameters = Map(
@@ -1001,7 +1001,6 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
     val c = ctx.freshName("c")
     val newKeys = ctx.freshName("newKeys")
     val newValues = ctx.freshName("newValues")
-    val originalIndex = ctx.freshName("originalIndex")
 
     val boxedKeyType = CodeGenerator.boxedType(keyType)
     val boxedValueType = CodeGenerator.boxedType(valueType)
