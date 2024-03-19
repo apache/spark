@@ -407,7 +407,7 @@ class XmlInferSchemaSuite extends QueryTest with SharedSparkSession with TestXml
     withTempPath(root => {
       withTempView("test_myxml_with_part") {
         val d1 = new File(root, "d1=1")
-        // root/dt=1/col1=abc
+        // root/d1=1/col1=abc
         makePartition(
           sparkContext.parallelize(2 to 5).map(i => s"""<ROW><a>1</a><b>str$i</b></ROW>"""),
           d1,
