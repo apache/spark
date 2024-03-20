@@ -20,13 +20,13 @@ package org.apache.spark.sql.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Connection, Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -445,9 +445,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row.length == 2)
     val infinity = row(0).getAs[Timestamp]("timestamp_column")
     val negativeInfinity = row(1).getAs[Timestamp]("timestamp_column")
-    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
-    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
-
+    val minTimeStamp = -62135596800000L
+    val maxTimestamp = 253402300799999L
     assert(infinity.getTime == maxTimestamp)
     assert(negativeInfinity.getTime == minTimeStamp)
   }
