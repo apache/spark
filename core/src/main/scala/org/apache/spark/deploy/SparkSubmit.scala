@@ -403,14 +403,19 @@ private[spark] class SparkSubmit extends Logging {
         // SPARK-43540: add current working directory into driver classpath
         val workingDirectory = "."
         childClasspath += workingDirectory
-        def downloadResourcesToCurrentDirectory(uris: String, isArchive: Boolean = false):
+
+        def downloadResourcesToCurrentDirectory(uris: String,
+                                                isArchive: Boolean = false,
+                                                avoidDownload: String => Boolean = _ => false):
         String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
+          val (avoidDownloads, toDownloads) =
+            resolvedUris.partition(uri => avoidDownload(uri.getScheme))
           val localResources = downloadFileList(
-            resolvedUris.map(
+            toDownloads.map(
               Utils.getUriBuilder(_).fragment(null).build().toString).mkString(","),
             targetDir, sparkConf, hadoopConf)
-          Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(resolvedUris).map {
+          (Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(toDownloads).map {
             case (localResources, resolvedUri) =>
               val source = new File(localResources.getPath).getCanonicalFile
               val dest = new File(
@@ -427,14 +432,19 @@ private[spark] class SparkSubmit extends Logging {
               // Keep the URIs of local files with the given fragments.
               Utils.getUriBuilder(
                 localResources).fragment(resolvedUri.getFragment).build().toString
-          }.mkString(",")
+          } ++ avoidDownloads.map(_.toString)).mkString(",")
         }
+
+        val avoidJarDownloadSchemes = sparkConf.get(KUBERNETES_AVOID_JAR_DOWNLOAD_SCHEMES)
+
+        def avoidJarDownload(scheme: String): Boolean =
+          avoidJarDownloadSchemes.contains("*") || avoidJarDownloadSchemes.contains(scheme)
 
         val filesLocalFiles = Option(args.files).map {
           downloadResourcesToCurrentDirectory(_)
         }.orNull
-        val jarsLocalJars = Option(args.jars).map {
-          downloadResourcesToCurrentDirectory(_)
+        val updatedJars = Option(args.jars).map {
+          downloadResourcesToCurrentDirectory(_, avoidDownload = avoidJarDownload)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map {
           downloadResourcesToCurrentDirectory(_, true)
@@ -445,7 +455,7 @@ private[spark] class SparkSubmit extends Logging {
         args.files = filesLocalFiles
         args.archives = archiveLocalFiles
         args.pyFiles = pyLocalFiles
-        args.jars = jarsLocalJars
+        args.jars = updatedJars
       }
     }
 
@@ -732,9 +742,10 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
+    // For isKubernetesClusterModeDriver, the jar is already added in the previous spark-submit
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python and R files, the primary resource is already distributed as a regular file
-    if (!isYarnCluster && !args.isPython && !args.isR) {
+    if (!isKubernetesClusterModeDriver && !isYarnCluster && !args.isPython && !args.isR) {
       var jars = sparkConf.get(JARS)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
