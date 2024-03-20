@@ -44,6 +44,7 @@ from typing import (
     cast,
     TYPE_CHECKING,
     Sequence,
+    Callable,
 )
 
 import pandas as pd
@@ -90,7 +91,7 @@ from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
-from pyspark.sql.connect.shell.progress import Progress
+from pyspark.sql.connect.shell.progress import Progress, ProgressHandler
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
@@ -675,6 +676,29 @@ class SparkConnectClient(object):
         self._server_session_id: Optional[str] = None
 
         self._profiler_collector = ConnectProfilerCollector()
+
+        self._progress_handlers: Iterable[ProgressHandler] = []
+
+    def register_progress_handler(self, handler: Callable) -> None:
+        """
+        Register a progress handler to be called when a progress message is received.
+        Parameters
+        ----------
+        handler
+
+        Returns
+        -------
+
+        """
+        if handler in self._progress_handlers:
+            return
+        self._progress_handlers.append(handler)
+
+    def clear_handlers(self) -> None:
+        self._progress_handlers.clear()
+
+    def remove_progress_handler(self, handler: Callable) -> None:
+        self._progress_handlers.remove(handler)
 
     def _retrying(self) -> "Retrying":
         return Retrying(self._retry_policies)
@@ -1262,6 +1286,7 @@ class SparkConnectClient(object):
                         b.execution_progress.num_tasks,
                         b.execution_progress.num_completed_tasks,
                         b.execution_progress.input_bytes_read,
+                        b.execution_progress.num_inflight_tasks,
                     )
             if b.HasField("arrow_batch"):
                 logger.debug(
@@ -1339,7 +1364,7 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        progress = Progress()
+        progress = Progress(handlers=self._progress_handlers)
         for response in self._execute_and_fetch_as_iterator(req, observations, progress=progress):
             if isinstance(response, StructType):
                 schema = response

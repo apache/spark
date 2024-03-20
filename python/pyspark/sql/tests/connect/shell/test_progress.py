@@ -31,7 +31,7 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
     def test_simple_progress(self):
         buffer = StringIO()
         p = Progress(output=buffer, enabled=True)
-        p.update_ticks(100, 50, 999)
+        p.update_ticks(100, 50, 999, 10)
         val = buffer.getvalue()
         self.assertIn("50.00%", val, "Current progress is 50%")
         self.assertIn("****", val, "Should use the default char to print.")
@@ -44,22 +44,42 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
     def test_configure_char(self):
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=True)
-        p.update_ticks(100, 50, 999)
+        p.update_ticks(100, 50, 999, 10)
         val = buffer.getvalue()
         self.assertIn("++++++", val, "Updating the char works.")
 
     def test_disabled_does_not_print(self):
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=False)
-        p.update_ticks(100, 50, 999)
-        p.update_ticks(100, 51, 999)
+        p.update_ticks(100, 50, 999, 10)
+        p.update_ticks(100, 51, 999, 10)
         val = buffer.getvalue()
         self.assertEqual(0, len(val), "If the printing is disabled, don't print.")
 
     def test_finish_progress(self):
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=True)
-        p.update_ticks(100, 50, 999)
+        p.update_ticks(100, 50, 999, 10)
+        p.finish()
+        self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
+
+    def test_progress_handler(self):
+        handler_called = 0
+
+        def handler(**kwargs):
+            nonlocal handler_called
+            handler_called = 1
+            self.assertEqual(100, kwargs["total_tasks"])
+            self.assertEqual(50, kwargs["tasks_completed"])
+            self.assertEqual(999, kwargs["bytes_read"])
+            self.assertEqual(10, kwargs["inflight_tasks"])
+
+        buffer = StringIO()
+        p = Progress(char="+", output=buffer, enabled=True, handlers=[handler])
+        p.update_ticks(100, 0, 0, 1)
+        p.update_ticks(100, 50, 999, 10)
+        self.assertIn("++++++", buffer.getvalue(), "Updating the char works.")
+        self.assertEqual(1, handler_called, "Handler should be called.")
         p.finish()
         self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
 

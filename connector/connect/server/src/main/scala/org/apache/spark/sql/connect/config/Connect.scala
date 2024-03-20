@@ -265,4 +265,11 @@ object Connect {
       .version("4.0.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(1024)
+
+  val CONNECT_PROGRESS_REPORT_INTERVAL =
+    buildStaticConf("spark.connect.progress.reportInterval")
+      .doc("The interval at which the progress of a query is reported to the client.")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("2s")
 }

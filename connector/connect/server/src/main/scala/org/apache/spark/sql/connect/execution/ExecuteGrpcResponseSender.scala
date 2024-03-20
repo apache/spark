@@ -24,7 +24,7 @@ import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE, CONNECT_PROGRESS_REPORT_INTERVAL}
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 
@@ -145,7 +145,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       listener.tryGetTracker(executeHolder.jobTag).foreach { tracker =>
         // Only send progress message if there is something new to report.
         tracker.yieldWhenDirty {
-          (tasks, tasksCompleted, stages, stagesCompleted, inputBytesRead) =>
+          (tasks, tasksCompleted, stages, stagesCompleted, inflightTasks, inputBytesRead) =>
             val response = ExecutePlanResponse
               .newBuilder()
               .setExecutionProgress(
@@ -155,7 +155,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
                   .setNumTasks(tasks)
                   .setNumCompletedTasks(tasksCompleted)
                   .setNumCompletedStages(stagesCompleted)
-                  .setNumStages(stages))
+                  .setNumStages(stages)
+                  .setNumInflightTasks(inflightTasks))
               .build()
             // There is a special case when the response observer has alreaady determined
             // that the final message is send (and the stream will be closed) but we might want
@@ -238,7 +239,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           // monitor, and will notify upon state change.
           if (response.isEmpty) {
             // Wake up more frequently to send the progress updates.
-            val timeout = 2000
+            val timeout = SparkEnv.get.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL)
             logTrace(s"Wait for response to become available with timeout=$timeout ms.")
             executionObserver.responseLock.wait(timeout)
             enqueueProgressMessage()

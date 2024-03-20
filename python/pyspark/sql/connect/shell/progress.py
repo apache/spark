@@ -16,9 +16,10 @@
 #
 
 """Implementation of a progress bar that is displayed while a query is running."""
-
+import abc
 import time
 import sys
+from typing import Iterable, Callable
 
 try:
     from IPython.utils.terminal import get_terminal_size
@@ -31,6 +32,14 @@ except ImportError:
 from pyspark.sql.connect.shell import progress_bar_enabled
 
 
+class ProgressHandler(abc.ABC):
+    @abc.abstractmethod
+    def __call__(
+        self, total_tasks: int, tasks_completed: int, bytes_read: int, inflight_tasks: int
+    ) -> None:
+        pass
+
+
 class Progress:
     """This is a small helper class to visualize a textual progress bar.
     he interface is very simple and assumes that nothing else prints to the
@@ -39,7 +48,14 @@ class Progress:
     SI_BYTE_SIZES = (1 << 60, 1 << 50, 1 << 40, 1 << 30, 1 << 20, 1 << 10, 1)
     SI_BYTE_SUFFIXES = ("EiB", "PiB", "TiB", "GiB", "MiB", "KiB", "B")
 
-    def __init__(self, char="*", min_width=80, output=sys.stdout, enabled=False):
+    def __init__(
+        self,
+        char="*",
+        min_width=80,
+        output=sys.stdout,
+        enabled=False,
+        handlers: Iterable[ProgressHandler] = [],
+    ):
         """
         Constructs a new Progress bar. The progress bar is typically used in
         the blocking query execution path to process the execution progress
@@ -61,17 +77,27 @@ class Progress:
         self._enabled = enabled or progress_bar_enabled()
         self._bytes_read = 0
         self._out = output
+        self._running = 0
+        self._handlers = handlers
 
-    def update_ticks(self, ticks: int, current: int, bytes_read: int) -> None:
+    def update_ticks(self, ticks: int, current: int, bytes_read: int, inflight_tasks: int) -> None:
         """This method is called from the execution to update the progress bar with a new total
         tick counter and the current position. This is necessary in case new stages get added with
-        new tasks and so the total task number will be udpated as well."""
+        new tasks and so the total task number will be updated as well."""
         if ticks > 0 and current != self._tick:
             self._ticks = ticks
             self._tick = current
             self._bytes_read = bytes_read
             if self._tick > 0:
                 self.output()
+            self._running = inflight_tasks
+            for handler in self._handlers:
+                handler(
+                    total_tasks=ticks,
+                    tasks_completed=current,
+                    bytes_read=bytes_read,
+                    inflight_tasks=inflight_tasks,
+                )
 
     def finish(self):
         """Clear the last line"""
@@ -87,7 +113,8 @@ class Progress:
             percent_complete = (self._tick / self._ticks) * 100
             elapsed = int(time.time() - self._started)
             scanned = self._bytes_to_string(self._bytes_read)
-            buffer = f"\r[{bar}] {percent_complete:.2f}% Complete ({elapsed}s, Scanned {scanned})"
+            running = self._running
+            buffer = f"\r[{bar}] {percent_complete:.2f}% Complete ({running} Tasks running, {elapsed}s, Scanned {scanned})"
             self._max_printed = max(len(buffer), self._max_printed)
             print(buffer, end="", flush=True, file=self._out)
 

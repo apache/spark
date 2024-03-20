@@ -37,6 +37,7 @@ from typing import (
     Iterable,
     TYPE_CHECKING,
     ClassVar,
+    Callable,
 )
 
 import numpy as np
@@ -316,6 +317,12 @@ class SparkSession:
         return DataStreamReader(self)
 
     readStream.__doc__ = PySparkSession.readStream.__doc__
+
+    def register_progress_handler(self, handler: Callable) -> None:
+        """
+        Register a progress handler to be called when a progress update is received from the server.
+        """
+        self._client.register_progress_handler(handler)
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None

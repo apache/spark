@@ -24,7 +24,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{SparkFunSuite, Success}
 import org.apache.spark.executor.{ExecutorMetrics, InputMetrics, TaskMetrics}
-import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, StageInfo, TaskInfo}
+import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart, StageInfo, TaskInfo}
 
 class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSugar {
 
@@ -53,6 +53,7 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
   testProperties.setProperty("spark.job.tags", s"otherTag,$testTag,anotherTag")
 
   val testJobStart = SparkListenerJobStart(1, 1, Seq(testStage1, testStage2), testProperties)
+  val testTaskStart = SparkListenerTaskStart(1, 1, testStage1Task1)
 
   test("onJobStart with no matching tags") {
     val listener = new ConnectProgressExecutionListener
@@ -69,13 +70,15 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
     listener.onJobStart(testJobStart)
     val t = listener.trackedTags(testTag)
 
-    t.yieldWhenDirty((totalTasks, completedTasks, totalStages, completedStages, bytesRead) => {
-      assert(totalTasks == 2)
-      assert(completedTasks == 0)
-      assert(totalStages == 2)
-      assert(completedStages == 0)
-      assert(bytesRead == 0)
-    })
+    t.yieldWhenDirty(
+      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) => {
+        assert(totalTasks == 2)
+        assert(completedTasks == 0)
+        assert(totalStages == 2)
+        assert(completedStages == 0)
+        assert(bytesRead == 0)
+        assert(inflight == 0)
+      })
   }
 
   test("taskDone") {
@@ -95,41 +98,45 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
 
     val t = listener.trackedTags(testTag)
     var yielded = false
-    t.yieldWhenDirty { (totalTasks, completedTasks, totalStages, completedStages, bytesRead) =>
-      assert(totalTasks == 2)
-      assert(completedTasks == 0)
-      assert(totalStages == 2)
-      assert(completedStages == 0)
-      yielded = true
+    t.yieldWhenDirty {
+      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) =>
+        assert(totalTasks == 2)
+        assert(completedTasks == 0)
+        assert(totalStages == 2)
+        assert(completedStages == 0)
+        yielded = true
     }
     assert(yielded, "Must updated with results")
 
     yielded = false
     listener.onTaskEnd(taskEnd)
-    t.yieldWhenDirty { (totalTasks, completedTasks, totalStages, completedStages, bytesRead) =>
-      assert(totalTasks == 2)
-      assert(completedTasks == 1)
-      assert(totalStages == 2)
-      assert(completedStages == 0)
-      assert(bytesRead == 500)
-      yielded = true
+    t.yieldWhenDirty {
+      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) =>
+        assert(totalTasks == 2)
+        assert(completedTasks == 1)
+        assert(totalStages == 2)
+        assert(completedStages == 0)
+        assert(bytesRead == 500)
+        yielded = true
     }
     assert(yielded, "Must updated with results")
     yielded = false
-    t.yieldWhenDirty { (totalTasks, completedTasks, totalStages, completedStages, bytesRead) =>
-      yielded = true
+    t.yieldWhenDirty {
+      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) =>
+        yielded = true
     }
     assert(!yielded, "Must not update if not dirty")
 
     val stageEnd = SparkListenerStageCompleted(testStage1)
     listener.onStageCompleted(stageEnd)
-    t.yieldWhenDirty { (totalTasks, completedTasks, totalStages, completedStages, bytesRead) =>
-      assert(totalTasks == 2)
-      assert(completedTasks == 1)
-      assert(totalStages == 2)
-      assert(completedStages == 1)
-      assert(bytesRead == 500)
-      yielded = true
+    t.yieldWhenDirty {
+      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) =>
+        assert(totalTasks == 2)
+        assert(completedTasks == 1)
+        assert(totalStages == 2)
+        assert(completedStages == 1)
+        assert(bytesRead == 500)
+        yielded = true
     }
     assert(yielded, "Must updated with results")
   }

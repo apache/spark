@@ -1410,11 +1410,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         NUM_STAGES_FIELD_NUMBER: builtins.int
         NUM_COMPLETED_STAGES_FIELD_NUMBER: builtins.int
         INPUT_BYTES_READ_FIELD_NUMBER: builtins.int
+        NUM_INFLIGHT_TASKS_FIELD_NUMBER: builtins.int
         num_tasks: builtins.int
         num_completed_tasks: builtins.int
         num_stages: builtins.int
         num_completed_stages: builtins.int
         input_bytes_read: builtins.int
+        num_inflight_tasks: builtins.int
         def __init__(
             self,
             *,
@@ -1423,6 +1425,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             num_stages: builtins.int = ...,
             num_completed_stages: builtins.int = ...,
             input_bytes_read: builtins.int = ...,
+            num_inflight_tasks: builtins.int = ...,
         ) -> None: ...
         def ClearField(
             self,
@@ -1433,6 +1436,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 b"num_completed_stages",
                 "num_completed_tasks",
                 b"num_completed_tasks",
+                "num_inflight_tasks",
+                b"num_inflight_tasks",
                 "num_stages",
                 b"num_stages",
                 "num_tasks",

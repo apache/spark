@@ -431,6 +431,7 @@ message ExecutePlanResponse {
     int64 num_stages = 3;
     int64 num_completed_stages = 4;
     int64 input_bytes_read = 5;
+    int64 num_inflight_tasks = 6;
   }
 }
 

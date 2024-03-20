@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.execution
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 
 /**
  * A listener that tracks the execution of jobs and stages for a given set of tags. This is used
@@ -48,6 +48,8 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
     private[ConnectProgressExecutionListener] val inputBytesRead = new AtomicLong(0)
     // The tracker is marked as dirty if it has new progress to report.
     private[ConnectProgressExecutionListener] val dirty = new AtomicBoolean(false)
+    // Tracks all currently running tasks for a particular tracker.
+    private[ConnectProgressExecutionListener] val inFlightTasks = new AtomicInteger(0)
 
     /**
      * Yield the current state of the tracker if it is dirty. A consumer of the tracker can
@@ -56,13 +58,14 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
      *
      * If the tracker was marked as dirty, the state is reset after.
      */
-    def yieldWhenDirty(thunk: (Int, Int, Int, Int, Long) => Unit): Unit = {
+    def yieldWhenDirty(thunk: (Int, Int, Int, Int, Int, Long) => Unit): Unit = {
       if (dirty.get()) {
         thunk(
           totalTasks.get(),
           completedTasks.get(),
           stages.size,
           completedStages.get(),
+          inFlightTasks.get(),
           inputBytesRead.get())
         dirty.set(false)
       }
@@ -101,12 +104,27 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
     }
   }
 
+  override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+    // Check if the task belongs to a job that we are tracking.
+    trackedTags.foreach({ case (tag, tracker) =>
+      if (tracker.stages.contains(taskStart.stageId)) {
+        tracker.inFlightTasks.incrementAndGet()
+        tracker.dirty.set(true)
+      }
+    })
+  }
+
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
     // Check if the task belongs to a job that we are tracking.
     trackedTags.foreach({ case (tag, tracker) =>
       if (tracker.stages.contains(taskEnd.stageId)) {
         tracker.completedTasks.incrementAndGet()
         tracker.inputBytesRead.updateAndGet(_ + taskEnd.taskMetrics.inputMetrics.bytesRead)
+        // This should never become negative, simply reset to zero if it does.
+        tracker.inFlightTasks.decrementAndGet()
+        if (tracker.inFlightTasks.get() < 0) {
+          tracker.inFlightTasks.set(0)
+        }
         tracker.dirty.set(true)
       }
     })
