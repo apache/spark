@@ -427,8 +427,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         result
       case other => resolve(other)
     }.map {
-      case e: Expression if e.resolved => e
+      case e: Expression if e.resolved || e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) => e
       // Resolve again to support order-insensitive lateral column alias
+      case a: Alias =>
+        aliasMap.remove(a.name.toLowerCase(Locale.ROOT))
+        resolve(a)
       case other => resolve(other)
     }
   }
