@@ -848,7 +848,7 @@ class RocksDB(
 
   /** Create a native RocksDB logger that forwards native logs to log4j with correct log levels. */
   private def createLogger(): Logger = {
-    val dbLogger = new Logger(dbOptions) {
+    val dbLogger = new Logger(dbOptions.infoLogLevel()) {
       override def log(infoLogLevel: InfoLogLevel, logMsg: String) = {
         // Map DB log level to log4j levels
         // Warn is mapped to info because RocksDB warn is too verbose
