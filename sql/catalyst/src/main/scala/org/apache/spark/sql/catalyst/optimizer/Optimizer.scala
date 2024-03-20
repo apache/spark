@@ -349,12 +349,23 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // We preserve the top aggregation, but its input has been optimized via
         // Optimizer.execute().
         // Make sure that the attributes still have IDs expected by the Aggregate node
-        // by inserting a project.
-        val updatedProjectList = projectOverAggregateChild.output.zip(optimizedInput.output).map {
-          case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
+        // by inserting a project if necessary.
+        val needProject = projectOverAggregateChild.output.zip(optimizedInput.output).exists {
+          case (oldAttr, newAttr) => oldAttr.exprId != newAttr.exprId
         }
-
-        s.withNewPlan(a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput))))
+        if (needProject) {
+          val updatedProjectList = projectOverAggregateChild.output.zip(optimizedInput.output).map {
+            case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
+          }
+          s.withNewPlan(a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput))))
+        } else {
+          // Remove the top-level project if it is trivial. We do it to minimize plan changes.
+          optimizedInput match {
+            case Project(projectList, input) if projectList.forall(_.isInstanceOf[Attribute]) =>
+              s.withNewPlan(a.withNewChildren(Seq(input)))
+            case _ => s.withNewPlan(a.withNewChildren(Seq(optimizedInput)))
+          }
+        }
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach

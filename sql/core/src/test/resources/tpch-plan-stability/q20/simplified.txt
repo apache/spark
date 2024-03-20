@@ -38,15 +38,14 @@ WholeStageCodegen (8)
                                         Exchange [l_partkey,l_suppkey] #5
                                           WholeStageCodegen (3)
                                             HashAggregate [l_partkey,l_suppkey,l_quantity] [sum,isEmpty,sum,isEmpty]
-                                              Project [l_partkey,l_quantity,l_suppkey]
-                                                BroadcastHashJoin [l_partkey,p_partkey]
-                                                  Project [l_partkey,l_suppkey,l_quantity]
-                                                    Filter [l_shipdate,l_partkey,l_suppkey]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet spark_catalog.default.lineitem [l_partkey,l_suppkey,l_quantity,l_shipdate]
-                                                  InputAdapter
-                                                    ReusedExchange [p_partkey] #3
+                                              BroadcastHashJoin [l_partkey,p_partkey]
+                                                Project [l_partkey,l_suppkey,l_quantity]
+                                                  Filter [l_shipdate,l_partkey,l_suppkey]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet spark_catalog.default.lineitem [l_partkey,l_suppkey,l_quantity,l_shipdate]
+                                                InputAdapter
+                                                  ReusedExchange [p_partkey] #3
               InputAdapter
                 BroadcastExchange #6
                   WholeStageCodegen (6)
