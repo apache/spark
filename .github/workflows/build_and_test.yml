@@ -64,7 +64,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: branch-3.4
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -113,7 +113,7 @@ jobs:
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_NAME="apache-spark-ci-image:branch-3.4-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
 
@@ -140,7 +140,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: apache/spark
-          ref: ${{ inputs.branch }}
+          ref: branch-3.4
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |
@@ -161,7 +161,7 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:branch-3.4
 
   pyspark:
     needs: [precondition, infra-image]
@@ -202,7 +202,7 @@ jobs:
             pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
-      PYTHON_TO_TEST: 'python3.9'
+      PYTHON_TO_TEST: ''
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
@@ -271,7 +271,6 @@ jobs:
     - name: Install Python test dependencies for branch-3.4
       if: matrix.branch == 'branch-3.4'
       run: |
-        # pypy3 -m pip install 'numpy==1.20.3' 'pandas<=1.5.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
         python3.9 -m pip install 'numpy==1.20.3' 'pandas<=1.5.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
     - name: Install Python test dependencies for branch-3.5
       if: matrix.branch == 'branch-3.5'
