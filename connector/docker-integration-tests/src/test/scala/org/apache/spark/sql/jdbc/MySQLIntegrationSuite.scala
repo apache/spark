@@ -24,6 +24,7 @@ import java.util.Properties
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StructType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -45,6 +46,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y TEXT(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (17,'dave')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE bools (b1 BOOLEAN, b2 BIT(1), b3 TINYINT(1))")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO bools VALUES (TRUE, b'1', 1)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
@@ -203,5 +208,20 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect().toSet == expectedResult)
+  }
+
+
+  test("SPARK-47478: all boolean synonyms read-write roundtrip") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "bools", new Properties)
+    checkAnswer(df, Row(true, true, true))
+    df.write.mode("append").jdbc(jdbcUrl, "bools", new Properties)
+    checkAnswer(df, Seq(Row(true, true, true), Row(true, true, true)))
+    val mb = new MetadataBuilder()
+      .putBoolean("isTimestampNTZ", false)
+      .putLong("scale", 0)
+    assert(df.schema === new StructType()
+      .add("b1", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build())
+      .add("b2", BooleanType, nullable = true, mb.putBoolean("isSigned", false).build())
+      .add("b3", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build()))
   }
 }
