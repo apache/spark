@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.util.Locale
-
 import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
@@ -33,6 +31,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -722,7 +721,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           // binary collation with values converted to lowercase should match the results as well
           sql(s"create table $tableNameLowercase(a ${check.dataType}) using parquet")
           check.rows.map(row =>
-            sql(s"insert into $tableNameLowercase(a) values(${row.toLowerCase(Locale.ROOT)})"))
+            // scalastyle:off caselocale
+            sql(
+              s"""
+                 |insert into $tableNameLowercase(a)
+                 |values(${UTF8String.fromString(row).toLowerCase})
+                 |""".stripMargin)
+            // scalastyle:on caselocale
+          )
           checkResults(tableNameLowercase)
         }
     )
@@ -815,7 +821,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           sql(s"create table $tab(a ${check.dataType}) using parquet"))
         Seq((tableLeftLowercase, check.leftRows), (tableRightLowercase, check.rightRows)).foreach {
           case (tab, data) =>
-            data.map(row => sql(s"insert into $tab(a) values(${row.toLowerCase(Locale.ROOT)})"))
+            // scalastyle:off caselocale
+            data.map(row =>
+              sql(s"insert into $tab(a) values(${UTF8String.fromString(row).toLowerCase})"))
+            // scalastyle:on caselocale
         }
         checkResults(tableLeft, tableRight)
       }
