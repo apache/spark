@@ -1871,8 +1871,8 @@ case class StringRepeat(str: Expression, times: Expression)
 
   override def left: Expression = str
   override def right: Expression = times
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, IntegerType)
+  override def dataType: DataType = str.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation, IntegerType)
 
   override def nullSafeEval(string: Any, n: Any): Any = {
     string.asInstanceOf[UTF8String].repeat(n.asInstanceOf[Integer])
