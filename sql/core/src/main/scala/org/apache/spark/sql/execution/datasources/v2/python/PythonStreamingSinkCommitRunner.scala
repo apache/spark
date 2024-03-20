@@ -30,6 +30,13 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 
+/**
+ * This class is a proxy to invoke commit or abort methods in Python DataSourceStreamWriter.
+ * A runner spawns a python worker process. In the main function, set up communication
+ * between JVM and python process through socket and create a DataSourceStreamWriter instance.
+ * In an infinite loop, the python worker process receive write commit messages
+ * from the socket, then commit or abort a microbatch.
+ */
 class PythonStreamingSinkCommitRunner(
     func: PythonFunction,
     schema: StructType,

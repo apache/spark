@@ -581,6 +581,9 @@ class DataSourceStreamWriter(ABC):
         ----------
         messages : List[WriterCommitMessage]
             A list of commit messages.
+        batchId: int
+            An integer that uniquely identifies a batch of data being written.
+            The integer increase by 1 with each microbatch processed.
         """
         ...
 
@@ -597,6 +600,9 @@ class DataSourceStreamWriter(ABC):
         ----------
         messages : List[WriterCommitMessage]
             A list of commit messages.
+        batchId: int
+            An integer that uniquely identifies a batch of data being written.
+            The integer increase by 1 with each microbatch processed.
         """
         ...
 
