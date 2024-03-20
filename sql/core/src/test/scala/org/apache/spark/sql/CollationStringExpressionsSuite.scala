@@ -69,7 +69,9 @@ class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession 
       )
     })
   }
+
   // TODO: Add more tests for other string expressions
+
 }
 
 class CollationStringExpressionsANSISuite extends CollationRegexpExpressionsSuite {
