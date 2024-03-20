@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write._
+import org.apache.spark.sql.connector.write.{BatchWrite, _}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 
 
@@ -42,6 +42,9 @@ class PythonWrite(
     ds.source.createPythonMetrics()
 }
 
+/**
+ * A [[BatchWrite]] for python data source writing. Responsible for generating the writer factory.
+ * */
 class PythonBatchWrite(
     ds: PythonDataSourceV2,
     shortName: String,

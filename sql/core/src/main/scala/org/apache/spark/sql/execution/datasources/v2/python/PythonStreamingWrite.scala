@@ -22,6 +22,10 @@ import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
 
+/**
+ * A [[streamingWrite]] for python data source writing.
+ * Responsible for generating the writer factory, committing or aborting a microbatch.
+ * */
 class PythonStreamingWrite(
     ds: PythonDataSourceV2,
     shortName: String,
