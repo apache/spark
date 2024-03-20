@@ -263,7 +263,7 @@ class StringType(AtomicType):
             self.collationId = self.collationNameToId(collation.upper())
         else:
             raise PySparkValueError(
-                f"Collation parameter expected to be string but got {type(collation)}"
+                f"Collation parameter expected to be string but got {type(collation)} {collation}"
             )
 
     @classmethod
@@ -288,7 +288,11 @@ class StringType(AtomicType):
         return "string" + self.collationIdToName()
 
     def __repr__(self) -> str:
-        return "StringType(%d)" % (self.collationId) if self.collationId != 0 else "StringType()"
+        return (
+            "StringType('%s')" % StringType.collationNames[self.collationId]
+            if self.collationId != 0
+            else "StringType()"
+        )
 
 
 class CharType(AtomicType):

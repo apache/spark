@@ -1316,7 +1316,7 @@ class DataFrameTestsMixin:
 
     def test_create_df_with_collation(self):
         schema = StructType([StructField("name", StringType("UNICODE_CI"), True)])
-        df = self.spark.createDataFrame([("Alice", ), ("alice", )], schema)
+        df = self.spark.createDataFrame([("Alice",), ("alice",)], schema)
 
         self.assertEqual(df.select("name").distinct().count(), 1)
 
