@@ -27,7 +27,7 @@ WholeStageCodegen (7)
                                     Exchange [cs_item_sk] #4
                                       WholeStageCodegen (3)
                                         HashAggregate [cs_item_sk,cs_ext_discount_amt] [sum,count,sum,count]
-                                          Project [cs_ext_discount_amt,cs_item_sk]
+                                          Project [cs_item_sk,cs_ext_discount_amt]
                                             BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                               Filter [cs_item_sk]
                                                 Subquery #2

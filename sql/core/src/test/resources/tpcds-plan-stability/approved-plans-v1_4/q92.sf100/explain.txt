@@ -77,11 +77,11 @@ Join type: Inner
 Join condition: None
 
 (11) Project [codegen id : 3]
-Output [2]: [ws_ext_discount_amt#4, ws_item_sk#3]
+Output [2]: [ws_item_sk#3, ws_ext_discount_amt#4]
 Input [4]: [ws_item_sk#3, ws_ext_discount_amt#4, ws_sold_date_sk#5, d_date_sk#9]
 
 (12) HashAggregate [codegen id : 3]
-Input [2]: [ws_ext_discount_amt#4, ws_item_sk#3]
+Input [2]: [ws_item_sk#3, ws_ext_discount_amt#4]
 Keys [1]: [ws_item_sk#3]
 Functions [1]: [partial_avg(UnscaledValue(ws_ext_discount_amt#4))]
 Aggregate Attributes [2]: [sum#10, count#11]
