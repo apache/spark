@@ -162,7 +162,7 @@ def main(infile: IO, outfile: IO) -> None:
             writer = data_source.streamWriter(schema, overwrite)
         else:
             # Instantiate the data source writer.
-            writer = data_source.writer(schema, overwrite) # type: ignore[assignment]
+            writer = data_source.writer(schema, overwrite)  # type: ignore[assignment]
 
         # Create a function that can be used in mapInArrow.
         import pyarrow as pa
