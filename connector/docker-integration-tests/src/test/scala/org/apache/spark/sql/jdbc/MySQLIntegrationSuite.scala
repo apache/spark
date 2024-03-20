@@ -53,11 +53,19 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
-      + "dbl DOUBLE, tiny TINYINT, u_tiny TINYINT UNSIGNED)").executeUpdate()
+      + "dbl DOUBLE, tiny TINYINT)").executeUpdate()
 
     conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
-      + "42.75, 1.0000000000000002, -128, 255)").executeUpdate()
+      + "42.75, 1.0000000000000002, -128)").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE unsigned_numbers (" +
+      "tiny TINYINT UNSIGNED, small SMALLINT UNSIGNED, med MEDIUMINT UNSIGNED," +
+      "nor INT UNSIGNED, big BIGINT UNSIGNED, deci DECIMAL(40,20) UNSIGNED," +
+      "dbl DOUBLE UNSIGNED)").executeUpdate()
+
+    conn.prepareStatement("INSERT INTO unsigned_numbers VALUES (255, 65535, 16777215, 4294967295," +
+      "9223372036854775808, 123456789012345.123456789012345, 1.0000000000000002)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
       + "yr YEAR)").executeUpdate()
@@ -87,10 +95,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 11)
+    assert(types.length == 10)
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
-    assert(types(2).equals("class java.lang.Integer"))
+    assert(types(2).equals("class java.lang.Short"))
     assert(types(3).equals("class java.lang.Integer"))
     assert(types(4).equals("class java.lang.Integer"))
     assert(types(5).equals("class java.lang.Long"))
@@ -98,10 +106,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(7).equals("class java.lang.Double"))
     assert(types(8).equals("class java.lang.Double"))
     assert(types(9).equals("class java.lang.Byte"))
-    assert(types(10).equals("class java.lang.Short"))
     assert(rows(0).getBoolean(0) == false)
     assert(rows(0).getLong(1) == 0x225)
-    assert(rows(0).getInt(2) == 17)
+    assert(rows(0).getShort(2) == 17)
     assert(rows(0).getInt(3) == 77777)
     assert(rows(0).getInt(4) == 123456789)
     assert(rows(0).getLong(5) == 123456789012345L)
@@ -110,7 +117,25 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDouble(7) == 42.75)
     assert(rows(0).getDouble(8) == 1.0000000000000002)
     assert(rows(0).getByte(9) == 0x80.toByte)
-    assert(rows(0).getShort(10) == 0xff.toShort)
+  }
+
+  test("SPARK-47462: Unsigned numeric types") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "unsigned_numbers", new Properties)
+    val rows = df.head()
+    assert(rows.get(0).isInstanceOf[Short])
+    assert(rows.get(1).isInstanceOf[Integer])
+    assert(rows.get(2).isInstanceOf[Integer])
+    assert(rows.get(3).isInstanceOf[Long])
+    assert(rows.get(4).isInstanceOf[BigDecimal])
+    assert(rows.get(5).isInstanceOf[BigDecimal])
+    assert(rows.get(6).isInstanceOf[Double])
+    assert(rows.getShort(0) === 255)
+    assert(rows.getInt(1) === 65535)
+    assert(rows.getInt(2) === 16777215)
+    assert(rows.getLong(3) === 4294967295L)
+    assert(rows.getAs[BigDecimal](4).equals(new BigDecimal("9223372036854775808")))
+    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.12345678901234500000")))
+    assert(rows.getDouble(6) === 1.0000000000000002)
   }
 
   test("Date types") {
