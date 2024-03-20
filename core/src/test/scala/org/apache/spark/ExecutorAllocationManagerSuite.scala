@@ -1934,8 +1934,6 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
     PrivateMethod[Map[Int, Map[String, Int]]](Symbol("rpIdToHostToLocalTaskCount"))
   private val _onSpeculativeTaskSubmitted =
     PrivateMethod[Unit](Symbol("onSpeculativeTaskSubmitted"))
-  private val _totalRunningTasksPerResourceProfile =
-    PrivateMethod[Int](Symbol("totalRunningTasksPerResourceProfile"))
 
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(new SparkConf)
 
@@ -2043,7 +2041,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   }
 
   private def totalRunningTasksPerResourceProfile(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _totalRunningTasksPerResourceProfile(defaultProfile.id)
+    manager.listener.totalRunningTasksPerResourceProfile(defaultProfile.id)
   }
 
   private def hostToLocalTaskCount(

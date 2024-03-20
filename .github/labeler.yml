@@ -101,6 +101,8 @@ SQL:
     ]
     - any-glob-to-any-file: [
      'common/unsafe/**/*',
+     'common/sketch/**/*',
+     'common/variant/**/*',
      'bin/spark-sql*',
      'bin/beeline*',
      'sbin/*thriftserver*.sh',

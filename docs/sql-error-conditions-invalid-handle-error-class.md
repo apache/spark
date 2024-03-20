@@ -46,6 +46,10 @@ Operation already exists.
 
 Operation not found.
 
+## SESSION_CHANGED
+
+The existing Spark server driver instance has restarted. Please reconnect.
+
 ## SESSION_CLOSED
 
 Session was closed.

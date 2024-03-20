@@ -29,8 +29,14 @@ class SparkConnectReattachExecuteHandler(
     extends Logging {
 
   def handle(v: proto.ReattachExecuteRequest): Unit = {
+    val previousSessionId = v.hasClientObservedServerSideSessionId match {
+      case true => Some(v.getClientObservedServerSideSessionId)
+      case false => None
+    }
     val sessionHolder = SparkConnectService.sessionManager
-      .getIsolatedSession(SessionKey(v.getUserContext.getUserId, v.getSessionId))
+      .getIsolatedSession(
+        SessionKey(v.getUserContext.getUserId, v.getSessionId),
+        previousSessionId)
 
     val executeHolder = sessionHolder.executeHolder(v.getOperationId).getOrElse {
       if (SparkConnectService.executionManager
