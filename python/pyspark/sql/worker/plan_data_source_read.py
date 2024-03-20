@@ -177,7 +177,7 @@ def main(infile: IO, outfile: IO) -> None:
                 f"but found '{type(partition).__name__}'."
             )
 
-            output_iter = reader.read(partition)  # type: ignore[arg-type]
+            output_iter = reader.read(partition)  # type: ignore[attr-defined]
 
             # Validate the output iterator.
             if not isinstance(output_iter, Iterator):
@@ -268,9 +268,9 @@ def main(infile: IO, outfile: IO) -> None:
                         },
                     )
                 if len(partitions) == 0:
-                    partitions = [None]  # type: ignore
+                    partitions = [None]
             except NotImplementedError:
-                partitions = [None]  # type: ignore
+                partitions = [None]
 
             # Return the serialized partition values.
             write_int(len(partitions), outfile)
