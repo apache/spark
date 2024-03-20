@@ -294,8 +294,10 @@ SELECT assert_true(false)
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-'false' is not true!
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -303,8 +305,10 @@ SELECT raise_error('hello')
 -- !query schema
 struct<>
 -- !query output
-java.lang.RuntimeException
-hello
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query

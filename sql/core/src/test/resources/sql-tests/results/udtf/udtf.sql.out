@@ -367,12 +367,10 @@ SELECT * FROM UDTFPartitionByOrderBySelectExprOnlyPartitionColumn(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-ValueError: 'input' is not in list
-
-During handling of the above exception, another exception occurred:
-
-pyspark.errors.exceptions.base.PySparkValueError: input
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -681,8 +679,10 @@ SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -690,8 +690,10 @@ SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -699,8 +701,10 @@ SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnArrayElementType(TABLE(t2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -708,8 +712,10 @@ SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnStructType(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -717,8 +723,10 @@ SELECT * FROM InvalidEvalReturnsNoneToNonNullableColumnMapType(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -726,8 +734,10 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnScalarType(TABLE(t2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -735,8 +745,10 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayType(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -744,8 +756,10 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnArrayElementType(TAB
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -753,8 +767,10 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnStructType(TABLE(t2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -762,8 +778,10 @@ SELECT * FROM InvalidTerminateReturnsNoneToNonNullableColumnMapType(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EXEC_ERROR] User defined table function encountered an error in the 'eval' or 'terminate' method: Column 0 within a returned row had a value of None, either directly or within array/struct/map subfields, but the corresponding column type was declared as non-nullable; please update the UDTF to return a non-None value at this location or otherwise declare the column type as nullable.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -771,8 +789,10 @@ SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE] Failed to evaluate the user-defined table function 'UDTFForwardStateFromAnalyzeWithKwargs' because the function arguments did not match the expected signature of the 'eval' method (missing a required argument: 'argument'). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its 'eval' method accepts the provided arguments, and then try the query again.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -802,8 +822,10 @@ SELECT * FROM UDTFForwardStateFromAnalyzeWithKwargs(invalid => 2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE] Failed to evaluate the user-defined table function 'UDTFForwardStateFromAnalyzeWithKwargs' because the function arguments did not match the expected signature of the 'eval' method (missing a required argument: 'argument'). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its 'eval' method accepts the provided arguments, and then try the query again.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -922,8 +944,10 @@ SELECT * FROM InvalidForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD] Failed to evaluate the user-defined table function 'InvalidForwardStateFromAnalyzeTooManyInitArgs' because its constructor is invalid: the function implements the 'analyze' method, but its constructor has more than two arguments (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, or one 'self' argument plus another argument for the result of the 'analyze' method, and try the query again.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -931,8 +955,10 @@ SELECT * FROM InvalidNotForwardStateFromAnalyzeTooManyInitArgs(TABLE(t2))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.api.python.PythonException
-pyspark.errors.exceptions.base.PySparkRuntimeError: [UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD] Failed to evaluate the user-defined table function 'InvalidNotForwardStateFromAnalyzeTooManyInitArgs' because its constructor is invalid: the function does not implement the 'analyze' method, and its constructor has more than one argument (including the 'self' reference). Please update the table function so that its constructor accepts exactly one 'self' argument, and try the query again.
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
