@@ -17,11 +17,11 @@
 package org.apache.spark.sql.execution.python
 
 import java.util.concurrent.CountDownLatch
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
+import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -129,7 +129,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       df.cache()
       checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
       if (batchId > 30) stopSignal.countDown()
-    }).start()
+    }).trigger(ProcessingTimeTrigger(0)).start()
     stopSignal.await()
     assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
@@ -183,7 +183,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       df.cache()
       checkAnswer(df, Seq(Row(batchId * 2), Row(batchId * 2 + 1)))
       if (batchId > 30) stopSignal.countDown()
-    }).start()
+    }).trigger(ProcessingTimeTrigger(0)).start()
     stopSignal.await()
     assert(q.recentProgress.forall(_.numInputRows == 2))
     q.stop()
