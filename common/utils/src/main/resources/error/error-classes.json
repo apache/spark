@@ -5271,7 +5271,7 @@
   },
   "_LEGACY_ERROR_TEMP_1148" : {
     "message" : [
-      "Can only write data to relations with a single path."
+      "Can only write data to relations with a single path, paths are <paths>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1149" : {

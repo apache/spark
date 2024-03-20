@@ -1709,10 +1709,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "partColumns" -> targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")))
   }
 
-  def cannotWriteDataToRelationsWithMultiplePathsError(): Throwable = {
+  def cannotWriteDataToRelationsWithMultiplePathsError(paths: Seq[Path]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1148",
-      messageParameters = Map.empty)
+      messageParameters = Map(
+        "paths" -> paths.mkString("[", ",", "]")))
   }
 
   def failedToRebuildExpressionError(filter: Filter): Throwable = {
