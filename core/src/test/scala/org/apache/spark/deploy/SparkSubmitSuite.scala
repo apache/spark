@@ -512,7 +512,7 @@ class SparkSubmitSuite
       "--master", "k8s://host:port",
       "--executor-memory", "1g",
       "--class", "org.SomeClass",
-      "--driver-memory", "2g",
+      "--driver-memory", "1g",
       "--conf", "spark.kubernetes.submitInDriver=true",
       "--jars", "src/test/resources/TestUDTF.jar",
       "/home/jarToIgnore.jar",
