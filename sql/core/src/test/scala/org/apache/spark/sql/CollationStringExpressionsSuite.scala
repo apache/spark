@@ -70,6 +70,22 @@ class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession 
     })
   }
 
+  case class RepeatCollationTestCase[R](s: String, n: Int, collation: String, expectedResult: R)
+
+  test("Support Repeat string expression with Collation") {
+    // Supported collations
+    val checks = Seq(
+      RepeatCollationTestCase("Spark", 2, "UTF8_BINARY", "SparkSpark"),
+      RepeatCollationTestCase("Spark", 2, "UTF8_BINARY_LCASE", "SparkSpark"),
+      RepeatCollationTestCase("Spark", 2, "UNICODE", "SparkSpark"),
+      RepeatCollationTestCase("Spark", 2, "UNICODE_CI", "SparkSpark"),
+    )
+    checks.foreach(ct => {
+      checkAnswer(sql(s"SELECT repeat(collate('${ct.s}', '${ct.collation}'), ${ct.n})"),
+        Row(ct.expectedResult))
+    })
+  }
+
   // TODO: Add more tests for other string expressions
 
 }
