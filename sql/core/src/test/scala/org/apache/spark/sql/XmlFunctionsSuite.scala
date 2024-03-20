@@ -450,7 +450,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("schema_of_xml - infers the schema of foldable JSON string") {
+  test("schema_of_xml - infers the schema of foldable XML string") {
     val input = regexp_replace(
       lit("""<ROW><item_id>1</item_id><item_price>0.1</item_price></ROW>"""), "item_", "")
     checkAnswer(

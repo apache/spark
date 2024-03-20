@@ -40,6 +40,15 @@ struct<>
 
 
 -- !query
+describe table t1
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+utf8_binary         	string              	                    
+utf8_binary_lcase   	string collate UTF8_BINARY_LCASE
+
+
+-- !query
 select count(*) from t1 group by utf8_binary
 -- !query schema
 struct<count(1):bigint>
@@ -220,7 +229,7 @@ struct<>
 
 
 -- !query
-INSERT INTO t1 VALUES (named_struct('utf8_binary', 'aaa', 'utf8_binary_lcase', 'aaa'))
+insert into t1 values (named_struct('utf8_binary', 'aaa', 'utf8_binary_lcase', 'aaa'))
 -- !query schema
 struct<>
 -- !query output
@@ -228,7 +237,7 @@ struct<>
 
 
 -- !query
-INSERT INTO t1 VALUES (named_struct('utf8_binary', 'AAA', 'utf8_binary_lcase', 'AAA'))
+insert into t1 values (named_struct('utf8_binary', 'AAA', 'utf8_binary_lcase', 'AAA'))
 -- !query schema
 struct<>
 -- !query output
@@ -258,3 +267,75 @@ drop table t1
 struct<>
 -- !query output
 
+
+
+-- !query
+select array_contains(ARRAY('aaa' collate utf8_binary_lcase),'AAA' collate utf8_binary_lcase)
+-- !query schema
+struct<array_contains(array(collate(aaa)), collate(AAA)):boolean>
+-- !query output
+true
+
+
+-- !query
+select array_position(ARRAY('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase),'BBB' collate utf8_binary_lcase)
+-- !query schema
+struct<array_position(array(collate(aaa), collate(bbb)), collate(BBB)):bigint>
+-- !query output
+2
+
+
+-- !query
+select nullif('aaa' COLLATE utf8_binary_lcase, 'AAA' COLLATE utf8_binary_lcase)
+-- !query schema
+struct<nullif(collate(aaa), collate(AAA)):string collate UTF8_BINARY_LCASE>
+-- !query output
+NULL
+
+
+-- !query
+select least('aaa' COLLATE utf8_binary_lcase, 'AAA' collate utf8_binary_lcase, 'a' collate utf8_binary_lcase)
+-- !query schema
+struct<least(collate(aaa), collate(AAA), collate(a)):string collate UTF8_BINARY_LCASE>
+-- !query output
+a
+
+
+-- !query
+select arrays_overlap(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<arrays_overlap(array(collate(aaa)), array(collate(AAA))):boolean>
+-- !query output
+true
+
+
+-- !query
+select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<array_distinct(array(collate(aaa), collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+["aaa"]
+
+
+-- !query
+select array_union(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<array_union(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+["aaa"]
+
+
+-- !query
+select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<array_intersect(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+["aaa"]
+
+
+-- !query
+select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<array_except(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+[]
