@@ -29,6 +29,8 @@ import scala.io.Source
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.slf4j.Log4jLogger
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.must.Matchers
@@ -292,9 +294,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
-  // TODO(SPARK-47491): Re-enable `driver log links` test in YarnClusterSuite
-  ignore("running Spark in yarn-cluster mode displays driver log links") {
-    val log4jConf = new File(tempDir, "log4j.properties")
+  test("running Spark in yarn-cluster mode displays driver log links") {
+    val log4jConf = new File(tempDir, "log4j2.properties")
     val logOutFile = new File(tempDir, "logs")
     Files.write(
       s"""rootLogger.level = debug
@@ -314,14 +315,27 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     Files.write(s"-Dlog4j.configurationFile=file://$log4jConf\n", javaOptsFile,
       StandardCharsets.UTF_8)
 
+    System.err.println(
+      classOf[org.apache.log4j.Appender].getProtectionDomain().getCodeSource().getLocation()
+        .toString)
+    System.err.println(
+      classOf[LogManager].getProtectionDomain().getCodeSource().getLocation().toString)
+    System.err.println(
+        classOf[Log4jLogger].getProtectionDomain().getCodeSource().getLocation().toString)
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
       mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath),
+      extraJars = Seq(
+        classOf[org.apache.log4j.Appender].getProtectionDomain().getCodeSource().getLocation()
+          .toString,
+        classOf[LogManager].getProtectionDomain().getCodeSource().getLocation().toString,
+        classOf[Log4jLogger].getProtectionDomain().getCodeSource().getLocation().toString),
       extraEnv = Map("SPARK_CONF_DIR" -> confDir.getAbsolutePath),
       extraConf = Map(CLIENT_INCLUDE_DRIVER_LOGS_LINK.key -> true.toString))
     checkResult(finalState, result)
     val logOutput = Files.toString(logOutFile, StandardCharsets.UTF_8)
+    System.err.println(logOutput)
     val logFilePattern = raw"""(?s).+\sDriver Logs \(<NAME>\): https?://.+/<NAME>(\?\S+)?\s.+"""
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stdout")
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stderr")
