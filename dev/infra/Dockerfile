@@ -37,7 +37,7 @@ RUN add-apt-repository ppa:pypy/ppa
 RUN apt update
 RUN $APT_INSTALL gfortran libopenblas-dev liblapack-dev
 RUN $APT_INSTALL build-essential
-RUN $APT_INSTALL build-dep python3-matplotlib
+RUN $APT_INSTALL python3-matplotlib
 
 RUN mkdir -p /usr/local/pypy/pypy3.7 && \
     curl -sqL https://downloads.python.org/pypy/pypy3.7-v7.3.7-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.7 --strip-components=1 && \
