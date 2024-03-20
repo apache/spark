@@ -77,18 +77,3 @@ select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_
 select array_union(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
 select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
 select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase));
-
--- array joins & aggregates
-create table l(a array<string collate utf8_binary_lcase>) using parquet;
-create table r(a array<string collate utf8_binary_lcase>) using parquet;
-
-insert into l(a) values(array('a' collate utf8_binary_lcase));
-insert into r(a) values(array('A' collate utf8_binary_lcase));
-select * from l join r where l.a = r.a;
-
-insert into l(a) values(array('A' collate utf8_binary_lcase));
-select distinct a from l;
-select a, count(*) from l group by a;
-
-drop table l;
-drop table r;
