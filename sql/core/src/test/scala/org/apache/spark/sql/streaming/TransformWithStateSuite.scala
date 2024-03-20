@@ -751,13 +751,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 }
 
-class TransformWithStateTriggerSuite extends StateStoreMetricsTest {
-
-  import testImplicits._
-
-
-}
-
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
   import testImplicits._
 
