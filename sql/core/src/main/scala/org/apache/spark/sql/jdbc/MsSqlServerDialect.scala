@@ -88,23 +88,24 @@ private object MsSqlServerDialect extends JdbcDialect {
     }
 
     override def build(expr: Expression): String = {
-      def isChildLikeExpression(child: Expression): Boolean = child match {
+      def isChildBooleanExpression(child: Expression): Boolean = child match {
         case gse: GeneralScalarExpression =>
           gse.name() match {
-            case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" => true
+            case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" | "IN" | "IS_NULL" | "IS_NOT_NULL" |
+                 "AND" | "OR" | "NOT" => true
             case _ => false
           }
         case _ => false
       }
 
       // MsSqlServer does not support boolean comparison using standard comparison operators
-      // LIKE operator has a boolean result, hence we don't propagate these queries to MsSqlServer
+      // We shouldn't propagate these queries to MsSqlServer
       expr match {
         case e: GeneralScalarExpression =>
           e.name() match {
             case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
-              if (isChildLikeExpression(e.children()(0))
-                || isChildLikeExpression(e.children()(1))) {
+              if (isChildBooleanExpression(e.children()(0))
+                || isChildBooleanExpression(e.children()(1))) {
                 super.visitUnexpectedExpr(expr)
               } else {
                 super.build(expr)
