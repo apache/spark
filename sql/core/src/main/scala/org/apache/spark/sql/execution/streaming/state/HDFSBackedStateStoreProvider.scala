@@ -280,6 +280,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
   }
 
+  // Run bunch of validations specific to HDFSBackedStateStoreProvider
   private def runValidation(
       useColumnFamilies: Boolean,
       useMultipleValuesPerKey: Boolean,
@@ -302,7 +303,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     keyStateEncoderSpec match {
       case NoPrefixKeyStateEncoderSpec(_) => 0
       case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) => numColsPrefixKey
-      case _ => throw StateStoreErrors.unsupportedOperationException("Range scan", providerName)
+      case _ => throw StateStoreErrors.unsupportedOperationException("Invalid key state encoder",
+        providerName)
     }
   }
 
