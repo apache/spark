@@ -654,33 +654,32 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       )
     }
   }
-}
 
-class TransformWithStateTriggerSuite extends StateStoreMetricsTest {
+  /** Create a text file with a single data item */
+  private def createFile(data: String, srcDir: File): File =
+    stringToFile(new File(srcDir, s"${UUID.randomUUID()}.txt"), data)
 
-  import testImplicits._
+  private def createFileStream(srcDir: File): Dataset[(String, String)] = {
+    spark
+      .readStream
+      .option("maxFilesPerTrigger", "1")
+      .text(srcDir.getCanonicalPath)
+      .select("value").as[String]
+      .groupByKey(x => x)
+      .transformWithState(new RunningCountStatefulProcessor(),
+        TimeoutMode.NoTimeouts(),
+        OutputMode.Update())
+  }
 
   test("transformWithState - availableNow trigger mode, rate limit is respected") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { srcDir =>
 
-        /** Create a text file with a single data item */
-        def createFile(data: String): File =
-          stringToFile(new File(srcDir, s"${UUID.randomUUID()}.txt"), data)
-
-        Seq("a", "b", "c").foreach(createFile)
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
 
         // Set up a query to read text files one at a time
-        val df = spark
-          .readStream
-          .option("maxFilesPerTrigger", "1")
-          .text(srcDir.getCanonicalPath)
-          .select("value").as[String]
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessor(),
-            TimeoutMode.NoTimeouts(),
-            OutputMode.Update())
+        val df = createFileStream(srcDir)
 
         testStream(df)(
           StartStream(trigger = Trigger.AvailableNow()),
@@ -688,7 +687,7 @@ class TransformWithStateTriggerSuite extends StateStoreMetricsTest {
           CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
           StopStream,
           Execute { _ =>
-            createFile("a")
+            createFile("a", srcDir)
           },
           StartStream(trigger = Trigger.AvailableNow()),
           ProcessAllAvailable(),
@@ -697,11 +696,11 @@ class TransformWithStateTriggerSuite extends StateStoreMetricsTest {
 
         var index = 0
         val foreachBatchDf = df.writeStream
-        .foreachBatch((_: Dataset[(String, String)], _: Long) => {
-          index += 1
-        })
-        .trigger(Trigger.AvailableNow())
-        .start()
+          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+            index += 1
+          })
+          .trigger(Trigger.AvailableNow())
+          .start()
 
         try {
           foreachBatchDf.awaitTermination()
@@ -712,6 +711,51 @@ class TransformWithStateTriggerSuite extends StateStoreMetricsTest {
       }
     }
   }
+
+  test("transformWithState - availableNow trigger mode, multiple restarts") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+        val df = createFileStream(srcDir)
+
+        var index = 0
+
+        def startTriggerAvailableNowQueryAndCheck(expectedIdx: Int): Unit = {
+          val q = df.writeStream
+            .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+              index += 1
+            })
+            .trigger(Trigger.AvailableNow)
+            .start()
+          try {
+            assert(q.awaitTermination(streamingTimeout.toMillis))
+            assert(index == expectedIdx)
+          } finally {
+            q.stop()
+          }
+        }
+        // start query for the first time
+        startTriggerAvailableNowQueryAndCheck(3)
+
+        // add two files and restart
+        createFile("a", srcDir)
+        createFile("b", srcDir)
+        startTriggerAvailableNowQueryAndCheck(8)
+
+        // try restart again
+        createFile("d", srcDir)
+        startTriggerAvailableNowQueryAndCheck(14)
+      }
+    }
+  }
+}
+
+class TransformWithStateTriggerSuite extends StateStoreMetricsTest {
+
+  import testImplicits._
+
+
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
