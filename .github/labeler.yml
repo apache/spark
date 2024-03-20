@@ -21,7 +21,6 @@ INFRA:
   - changed-files:
     - any-glob-to-any-file: [
      '.github/**/*',
-     'appveyor.yml',
      'tools/**/*',
      'dev/create-release/**/*',
      '.asf.yaml',
@@ -102,6 +101,8 @@ SQL:
     ]
     - any-glob-to-any-file: [
      'common/unsafe/**/*',
+     'common/sketch/**/*',
+     'common/variant/**/*',
      'bin/spark-sql*',
      'bin/beeline*',
      'sbin/*thriftserver*.sh',

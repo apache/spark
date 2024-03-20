@@ -4845,6 +4845,22 @@ object functions {
       otherChar: Column): Column =
     Column.fn("mask", input, upperChar, lowerChar, digitChar, otherChar)
 
+  /**
+   * Marks a given column with specified collation.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collate(e: Column, collation: String): Column = Column.fn("collate", e, lit(collation))
+
+  /**
+   * Returns the collation name of a given column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collation(e: Column): Column = Column.fn("collation", e)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // DateTime functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -7080,6 +7096,23 @@ object functions {
    * @since 3.4.0
    */
   def sort_array(e: Column, asc: Boolean): Column = Column.fn("sort_array", e, lit(asc))
+
+  /**
+   * Sorts the input map in ascending order according to the natural ordering of the map keys.
+   *
+   * @group map_funcs
+   * @since 4.0.0
+   */
+  def map_sort(e: Column): Column = map_sort(e, asc = true)
+
+  /**
+   * Sorts the input map in ascending or descending order according to the natural ordering of the
+   * map keys.
+   *
+   * @group map_funcs
+   * @since 4.0.0
+   */
+  def map_sort(e: Column, asc: Boolean): Column = Column.fn("map_sort", e, lit(asc))
 
   /**
    * Returns the minimum value in the array. NaN is greater than any non-NaN elements for

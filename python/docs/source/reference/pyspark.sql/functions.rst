@@ -160,6 +160,8 @@ String Functions
     char
     char_length
     character_length
+    collate
+    collation
     concat_ws
     contains
     decode
@@ -394,6 +396,7 @@ Map Functions
     map_from_entries
     map_keys
     map_values
+    map_sort
     str_to_map
 
 

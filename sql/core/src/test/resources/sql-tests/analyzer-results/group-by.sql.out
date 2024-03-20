@@ -635,7 +635,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(1)\""
   },
@@ -659,7 +659,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"SMALLINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"some(1)\""
   },
@@ -683,7 +683,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"BIGINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"any(1)\""
   },
@@ -707,7 +707,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(true)\""
   },
@@ -731,7 +731,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DECIMAL(2,1)\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"bool_and(1.0)\""
   },
@@ -755,7 +755,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1.0\"",
     "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"bool_or(1.0)\""
   },
@@ -1171,3 +1171,22 @@ Aggregate [c#x], [(c#x * 2) AS d#x]
          +- Project [if ((a#x < 0)) 0 else a#x AS b#x]
             +- SubqueryAlias t1
                +- LocalRelation [a#x]
+
+
+-- !query
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Aggregate [col1#x], [col1#x, count(1) AS cnt#xL]
+   +- LocalRelation [col1#x]

@@ -19,18 +19,20 @@ package org.apache.spark.sql.types
 
 import java.util.Locale
 
-import scala.collection.{mutable, Map}
+import scala.collection.{immutable, mutable, Map}
 import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.json4s.JsonDSL._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, SparkStringUtils, StringConcat}
 import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.SparkCollectionUtils
 
@@ -281,8 +283,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
-      throw new IllegalArgumentException(
-        s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
+      throw new SparkIllegalArgumentException(
+        errorClass = "FIELD_NOT_FOUND",
+        messageParameters = immutable.Map(
+          "fieldName" -> toSQLId(name),
+          "fields" -> fieldNames.map(toSQLId).mkString(", "))))
   }
 
   /**
@@ -294,9 +299,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
-      throw new IllegalArgumentException(
-        s"${nonExistFields.mkString(", ")} do(es) not exist. " +
-          s"Available: ${fieldNames.mkString(", ")}")
+      throw new SparkIllegalArgumentException(
+        errorClass = "NONEXISTENT_FIELD_NAME_IN_LIST",
+        messageParameters = immutable.Map(
+          "nonExistFields" -> nonExistFields.map(toSQLId).mkString(", "),
+          "fieldNames" -> fieldNames.map(toSQLId).mkString(", ")))
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -309,8 +316,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
-      throw new IllegalArgumentException(
-        s"$name does not exist. Available: ${fieldNames.mkString(", ")}"))
+      throw new SparkIllegalArgumentException(
+        errorClass = "FIELD_NOT_FOUND",
+        messageParameters = immutable.Map(
+          "fieldName" -> toSQLId(name),
+          "fields" -> fieldNames.map(toSQLId).mkString(", "))))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {

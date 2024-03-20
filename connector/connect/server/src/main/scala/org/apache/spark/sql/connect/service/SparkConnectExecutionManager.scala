@@ -67,8 +67,15 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
    * Create a new ExecuteHolder and register it with this global manager and with its session.
    */
   private[connect] def createExecuteHolder(request: proto.ExecutePlanRequest): ExecuteHolder = {
+    val previousSessionId = request.hasClientObservedServerSideSessionId match {
+      case true => Some(request.getClientObservedServerSideSessionId)
+      case false => None
+    }
     val sessionHolder = SparkConnectService
-      .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
+      .getOrCreateIsolatedSession(
+        request.getUserContext.getUserId,
+        request.getSessionId,
+        previousSessionId)
     val executeHolder = new ExecuteHolder(request, sessionHolder)
     executionsLock.synchronized {
       // Check if the operation already exists, both in active executions, and in the graveyard
@@ -120,8 +127,10 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     // close the execution outside the lock
     executeHolder.foreach { e =>
       e.close()
-      // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
-      abandonedTombstones.put(key, e.getExecuteInfo)
+      if (abandoned) {
+        // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
+        abandonedTombstones.put(key, e.getExecuteInfo)
+      }
     }
   }
 

@@ -202,4 +202,24 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
       }
     }
   }
+
+  test("SessionValidation: server validates that the client is talking to the same session.") {
+    val sessionId = UUID.randomUUID.toString()
+    val userId = "Y"
+    withClient(sessionId = sessionId, userId = userId) { client =>
+      // this will create the session, and then ReleaseSession at the end of withClient.
+      val query = client.execute(buildPlan("SELECT 1"))
+      query.hasNext // trigger execution
+      // Same session id.
+      val new_query = client.execute(buildPlan("SELECT 1 + 1"))
+      new_query.hasNext // trigger execution
+      // Change the server session id in the client for testing and try to run something.
+      client.hijackServerSideSessionIdForTesting("-testing")
+      val queryError = intercept[SparkException] {
+        val newest_query = client.execute(buildPlan("SELECT 1 + 1 + 1"))
+        newest_query.hasNext
+      }
+      assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CHANGED"))
+    }
+  }
 }

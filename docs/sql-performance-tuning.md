@@ -19,13 +19,12 @@ license: |
   limitations under the License.
 ---
 
+Spark offers many techniques for tuning the performance of DataFrame or SQL workloads. Those techniques, broadly speaking, include caching data, altering how datasets are partitioned, selecting the optimal join strategy, and providing the optimizer with additional information it can use to build more efficient execution plans.
+
 * Table of contents
 {:toc}
 
-For some workloads, it is possible to improve performance by either caching data in memory, or by
-turning on some experimental options.
-
-## Caching Data In Memory
+## Caching Data
 
 Spark SQL can cache tables using an in-memory columnar format by calling `spark.catalog.cacheTable("tableName")` or `dataFrame.cache()`.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
@@ -54,13 +53,9 @@ Configuration of in-memory caching can be done via `spark.conf.set` or by runnin
   </td>
   <td>1.1.1</td>
 </tr>
-
 </table>
 
-## Other Configuration Options
-
-The following options can also be used to tune the performance of query execution. It is possible
-that these options will be deprecated in future release as more optimizations are performed automatically.
+## Tuning Partitions
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -107,27 +102,6 @@ that these options will be deprecated in future release as more optimizations ar
     <td>3.5.0</td>
   </tr>
   <tr>
-    <td><code>spark.sql.broadcastTimeout</code></td>
-    <td>300</td>
-    <td>
-      <p>
-        Timeout in seconds for the broadcast wait time in broadcast joins
-      </p>
-    </td>
-    <td>1.3.0</td>
-  </tr>
-  <tr>
-    <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
-    <td>10485760 (10 MB)</td>
-    <td>
-      Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
-      performing a join. By setting this value to -1, broadcasting can be disabled. Note that currently
-      statistics are only supported for Hive Metastore tables where the command
-      <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code> has been run.
-    </td>
-    <td>1.1.0</td>
-  </tr>
-  <tr>
     <td><code>spark.sql.shuffle.partitions</code></td>
     <td>200</td>
     <td>
@@ -158,72 +132,7 @@ that these options will be deprecated in future release as more optimizations ar
   </tr>
 </table>
 
-## Join Strategy Hints for SQL Queries
-
-The join strategy hints, namely `BROADCAST`, `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL`,
-instruct Spark to use the hinted strategy on each specified relation when joining them with another
-relation. For example, when the `BROADCAST` hint is used on table 't1', broadcast join (either
-broadcast hash join or broadcast nested loop join depending on whether there is any equi-join key)
-with 't1' as the build side will be prioritized by Spark even if the size of table 't1' suggested
-by the statistics is above the configuration `spark.sql.autoBroadcastJoinThreshold`.
-
-When different join strategy hints are specified on both sides of a join, Spark prioritizes the
-`BROADCAST` hint over the `MERGE` hint over the `SHUFFLE_HASH` hint over the `SHUFFLE_REPLICATE_NL`
-hint. When both sides are specified with the `BROADCAST` hint or the `SHUFFLE_HASH` hint, Spark will
-pick the build side based on the join type and the sizes of the relations.
-
-Note that there is no guarantee that Spark will choose the join strategy specified in the hint since
-a specific strategy may not support all join types.
-
-<div class="codetabs">
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
-{% endhighlight %}
-
-</div>
-
-<div data-lang="scala"  markdown="1">
-
-{% highlight scala %}
-spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
-{% endhighlight %}
-
-</div>
-
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-spark.table("src").join(spark.table("records").hint("broadcast"), "key").show();
-{% endhighlight %}
-
-</div>
-
-<div data-lang="r"  markdown="1">
-
-{% highlight r %}
-src <- sql("SELECT * FROM src")
-records <- sql("SELECT * FROM records")
-head(join(src, hint(records, "broadcast"), src$key == records$key))
-{% endhighlight %}
-
-</div>
-
-<div data-lang="SQL"  markdown="1">
-
-{% highlight sql %}
--- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint
-SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
-{% endhighlight %}
-
-</div>
-</div>
-
-For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html#join-hints).
-
-## Coalesce Hints for SQL Queries
+### Coalesce Hints
 
 Coalesce hints allow Spark SQL users to control the number of output files just like
 `coalesce`, `repartition` and `repartitionByRange` in the Dataset API, they can be used for performance
@@ -248,8 +157,110 @@ SELECT /*+ REBALANCE(3, c) */ * FROM t;
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
 
+## Leveraging Statistics
+Apache Spark's ability to choose the best execution plan among many possible options is determined in part by its estimates of how many rows will be output by every node in the execution plan (read, filter, join, etc.). Those estimates in turn are based on statistics that are made available to Spark in one of several ways:
+
+- **Data source**: Statistics that Spark reads directly from the underlying data source, like the counts and min/max values in the metadata of Parquet files. These statistics are maintained by the underlying data source.
+- **Catalog**: Statistics that Spark reads from the catalog, like the Hive Metastore. These statistics are collected or updated whenever you run [`ANALYZE TABLE`](sql-ref-syntax-aux-analyze-table.html).
+- **Runtime**: Statistics that Spark computes itself as a query is running. This is part of the [adaptive query execution framework](#adaptive-query-execution).
+
+Missing or inaccurate statistics will hinder Spark's ability to select an optimal plan, and may lead to poor query performance. It's helpful then to inspect the statistics available to Spark and the estimates it makes during query planning and execution.
+
+- **Data object statistics**: You can inspect the statistics on a table or column with [`DESCRIBE EXTENDED`](sql-ref-syntax-aux-describe-table.html).
+- **Query plan estimates**: You can inspect Spark's cost estimates in the optimized query plan via [`EXPLAIN COST`](sql-ref-syntax-qry-explain.html) or `DataFrame.explain(mode="cost")`.
+- **Runtime statistics**: You can inspect these statistics in the [SQL UI](web-ui.html#sql-tab) under the "Details" section as a query is running. Look for `Statistics(..., isRuntime=true)` in the plan.
+
+## Optimizing the Join Strategy
+
+### Automatically Broadcasting Joins
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
+    <td>10485760 (10 MB)</td>
+    <td>
+      Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
+      performing a join. By setting this value to -1, broadcasting can be disabled.
+    </td>
+    <td>1.1.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.broadcastTimeout</code></td>
+    <td>300</td>
+    <td>
+      <p>
+        Timeout in seconds for the broadcast wait time in broadcast joins
+      </p>
+    </td>
+    <td>1.3.0</td>
+  </tr>
+</table>
+
+### Join Strategy Hints
+
+The join strategy hints, namely `BROADCAST`, `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL`,
+instruct Spark to use the hinted strategy on each specified relation when joining them with another
+relation. For example, when the `BROADCAST` hint is used on table 't1', broadcast join (either
+broadcast hash join or broadcast nested loop join depending on whether there is any equi-join key)
+with 't1' as the build side will be prioritized by Spark even if the size of table 't1' suggested
+by the statistics is above the configuration `spark.sql.autoBroadcastJoinThreshold`.
+
+When different join strategy hints are specified on both sides of a join, Spark prioritizes the
+`BROADCAST` hint over the `MERGE` hint over the `SHUFFLE_HASH` hint over the `SHUFFLE_REPLICATE_NL`
+hint. When both sides are specified with the `BROADCAST` hint or the `SHUFFLE_HASH` hint, Spark will
+pick the build side based on the join type and the sizes of the relations.
+
+Note that there is no guarantee that Spark will choose the join strategy specified in the hint since
+a specific strategy may not support all join types.
+
+<div class="codetabs">
+<div data-lang="python" markdown="1">
+```python
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
+```
+</div>
+<div data-lang="scala" markdown="1">
+```scala
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
+```
+</div>
+<div data-lang="java" markdown="1">
+```java
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show();
+```
+</div>
+<div data-lang="r" markdown="1">
+```r
+src <- sql("SELECT * FROM src")
+records <- sql("SELECT * FROM records")
+head(join(src, hint(records, "broadcast"), src$key == records$key))
+```
+</div>
+<div data-lang="SQL" markdown="1">
+```sql
+-- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint
+SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
+```
+</div>
+</div>
+
+For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html#join-hints).
+
 ## Adaptive Query Execution
-Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration. As of Spark 3.0, there are three major features in AQE: including coalescing post-shuffle partitions, converting sort-merge join to broadcast join, and skew join optimization.
+Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan, which is enabled by default since Apache Spark 3.2.0. Spark SQL can turn on and off AQE by `spark.sql.adaptive.enabled` as an umbrella configuration.
+
+ <table class="spark-config">
+   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+   <tr>
+     <td><code>spark.sql.adaptive.enabled</code></td>
+     <td>true</td>
+     <td>
+     When true, enable adaptive query execution, which re-optimizes the query plan in the middle of query execution, based on accurate runtime statistics.
+     </td>
+     <td>1.6.0</td>
+   </tr>
+</table>
 
 ### Coalescing Post Shuffle Partitions
 This feature coalesces the post shuffle partitions based on the map output statistics when both `spark.sql.adaptive.enabled` and `spark.sql.adaptive.coalescePartitions.enabled` configurations are true. This feature simplifies the tuning of shuffle partition number when running queries. You do not need to set a proper shuffle partition number to fit your dataset. Spark can pick the proper shuffle partition number at runtime once you set a large enough initial number of shuffle partitions via `spark.sql.adaptive.coalescePartitions.initialPartitionNum` configuration.
@@ -267,7 +278,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.coalescePartitions.parallelismFirst</code></td>
      <td>true</td>
      <td>
-       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respect the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regressions when enabling adaptive query execution. It's recommended to set this config to true on a busy cluster to make resource utilization more efficient (not many small tasks).
+       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respect the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regressions when enabling adaptive query execution. It's recommended to set this config to false on a busy cluster to make resource utilization more efficient (not many small tasks).
      </td>
      <td>3.2.0</td>
    </tr>
@@ -319,7 +330,8 @@ This feature coalesces the post shuffle partitions based on the map output stati
  </table>
 
 ### Converting sort-merge join to broadcast join
-AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side is smaller than the adaptive broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than keep doing the sort-merge join, as we can save the sorting of both the join sides, and read shuffle files locally to save network traffic(if `spark.sql.adaptive.localShuffleReader.enabled` is true)
+AQE converts sort-merge join to broadcast hash join when the runtime statistics of any join side are smaller than the adaptive broadcast hash join threshold. This is not as efficient as planning a broadcast hash join in the first place, but it's better than continuing the sort-merge join, as we can avoid sorting both join sides and read shuffle files locally to save network traffic (provided `spark.sql.adaptive.localShuffleReader.enabled` is true).
+
   <table class="spark-config">
      <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
      <tr>
@@ -341,7 +353,8 @@ AQE converts sort-merge join to broadcast hash join when the runtime statistics 
   </table>
 
 ### Converting sort-merge join to shuffled hash join
-AQE converts sort-merge join to shuffled hash join when all post shuffle partitions are smaller than a threshold, the max threshold can see the config `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
+AQE converts sort-merge join to shuffled hash join when all post shuffle partitions are smaller than the threshold configured in `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
+
   <table class="spark-config">
      <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
      <tr>
@@ -392,7 +405,10 @@ Data skew can severely downgrade the performance of join queries. This feature d
      </tr>
    </table>
 
-### Misc
+### Advanced Customization
+
+You can control the details of how AQE works by providing your own cost evaluator class or by excluding AQE optimizer rules.
+
   <table class="spark-config">
     <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
     <tr>

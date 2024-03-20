@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.FakeV2Provider
+import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -434,7 +434,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       )
 
       sql(s"CREATE TABLE target2(a INT, b STRING) USING JSON")
-      val e = sql(
+      sql(
         """
           |WITH tbl AS (SELECT * FROM jt)
           |FROM tbl
@@ -1161,6 +1161,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Row(4, 44L, 43L) ::
           Row(5, 44L, 43L) :: Nil)
       }
+    }
+  }
+
+  test("SPARK-47164: Make Default Value From Wider Type Narrow Literal pass v2") {
+    withTable("t") {
+      val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+      sql("CREATE TABLE t (" +
+        "key int, " +
+        s"d timestamp DEFAULT '2018-11-17 13:33:33') USING $v2Source")
     }
   }
 
@@ -2027,6 +2036,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         "parquet",
         useDataFrames = true),
       Config(
+        "json"),
+      Config(
+        "json",
+        useDataFrames = true),
+      Config(
         "orc"),
       Config(
         "orc",
@@ -2082,6 +2096,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         "parquet"),
       Config(
         "parquet",
+        useDataFrames = true),
+      Config(
+        "json"),
+      Config(
+        "json",
         useDataFrames = true),
       Config(
         "orc"),
@@ -2141,6 +2160,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       Config(
         "parquet",
         useDataFrames = true),
+      // SPARK-47029: ALTER COLUMN DROP DEFAULT fails to work correctly with JSON data sources.
+      /*
+      Config(
+        "json"),
+        */
+      Config(
+        "json",
+        useDataFrames = true),
       Config(
         "orc"),
       Config(
@@ -2153,8 +2180,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         } else {
           sql("insert into t select false")
         }
-        sql("alter table t add column s map<boolean, string> default map(true, 'abc')")
-        checkAnswer(spark.table("t"), Row(false, Map(true -> "abc")))
+        sql("alter table t add column s map<string, boolean> default map('abc', true)")
+        checkAnswer(spark.table("t"), Row(false, Map("abc" -> true)))
       }
       withTable("t") {
         sql(
@@ -2165,12 +2192,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
                 x array<
                   struct<a int, b int>>,
                 y array<
-                  map<boolean, string>>>
+                  map<string, boolean>>>
               default struct(
                 array(
                   struct(1, 2)),
                 array(
-                  map(false, 'def', true, 'jkl'))))
+                  map('def', false, 'jkl', true))))
               using ${config.dataSource}""")
         sql("insert into t select 1, default")
         sql("alter table t alter column s drop default")
@@ -2186,30 +2213,30 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               array(
                 struct(3, 4)),
               array(
-                map(false, 'mno', true, 'pqr')))""")
+                map('mno', false, 'pqr', true)))""")
         sql("insert into t select 3, default")
         sql(
           """
             alter table t
             add column t array<
-              map<boolean, string>>
+              map<string, boolean>>
             default array(
-              map(true, 'xyz'))""")
+              map('xyz', true))""")
         sql("insert into t(i, s) select 4, default")
         checkAnswer(spark.table("t"),
           Seq(
             Row(1,
-              Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl"))),
-              Seq(Map(true -> "xyz"))),
+              Row(Seq(Row(1, 2)), Seq(Map("def" -> false, "jkl" -> true))),
+              Seq(Map("xyz" -> true))),
             Row(2,
               null,
-              Seq(Map(true -> "xyz"))),
+              Seq(Map("xyz" -> true))),
             Row(3,
-              Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
-              Seq(Map(true -> "xyz"))),
+              Row(Seq(Row(3, 4)), Seq(Map("mno" -> false, "pqr" -> true))),
+              Seq(Map("xyz" -> true))),
             Row(4,
-              Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
-              Seq(Map(true -> "xyz")))))
+              Row(Seq(Row(3, 4)), Seq(Map("mno" -> false, "pqr" -> true))),
+              Seq(Map("xyz" -> true)))))
       }
     }
     // Negative tests: provided map element types must match their corresponding DEFAULT

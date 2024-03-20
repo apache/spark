@@ -33,8 +33,10 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.ui.SparkUICssErrorHandler
 
+@WebBrowserTest
 class UISeleniumSuite
   extends HiveThriftServer2TestBase
   with WebBrowser with Matchers with BeforeAndAfterAll {

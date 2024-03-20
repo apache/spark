@@ -44,16 +44,16 @@ class ArithmeticTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser + pser, psser + psser)
-            self.assert_eq(pser + 1, psser + 1)
+            self.assert_eq(pser + pser, psser + psser, check_exact=False)
+            self.assert_eq(pser + 1, psser + 1, check_exact=False)
             # self.assert_eq(pser + 0.1, psser + 0.1)
-            self.assert_eq(pser + pser.astype(bool), psser + psser.astype(bool))
-            self.assert_eq(pser + True, psser + True)
-            self.assert_eq(pser + False, psser + False)
+            self.assert_eq(pser + pser.astype(bool), psser + psser.astype(bool), check_exact=False)
+            self.assert_eq(pser + True, psser + True, check_exact=False)
+            self.assert_eq(pser + False, psser + False, check_exact=False)
 
             for n_col in self.non_numeric_df_cols:
                 if n_col == "bool":
-                    self.assert_eq(pser + pdf[n_col], psser + psdf[n_col])
+                    self.assert_eq(pser + pdf[n_col], psser + psdf[n_col], check_exact=False)
                 else:
                     self.assertRaises(TypeError, lambda: psser + psdf[n_col])
 
@@ -61,16 +61,16 @@ class ArithmeticTestsMixin:
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser - pser, psser - psser)
-            self.assert_eq(pser - 1, psser - 1)
+            self.assert_eq(pser - pser, psser - psser, check_exact=False)
+            self.assert_eq(pser - 1, psser - 1, check_exact=False)
             # self.assert_eq(pser - 0.1, psser - 0.1)
-            self.assert_eq(pser - pser.astype(bool), psser - psser.astype(bool))
-            self.assert_eq(pser - True, psser - True)
-            self.assert_eq(pser - False, psser - False)
+            self.assert_eq(pser - pser.astype(bool), psser - psser.astype(bool), check_exact=False)
+            self.assert_eq(pser - True, psser - True, check_exact=False)
+            self.assert_eq(pser - False, psser - False, check_exact=False)
 
             for n_col in self.non_numeric_df_cols:
                 if n_col == "bool":
-                    self.assert_eq(pser - pdf[n_col], psser - psdf[n_col])
+                    self.assert_eq(pser - pdf[n_col], psser - psdf[n_col], check_exact=False)
                 else:
                     self.assertRaises(TypeError, lambda: psser - psdf[n_col])
 

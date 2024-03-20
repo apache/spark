@@ -698,6 +698,11 @@ class PlanGenerationTestSuite
     simple.distinct()
   }
 
+  test("select collated string") {
+    val schema = StructType(StructField("s", StringType(1)) :: Nil)
+    createLocalRelation(schema.catalogString).select("s")
+  }
+
   /* Column API */
   private def columnTest(name: String)(f: => Column): Unit = {
     test("column " + name) {
@@ -1813,6 +1818,14 @@ class PlanGenerationTestSuite
     fn.hours(Column("a"))
   }
 
+  functionTest("collate") {
+    fn.collate(fn.col("g"), "UNICODE")
+  }
+
+  functionTest("collation") {
+    fn.collation(fn.col("g"))
+  }
+
   temporalFunctionTest("convert_timezone with source time zone") {
     fn.convert_timezone(lit("\"Africa/Dakar\""), lit("\"Asia/Urumqi\""), fn.col("t"))
   }
@@ -2518,6 +2531,10 @@ class PlanGenerationTestSuite
 
   functionTest("map_from_entries") {
     fn.map_from_entries(fn.transform(fn.col("e"), (x, i) => fn.struct(i, x)))
+  }
+
+  functionTest("map_sort") {
+    fn.map_sort(fn.col("f"))
   }
 
   functionTest("arrays_zip") {

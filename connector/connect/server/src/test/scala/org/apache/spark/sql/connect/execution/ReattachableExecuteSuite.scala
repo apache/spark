@@ -300,7 +300,9 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   test("SPARK-46186 interrupt directly after query start") {
     // register a sleep udf in the session
     val serverSession =
-      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
+      SparkConnectService
+        .getOrCreateIsolatedSession(defaultUserId, defaultSessionId, None)
+        .session
     serverSession.udf.register(
       "sleep",
       ((ms: Int) => {
@@ -384,7 +386,9 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   test("long sleeping query") {
     // register udf directly on the server, we're not testing client UDFs here...
     val serverSession =
-      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
+      SparkConnectService
+        .getOrCreateIsolatedSession(defaultUserId, defaultSessionId, None)
+        .session
     serverSession.udf.register("sleep", ((ms: Int) => { Thread.sleep(ms); ms }))
     // query will be sleeping and not returning results, while having multiple reattach
     withSparkEnvConfs(
@@ -412,5 +416,17 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
 
       assert(newAccessTime > lastAccessTime, "reattach should update session holder access time")
     }
+  }
+
+  test("SPARK-47249: non-abandoned executions are not added to tombstone cache upon close") {
+    val dummyOpId = UUID.randomUUID().toString
+    val dummyRequest =
+      buildExecutePlanRequest(buildPlan("select * from range(1)"), operationId = dummyOpId)
+    val manager = SparkConnectService.executionManager
+    val holder = manager.createExecuteHolder(dummyRequest)
+    holder.eventsManager.postStarted()
+    manager.removeExecuteHolder(holder.key, abandoned = false)
+    val abandonedExecutions = manager.listAbandonedExecutions
+    assert(abandonedExecutions.forall(_.operationId != dummyOpId))
   }
 }

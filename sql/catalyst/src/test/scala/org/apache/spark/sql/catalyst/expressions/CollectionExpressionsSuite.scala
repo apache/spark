@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, LA, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -411,13 +412,53 @@ class CollectionExpressionsSuite
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "inputSql" -> "\"1\"",
           "inputType" -> "\"INT\"",
           "requiredType" -> "\"ARRAY\" of pair \"STRUCT\""
         )
       )
     )
+  }
+
+  test("Sort Map") {
+    val intKey = Literal.create(Map(2 -> 2, 1 -> 1, 3 -> 3), MapType(IntegerType, IntegerType))
+    val boolKey = Literal.create(Map(true -> 2, false -> 1), MapType(BooleanType, IntegerType))
+    val stringKey = Literal.create(Map("2" -> 2, "1" -> 1, "3" -> 3),
+      MapType(StringType, IntegerType))
+    val arrayKey = Literal.create(Map(Seq(2) -> 2, Seq(1) -> 1, Seq(3) -> 3),
+      MapType(ArrayType(IntegerType), IntegerType))
+    val nestedArrayKey = Literal.create(Map(Seq(Seq(2)) -> 2, Seq(Seq(1)) -> 1, Seq(Seq(3)) -> 3),
+      MapType(ArrayType(ArrayType(IntegerType)), IntegerType))
+    val structKey = Literal.create(
+      Map(create_row(2) -> 2, create_row(1) -> 1, create_row(3) -> 3),
+      MapType(StructType(Seq(StructField("a", IntegerType))), IntegerType))
+
+    checkEvaluation(new MapSort(intKey), Map(1 -> 1, 2 -> 2, 3 -> 3))
+    checkEvaluation(MapSort(intKey, Literal.create(false, BooleanType)),
+      Map(3 -> 3, 2 -> 2, 1 -> 1))
+
+    checkEvaluation(new MapSort(boolKey), Map(false -> 1, true -> 2))
+    checkEvaluation(MapSort(boolKey, Literal.create(false, BooleanType)),
+      Map(true -> 2, false -> 1))
+
+    checkEvaluation(new MapSort(stringKey), Map("1" -> 1, "2" -> 2, "3" -> 3))
+    checkEvaluation(MapSort(stringKey, Literal.create(false, BooleanType)),
+      Map("3" -> 3, "2" -> 2, "1" -> 1))
+
+    checkEvaluation(new MapSort(arrayKey), Map(Seq(1) -> 1, Seq(2) -> 2, Seq(3) -> 3))
+    checkEvaluation(MapSort(arrayKey, Literal.create(false, BooleanType)),
+      Map(Seq(3) -> 3, Seq(2) -> 2, Seq(1) -> 1))
+
+    checkEvaluation(new MapSort(nestedArrayKey),
+      Map(Seq(Seq(1)) -> 1, Seq(Seq(2)) -> 2, Seq(Seq(3)) -> 3))
+    checkEvaluation(MapSort(nestedArrayKey, Literal.create(false, BooleanType)),
+      Map(Seq(Seq(3)) -> 3, Seq(Seq(2)) -> 2, Seq(Seq(1)) -> 1))
+
+    checkEvaluation(new MapSort(structKey),
+      Map(create_row(1) -> 1, create_row(2) -> 2, create_row(3) -> 3))
+    checkEvaluation(MapSort(structKey, Literal.create(false, BooleanType)),
+      Map(create_row(3) -> 3, create_row(2) -> 2, create_row(1) -> 1))
   }
 
   test("Sort Array") {

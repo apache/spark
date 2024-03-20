@@ -709,7 +709,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       pythonUdf,
       output,
       project,
-      false)
+      false,
+      None)
     val left = SubqueryAlias("temp0", mapInPandas)
     val right = SubqueryAlias("temp1", mapInPandas)
     val join = Join(left, right, Inner, None, JoinHint.NONE)
@@ -729,7 +730,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       pythonUdf,
       output,
       project,
-      false)
+      false,
+      None)
     assertAnalysisSuccess(mapInPandas)
   }
 
@@ -745,7 +747,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       pythonUdf,
       output,
       project,
-      false)
+      false,
+      None)
     assertAnalysisSuccess(mapInArrow)
   }
 
@@ -1348,7 +1351,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"mean(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
@@ -1367,7 +1370,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"mean(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
@@ -1385,7 +1388,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" ->
@@ -1405,7 +1408,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       expectedErrorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       expectedMessageParameters = Map(
         "sqlExpr" -> "\"abs(c)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
         "requiredType" ->

@@ -375,6 +375,11 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)(F.col("name"))).first()[0],
             )
 
+    def test_collation(self):
+        df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
+        self.assertEqual([Row("UNICODE")], actual)
+
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
         df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
@@ -1437,6 +1442,13 @@ class FunctionsTestsMixin:
         df = self.spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c') as map2")
         self.assertEqual(
             df.select(F.map_concat(["map1", "map2"]).alias("map3")).first()[0],
+            {1: "a", 2: "b", 3: "c"},
+        )
+
+    def test_map_sort(self):
+        df = self.spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as map1")
+        self.assertEqual(
+            df.select(F.map_sort("map1").alias("map2")).first()[0],
             {1: "a", 2: "b", 3: "c"},
         )
 

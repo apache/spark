@@ -1474,6 +1474,8 @@ test_that("column functions", {
   c31 <- sec(c1) + csc(c1) + cot(c1)
   c32 <- ln(c1) + positive(c2) + negative(c3)
   c33 <- width_bucket(lit(2.5), lit(2.0), lit(3.0), lit(10L))
+  c34 <- collate(c, "UNICODE")
+  c35 <- collation(c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1644,6 +1646,12 @@ test_that("column functions", {
                                   map2 = as.environment(list(a = 3, b = 4)))))
   result <- collect(select(df, map_concat(df[[1]], df[[2]])))[[1]]
   expected_entries <- list(as.environment(list(x = 1, y = 2, a = 3, b = 4)))
+  expect_equal(result, expected_entries)
+
+  # Test map_sort
+  df <- createDataFrame(list(list(map1 = as.environment(list(c = 3, a = 1, b = 2)))))
+  result <- collect(select(df, map_sort(df[[1]])))[[1]]
+  expected_entries <- list(as.environment(list(a = 1, b = 2, c = 3)))
   expect_equal(result, expected_entries)
 
   # Test map_entries(), map_keys(), map_values() and element_at()

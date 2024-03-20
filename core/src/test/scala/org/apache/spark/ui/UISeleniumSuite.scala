@@ -19,14 +19,14 @@ package org.apache.spark.ui
 
 import java.net.URL
 import java.util.Locale
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 import scala.xml.Node
 
-import com.gargoylesoftware.css.parser.CSSParseException
-import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
+import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
+import org.htmlunit.DefaultCssErrorHandler
+import org.htmlunit.cssparser.parser.CSSParseException
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 import org.openqa.selenium.{By, WebDriver}
@@ -46,6 +46,7 @@ import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.util.Utils
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
@@ -80,6 +81,7 @@ private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 /**
  * Selenium tests for the Spark Web UI.
  */
+@WebBrowserTest
 class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _

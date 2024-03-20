@@ -108,7 +108,7 @@ class SparkConnectPlanner(
 
   private[connect] def sessionId: String = sessionHolder.sessionId
 
-  lazy val executeHolder = executeHolderOpt.getOrElse {
+  private lazy val executeHolder = executeHolderOpt.getOrElse {
     throw new IllegalArgumentException("executeHolder is not set")
   }
 
@@ -208,11 +208,11 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.transform(extension, this))
+      .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .get()
   }
 
   private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
@@ -549,13 +549,15 @@ class SparkConnectPlanner(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
-              isBarrier)
+              isBarrier,
+              None)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
             logical.MapInArrow(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
-              isBarrier)
+              isBarrier,
+              None)
           case _ =>
             throw InvalidPlanInput(
               s"Function with EvalType: ${pythonUdf.evalType} is not supported")
@@ -1471,11 +1473,11 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.transform(extension, this))
+      .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .get
   }
 
   /**
@@ -2516,7 +2518,7 @@ class SparkConnectPlanner(
     }
   }
 
-  def handleSqlCommand(
+  private def handleSqlCommand(
       getSqlCommand: SqlCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
@@ -2711,10 +2713,9 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.process(extension, this))
+      .map(p => p.process(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_ == true)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
     executeHolder.eventsManager.postFinished()
   }
@@ -2827,7 +2828,7 @@ class SparkConnectPlanner(
    *
    * @param writeOperation
    */
-  def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+  private def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
@@ -2886,7 +2887,7 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  def handleWriteStreamOperationStart(
+  private def handleWriteStreamOperationStart(
       writeOp: WriteStreamOperationStart,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
@@ -3012,7 +3013,7 @@ class SparkConnectPlanner(
         .build())
   }
 
-  def handleStreamingQueryCommand(
+  private def handleStreamingQueryCommand(
       command: StreamingQueryCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
@@ -3190,7 +3191,7 @@ class SparkConnectPlanner(
     builder.build()
   }
 
-  def handleStreamingQueryManagerCommand(
+  private def handleStreamingQueryManagerCommand(
       command: StreamingQueryManagerCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
@@ -3271,7 +3272,7 @@ class SparkConnectPlanner(
         .build())
   }
 
-  def handleGetResourcesCommand(
+  private def handleGetResourcesCommand(
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

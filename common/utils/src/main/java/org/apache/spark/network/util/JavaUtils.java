@@ -104,7 +104,9 @@ public class JavaUtils {
 
     // On Unix systems, use operating system command to run faster
     // If that does not work out, fallback to the Java IO way
-    if (SystemUtils.IS_OS_UNIX && filter == null) {
+    // We exclude Apple Silicon test environment due to the limited resource issues.
+    if (SystemUtils.IS_OS_UNIX && filter == null && !(SystemUtils.IS_OS_MAC_OSX &&
+        (System.getenv("SPARK_TESTING") != null || System.getProperty("spark.testing") != null))) {
       try {
         deleteRecursivelyUsingUnixNative(file);
         return;
@@ -120,6 +122,7 @@ public class JavaUtils {
   private static void deleteRecursivelyUsingJavaIO(
       File file,
       FilenameFilter filter) throws IOException {
+    if (!file.exists()) return;
     BasicFileAttributes fileAttributes =
       Files.readAttributes(file.toPath(), BasicFileAttributes.class);
     if (fileAttributes.isDirectory() && !isSymlink(file)) {

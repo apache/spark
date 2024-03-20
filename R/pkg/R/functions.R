@@ -2517,6 +2517,35 @@ setMethod("upper",
           })
 
 #' @details
+#' \code{collate}: Marks a given column with specified collation.
+#'
+#' @param x a Column on which to perform collate.
+#' @param collation specified collation name.
+#' @rdname column_string_functions
+#' @aliases collate collate,Column-method
+#' @note collate since 4.0.0
+setMethod("collate",
+          signature(x = "Column", collation = "character"),
+          function(x, collation) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collate", x@jc, collation)
+            column(jc)
+          })
+
+#' @details
+#' \code{collation}: Returns the collation name of a given column.
+#'
+#' @param x a Column on which to return collation name.
+#' @rdname column_string_functions
+#' @aliases collation collation,Column-method
+#' @note collation since 4.0.0
+setMethod("collation",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "collation", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{var}: Alias for \code{var_samp}.
 #'
 #' @rdname column_aggregate_functions
@@ -4521,6 +4550,23 @@ setMethod("map_zip_with",
               cols = list(x, y),
               funs = list(f)
            )
+          })
+
+#' @details
+#' \code{map_sort}: Sorts the input map in ascending or descending order according to
+#' the natural ordering of the map keys.
+#'
+#' @rdname column_collection_functions
+#' @param asc a logical flag indicating the sorting order.
+#'            TRUE, sorting is in ascending order.
+#'            FALSE, sorting is in descending order.
+#' @aliases map_sort map_sort,Column-method
+#' @note map_sort since 4.0.0
+setMethod("map_sort",
+          signature(x = "Column"),
+          function(x, asc = TRUE) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_sort", x@jc, asc)
+            column(jc)
           })
 
 #' @details

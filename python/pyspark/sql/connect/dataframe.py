@@ -701,7 +701,8 @@ class DataFrame:
                     _c = self[-c - 1].desc()
                 else:
                     raise PySparkIndexError(
-                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                        error_class="ZERO_INDEX",
+                        message_parameters={},
                     )
             else:
                 _c = c  # type: ignore[assignment]
@@ -2113,6 +2114,11 @@ class DataFrame:
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def sameSemantics(self, other: "DataFrame") -> bool:
+        if not isinstance(other, DataFrame):
+            raise PySparkTypeError(
+                error_class="NOT_DATAFRAME",
+                message_parameters={"arg_name": "other", "arg_type": type(other).__name__},
+            )
         self._check_same_session(other)
         return self._session.client.same_semantics(
             plan=self._plan.to_proto(self._session.client),
@@ -2237,14 +2243,8 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.dataframe.__dict__.copy()
 
-    # TODO(SPARK-41625): Support Structured Streaming
-    del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
-
     # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
     del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
-
-    # TODO(SPARK-43435): should reenable this test
-    del pyspark.sql.connect.dataframe.DataFrame.writeStream.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
