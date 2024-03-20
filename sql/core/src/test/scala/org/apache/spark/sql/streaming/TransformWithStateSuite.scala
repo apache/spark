@@ -18,10 +18,11 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.util.UUID
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Dataset, Encoders}
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException}
@@ -653,20 +654,27 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       )
     }
   }
+}
 
-  test("transformWithState - availableNow trigger mode with rate limit option") {
+class TransformWithStateTriggerSuite extends StateStoreMetricsTest {
+
+  import testImplicits._
+
+  test("transformWithState - availableNow trigger mode, rate limit is respected") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { srcDir =>
 
         /** Create a text file with a single data item */
         def createFile(data: String): File =
-          stringToFile(new File(srcDir, s"$data.txt"), data)
+          stringToFile(new File(srcDir, s"${UUID.randomUUID()}.txt"), data)
+
         Seq("a", "b", "c").foreach(createFile)
 
         // Set up a query to read text files one at a time
         val df = spark
           .readStream
+          .option("maxFilesPerTrigger", "1")
           .text(srcDir.getCanonicalPath)
           .select("value").as[String]
           .groupByKey(x => x)
@@ -674,11 +682,33 @@ class TransformWithStateSuite extends StateStoreMetricsTest
             TimeoutMode.NoTimeouts(),
             OutputMode.Update())
 
-        testStream(df, extraOptions = Map("maxFilesPerTrigger" -> "1"))(
+        testStream(df)(
           StartStream(trigger = Trigger.AvailableNow()),
           ProcessAllAvailable(),
-          CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1"))
+          CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
+          StopStream,
+          Execute { _ =>
+            createFile("a")
+          },
+          StartStream(trigger = Trigger.AvailableNow()),
+          ProcessAllAvailable(),
+          CheckNewAnswer(("a", "2"))
         )
+
+        var index = 0
+        val foreachBatchDf = df.writeStream
+        .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+          index += 1
+        })
+        .trigger(Trigger.AvailableNow())
+        .start()
+
+        try {
+          foreachBatchDf.awaitTermination()
+          assert(index == 4)
+        } finally {
+          foreachBatchDf.stop()
+        }
       }
     }
   }
