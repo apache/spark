@@ -984,20 +984,39 @@ private[spark] class SparkSubmit extends Logging {
         e
     }
 
+    //    this variable is used to judge whether driver pod is normal if spark is on k8s
+    var DriverPodIsNormal: Boolean = if (args.master.startsWith("k8s")) true else false
+    var driverThrow: Throwable = null
     try {
       app.start(childArgs.toArray, sparkConf)
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        logWarning("Some ERR/Exception happened when app is running.")
+        if (args.master.startsWith("k8s")) {
+          DriverPodIsNormal = false
+          driverThrow = t
+        } else {
+          throw findCause(t)
+        }
     } finally {
       if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
           !isConnectServer(args.mainClass)) {
         try {
+          logWarning("Begin to close SparkContext inside driver pod......")
           SparkContext.getActive.foreach(_.stop())
         } catch {
           case e: Throwable => logError(s"Failed to close SparkContext: $e")
-        }
+        } finally {
+          if (SparkContext.getActive.isEmpty) {
+            logWarning("Finished to close SparkContext inside driver pod successfully.")
+            if (!DriverPodIsNormal) {
+              logError(s"Driver Pod will exit because: $driverThrow")
+              System.exit(1)
+            }
+          } else {
+            logWarning("Failed to close SparkContext.")
+          }
       }
     }
   }
