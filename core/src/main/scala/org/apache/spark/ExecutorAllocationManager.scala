@@ -320,10 +320,6 @@ private[spark] class ExecutorAllocationManager(
     }
   }
 
-  private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
-    listener.totalRunningTasksPerResourceProfile(id)
-  }
-
   /**
    * This is called at a fixed interval to regulate the number of pending executor requests
    * and number of executors running.
