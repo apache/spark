@@ -54,7 +54,7 @@ object BucketingUtils {
   }
 
   def canBucketOn(dataType: DataType): Boolean = dataType match {
-    case st: StringType => st.isSparkInternalCollation
+    case st: StringType => st.isUTF8BinaryCollation
     case other => true
   }
 

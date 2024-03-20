@@ -71,7 +71,7 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String =>
       if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.SPARK_INTERNAL_COLLATION_ID) {
+        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         Literal(UTF8String.fromString(s), StringType)
       }
       else {
@@ -80,7 +80,7 @@ object Literal {
       }
     case s: UTF8String =>
       if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.SPARK_INTERNAL_COLLATION_ID) {
+        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         Literal(s, StringType)
       }
       else {
@@ -88,7 +88,7 @@ object Literal {
       }
     case c: Char =>
       if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.SPARK_INTERNAL_COLLATION_ID) {
+        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         Literal(UTF8String.fromString(c.toString), StringType)
       }
       else {
@@ -97,7 +97,7 @@ object Literal {
       }
     case ac: Array[Char] =>
       if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.SPARK_INTERNAL_COLLATION_ID) {
+        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
       }
       else {
@@ -163,7 +163,7 @@ object Literal {
     case _ if clz == classOf[Array[Byte]] => BinaryType
     case _ if clz == classOf[Array[Char]] =>
       if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.SPARK_INTERNAL_COLLATION_ID) {
+        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         StringType
       }
       else StringType(CollationFactory.collationNameToId(SQLConf.get.defaultCollation))
@@ -178,7 +178,7 @@ object Literal {
     // other scala classes
     case _ if clz == classOf[String] =>
       if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.SPARK_INTERNAL_COLLATION_ID) {
+        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         StringType
       }
       else StringType(CollationFactory.collationNameToId(SQLConf.get.defaultCollation))

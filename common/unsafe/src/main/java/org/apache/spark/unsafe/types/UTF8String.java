@@ -346,7 +346,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.contains(substring);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().contains(substring.toLowerCase());
     }
     return collatedContains(substring, collationId);
@@ -397,7 +397,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.startsWith(prefix);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().startsWith(prefix.toLowerCase());
     }
     return matchAt(prefix, 0, collationId);
@@ -411,7 +411,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.endsWith(suffix);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().endsWith(suffix.toLowerCase());
     }
     return matchAt(suffix, numBytes - suffix.numBytes, collationId);

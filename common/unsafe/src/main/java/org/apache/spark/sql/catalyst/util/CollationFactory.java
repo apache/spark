@@ -109,8 +109,8 @@ public final class CollationFactory {
   private static final Collation[] collationTable = new Collation[4];
   private static final HashMap<String, Integer> collationNameToIdMap = new HashMap<>();
 
-  public static final int SPARK_INTERNAL_COLLATION_ID = 0;
-  public static final int LOWERCASE_COLLATION_ID = 1;
+  public static final int UTF8_BINARY_COLLATION_ID = 0;
+  public static final int UTF8_BINARY_LCASE_COLLATION_ID = 1;
 
   static {
     // Binary comparison. This is the default collation.

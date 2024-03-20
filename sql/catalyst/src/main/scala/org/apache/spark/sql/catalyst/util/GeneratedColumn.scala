@@ -163,7 +163,7 @@ object GeneratedColumn {
         s"generation expression data type ${analyzed.dataType.simpleString} " +
         s"is incompatible with column data type ${dataType.simpleString}")
     }
-    if (analyzed.exists(e => SchemaUtils.hasNonInternallyCollatedString(e.dataType))) {
+    if (analyzed.exists(e => SchemaUtils.hasNonUTF8BinaryCollatedString(e.dataType))) {
       throw unsupportedExpressionError(
         "generation expression cannot contain collated string type other than UTF8_BINARY")
     }
