@@ -639,4 +639,24 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "expressionStr" -> "UCASE(struct1.a)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
   }
+
+  test("window aggregates should respect collation") {
+    val t1 = "T_NON_BINARY"
+    val t2 = "T_BINARY"
+
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (c STRING COLLATE UTF8_BINARY_LCASE, i int) USING PARQUET")
+      sql(s"INSERT INTO $t1 VALUES ('aA', 2), ('Aa', 1), ('ab', 3), ('aa', 1)")
+
+      sql(s"CREATE TABLE $t2 (c STRING, i int) USING PARQUET")
+      // Same input but already normalized to lowercase.
+      sql(s"INSERT INTO $t2 VALUES ('aa', 2), ('aa', 1), ('ab', 3), ('aa', 1)")
+
+      val dfNonBinary =
+        sql(s"SELECT lower(c), i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t1")
+      val dfBinary =
+        sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
+      checkAnswer(dfNonBinary, dfBinary)
+    }
+  }
 }
