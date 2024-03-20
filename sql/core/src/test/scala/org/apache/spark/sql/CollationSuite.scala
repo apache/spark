@@ -639,4 +639,169 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
   }
+
+  test("Aggregation of arrays built on collated strings") {
+    val tableName = "test_agg_arr_collated"
+    val simple = Seq(
+      // binary
+      ("utf8_binary", Seq("array('aaa')", "array('AAA')"),
+        Seq((Seq("aaa"), 1), (Seq("AAA"), 1))),
+      ("utf8_binary", Seq("array('aaa', 'bbb')", "array('AAA', 'BBB')"),
+        Seq((Seq("aaa", "bbb"), 1), (Seq("AAA", "BBB"), 1))),
+      ("utf8_binary", Seq("array('aaa')", "array('bbb')", "array('AAA')", "array('BBB')"),
+        Seq((Seq("aaa"), 1), (Seq("bbb"), 1), (Seq("AAA"), 1), (Seq("BBB"), 1))),
+      // non-binary
+      ("utf8_binary_lcase",
+        Seq(
+          "array('aaa' collate utf8_binary_lcase)",
+          "array('AAA' collate utf8_binary_lcase)"
+        ),
+        Seq((Seq("aaa"), 2))),
+      ("utf8_binary_lcase",
+        Seq(
+          "array('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase)",
+          "array('AAA' collate utf8_binary_lcase, 'BBB' collate utf8_binary_lcase)"
+        ),
+        Seq((Seq("aaa", "bbb"), 2))),
+      ("utf8_binary_lcase",
+        Seq(
+          "array('aaa' collate utf8_binary_lcase)",
+          "array('bbb' collate utf8_binary_lcase)",
+          "array('AAA' collate utf8_binary_lcase)",
+          "array('BBB' collate utf8_binary_lcase)"
+        ),
+        Seq((Seq("aaa"), 2), (Seq("bbb"), 2)))
+    )
+    val nested = Seq(
+      // binary
+      ("utf8_binary", Seq("array(array('aaa'))", "array(array('AAA'))"),
+        Seq((Seq(Seq("aaa")), 1), (Seq(Seq("AAA")), 1))),
+      ("utf8_binary", Seq("array(array('aaa'), array('bbb'))", "array(array('AAA'), array('bbb'))"),
+        Seq((Seq(Seq("aaa"), Seq("bbb")), 1), (Seq(Seq("AAA"), Seq("bbb")), 1))),
+      // non-binary
+      ("utf8_binary_lcase",
+        Seq(
+          "array(array('aaa' collate utf8_binary_lcase))",
+          "array(array('AAA' collate utf8_binary_lcase))"
+        ),
+        Seq((Seq(Seq("aaa")), 2))),
+      ("utf8_binary_lcase",
+        Seq(
+          "array(array('aaa' collate utf8_binary_lcase), array('bbb' collate utf8_binary_lcase))",
+          "array(array('AAA' collate utf8_binary_lcase), array('bbb' collate utf8_binary_lcase))"
+        ),
+        Seq((Seq(Seq("aaa"), Seq("bbb")), 2))),
+      ("utf8_binary_lcase",
+        Seq(
+          "array(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_binary_lcase)," +
+            "array('bbb' collate utf8_binary_lcase, 'ccc' collate utf8_binary_lcase))",
+          "array(array('aaa' collate utf8_binary_lcase, 'aaa' collate utf8_binary_lcase)," +
+            "array('bbb' collate utf8_binary_lcase, 'ccc' collate utf8_binary_lcase)," +
+            "array('ddd' collate utf8_binary_lcase))",
+          "array(array('AAA' collate utf8_binary_lcase, 'aaa' collate utf8_binary_lcase)," +
+            "array('BBB' collate utf8_binary_lcase, 'CCC' collate utf8_binary_lcase))"
+        ),
+        Seq(
+          (Seq(Seq("aaa", "AAA"), Seq("bbb", "ccc")), 2),
+          (Seq(Seq("aaa", "aaa"), Seq("bbb", "ccc"), Seq("ddd")), 1)
+        )
+      )
+    )
+
+    val all = simple.map {
+      case (collName, data, res) => (s"array<string collate $collName>", data, res)
+    } ++ nested.map {
+      case (collName, data, res) => (s"array<array<string collate $collName>>", data, res)
+    }
+
+    all.foreach {
+      case (dt, rows, count) =>
+        withTable(tableName) {
+          sql(s"create table $tableName(a $dt) using parquet")
+          rows.map(row => sql(s"insert into $tableName(a) values($row)"))
+          checkAnswer(sql(s"select a, count(*) from $tableName group by a"),
+            count.map { case (aggStr, cnt) => Row(aggStr, cnt) })
+          checkAnswer(sql(s"select distinct a from $tableName"),
+            count.map{ case (aggStr, _) => Row(aggStr)})
+        }
+    }
+  }
+
+  test("Join on arrays of collated strings") {
+    val tablePrefix = "test_join_arr_collated"
+    val tableLeft = s"${tablePrefix}_left"
+    val tableRight = s"${tablePrefix}_right"
+    val simple = Seq(
+      // binary
+      ("utf8_binary", Seq("array('aaa')"), Seq("array('AAA')"), Seq()),
+      // non-binary
+      ("utf8_binary_lcase",
+        Seq("array('aaa' collate utf8_binary_lcase)"),
+        Seq("array('AAA' collate utf8_binary_lcase)"),
+        Seq(Seq("aaa"))),
+      ("utf8_binary_lcase",
+        Seq("array('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase)"),
+        Seq("array('AAA' collate utf8_binary_lcase, 'BBB' collate utf8_binary_lcase)"),
+        Seq(Seq("aaa", "bbb"))),
+      ("utf8_binary_lcase",
+        Seq("array('aaa' collate utf8_binary_lcase)", "array('bbb' collate utf8_binary_lcase)"),
+        Seq("array('AAA' collate utf8_binary_lcase)", "array('BBB' collate utf8_binary_lcase)"),
+        Seq(Seq("aaa"), Seq("bbb"))),
+      ("utf8_binary_lcase",
+        Seq("array('aaa' collate utf8_binary_lcase)", "array('bbb' collate utf8_binary_lcase)"),
+        Seq("array('AAAA' collate utf8_binary_lcase)", "array('BBBB' collate utf8_binary_lcase)"),
+        Seq())
+    )
+    val nested = Seq(
+      // binary
+      ("utf8_binary", Seq("array(array('aaa'))"), Seq("array(array('AAA'))"), Seq()),
+      // non-binary
+      ("utf8_binary_lcase",
+        Seq("array(array('aaa' collate utf8_binary_lcase))"),
+        Seq("array(array('AAA' collate utf8_binary_lcase))"),
+        Seq(Seq(Seq("aaa")))),
+      ("utf8_binary_lcase",
+        Seq("array(array('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase))"),
+        Seq("array(array('AAA' collate utf8_binary_lcase, 'BBB' collate utf8_binary_lcase))"),
+        Seq(Seq(Seq("aaa", "bbb")))),
+      ("utf8_binary_lcase",
+        Seq("array(array('aaa' collate utf8_binary_lcase)," +
+          "array('bbb' collate utf8_binary_lcase))"),
+        Seq("array(array('AAA' collate utf8_binary_lcase)," +
+          "array('BBB' collate utf8_binary_lcase))"),
+        Seq(Seq(Seq("aaa"), Seq("bbb")))),
+      ("utf8_binary_lcase",
+        Seq("array(array('aaa' collate utf8_binary_lcase)," +
+          "array('bbb' collate utf8_binary_lcase))"),
+        Seq("array(array('AAA' collate utf8_binary_lcase)," +
+          "array('CCC' collate utf8_binary_lcase))"),
+        Seq())
+    )
+
+    val all = simple.map {
+      case (collName, l, r, res) => (s"array<string collate $collName>", l, r, res)
+    } ++ nested.map {
+      case (collName, l, r, res) => (s"array<array<string collate $collName>>", l, r, res)
+    }
+
+    all.foreach {
+      case (dt, dataLeft, dataRight, res) =>
+        withTable(tableLeft) {
+          withTable(tableRight) {
+            Seq(tableLeft, tableRight).map(tab => sql(s"create table $tab(a $dt) using parquet"))
+            Seq((tableLeft, dataLeft), (tableRight, dataRight)).foreach {
+              case (tab, data) => data.map(row => sql(s"insert into $tab(a) values($row)"))
+            }
+            checkAnswer(
+              sql(
+                s"""
+                   |select $tableLeft.a from $tableLeft join $tableRight
+                   |where $tableLeft.a = $tableRight.a
+                   |""".stripMargin),
+              res.map(Row(_))
+            )
+          }
+        }
+    }
+  }
 }

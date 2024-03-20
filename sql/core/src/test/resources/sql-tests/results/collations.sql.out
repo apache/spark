@@ -339,3 +339,83 @@ select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate 
 struct<array_except(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
 -- !query output
 []
+
+
+-- !query
+create table l(a array<string collate utf8_binary_lcase>) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+create table r(a array<string collate utf8_binary_lcase>) using parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into l(a) values(array('a' collate utf8_binary_lcase))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+insert into r(a) values(array('A' collate utf8_binary_lcase))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select * from l join r where l.a = r.a
+-- !query schema
+struct<a:array<string collate UTF8_BINARY_LCASE>,a:array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+["a"]	["A"]
+
+
+-- !query
+insert into l(a) values(array('A' collate utf8_binary_lcase))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+select distinct a from l
+-- !query schema
+struct<a:array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+["a"]
+
+
+-- !query
+select a, count(*) from l group by a
+-- !query schema
+struct<a:array<string collate UTF8_BINARY_LCASE>,count(1):bigint>
+-- !query output
+["a"]	2
+
+
+-- !query
+drop table l
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+drop table r
+-- !query schema
+struct<>
+-- !query output
+
