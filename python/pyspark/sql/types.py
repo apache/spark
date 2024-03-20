@@ -263,7 +263,7 @@ class StringType(AtomicType):
             self.collationId = self.collationNameToId(collation.upper())
         else:
             raise PySparkValueError(
-                f"Collation parameter expected to be string but got {type(collation)} {collation}"
+                f"Collation parameter expected to be string but got {type(collation)}"
             )
 
     @classmethod
