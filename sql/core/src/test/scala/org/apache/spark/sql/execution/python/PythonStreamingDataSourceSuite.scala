@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.util.concurrent.CountDownLatch
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
