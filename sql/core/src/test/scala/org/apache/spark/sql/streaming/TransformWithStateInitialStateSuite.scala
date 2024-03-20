@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
@@ -257,5 +258,36 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
 
     val df = result.toDF()
     checkAnswer(df, Seq(("k1", "getOption", 37.0)).toDF())
+  }
+
+  test("transformWithStateWithInitialState - " +
+    "cannot re-initialize state during initial state handling") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val initDf = Seq(("init_1", 40.0), ("init_2", 100.0), ("init_1", 50.0)).toDS()
+        .groupByKey(x => x._1).mapValues(x => x)
+      val inputData = MemoryStream[InitInputRow]
+      val query = inputData.toDS()
+        .groupByKey(x => x.key)
+        .transformWithState(new AccumulateStatefulProcessorWithInitState(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Append(),
+          initDf)
+
+      testStream(query, OutputMode.Update())(
+        AddData(inputData, InitInputRow("k1", "add", 50.0)),
+        Execute { q =>
+          val e = intercept[Exception] {
+            q.processAllAvailable()
+          }
+          checkError(
+            exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
+            errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
+            sqlState = Some("42802"),
+            parameters = Map("groupingKey" -> "init_1")
+          )
+        }
+      )
+    }
   }
 }

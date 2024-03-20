@@ -92,6 +92,11 @@ object StateStoreErrors {
       handleState: String): StatefulProcessorCannotPerformOperationWithInvalidHandleState = {
     new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
   }
+
+  def cannotReInitializeStateOnKey(groupingKey: String):
+    StatefulProcessorCannotReInitializeState = {
+    new StatefulProcessorCannotReInitializeState(groupingKey)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -142,3 +147,8 @@ class StateStoreUnsupportedOperationOnMissingColumnFamily(
     colFamilyName: String) extends SparkUnsupportedOperationException(
   errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
   messageParameters = Map("operationType" -> operationType, "colFamilyName" -> colFamilyName))
+
+class StatefulProcessorCannotReInitializeState(groupingKey: String)
+  extends SparkUnsupportedOperationException(
+  errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
+  messageParameters = Map("groupingKey" -> groupingKey))

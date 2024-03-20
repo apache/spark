@@ -162,7 +162,13 @@ case class TransformWithStateExec(
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
 
+    var seenInitStateOnKey = false
     initStateObjIter.foreach { initState =>
+      // cannot re-initialize state on the same grouping key during initial state handling
+      if (seenInitStateOnKey) {
+        throw StateStoreErrors.cannotReInitializeStateOnKey(keyObj.toString)
+      }
+      seenInitStateOnKey = true
       statefulProcessor
         .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
         .handleInitialState(keyObj, initState)
