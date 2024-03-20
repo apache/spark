@@ -121,7 +121,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "paramIndex" -> "first",
         "inputSql" -> "\"1\"",
         "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRING\""),
+        "requiredType" -> "\"STRING_ANY_COLLATION\""),
       context = ExpectedContext(
         fragment = s"collate(1, 'UTF8_BINARY')", start = 7, stop = 31))
   }
@@ -611,7 +611,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           s"""
              |CREATE TABLE testcat.test_table(
              |  c1 STRING COLLATE UNICODE,
-             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (c1 || 'a' COLLATE UNICODE)
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (LOWER(c1))
              |)
              |USING $v2Source
              |""".stripMargin)
@@ -619,7 +619,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
       parameters = Map(
         "fieldName" -> "c2",
-        "expressionStr" -> "c1 || 'a' COLLATE UNICODE",
+        "expressionStr" -> "LOWER(c1)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
 
     checkError(
@@ -628,7 +628,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           s"""
              |CREATE TABLE testcat.test_table(
              |  struct1 STRUCT<a: STRING COLLATE UNICODE>,
-             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (SUBSTRING(struct1.a, 0, 1))
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (UCASE(struct1.a))
              |)
              |USING $v2Source
              |""".stripMargin)
@@ -636,7 +636,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
       parameters = Map(
         "fieldName" -> "c2",
-        "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
+        "expressionStr" -> "UCASE(struct1.a)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
   }
 }
