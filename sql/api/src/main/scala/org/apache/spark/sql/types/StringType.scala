@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.StringType.DEFAULT_COLLATION_ID
+import org.apache.spark.sql.types.StringType.{DEFAULT_COLLATION_ID, isDefaultCollation}
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -30,17 +30,6 @@ import org.apache.spark.sql.types.StringType.DEFAULT_COLLATION_ID
  */
 @Stable
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
-  /**
-   * Returns whether assigned collation is the default spark collation (UTF8_BINARY).
-   */
-  def isDefaultCollation: Boolean = {
-    if (SqlApiConf.get.defaultCollation
-      != CollationFactory.fetchCollation(DEFAULT_COLLATION_ID).collationName) {
-      DEFAULT_COLLATION_ID = CollationFactory.collationNameToId(SqlApiConf.get.defaultCollation)
-    }
-    collationId == DEFAULT_COLLATION_ID
-  }
-
   /**
    * Binary collation implies that strings are considered equal only if they are
    * byte for byte equal. E.g. all accent or case-insensitive collations are considered non-binary.
@@ -87,6 +76,17 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
  */
 @Stable
 case object StringType extends StringType(0) {
+  /**
+   * Returns whether assigned collation is the default spark collation.
+   */
+  def isDefaultCollation: Boolean = {
+    if (SqlApiConf.get.defaultCollation
+      != CollationFactory.fetchCollation(DEFAULT_COLLATION_ID).collationName) {
+      DEFAULT_COLLATION_ID = CollationFactory.collationNameToId(SqlApiConf.get.defaultCollation)
+    }
+    collationId == DEFAULT_COLLATION_ID
+  }
+
   var DEFAULT_COLLATION_ID: Int =
     CollationFactory.collationNameToId(SqlApiConf.get.defaultCollation)
   def apply(collationId: Int): StringType = new StringType(collationId)
