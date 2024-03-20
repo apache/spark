@@ -2191,6 +2191,12 @@ Incorrect number of ordering columns=`<numOrderingCols>` for range scan encoder.
 
 Incorrect number of prefix columns=`<numPrefixCols>` for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns.
 
+### STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Null type ordering column with name=`<fieldName>` at index=`<index>` is not supported for range scan encoder.
+
 ### STATE_STORE_UNSUPPORTED_OPERATION
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)

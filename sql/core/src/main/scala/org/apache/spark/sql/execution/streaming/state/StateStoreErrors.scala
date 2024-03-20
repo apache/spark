@@ -86,6 +86,11 @@ object StateStoreErrors {
     new StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols)
   }
 
+  def nullTypeOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreNullTypeOrderingColsNotSupported = {
+    new StateStoreNullTypeOrderingColsNotSupported(fieldName, index)
+  }
+
   def variableSizeOrderingColsNotSupported(fieldName: String, index: String):
     StateStoreVariableSizeOrderingColsNotSupported = {
     new StateStoreVariableSizeOrderingColsNotSupported(fieldName, index)
@@ -171,4 +176,9 @@ class StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols: String)
 class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
     messageParameters = Map("fieldName" -> fieldName, "index" -> index))

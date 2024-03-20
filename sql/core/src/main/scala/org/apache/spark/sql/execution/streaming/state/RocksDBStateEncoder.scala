@@ -227,7 +227,12 @@ class RangeKeyScanStateEncoder(
   // verify that only fixed sized columns are used for ordering
   rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
     if (!isFixedSize(field.dataType)) {
-      throw StateStoreErrors.variableSizeOrderingColsNotSupported(field.name, idx.toString)
+      // NullType is technically fixed size, but not supported for ordering
+      if (field.dataType == NullType) {
+        throw StateStoreErrors.nullTypeOrderingColsNotSupported(field.name, idx.toString)
+      } else {
+        throw StateStoreErrors.variableSizeOrderingColsNotSupported(field.name, idx.toString)
+      }
     }
   }
 

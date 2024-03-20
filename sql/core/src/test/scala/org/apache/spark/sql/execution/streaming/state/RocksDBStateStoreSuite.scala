@@ -221,6 +221,29 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     )
   }
 
+  testWithColumnFamilies("rocksdb range scan validation - null type columns",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val keySchemaWithNullTypeCols: StructType = StructType(
+      Seq(StructField("key1", NullType, false), StructField("key2", StringType, false)))
+
+    val ex = intercept[SparkUnsupportedOperationException] {
+      tryWithProviderResource(newStoreProvider(keySchemaWithNullTypeCols,
+        RangeKeyScanStateEncoderSpec(keySchemaWithNullTypeCols, 1),
+        colFamiliesEnabled)) { provider =>
+        provider.getStore(0)
+      }
+    }
+    checkError(
+      ex,
+      errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
+      parameters = Map(
+        "fieldName" -> keySchemaWithNullTypeCols.fields(0).name,
+        "index" -> "0"
+      ),
+      matchPVals = true
+    )
+  }
+
   testWithColumnFamilies("rocksdb range scan - fixed size non-ordering columns",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
