@@ -426,6 +426,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         }
         result
       case other => resolve(other)
+    }.map {
+      case e: Expression if e.resolved => e
+      // Resolve again to support order-insensitive lateral column alias
+      case other => resolve(other)
     }
   }
 

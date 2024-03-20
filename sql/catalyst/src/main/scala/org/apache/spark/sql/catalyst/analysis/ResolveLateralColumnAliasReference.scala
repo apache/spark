@@ -148,7 +148,9 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
         val p @ Project(projectList, child) = pOriginal.mapChildren(apply0)
         var aliasMap = AttributeMap.empty[AliasEntry]
         val referencedAliases = collection.mutable.Set.empty[AliasEntry]
-        def unwrapLCAReference(e: NamedExpression): NamedExpression = {
+        // In order to support order-insensitive lateral column alias, we need to keep the
+        // LateralColumnAliasReference on first unwrap. We will restore it in the next round.
+        def unwrapLCAReference(e: NamedExpression, isRestore: Boolean): NamedExpression = {
           e.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
             case lcaRef: LateralColumnAliasReference if aliasMap.contains(lcaRef.a) =>
               val aliasEntry = aliasMap.get(lcaRef.a).get
@@ -161,20 +163,20 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
               } else {
                 lcaRef
               }
-            case lcaRef: LateralColumnAliasReference if !aliasMap.contains(lcaRef.a) =>
+            case lcaRef: LateralColumnAliasReference if isRestore && !aliasMap.contains(lcaRef.a) =>
               // It shouldn't happen, but restore to unresolved attribute to be safe.
               UnresolvedAttribute(lcaRef.nameParts)
           }.asInstanceOf[NamedExpression]
         }
         val newProjectList = projectList.zipWithIndex.map {
           case (a: Alias, idx) =>
-            val lcaResolved = unwrapLCAReference(a)
+            val lcaResolved = unwrapLCAReference(a, isRestore = false)
             // Insert the original alias instead of rewritten one to detect chained LCA
             aliasMap += (a.toAttribute -> AliasEntry(a, idx))
             lcaResolved
           case (e, _) =>
-            unwrapLCAReference(e)
-        }
+            unwrapLCAReference(e, isRestore = false)
+        }.map(unwrapLCAReference(_, isRestore = true))
 
         if (referencedAliases.isEmpty) {
           p
