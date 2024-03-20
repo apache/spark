@@ -68,39 +68,11 @@ jobs:
     - name: Check all modules
       id: set-outputs
       run: |
-        if [ -z "${{ inputs.jobs }}" ]; then
-          pyspark=true; sparkr=true; tpcds=true; docker=true;
-          pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-          pyspark=`./dev/is-changed.py -m $pyspark_modules`
-          sparkr=`./dev/is-changed.py -m sparkr`
-          tpcds=`./dev/is-changed.py -m sql`
-          docker=`./dev/is-changed.py -m docker-integration-tests`
-          # 'build' and 'maven-build' are always true for now.
-          # It does not save significant time and most of PRs trigger the build.
-          precondition="
-            {
-              \"build\": \"true\",
-              \"pyspark\": \"$pyspark\",
-              \"sparkr\": \"$sparkr\",
-              \"tpcds-1g\": \"$tpcds\",
-              \"docker-integration-tests\": \"$docker\",
-              \"maven-build\": \"true\",
-              \"lint\" : \"true\",
-              \"k8s-integration-tests\" : \"true\",
-              \"buf\" : \"true\",
-              \"ui\" : \"true\",
-            }"
-          echo $precondition # For debugging
-          # Remove `\n` to avoid "Invalid format" error
-          precondition="${precondition//$'\n'/}}"
-          echo "required=$precondition" >> $GITHUB_OUTPUT
-        else
-          # This is usually set by scheduled jobs.
-          precondition='${{ inputs.jobs }}'
-          echo $precondition # For debugging
-          precondition="${precondition//$'\n'/}"
-          echo "required=$precondition" >> $GITHUB_OUTPUT
-        fi
+        # This is usually set by scheduled jobs.
+        precondition='${{ inputs.jobs }}'
+        echo $precondition # For debugging
+        precondition="${precondition//$'\n'/}"
+        echo "required=$precondition" >> $GITHUB_OUTPUT
     - name: Generate infra image URL
       id: infra-image-outputs
       run: |
