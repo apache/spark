@@ -273,6 +273,24 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         key._1
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.commit()
+
+      // test with a different set of power of 2 timestamps
+      val store1 = provider.getStore(1)
+      val timerTimestamps1 = Seq(64L, 32L, 1024L, 4096L, 0L)
+      timerTimestamps1.foreach { ts =>
+        // non-timestamp col is of fixed size
+        val keyRow = dataToKeyRowWithRangeScan(ts, "a")
+        val valueRow = dataToValueRow(1)
+        store1.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
+      }
+
+      val result1 = store1.iterator(cfName).map { kv =>
+        val key = keyRowWithRangeScanToData(kv.key)
+        key._1
+      }.toSeq
+      assert(result1 === (timerTimestamps ++ timerTimestamps1).sorted)
     }
   }
 
@@ -305,6 +323,25 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         key._1
       }.toSeq
       assert(result === timerTimestamps.sorted)
+      store.commit()
+
+      // test with a different set of power of 2 timestamps
+      val store1 = provider.getStore(1)
+      val timerTimestamps1 = Seq(64L, 32L, 1024L, 4096L, 0L)
+      timerTimestamps1.foreach { ts =>
+        // non-timestamp col is of fixed size
+        val keyRow = dataToKeyRowWithRangeScan(ts,
+          Random.alphanumeric.take(Random.nextInt(20) + 1).mkString)
+        val valueRow = dataToValueRow(1)
+        store1.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
+      }
+
+      val result1 = store1.iterator(cfName).map { kv =>
+        val key = keyRowWithRangeScanToData(kv.key)
+        key._1
+      }.toSeq
+      assert(result1 === (timerTimestamps ++ timerTimestamps1).sorted)
     }
   }
 
