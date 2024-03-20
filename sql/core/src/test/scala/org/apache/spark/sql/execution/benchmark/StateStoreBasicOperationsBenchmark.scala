@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, TimestampType}
 import org.apache.spark.util.Utils
@@ -346,8 +346,8 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val provider = new HDFSBackedStateStoreProvider()
     val storeConf = new StateStoreConf(new SQLConf())
     provider.init(
-      storeId, keySchema, valueSchema, 0, useColumnFamilies = false,
-      storeConf, new Configuration)
+      storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = false, storeConf, new Configuration)
     provider
   }
 
@@ -361,8 +361,8 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val storeConf = new StateStoreConf(sqlConf)
 
     provider.init(
-      storeId, keySchema, valueSchema, 0, useColumnFamilies = false,
-      storeConf, new Configuration)
+      storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = false, storeConf, new Configuration)
     provider
   }
 

@@ -276,7 +276,7 @@ case class TransformWithStateExec(
         getStateInfo,
         schemaForKeyRow,
         schemaForValueRow,
-        numColsPrefixKey = 0,
+        NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
         session.sqlContext.sessionState,
         Some(session.sqlContext.streams.stateStoreCoordinator),
         useColumnFamilies = true,
@@ -308,12 +308,11 @@ case class TransformWithStateExec(
             providerId,
             schemaForKeyRow,
             schemaForValueRow,
-            numColsPrefixKey = 0,
+            NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
             useColumnFamilies = true,
             storeConf = storeConf,
             hadoopConf = broadcastedHadoopConf.value,
-            useMultipleValuesPerKey = true,
-            keyStateEncoderType = NoPrefixKeyStateEncoderType)
+            useMultipleValuesPerKey = true)
 
           val store = stateStoreProvider.getStore(0)
           val outputIterator = processData(store, iter)

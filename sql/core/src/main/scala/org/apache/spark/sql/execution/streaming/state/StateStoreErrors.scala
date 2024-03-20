@@ -76,9 +76,14 @@ object StateStoreErrors {
       messageParameters = Map("stateName" -> stateName))
   }
 
-  def incorrectNumOrderingColsNotSupported(numOrderingCols: String):
-    StateStoreIncorrectNumOrderingColsNotSupported = {
-    new StateStoreIncorrectNumOrderingColsNotSupported(numOrderingCols)
+  def incorrectNumOrderingColsForPrefixScan(numPrefixCols: String):
+    StateStoreIncorrectNumOrderingColsForPrefixScan = {
+    new StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols)
+  }
+
+  def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
+    StateStoreIncorrectNumOrderingColsForRangeScan = {
+    new StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols)
   }
 
   def variableSizeOrderingColsNotSupported(fieldName: String, index: String):
@@ -153,9 +158,14 @@ class StateStoreUnsupportedOperationOnMissingColumnFamily(
   errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
   messageParameters = Map("operationType" -> operationType, "colFamilyName" -> colFamilyName))
 
-class StateStoreIncorrectNumOrderingColsNotSupported(numOrderingCols: String)
+class StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_NOT_SUPPORTED",
+    errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_PREFIX_SCAN",
+    messageParameters = Map("numPrefixCols" -> numPrefixCols))
+
+class StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN",
     messageParameters = Map("numOrderingCols" -> numOrderingCols))
 
 class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: String)

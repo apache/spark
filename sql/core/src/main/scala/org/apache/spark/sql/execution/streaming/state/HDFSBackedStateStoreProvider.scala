@@ -122,10 +122,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def createColFamilyIfAbsent(
         colFamilyName: String,
-        keyStateEncoderType: KeyStateEncoderType,
         keySchema: StructType,
-        numColsPrefixKey: Int,
         valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
@@ -281,23 +280,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
   }
 
-  override def init(
-      stateStoreId: StateStoreId,
-      keySchema: StructType,
-      valueSchema: StructType,
-      numColsPrefixKey: Int,
+  private def runValidation(
       useColumnFamilies: Boolean,
-      storeConf: StateStoreConf,
-      hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false,
-      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType): Unit = {
-    this.stateStoreId_ = stateStoreId
-    this.keySchema = keySchema
-    this.valueSchema = valueSchema
-    this.storeConf = storeConf
-    this.hadoopConf = hadoopConf
-    this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
-
+      useMultipleValuesPerKey: Boolean,
+      keyStateEncoderSpec: KeyStateEncoderSpec): Unit = {
     // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
     if (useColumnFamilies) {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
@@ -307,16 +293,39 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
     }
 
-    if (keyStateEncoderType == RangeKeyScanStateEncoderType) {
+    if (keyStateEncoderSpec.isInstanceOf[RangeKeyScanStateEncoderSpec]) {
       throw StateStoreErrors.unsupportedOperationException("Range scan", providerName)
     }
+  }
 
-    if (keyStateEncoderType == NoPrefixKeyStateEncoderType && numColsPrefixKey > 0) {
-      throw StateStoreErrors.unsupportedOperationException("Incorrect encoder type for prefix scan",
-        providerName)
+  private def getNumColsPrefixKey(keyStateEncoderSpec: KeyStateEncoderSpec): Int = {
+    keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(_) => 0
+      case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) => numColsPrefixKey
+      case _ => throw StateStoreErrors.unsupportedOperationException("Range scan", providerName)
     }
+  }
 
-    this.numColsPrefixKey = numColsPrefixKey
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
+    this.stateStoreId_ = stateStoreId
+    this.keySchema = keySchema
+    this.valueSchema = valueSchema
+    this.storeConf = storeConf
+    this.hadoopConf = hadoopConf
+    this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
+
+    // run a bunch of validation checks for this state store provider
+    runValidation(useColumnFamilies, useMultipleValuesPerKey, keyStateEncoderSpec)
+
+    this.numColsPrefixKey = getNumColsPrefixKey(keyStateEncoderSpec)
 
     fm.mkdirs(baseDir)
   }

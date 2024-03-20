@@ -62,19 +62,19 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   private def newStoreProviderWithHandle(useColumnFamilies: Boolean):
     RocksDBStateStoreProvider = {
     newStoreProviderWithHandle(StateStoreId(newDir(), Random.nextInt(), 0),
-      numColsPrefixKey = 0,
+      NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
       useColumnFamilies = useColumnFamilies)
   }
 
   private def newStoreProviderWithHandle(
       storeId: StateStoreId,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       sqlConf: Option[SQLConf] = None,
       conf: Configuration = new Configuration,
       useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
-      storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
+      storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,
       useColumnFamilies,
       new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
     provider

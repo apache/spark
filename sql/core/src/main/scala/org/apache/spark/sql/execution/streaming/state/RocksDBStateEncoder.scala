@@ -41,20 +41,21 @@ sealed trait RocksDBValueStateEncoder {
 }
 
 object RocksDBStateEncoder {
-  def getKeyEncoder(
-      keySchema: StructType,
-      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType,
-      numColsPrefixKey: Int = 0): RocksDBKeyStateEncoder = {
+  def getKeyEncoder(keyStateEncoderSpec: KeyStateEncoderSpec): RocksDBKeyStateEncoder = {
     // Return the key state encoder based on the requested type
-    keyStateEncoderType match {
-      case NoPrefixKeyStateEncoderType =>
+    keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(keySchema) =>
         new NoPrefixKeyStateEncoder(keySchema)
 
-      case PrefixKeyScanStateEncoderType =>
+      case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
         new PrefixKeyScanStateEncoder(keySchema, numColsPrefixKey)
 
-      case RangeKeyScanStateEncoderType =>
+      case RangeKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
         new RangeKeyScanStateEncoder(keySchema, numColsPrefixKey)
+
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported key state encoder spec: " +
+          s"$keyStateEncoderSpec")
     }
   }
 
@@ -118,12 +119,6 @@ class PrefixKeyScanStateEncoder(
     numColsPrefixKey: Int) extends RocksDBKeyStateEncoder {
 
   import RocksDBStateEncoder._
-
-  // Note that numColsPrefixKey have to be less than the number of columns in the key schema
-  // Range scan encoder allows for equality, but prefix key scan encoder does not
-  if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
-    throw StateStoreErrors.incorrectNumOrderingColsNotSupported(numColsPrefixKey.toString)
-  }
 
   private val prefixKeyFieldsWithIdx: Seq[(StructField, Int)] = {
     keySchema.zipWithIndex.take(numColsPrefixKey)
@@ -218,12 +213,6 @@ class RangeKeyScanStateEncoder(
     numOrderingCols: Int) extends RocksDBKeyStateEncoder {
 
   import RocksDBStateEncoder._
-
-  // Verify that num cols specified for ordering are valid
-  // Note that ordering cols can be equal to number of key schema columns
-  if (numOrderingCols == 0 || numOrderingCols > keySchema.length) {
-    throw StateStoreErrors.incorrectNumOrderingColsNotSupported(numOrderingCols.toString)
-  }
 
   private val rangeScanKeyFieldsWithIdx: Seq[(StructField, Int)] = {
     keySchema.zipWithIndex.take(numOrderingCols)

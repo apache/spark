@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderType, PrefixKeyScanStateEncoderType, ReadStateStore, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, ReadStateStore, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -77,18 +77,18 @@ class StatePartitionReader(
       stateStoreMetadata.head.numColsPrefixKey
     }
 
-    // TODO: currently we don't support RangeKeyScanEncoderType. Support for this will be
+    // TODO: currently we don't support RangeKeyScanStateEncoderSpec. Support for this will be
     // added in the future along with state metadata changes.
     val keyStateEncoderType = if (numColsPrefixKey > 0) {
-      PrefixKeyScanStateEncoderType
+      new PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
     } else {
-      NoPrefixKeyStateEncoderType
+      new NoPrefixKeyStateEncoderSpec(keySchema)
     }
 
     StateStoreProvider.createAndInit(
-      stateStoreProviderId, keySchema, valueSchema, numColsPrefixKey,
+      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderType,
       useColumnFamilies = false, storeConf, hadoopConf.value,
-      useMultipleValuesPerKey = false, keyStateEncoderType)
+      useMultipleValuesPerKey = false)
   }
 
   private lazy val store: ReadStateStore = {

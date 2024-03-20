@@ -2179,7 +2179,13 @@ Failed to perform column family operation=`<operationName>` with invalid name=`<
 The handle has not been initialized for this StatefulProcessor.
 Please only use the StatefulProcessor within the transformWithState operator.
 
-### STATE_STORE_INCORRECT_NUM_ORDERING_COLS_NOT_SUPPORTED
+### STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_PREFIX_SCAN
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Incorrect number of prefix columns=`<numPrefixCols>` for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns.
+
+### STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 

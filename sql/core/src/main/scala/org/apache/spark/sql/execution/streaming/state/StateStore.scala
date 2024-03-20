@@ -127,10 +127,9 @@ trait StateStore extends ReadStateStore {
    */
   def createColFamilyIfAbsent(
       colFamilyName: String,
-      keyStateEncoderType: KeyStateEncoderType,
       keySchema: StructType,
-      numColsPrefixKey: Int,
       valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
       isInternal: Boolean = false): Unit
 
@@ -290,11 +289,25 @@ class InvalidUnsafeRowException(error: String)
     "among restart. For the first case, you can try to restart the application without " +
     s"checkpoint or use the legacy Spark version to process the streaming state.\n$error", null)
 
-// types of key encoders
-sealed trait KeyStateEncoderType
-case object NoPrefixKeyStateEncoderType extends KeyStateEncoderType
-case object PrefixKeyScanStateEncoderType extends KeyStateEncoderType
-case object RangeKeyScanStateEncoderType extends KeyStateEncoderType
+sealed trait KeyStateEncoderSpec
+
+case class NoPrefixKeyStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec
+
+case class PrefixKeyScanStateEncoderSpec(
+    keySchema: StructType,
+    numColsPrefixKey: Int) extends KeyStateEncoderSpec {
+  if (numColsPrefixKey == 0 || numColsPrefixKey >= keySchema.length) {
+    throw StateStoreErrors.incorrectNumOrderingColsForPrefixScan(numColsPrefixKey.toString)
+  }
+}
+
+case class RangeKeyScanStateEncoderSpec(
+    keySchema: StructType,
+    numColsPrefixKey: Int) extends KeyStateEncoderSpec {
+  if (numColsPrefixKey == 0 || numColsPrefixKey > keySchema.length) {
+    throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(numColsPrefixKey.toString)
+  }
+}
 
 /**
  * Trait representing a provider that provide [[StateStore]] instances representing
@@ -332,18 +345,16 @@ trait StateStoreProvider {
    * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
    * @param useMultipleValuesPerKey Whether the underlying state store needs to support multiple
    *                                values for a single key.
-   * @param keyStateEncoderType Encoder type to be used for encoding keys
    */
   def init(
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false,
-      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType): Unit
+      useMultipleValuesPerKey: Boolean = false): Unit
 
   /**
    * Return the id of the StateStores this provider will generate.
@@ -394,15 +405,14 @@ object StateStoreProvider {
       providerId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean,
-      keyStateEncoderType: KeyStateEncoderType): StateStoreProvider = {
+      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
-    provider.init(providerId.storeId, keySchema, valueSchema, numColsPrefixKey,
-      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey, keyStateEncoderType)
+    provider.init(providerId.storeId, keySchema, valueSchema, keyStateEncoderSpec,
+      useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     provider
   }
 
@@ -591,19 +601,17 @@ object StateStore extends Logging {
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false,
-      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType): ReadStateStore = {
+      useMultipleValuesPerKey: Boolean = false): ReadStateStore = {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-      keyStateEncoderType)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     storeProvider.getReadStore(version)
   }
 
@@ -612,19 +620,17 @@ object StateStore extends Logging {
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       version: Long,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false,
-      keyStateEncoderType: KeyStateEncoderType = NoPrefixKeyStateEncoderType): StateStore = {
+      useMultipleValuesPerKey: Boolean = false): StateStore = {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      numColsPrefixKey, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-      keyStateEncoderType)
+      keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     storeProvider.getStore(version)
   }
 
@@ -632,12 +638,11 @@ object StateStore extends Logging {
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean,
-      keyStateEncoderType: KeyStateEncoderType): StateStoreProvider = {
+      useMultipleValuesPerKey: Boolean): StateStoreProvider = {
     loadedProviders.synchronized {
       startMaintenanceIfNeeded(storeConf)
 
@@ -670,9 +675,8 @@ object StateStore extends Logging {
         loadedProviders.getOrElseUpdate(
           storeProviderId,
           StateStoreProvider.createAndInit(
-            storeProviderId, keySchema, valueSchema, numColsPrefixKey,
-            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey,
-            keyStateEncoderType)
+            storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
+            useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
         )
       }
 
