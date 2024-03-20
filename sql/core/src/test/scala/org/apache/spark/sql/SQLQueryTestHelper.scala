@@ -98,20 +98,24 @@ trait SQLQueryTestHelper extends Logging {
     }
   }
 
+  /**
+   * Uses the Spark logical plan to determine whether the plan is semantically sorted. This is
+   * important to make non-sorted queries test cases more deterministic.
+   */
+  protected def isSemanticallySorted(plan: LogicalPlan): Boolean = plan match {
+    case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
+    case _: DescribeCommandBase
+         | _: DescribeColumnCommand
+         | _: DescribeRelation
+         | _: DescribeColumn => true
+    case PhysicalOperation(_, _, Sort(_, true, _)) => true
+    case _ => plan.children.iterator.exists(isSemanticallySorted)
+  }
+
   /** Executes a query and returns the result as (schema of the output, normalized output). */
   protected def getNormalizedQueryExecutionResult(
       session: SparkSession, sql: String): (String, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
-    def isSorted(plan: LogicalPlan): Boolean = plan match {
-      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case _: DescribeCommandBase
-          | _: DescribeColumnCommand
-          | _: DescribeRelation
-          | _: DescribeColumn => true
-      case PhysicalOperation(_, _, Sort(_, true, _)) => true
-      case _ => plan.children.iterator.exists(isSorted)
-    }
-
     val df = session.sql(sql)
     val schema = df.schema.catalogString
     // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
@@ -120,7 +124,11 @@ trait SQLQueryTestHelper extends Logging {
     }
 
     // If the output is not pre-sorted, sort it.
-    if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
+    if (isSemanticallySorted(df.queryExecution.analyzed)) {
+      (schema, answer)
+    } else {
+      (schema, answer.sorted)
+    }
   }
 
   /**

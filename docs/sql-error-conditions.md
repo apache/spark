@@ -1640,6 +1640,12 @@ Can't determine the default value for `<colName>` since it is not nullable and i
 
 No handler for UDAF '`<functionName>`'. Use sparkSession.udf.register(...) instead.
 
+### NO_MERGE_ACTION_SPECIFIED
+
+[SQLSTATE: 42K0E](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+df.mergeInto needs to be followed by at least one of whenMatched/whenNotMatched/whenNotMatchedBySource.
+
 ### NO_SQL_TYPE_IN_PROTOBUF_SCHEMA
 
 [SQLSTATE: 42S22](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

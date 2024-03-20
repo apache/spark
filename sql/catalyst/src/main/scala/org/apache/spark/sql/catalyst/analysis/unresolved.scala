@@ -132,6 +132,21 @@ case class UnresolvedInlineTable(
 }
 
 /**
+ * An resolved inline table that holds all the expressions that were checked for
+ * the right shape and common data types.
+ * This is a preparation step for [[org.apache.spark.sql.catalyst.optimizer.EvalInlineTables]] which
+ * will produce a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]]
+ * for this inline table.
+ *
+ * @param output list of column attributes
+ * @param rows expressions for the data rows
+ */
+case class ResolvedInlineTable(rows: Seq[Seq[Expression]], output: Seq[Attribute])
+  extends LeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
+}
+
+/**
  * A table-valued function, e.g.
  * {{{
  *   select id from range(10);
