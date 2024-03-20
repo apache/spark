@@ -666,9 +666,21 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           "generation expression cannot contain collated string type other than UTF8_BINARY"))
   }
 
-  test("SPARK-47431: Default collation set to UNICODE") {
+  test("SPARK-47431: Default collation set to UNICODE, literal test") {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
       checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UNICODE")))
+    }
+  }
+
+  test("SPARK-47431: Default collation set to UNICODE, column type test") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      sql(
+        s"""
+           |CREATE TABLE t(c1 STRING)
+           |USING PARQUET
+           |""".stripMargin)
+      sql("INSERT INTO t VALUES ('a')")
+      checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UNICODE")))
     }
   }
 }

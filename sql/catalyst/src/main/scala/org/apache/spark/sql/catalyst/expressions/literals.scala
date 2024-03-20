@@ -70,40 +70,15 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String =>
-      if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
-        Literal(UTF8String.fromString(s), StringType)
-      }
-      else {
-        Literal(UTF8String.fromString(s),
-          StringType(CollationFactory.collationNameToId(SQLConf.get.defaultCollation)))
-      }
+        Literal(UTF8String.fromString(s), StringType(SparkStringTypeUtils.getDefaultCollationId))
     case s: UTF8String =>
-      if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
-        Literal(s, StringType)
-      }
-      else {
-        Literal(s, StringType(CollationFactory.collationNameToId(SQLConf.get.defaultCollation)))
-      }
+      Literal(s, StringType(SparkStringTypeUtils.getDefaultCollationId))
     case c: Char =>
-      if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
-        Literal(UTF8String.fromString(c.toString), StringType)
-      }
-      else {
-        Literal(UTF8String.fromString(c.toString),
-          StringType(CollationFactory.collationNameToId(SQLConf.get.defaultCollation)))
-      }
+      Literal(UTF8String.fromString(c.toString),
+        StringType(SparkStringTypeUtils.getDefaultCollationId))
     case ac: Array[Char] =>
-      if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
-        Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
-      }
-      else {
         Literal(UTF8String.fromString(String.valueOf(ac)),
-          StringType(CollationFactory.collationNameToId(SQLConf.get.defaultCollation)))
-      }
+          StringType(SparkStringTypeUtils.getDefaultCollationId))
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal =>
       val decimal = Decimal(d)
@@ -161,12 +136,7 @@ object Literal {
     case _ if clz == classOf[Period] => YearMonthIntervalType()
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
-    case _ if clz == classOf[Array[Char]] =>
-      if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
-        StringType
-      }
-      else StringType(CollationFactory.collationNameToId(SQLConf.get.defaultCollation))
+    case _ if clz == classOf[Array[Char]] => StringType(SparkStringTypeUtils.getDefaultCollationId)
     case _ if clz == classOf[JavaShort] => ShortType
     case _ if clz == classOf[JavaInteger] => IntegerType
     case _ if clz == classOf[JavaLong] => LongType
@@ -176,12 +146,7 @@ object Literal {
     case _ if clz == classOf[JavaBoolean] => BooleanType
 
     // other scala classes
-    case _ if clz == classOf[String] =>
-      if (CollationFactory.collationNameToId(SQLConf.get.defaultCollation)
-        == CollationFactory.UTF8_BINARY_COLLATION_ID) {
-        StringType
-      }
-      else StringType(CollationFactory.collationNameToId(SQLConf.get.defaultCollation))
+    case _ if clz == classOf[String] => StringType(SparkStringTypeUtils.getDefaultCollationId)
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
