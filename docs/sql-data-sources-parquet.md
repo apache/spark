@@ -617,7 +617,7 @@ Configuration of Parquet can be done via `spark.conf.set` or by running
 </tr>
 <tr>
   <td><code>spark.sql.parquet.inferTimestampNTZ.enabled</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     When enabled, Parquet timestamp columns with annotation <code>isAdjustedToUTC = false</code>
     are inferred as TIMESTAMP_NTZ type during schema inference. Otherwise, all the Parquet

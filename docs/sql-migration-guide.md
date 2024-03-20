@@ -42,6 +42,7 @@ license: |
 - Since Spark 4.0, the function `to_csv` no longer supports input with the data type `STRUCT`, `ARRAY`, `MAP`, `VARIANT` and `BINARY` (because the `CSV specification` does not have standards for these data types and cannot be read back using `from_csv`), Spark will throw `DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE` exception.
 - Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert Postgres TIMESTAMP WITH TIME ZONE and TIME WITH TIME ZONE data types to TimestampNTZType, which is available in Spark 3.5. 
 - Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert MySQL TIMESTAMP to TimestampNTZType, which is available in Spark 3.5. MySQL DATETIME is not affected.
+- Since Spark 4.0, the SQL config `spark.sql.parquet.inferTimestampNTZ.enabled` is turned off by default. Consequently, when reading Parquet files that were not produced by Spark, the Parquet reader will no longer automatically recognize data as the TIMESTAMP_NTZ data type. This change ensures backward compatibility with releases of Spark version 3.2 and earlier. It also aligns the behavior of schema inference for Parquet files with that of other data sources such as CSV, JSON, and JDBC, enhancing consistency across the platform. If you wish to revert to the previous behavior where TIMESTAMP_NTZ types were inferred, set `spark.sql.parquet.inferTimestampNTZ.enabled` to true.
 
 ## Upgrading from Spark SQL 3.4 to 3.5
 
@@ -121,6 +122,8 @@ license: |
   - Since Spark 3.3, the `unbase64` function throws error for a malformed `str` input. Use `try_to_binary(<str>, 'base64')` to tolerate malformed input and return NULL instead. In Spark 3.2 and earlier, the `unbase64` function returns a best-efforts result for a malformed `str` input.
 
   - Since Spark 3.3.1 and 3.2.3, for `SELECT ... GROUP BY a GROUPING SETS (b)`-style SQL statements, `grouping__id` returns different values from Apache Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0. It computes based on user-given group-by expressions plus grouping set columns. To restore the behavior before 3.3.1 and 3.2.3, you can set `spark.sql.legacy.groupingIdWithAppendedUserGroupBy`. For details, see [SPARK-40218](https://issues.apache.org/jira/browse/SPARK-40218) and [SPARK-40562](https://issues.apache.org/jira/browse/SPARK-40562).
+    
+  - In Spark 3.3/3.4/3.5 releases, when reading Parquet files that were not produced by Spark, Parquet timestamp columns with annotation `isAdjustedToUTC = false` are inferred as TIMESTAMP_NTZ type during schema inference. In Spark 3.2 and earlier, these columns are inferred as TIMESTAMP type. To restore the behavior before Spark 3.3, you can set `spark.sql.parquet.inferTimestampNTZ.enabled` to `false`. Note that this is a behavior change, and it will be disabled after Spark 4.0 release. 
 
 ## Upgrading from Spark SQL 3.1 to 3.2
 
