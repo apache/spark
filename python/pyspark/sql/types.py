@@ -256,15 +256,8 @@ class StringType(AtomicType):
 
     collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
 
-    def __init__(self, collation: str = None):
-        if collation is None:
-            self.collationId = 0
-        elif isinstance(collation, str):
-            self.collationId = self.collationNameToId(collation.upper())
-        else:
-            raise PySparkValueError(
-                f"Collation parameter expected to be string but got {type(collation)}"
-            )
+    def __init__(self, collation: Optional[str] = None):
+        self.collationId = 0 if collation is None else self.collationNameToId(collation)
 
     @classmethod
     def fromCollationId(self, collationId: int) -> "StringType":
