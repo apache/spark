@@ -80,9 +80,9 @@ class StatePartitionReader(
     // TODO: currently we don't support RangeKeyScanStateEncoderSpec. Support for this will be
     // added in the future along with state metadata changes.
     val keyStateEncoderType = if (numColsPrefixKey > 0) {
-      new PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+      PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
     } else {
-      new NoPrefixKeyStateEncoderSpec(keySchema)
+      NoPrefixKeyStateEncoderSpec(keySchema)
     }
 
     StateStoreProvider.createAndInit(

@@ -160,7 +160,7 @@ class StateStoreUnsupportedOperationOnMissingColumnFamily(
 
 class StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_PREFIX_SCAN",
+    errorClass = "STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN",
     messageParameters = Map("numPrefixCols" -> numPrefixCols))
 
 class StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols: String)
