@@ -295,10 +295,50 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) FILTER (WHERE c > 1)", 7, 76)))
   }
 
-  errorTest(
-    "non-deterministic filter predicate in aggregate functions",
-    CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
-    "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
+  test("SPARK-47256: non deterministic FILTER expression in an aggregate function") {
+    val plan =
+      CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2")
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_NON_DETERMINISTIC",
+      expectedMessageParameters = Map.empty,
+      queryContext = Array(
+        ExpectedContext("count(a) FILTER (WHERE rand(int(c)) > 1)", 7, 46)))
+  }
+
+  test("SPARK-38666 | SPARK-47256: non boolean FILTER expression in an aggregate function") {
+    val plan =
+      CatalystSqlParser.parsePlan("SELECT sum(c) FILTER (WHERE e) FROM TaBlE2")
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_NOT_BOOLEAN",
+      expectedMessageParameters = Map.empty,
+      queryContext = Array(
+        ExpectedContext("sum(c) FILTER (WHERE e)", 7, 29)))
+  }
+
+  test("SPARK-38666 | SPARK-47256: aggregate FILTER expression in an aggregate function") {
+    val plan =
+      CatalystSqlParser.parsePlan("SELECT sum(c) FILTER (WHERE max(e) > 1) FROM TaBlE2")
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_CONTAINS_AGGREGATE",
+      expectedMessageParameters = Map.empty,
+      queryContext = Array(
+        ExpectedContext("sum(c) FILTER (WHERE max(e) > 1)", 7, 38)))
+  }
+
+  test("SPARK-38666 | SPARK-47256: window function in FILTER expression in an aggregate function") {
+    val plan =
+      CatalystSqlParser.parsePlan(
+        "SELECT sum(c) FILTER (WHERE nth_value(e, 2) OVER(ORDER BY b) > 1) FROM TaBlE2")
+    assertAnalysisErrorClass(
+      inputPlan = plan,
+      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_CONTAINS_WINDOW_FUNCTION",
+      expectedMessageParameters = Map.empty,
+      queryContext = Array(
+        ExpectedContext("sum(c) FILTER (WHERE nth_value(e, 2) OVER(ORDER BY b) > 1)", 7, 64)))
+  }
 
   test("function don't support ignore nulls") {
     assertAnalysisErrorClass(
@@ -806,22 +846,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     "The generator is not supported: only one generator allowed per SELECT clause but found 2: " +
       """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
-
-  errorTest(
-    "SPARK-38666: non-boolean aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where e) FROM TaBlE2"),
-    "FILTER expression is not of type boolean" :: Nil)
-
-  errorTest(
-    "SPARK-38666: aggregate in aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where max(e) > 1) FROM TaBlE2"),
-    "FILTER expression contains aggregate" :: Nil)
-
-  errorTest(
-    "SPARK-38666: window function in aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) " +
-       "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
-    "FILTER expression contains window function" :: Nil)
 
   errorClassTest(
     "EXEC IMMEDIATE - nested execute immediate not allowed",

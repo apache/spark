@@ -4627,6 +4627,26 @@
     ],
     "sqlState" : "42KDF"
   },
+  "AGGREGATE_FILTER_EXPRESSION_NON_DETERMINISTIC" : {
+    "message" : [
+      "FILTER expression is non-deterministic. Such expression cannot be used in an aggregate function."
+    ]
+  },
+  "AGGREGATE_FILTER_EXPRESSION_NOT_BOOLEAN" : {
+    "message" : [
+      "FILTER expression is not of boolean type. Such expression cannot be used in an aggregate function."
+    ]
+  },
+  "AGGREGATE_FILTER_EXPRESSION_CONTAINS_AGGREGATE" : {
+    "message" : [
+      "FILTER expression contains aggregate. Such expression cannot be used to an aggregate function."
+    ]
+  },
+  "AGGREGATE_FILTER_EXPRESSION_CONTAINS_WINDOW_FUNCTION" : {
+    "message" : [
+      "FILTER expression contains window function. Such expression cannot be used to an aggregate function."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."
@@ -4871,26 +4891,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1024" : {
-    "message" : [
-      "FILTER expression is non-deterministic, it cannot be used in aggregate functions."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1025" : {
-    "message" : [
-      "FILTER expression is not of type boolean. It cannot be used in an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1026" : {
-    "message" : [
-      "FILTER expression contains aggregate. It cannot be used in an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1027" : {
-    "message" : [
-      "FILTER expression contains window function. It cannot be used in an aggregate function."
     ]
   },
   "_LEGACY_ERROR_TEMP_1030" : {
