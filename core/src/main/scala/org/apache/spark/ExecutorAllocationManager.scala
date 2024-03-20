@@ -320,8 +320,8 @@ private[spark] class ExecutorAllocationManager(
     }
   }
 
-  // SPARK-47474: Please do not delete this function, the tests in
-  // `ExecutorAllocationManagerSuite` need to access it with `synchronized`.
+  // SPARK-47474: Please do not delete this function, the tests in `ExecutorAllocationManagerSuite`
+  // need to access `listener.totalRunningTasksPerResourceProfile` with `synchronized`.
   private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
     listener.totalRunningTasksPerResourceProfile(id)
   }
