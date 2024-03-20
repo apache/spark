@@ -19,7 +19,9 @@ package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CollationRegexpExpressionsSuite extends QueryTest with SharedSparkSession {
@@ -434,5 +436,9 @@ class CollationRegexpExpressionsSuite extends QueryTest with SharedSparkSession 
       )
     })
   }
+}
 
+class CollationRegexpExpressionsANSISuite extends CollationRegexpExpressionsSuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 }

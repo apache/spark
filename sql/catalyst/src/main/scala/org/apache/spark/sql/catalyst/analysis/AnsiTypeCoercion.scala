@@ -221,7 +221,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         }
 
       // "canANSIStoreAssign" doesn't account for targets extending StringTypeCollated, but
-      // ANSIStoreAssign is generally expected to return "true" for (AtomicType, StringType)
+      // ANSIStoreAssign is generally expected to work with StringTypes
       case (_, st: StringTypeCollated) =>
         if (Cast.canANSIStoreAssign(inType, st.defaultConcreteType)) {
           Some(st.defaultConcreteType)
