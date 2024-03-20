@@ -255,9 +255,10 @@ case class TransformWithStateExec(
         iter
     }
 
-    val newDataProcessorIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
-      processNewData(filteredIter),
-      { // Once the input is processed, mark the start time for timeout processing to measure
+    val newDataProcessorIter =
+      CompletionIterator[InternalRow, Iterator[InternalRow]](
+      processNewData(filteredIter), {
+        // Once the input is processed, mark the start time for timeout processing to measure
         // it separately from the overall processing time.
         timeoutProcessingStartTimeNs = System.nanoTime
         processorHandle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
