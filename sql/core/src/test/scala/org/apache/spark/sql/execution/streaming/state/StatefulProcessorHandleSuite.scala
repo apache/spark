@@ -19,75 +19,20 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 
-import scala.util.Random
-
-import org.apache.hadoop.conf.Configuration
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.TimeoutMode
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
 
 /**
  * Class that adds tests to verify operations based on stateful processor handle
  * used primarily in queries based on the `transformWithState` operator.
  */
-class StatefulProcessorHandleSuite extends SharedSparkSession
-  with BeforeAndAfter {
-
-  before {
-    StateStore.stop()
-    require(!StateStore.isMaintenanceRunning)
-  }
-
-  after {
-    StateStore.stop()
-    require(!StateStore.isMaintenanceRunning)
-  }
-
-  import StateStoreTestsHelper._
-
-  val schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-
-  val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
   private def keyExprEncoder: ExpressionEncoder[Any] =
     Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]]
-
-  private def newStoreProviderWithHandle(useColumnFamilies: Boolean):
-    RocksDBStateStoreProvider = {
-    newStoreProviderWithHandle(StateStoreId(newDir(), Random.nextInt(), 0),
-      numColsPrefixKey = 0,
-      useColumnFamilies = useColumnFamilies)
-  }
-
-  private def newStoreProviderWithHandle(
-      storeId: StateStoreId,
-      numColsPrefixKey: Int,
-      sqlConf: Option[SQLConf] = None,
-      conf: Configuration = new Configuration,
-      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
-    val provider = new RocksDBStateStoreProvider()
-    provider.init(
-      storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
-      useColumnFamilies,
-      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
-    provider
-  }
-
-  private def tryWithProviderResource[T](
-      provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
-    try {
-      f(provider)
-    } finally {
-      provider.close()
-    }
-  }
 
   private def getTimeoutMode(timeoutMode: String): TimeoutMode = {
     timeoutMode match {
@@ -100,7 +45,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
 
   Seq("NoTimeouts", "ProcessingTime", "EventTime").foreach { timeoutMode =>
     test(s"value state creation with timeoutMode=$timeoutMode should succeed") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
@@ -141,7 +86,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   Seq("NoTimeouts", "ProcessingTime", "EventTime").foreach { timeoutMode =>
     test(s"value state creation with timeoutMode=$timeoutMode " +
       "and invalid state should fail") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
@@ -159,7 +104,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
   }
 
   test("registering processing/event time timeouts with NoTimeout mode should fail") {
-    tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), keyExprEncoder, TimeoutMode.NoTimeouts())
@@ -195,7 +140,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
 
   Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
     test(s"registering timeouts with timeoutMode=$timeoutMode should succeed") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
@@ -216,7 +161,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
 
   Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
     test(s"verify listing of registered timers with timeoutMode=$timeoutMode") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
@@ -256,7 +201,7 @@ class StatefulProcessorHandleSuite extends SharedSparkSession
 
   Seq("ProcessingTime", "EventTime").foreach { timeoutMode =>
     test(s"registering timeouts with timeoutMode=$timeoutMode and invalid state should fail") {
-      tryWithProviderResource(newStoreProviderWithHandle(true)) { provider =>
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), keyExprEncoder, getTimeoutMode(timeoutMode))
