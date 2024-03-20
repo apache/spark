@@ -15,32 +15,20 @@
 # limitations under the License.
 #
 
-import unittest
-
-from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
+from pyspark.sql.tests.test_creation import DataFrameCreationTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_help_command(self):
-        super().test_help_command()
-
-    # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
-    def test_sample(self):
-        super().test_sample()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_toDF_with_schema_string(self):
-        super().test_toDF_with_schema_string()
-
-    def test_toDF_with_string(self):
-        super().test_toDF_with_string()
+class DataFrameCreationParityTests(
+    DataFrameCreationTestsMixin,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_parity_dataframe import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_creation import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
