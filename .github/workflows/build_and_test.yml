@@ -281,6 +281,8 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
+        python3.9 -m pip list
+        pypy3 -m pip list
         export SCALA_PROFILE="scala2.13"
         unset GITHUB_ACTIONS
         if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
@@ -289,9 +291,11 @@ jobs:
           echo "Python Packaging Tests Enabled!"
         fi
         if [ ! -z "$PYTHON_TO_TEST" ]; then
+          echo "1"
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
         else
           # For branch-3.5 and below, it uses the default Python versions.
+          echo "2"
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
         fi
     - name: Upload coverage to Codecov
