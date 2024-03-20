@@ -4639,12 +4639,12 @@
   },
   "AGGREGATE_FILTER_EXPRESSION_CONTAINS_AGGREGATE" : {
     "message" : [
-      "FILTER expression contains aggregate. Such expression cannot be used to an aggregate function."
+      "FILTER expression contains an aggregation. Such expression cannot be used in an aggregate function."
     ]
   },
   "AGGREGATE_FILTER_EXPRESSION_CONTAINS_WINDOW_FUNCTION" : {
     "message" : [
-      "FILTER expression contains window function. Such expression cannot be used to an aggregate function."
+      "FILTER expression contains window function. Such expression cannot be used in an aggregate function."
     ]
   },
   "_LEGACY_ERROR_TEMP_0001" : {
