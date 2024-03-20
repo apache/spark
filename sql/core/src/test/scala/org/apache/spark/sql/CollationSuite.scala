@@ -786,21 +786,19 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     all.foreach {
       case (dt, dataLeft, dataRight, res) =>
-        withTable(tableLeft) {
-          withTable(tableRight) {
-            Seq(tableLeft, tableRight).map(tab => sql(s"create table $tab(a $dt) using parquet"))
-            Seq((tableLeft, dataLeft), (tableRight, dataRight)).foreach {
-              case (tab, data) => data.map(row => sql(s"insert into $tab(a) values($row)"))
-            }
-            checkAnswer(
-              sql(
-                s"""
-                   |select $tableLeft.a from $tableLeft join $tableRight
-                   |where $tableLeft.a = $tableRight.a
-                   |""".stripMargin),
-              res.map(Row(_))
-            )
+        withTable(tableLeft, tableRight) {
+          Seq(tableLeft, tableRight).map(tab => sql(s"create table $tab(a $dt) using parquet"))
+          Seq((tableLeft, dataLeft), (tableRight, dataRight)).foreach {
+            case (tab, data) => data.map(row => sql(s"insert into $tab(a) values($row)"))
           }
+          checkAnswer(
+            sql(
+              s"""
+                 |select $tableLeft.a from $tableLeft join $tableRight
+                 |where $tableLeft.a = $tableRight.a
+                 |""".stripMargin),
+            res.map(Row(_))
+          )
         }
     }
   }
