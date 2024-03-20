@@ -299,3 +299,43 @@ select least('aaa' COLLATE utf8_binary_lcase, 'AAA' collate utf8_binary_lcase, '
 struct<least(collate(aaa), collate(AAA), collate(a)):string collate UTF8_BINARY_LCASE>
 -- !query output
 a
+
+
+-- !query
+select arrays_overlap(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<arrays_overlap(array(collate(aaa)), array(collate(AAA))):boolean>
+-- !query output
+true
+
+
+-- !query
+select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<array_distinct(array(collate(aaa), collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+["aaa"]
+
+
+-- !query
+select array_union(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<array_union(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+["aaa"]
+
+
+-- !query
+select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<array_intersect(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+["aaa"]
+
+
+-- !query
+select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
+-- !query schema
+struct<array_except(array(collate(aaa)), array(collate(AAA))):array<string collate UTF8_BINARY_LCASE>>
+-- !query output
+[]

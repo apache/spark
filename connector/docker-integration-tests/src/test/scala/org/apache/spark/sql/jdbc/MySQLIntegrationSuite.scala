@@ -27,25 +27,16 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:8.0.31):
+ * To run this test suite for a specific version (e.g., mysql:8.3.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.0.31
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
  * }}}
  */
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
-    override val env = Map(
-      "MYSQL_ROOT_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 3306
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
-  }
+  override val db = new MySQLDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
     // Since MySQL 5.7.14+, we need to disable strict mode

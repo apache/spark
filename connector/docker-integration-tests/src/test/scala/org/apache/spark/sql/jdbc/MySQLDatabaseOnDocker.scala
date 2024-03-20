@@ -15,24 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.sql.jdbc
 
-import org.apache.spark.resource.{ResourceAllocator, ResourceInformation}
+class MySQLDatabaseOnDocker extends DatabaseOnDocker {
+  override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.3.0")
+  override val env = Map(
+    "MYSQL_ROOT_PASSWORD" -> "rootpass"
+  )
+  override val usesIpc = false
+  override val jdbcPort: Int = 3306
 
-/**
- * Class to hold information about a type of Resource on an Executor. This information is managed
- * by SchedulerBackend, and TaskScheduler shall schedule tasks on idle Executors based on the
- * information.
- * @param name Resource name
- * @param addresses Resource addresses provided by the executor
- */
-private[spark] class ExecutorResourceInfo(
-    name: String,
-    addresses: Seq[String])
-  extends ResourceInformation(name, addresses.toArray) with ResourceAllocator {
-
-  override protected def resourceName = this.name
-  override protected def resourceAddresses = this.addresses
-  def totalAddressesAmount: Int = this.addresses.length
-
+  override def getJdbcUrl(ip: String, port: Int): String =
+    s"jdbc:mysql://$ip:$port/" +
+      s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
 }

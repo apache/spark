@@ -55,7 +55,8 @@ object OrcUtils extends Logging {
     OrcCompressionCodec.ZLIB.name() -> ".zlib",
     OrcCompressionCodec.ZSTD.name() -> ".zstd",
     OrcCompressionCodec.LZ4.name() -> ".lz4",
-    OrcCompressionCodec.LZO.name() -> ".lzo")
+    OrcCompressionCodec.LZO.name() -> ".lzo",
+    OrcCompressionCodec.BROTLI.name() -> ".brotli")
 
   val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 

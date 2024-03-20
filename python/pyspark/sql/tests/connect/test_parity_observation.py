@@ -17,30 +17,23 @@
 
 import unittest
 
-from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
+from pyspark.sql.tests.test_observation import DataFrameObservationTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_help_command(self):
-        super().test_help_command()
-
-    # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
-    def test_sample(self):
-        super().test_sample()
-
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_toDF_with_schema_string(self):
-        super().test_toDF_with_schema_string()
-
-    def test_toDF_with_string(self):
-        super().test_toDF_with_string()
+class DataFrameObservationParityTests(
+    DataFrameObservationTestsMixin,
+    ReusedConnectTestCase,
+):
+    # TODO(SPARK-41625): Support Structured Streaming
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_observe_str(self):
+        super().test_observe_str()
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_parity_dataframe import *  # noqa: F401
+    from pyspark.sql.tests.connect.test_parity_observation import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
