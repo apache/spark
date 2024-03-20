@@ -37,6 +37,7 @@ RUN add-apt-repository ppa:pypy/ppa
 RUN apt update
 RUN $APT_INSTALL gfortran libopenblas-dev liblapack-dev
 RUN $APT_INSTALL build-essential
+RUN $APT_INSTALL python3-matplotlib
 
 RUN mkdir -p /usr/local/pypy/pypy3.7 && \
     curl -sqL https://downloads.python.org/pypy/pypy3.7-v7.3.7-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.7 --strip-components=1 && \
@@ -64,8 +65,8 @@ RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='ht
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN pypy3 -m pip install numpy 'pandas<=1.5.3' scipy coverage matplotlib
-RUN python3.9 -m pip install 'numpy==1.23.5' 'pyarrow==12.0.1' 'pandas<=1.5.3' scipy unittest-xml-reporting plotly>=4.8 scikit-learn 'mlflow>=1.0' coverage matplotlib openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+RUN pypy3 -m pip install numpy 'pandas<=1.5.3' scipy coverage 'matplotlib<3.3.0'
+RUN python3.9 -m pip install 'numpy==1.23.5' 'pyarrow==12.0.1' 'pandas<=1.5.3' scipy unittest-xml-reporting plotly>=4.8 scikit-learn 'mlflow>=1.0' coverage 'matplotlib<3.3.0' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install grpcio protobuf googleapis-common-protos grpcio-status
