@@ -454,8 +454,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val negativeInfinity = row(1).getAs[Timestamp]("timestamp_column")
     val infinitySeq = row(0).getAs[scala.collection.Seq[Timestamp]]("timestamp_array")
     val negativeInfinitySeq = row(1).getAs[scala.collection.Seq[Timestamp]]("timestamp_array")
-    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
-    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
+    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli
+    val maxTimestamp =
+      LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999).toInstant(ZoneOffset.UTC).toEpochMilli
     assert(infinity.getTime == maxTimestamp)
     assert(negativeInfinity.getTime == minTimeStamp)
     assert(infinitySeq.head.getTime == maxTimestamp)
