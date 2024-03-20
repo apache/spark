@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters.MapHasAsJava
 
@@ -640,166 +642,183 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "reason" -> "generation expression cannot contain non-default collated string type"))
   }
 
+  trait ArrayCheck {
+    def dataType: String
+    def dataTypeCollated: String
+  }
+
+  trait ArrayCheckSimple extends ArrayCheck {
+    override def dataType: String = s"array<string>"
+    override def dataTypeCollated: String = s"array<string collate utf8_binary_lcase>"
+  }
+
+  trait ArrayCheckNested extends ArrayCheck {
+    override def dataType: String = s"array<array<string>>"
+    override def dataTypeCollated: String = s"array<array<string collate utf8_binary_lcase>>"
+  }
+
   test("Aggregation of arrays built on collated strings") {
+    abstract class AggCheck(val rows: Seq[String], val result: Seq[(Any, Int)]) extends ArrayCheck
+
+    case class AggCheckSimple(override val rows: Seq[String],
+                              override val result: Seq[(Seq[String], Int)])
+      extends AggCheck(rows, result) with ArrayCheckSimple
+
+    case class AggCheckNested(override val rows: Seq[String],
+                              override val result: Seq[(Seq[Seq[String]], Int)])
+      extends AggCheck(rows, result) with ArrayCheckNested
+
     val tableName = "test_agg_arr_collated"
-    val simple = Seq(
-      // binary
-      ("utf8_binary", Seq("array('aaa')", "array('AAA')"),
-        Seq((Seq("aaa"), 1), (Seq("AAA"), 1))),
-      ("utf8_binary", Seq("array('aaa', 'bbb')", "array('AAA', 'BBB')"),
-        Seq((Seq("aaa", "bbb"), 1), (Seq("AAA", "BBB"), 1))),
-      ("utf8_binary", Seq("array('aaa')", "array('bbb')", "array('AAA')", "array('BBB')"),
-        Seq((Seq("aaa"), 1), (Seq("bbb"), 1), (Seq("AAA"), 1), (Seq("BBB"), 1))),
-      // non-binary
-      ("utf8_binary_lcase",
-        Seq(
-          "array('aaa' collate utf8_binary_lcase)",
-          "array('AAA' collate utf8_binary_lcase)"
+    val tableNameLowercase = "test_agg_arr_collated_lowercase"
+
+    Seq(
+      // simple
+      AggCheckSimple(
+        rows = Seq("array('aaa')", "array('AAA')"),
+        result = Seq((Seq("aaa"), 2))
+      ),
+      AggCheckSimple(
+        rows = Seq("array('aaa', 'bbb')", "array('AAA', 'BBB')"),
+        result = Seq((Seq("aaa", "bbb"), 2))
+      ),
+      AggCheckSimple(
+        rows = Seq("array('aaa')", "array('bbb')", "array('AAA')", "array('BBB')"),
+        result = Seq((Seq("aaa"), 2), (Seq("bbb"), 2))
+      ),
+      // nested
+      AggCheckNested(
+        rows = Seq("array(array('aaa'))", "array(array('AAA'))"),
+        result = Seq((Seq(Seq("aaa")), 2))
+      ),
+      AggCheckNested(
+        rows = Seq("array(array('aaa'), array('bbb'))", "array(array('AAA'), array('bbb'))"),
+        result = Seq((Seq(Seq("aaa"), Seq("bbb")), 2))
+      ),
+      AggCheckNested(
+        rows = Seq(
+          "array(array('aaa', 'aaa'), array('bbb', 'ccc'))",
+          "array(array('aaa', 'aaa'), array('bbb', 'ccc'), array('ddd'))",
+          "array(array('AAA', 'AAA'), array('BBB', 'CCC'))"
         ),
-        Seq((Seq("aaa"), 2))),
-      ("utf8_binary_lcase",
-        Seq(
-          "array('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase)",
-          "array('AAA' collate utf8_binary_lcase, 'BBB' collate utf8_binary_lcase)"
-        ),
-        Seq((Seq("aaa", "bbb"), 2))),
-      ("utf8_binary_lcase",
-        Seq(
-          "array('aaa' collate utf8_binary_lcase)",
-          "array('bbb' collate utf8_binary_lcase)",
-          "array('AAA' collate utf8_binary_lcase)",
-          "array('BBB' collate utf8_binary_lcase)"
-        ),
-        Seq((Seq("aaa"), 2), (Seq("bbb"), 2)))
-    )
-    val nested = Seq(
-      // binary
-      ("utf8_binary", Seq("array(array('aaa'))", "array(array('AAA'))"),
-        Seq((Seq(Seq("aaa")), 1), (Seq(Seq("AAA")), 1))),
-      ("utf8_binary", Seq("array(array('aaa'), array('bbb'))", "array(array('AAA'), array('bbb'))"),
-        Seq((Seq(Seq("aaa"), Seq("bbb")), 1), (Seq(Seq("AAA"), Seq("bbb")), 1))),
-      // non-binary
-      ("utf8_binary_lcase",
-        Seq(
-          "array(array('aaa' collate utf8_binary_lcase))",
-          "array(array('AAA' collate utf8_binary_lcase))"
-        ),
-        Seq((Seq(Seq("aaa")), 2))),
-      ("utf8_binary_lcase",
-        Seq(
-          "array(array('aaa' collate utf8_binary_lcase), array('bbb' collate utf8_binary_lcase))",
-          "array(array('AAA' collate utf8_binary_lcase), array('bbb' collate utf8_binary_lcase))"
-        ),
-        Seq((Seq(Seq("aaa"), Seq("bbb")), 2))),
-      ("utf8_binary_lcase",
-        Seq(
-          "array(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_binary_lcase)," +
-            "array('bbb' collate utf8_binary_lcase, 'ccc' collate utf8_binary_lcase))",
-          "array(array('aaa' collate utf8_binary_lcase, 'aaa' collate utf8_binary_lcase)," +
-            "array('bbb' collate utf8_binary_lcase, 'ccc' collate utf8_binary_lcase)," +
-            "array('ddd' collate utf8_binary_lcase))",
-          "array(array('AAA' collate utf8_binary_lcase, 'aaa' collate utf8_binary_lcase)," +
-            "array('BBB' collate utf8_binary_lcase, 'CCC' collate utf8_binary_lcase))"
-        ),
-        Seq(
-          (Seq(Seq("aaa", "AAA"), Seq("bbb", "ccc")), 2),
+        result = Seq(
+          (Seq(Seq("aaa", "aaa"), Seq("bbb", "ccc")), 2),
           (Seq(Seq("aaa", "aaa"), Seq("bbb", "ccc"), Seq("ddd")), 1)
         )
       )
-    )
+    ).map((check: AggCheck) =>
+        withTable(tableName, tableNameLowercase) {
+          def checkResults(table: String): Unit = {
+            checkAnswer(sql(s"select a, count(*) from $table group by a"),
+              check.result.map{ case (agg, cnt) => Row(agg, cnt) })
+            checkAnswer(sql(s"select distinct a from $table"),
+              check.result.map{ case (agg, _) => Row(agg) })
+          }
 
-    val all = simple.map {
-      case (collName, data, res) => (s"array<string collate $collName>", data, res)
-    } ++ nested.map {
-      case (collName, data, res) => (s"array<array<string collate $collName>>", data, res)
-    }
+          // check against non-binary collation
+          sql(s"create table $tableName(a ${check.dataTypeCollated}) using parquet")
+          check.rows.map(row => sql(s"insert into $tableName(a) values($row)"))
+          checkResults(tableName)
 
-    all.foreach {
-      case (dt, rows, count) =>
-        withTable(tableName) {
-          sql(s"create table $tableName(a $dt) using parquet")
-          rows.map(row => sql(s"insert into $tableName(a) values($row)"))
-          checkAnswer(sql(s"select a, count(*) from $tableName group by a"),
-            count.map { case (aggStr, cnt) => Row(aggStr, cnt) })
-          checkAnswer(sql(s"select distinct a from $tableName"),
-            count.map{ case (aggStr, _) => Row(aggStr)})
+          // binary collation with values converted to lowercase should match the results as well
+          sql(s"create table $tableNameLowercase(a ${check.dataType}) using parquet")
+          check.rows.map(row =>
+            sql(s"insert into $tableNameLowercase(a) values(${row.toLowerCase(Locale.ROOT)})"))
+          checkResults(tableNameLowercase)
         }
-    }
+    )
   }
 
   test("Join on arrays of collated strings") {
+    abstract class JoinCheck(val leftRows: Seq[String],
+                             val rightRows: Seq[String],
+                             val resultRows: Seq[Any])
+      extends ArrayCheck
+
+    case class JoinSimpleCheck(override val leftRows: Seq[String],
+                               override val rightRows: Seq[String],
+                               override val resultRows: Seq[Seq[String]])
+      extends JoinCheck(leftRows, rightRows, resultRows) with ArrayCheckSimple
+
+    case class JoinNestedCheck(override val leftRows: Seq[String],
+                               override val rightRows: Seq[String],
+                               override val resultRows: Seq[Seq[Seq[String]]])
+      extends JoinCheck(leftRows, rightRows, resultRows) with ArrayCheckNested
+
     val tablePrefix = "test_join_arr_collated"
     val tableLeft = s"${tablePrefix}_left"
+    val tableLeftLowercase = s"${tableLeft}_lowercase"
     val tableRight = s"${tablePrefix}_right"
-    val simple = Seq(
-      // binary
-      ("utf8_binary", Seq("array('aaa')"), Seq("array('AAA')"), Seq()),
-      // non-binary
-      ("utf8_binary_lcase",
-        Seq("array('aaa' collate utf8_binary_lcase)"),
-        Seq("array('AAA' collate utf8_binary_lcase)"),
-        Seq(Seq("aaa"))),
-      ("utf8_binary_lcase",
-        Seq("array('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase)"),
-        Seq("array('AAA' collate utf8_binary_lcase, 'BBB' collate utf8_binary_lcase)"),
-        Seq(Seq("aaa", "bbb"))),
-      ("utf8_binary_lcase",
-        Seq("array('aaa' collate utf8_binary_lcase)", "array('bbb' collate utf8_binary_lcase)"),
-        Seq("array('AAA' collate utf8_binary_lcase)", "array('BBB' collate utf8_binary_lcase)"),
-        Seq(Seq("aaa"), Seq("bbb"))),
-      ("utf8_binary_lcase",
-        Seq("array('aaa' collate utf8_binary_lcase)", "array('bbb' collate utf8_binary_lcase)"),
-        Seq("array('AAAA' collate utf8_binary_lcase)", "array('BBBB' collate utf8_binary_lcase)"),
-        Seq())
-    )
-    val nested = Seq(
-      // binary
-      ("utf8_binary", Seq("array(array('aaa'))"), Seq("array(array('AAA'))"), Seq()),
-      // non-binary
-      ("utf8_binary_lcase",
-        Seq("array(array('aaa' collate utf8_binary_lcase))"),
-        Seq("array(array('AAA' collate utf8_binary_lcase))"),
-        Seq(Seq(Seq("aaa")))),
-      ("utf8_binary_lcase",
-        Seq("array(array('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase))"),
-        Seq("array(array('AAA' collate utf8_binary_lcase, 'BBB' collate utf8_binary_lcase))"),
-        Seq(Seq(Seq("aaa", "bbb")))),
-      ("utf8_binary_lcase",
-        Seq("array(array('aaa' collate utf8_binary_lcase)," +
-          "array('bbb' collate utf8_binary_lcase))"),
-        Seq("array(array('AAA' collate utf8_binary_lcase)," +
-          "array('BBB' collate utf8_binary_lcase))"),
-        Seq(Seq(Seq("aaa"), Seq("bbb")))),
-      ("utf8_binary_lcase",
-        Seq("array(array('aaa' collate utf8_binary_lcase)," +
-          "array('bbb' collate utf8_binary_lcase))"),
-        Seq("array(array('AAA' collate utf8_binary_lcase)," +
-          "array('CCC' collate utf8_binary_lcase))"),
-        Seq())
-    )
+    val tableRightLowercase = s"${tableRight}_lowercase"
 
-    val all = simple.map {
-      case (collName, l, r, res) => (s"array<string collate $collName>", l, r, res)
-    } ++ nested.map {
-      case (collName, l, r, res) => (s"array<array<string collate $collName>>", l, r, res)
-    }
-
-    all.foreach {
-      case (dt, dataLeft, dataRight, res) =>
-        withTable(tableLeft, tableRight) {
-          Seq(tableLeft, tableRight).map(tab => sql(s"create table $tab(a $dt) using parquet"))
-          Seq((tableLeft, dataLeft), (tableRight, dataRight)).foreach {
-            case (tab, data) => data.map(row => sql(s"insert into $tab(a) values($row)"))
-          }
+    Seq(
+      // simple
+      JoinSimpleCheck(
+        leftRows = Seq("array('aaa')"),
+        rightRows = Seq("array('AAA')"),
+        resultRows = Seq(Seq("aaa"))
+      ),
+      JoinSimpleCheck(
+        leftRows = Seq("array('aaa', 'bbb')"),
+        rightRows = Seq("array('AAA', 'BBB')"),
+        resultRows = Seq(Seq("aaa", "bbb"))
+      ),
+      JoinSimpleCheck(
+        leftRows = Seq("array('aaa')", "array('bbb')"),
+        rightRows = Seq("array('AAA')", "array('BBB')"),
+        resultRows = Seq(Seq("aaa"), Seq("bbb"))
+      ),
+      JoinSimpleCheck(
+        leftRows = Seq("array('aaa')", "array('bbb')"),
+        rightRows = Seq("array('AAAA')", "array('BBBB')"),
+        resultRows = Seq()
+      ),
+      // nested
+      JoinNestedCheck(
+        leftRows = Seq("array(array('aaa'))"),
+        rightRows = Seq("array(array('AAA'))"),
+        resultRows = Seq(Seq(Seq("aaa")))
+      ),
+      JoinNestedCheck(
+        leftRows = Seq("array(array('aaa', 'bbb'))"),
+        rightRows = Seq("array(array('AAA', 'BBB'))"),
+        resultRows = Seq(Seq(Seq("aaa", "bbb")))
+      ),
+      JoinNestedCheck(
+        Seq("array(array('aaa'), array('bbb'))"),
+        Seq("array(array('AAA'), array('BBB'))"),
+        Seq(Seq(Seq("aaa"), Seq("bbb")))
+      ),
+      JoinNestedCheck(
+        Seq("array(array('aaa'), array('bbb'))"),
+        Seq("array(array('AAA'), array('CCC'))"),
+        Seq()
+      )
+    ).map((check: JoinCheck) =>
+      withTable(tableLeft, tableLeftLowercase, tableRight, tableRightLowercase) {
+        def checkResults(left: String, right: String): Unit = {
           checkAnswer(
-            sql(
-              s"""
-                 |select $tableLeft.a from $tableLeft join $tableRight
-                 |where $tableLeft.a = $tableRight.a
-                 |""".stripMargin),
-            res.map(Row(_))
+            sql(s"select $left.a from $left join $right where $left.a = $right.a"),
+            check.resultRows.map(Row(_))
           )
         }
-    }
+
+        // check against non-binary collation
+        Seq(tableLeft, tableRight).map(tab =>
+          sql(s"create table $tab(a ${check.dataTypeCollated}) using parquet"))
+        Seq((tableLeft, check.leftRows), (tableRight, check.rightRows)).foreach {
+          case (tab, data) => data.map(row => sql(s"insert into $tab(a) values($row)"))
+        }
+        checkResults(tableLeft, tableRight)
+
+        // binary collation with values converted to lowercase should match the results as well
+        Seq(tableLeftLowercase, tableRightLowercase).map(tab =>
+          sql(s"create table $tab(a ${check.dataType}) using parquet"))
+        Seq((tableLeftLowercase, check.leftRows), (tableRightLowercase, check.rightRows)).foreach {
+          case (tab, data) =>
+            data.map(row => sql(s"insert into $tab(a) values(${row.toLowerCase(Locale.ROOT)})"))
+        }
+        checkResults(tableLeft, tableRight)
+      }
+    )
   }
 }
