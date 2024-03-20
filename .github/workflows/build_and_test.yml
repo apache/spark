@@ -271,6 +271,7 @@ jobs:
     - name: Install Python test dependencies for branch-3.4
       if: matrix.branch == 'branch-3.4'
       run: |
+        pypy3 -m pip install 'numpy==1.20.3' 'pandas<=1.5.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
         python3.9 -m pip install 'numpy==1.20.3' 'pandas<=1.5.3' 'pyarrow==12.0.1' 'matplotlib==3.7.2' 'torch==2.0.1' 'torchvision==0.15.2' 'scikit-learn==1.1.*'
     - name: Install Python test dependencies for branch-3.5
       if: matrix.branch == 'branch-3.5'
