@@ -121,5 +121,5 @@ case class Collation(child: Expression)
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, StringType)
   }
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 }

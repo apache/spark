@@ -175,8 +175,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       inType: DataType,
       expectedType: AbstractDataType): Option[DataType] = {
     (inType, expectedType) match {
-      case (_: StringType, st: StringType) =>
-        Some(st)
       // If the expected type equals the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => Some(inType)
 
@@ -192,7 +190,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // If a function expects a StringType, no StringType instance should be implicitly cast to
       // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
-      case (_: StringType, StringType) => None
+      case (_: StringType, _: StringType) => None
       case (_: StringType, _: StringTypeCollated) => None
 
       // This type coercion system will allow implicit converting String type as other

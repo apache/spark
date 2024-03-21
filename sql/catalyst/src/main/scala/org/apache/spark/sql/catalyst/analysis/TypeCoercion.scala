@@ -710,7 +710,7 @@ abstract class TypeCoercionBase {
           // If we cannot do the implicit cast, just use the original input.
           case (in, expected) => implicitCast(in, expected).getOrElse(in)
         }
-        val collationId = getOutputCollation(childrenBeforeCollations)
+        val collationId = getOutputCollation(e.children)
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
             castStringType(in, collationId).getOrElse(in)
@@ -729,7 +729,7 @@ abstract class TypeCoercionBase {
             in
           }
         }
-        val collationId = getOutputCollation(childrenBeforeCollations)
+        val collationId = getOutputCollation(e.children)
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
             castStringType(in, collationId).getOrElse(in)
@@ -751,7 +751,7 @@ abstract class TypeCoercionBase {
             ).getOrElse(in)
           }
         }
-        val collationId = getOutputCollation(childrenBeforeCollations)
+        val collationId = getOutputCollation(udf.children)
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
             castStringType(in, collationId).getOrElse(in)
@@ -1018,7 +1018,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, StringType) if !any.isInstanceOf[StringType] => StringType
+      case (any: AtomicType, _: StringType) if !any.isInstanceOf[StringType] => StringType
       case (any: AtomicType, st: StringTypeCollated)
         if !any.isInstanceOf[StringType] => st.defaultConcreteType
 
