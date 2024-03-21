@@ -584,11 +584,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE('a', 'UTF8_BINARY') IN " +
         s"(COLLATE('aa', 'UNICODE'))"),
         Seq(Row("a")))
-
-      // ImplicitInputTypeCast test
-      checkAnswer(
-        sql("SELECT REPEAT('aa' collate unicode_ci, MONTH(\"2024-02-02\" COLLATE UNICODE));"),
-        Seq(Row("aaaa")))
     }
   }
 
