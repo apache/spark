@@ -312,8 +312,9 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     val POSTGRESQL_DATE_POSITIVE_INFINITY = 9223372036825200000L
     val POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY = 185543533774800000L
 
-    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
-    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
+    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli
+    val maxTimestamp =
+      LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999).toInstant(ZoneOffset.UTC).toEpochMilli
 
     val time = t.getTime
     if (time == POSTGRESQL_DATE_POSITIVE_INFINITY ||

@@ -40,6 +40,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * equality and hashing).
    */
   def isBinaryCollation: Boolean = CollationFactory.fetchCollation(collationId).isBinaryCollation
+  def isLowercaseCollation: Boolean = collationId == CollationFactory.LOWERCASE_COLLATION_ID
 
   /**
    * Type name that is shown to the customer.
@@ -54,8 +55,6 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 
   override def hashCode(): Int = collationId.hashCode()
 
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
-
   /**
    * The default size of a value of the StringType is 20 bytes.
    */
@@ -65,6 +64,8 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 }
 
 /**
+ * Use StringType for expressions supporting only binary collation.
+ *
  * @since 1.3.0
  */
 @Stable

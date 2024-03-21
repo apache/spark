@@ -120,6 +120,8 @@ license: |
 
   - Since Spark 3.3, the `unbase64` function throws error for a malformed `str` input. Use `try_to_binary(<str>, 'base64')` to tolerate malformed input and return NULL instead. In Spark 3.2 and earlier, the `unbase64` function returns a best-efforts result for a malformed `str` input.
 
+  - Since Spark 3.3, when reading Parquet files that were not produced by Spark, Parquet timestamp columns with annotation `isAdjustedToUTC = false` are inferred as TIMESTAMP_NTZ type during schema inference. In Spark 3.2 and earlier, these columns are inferred as TIMESTAMP type. To restore the behavior before Spark 3.3, you can set `spark.sql.parquet.inferTimestampNTZ.enabled` to `false`.
+
   - Since Spark 3.3.1 and 3.2.3, for `SELECT ... GROUP BY a GROUPING SETS (b)`-style SQL statements, `grouping__id` returns different values from Apache Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0. It computes based on user-given group-by expressions plus grouping set columns. To restore the behavior before 3.3.1 and 3.2.3, you can set `spark.sql.legacy.groupingIdWithAppendedUserGroupBy`. For details, see [SPARK-40218](https://issues.apache.org/jira/browse/SPARK-40218) and [SPARK-40562](https://issues.apache.org/jira/browse/SPARK-40562).
 
 ## Upgrading from Spark SQL 3.1 to 3.2
