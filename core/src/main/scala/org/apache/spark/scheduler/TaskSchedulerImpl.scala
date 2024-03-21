@@ -1257,7 +1257,11 @@ private[spark] object TaskSchedulerImpl {
           numTasksPerExecCores
         } else {
           val availAddrs = resources.getOrElse(limitingResource, 0)
-          val resourceLimit = (availAddrs / taskLimit).toInt
+          val resourceLimit = if (taskLimit >= 1.0) {
+            availAddrs / taskLimit.ceil.toInt
+          } else {
+            availAddrs * Math.floor(1.0 / taskLimit).toInt
+          }
           // when executor cores config isn't set, we can't calculate the real limiting resource
           // and number of tasks per executor ahead of time, so calculate it now based on what
           // is available.

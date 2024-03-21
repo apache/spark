@@ -71,6 +71,29 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   def getQueryInfo(): QueryInfo
 
   /**
+   * Function to register a processing/event time based timer for given implicit grouping key
+   * and provided timestamp
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  def registerTimer(expiryTimestampMs: Long): Unit
+
+  /**
+   * Function to delete a processing/event time based timer for given implicit grouping key
+   * and provided timestamp
+   * @param expiryTimestampMs - timer expiry timestamp in milliseconds
+   */
+  def deleteTimer(expiryTimestampMs: Long): Unit
+
+  /**
+   * Function to list all the timers registered for given implicit grouping key
+   * Note: calling listTimers() within the `handleInputRows` method of the StatefulProcessor
+   * will return all the unprocessed registered timers, including the one being fired within the
+   * invocation of `handleInputRows`.
+   * @return - list of all the registered timers for given implicit grouping key
+   */
+  def listTimers(): Iterator[Long]
+
+  /**
    * Function to delete and purge state variable if defined previously
    * @param stateName - name of the state variable
    */

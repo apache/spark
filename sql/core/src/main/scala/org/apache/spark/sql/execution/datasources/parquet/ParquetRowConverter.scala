@@ -436,6 +436,17 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      // INT96 timestamp doesn't have a logical type, here we check the physical type instead.
+      case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT96 =>
+        new ParquetPrimitiveConverter(updater) {
+          // Converts nanosecond timestamps stored as INT96.
+          // TimestampNTZ type does not require rebasing due to its lack of time zone context.
+          override def addBinary(value: Binary): Unit = {
+            val julianMicros = ParquetRowConverter.binaryToSQLTimestamp(value)
+            this.updater.setLong(julianMicros)
+          }
+        }
+
       case TimestampNTZType
         if canReadAsTimestampNTZ(parquetType) &&
           parquetType.getLogicalTypeAnnotation
@@ -536,10 +547,7 @@ private[parquet] class ParquetRowConverter(
   // can be read as Spark's TimestampNTZ type. This is to avoid mistakes in reading the timestamp
   // values.
   private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
-    parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
-    parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-    !parquetType.getLogicalTypeAnnotation
-      .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
+    parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation]
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.

@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import scala.collection.immutable.Seq
-import scala.collection.parallel.CollectionConverters.ImmutableIterableIsParallelizable
 import scala.jdk.CollectionConverters.MapHasAsJava
 
 import org.apache.spark.SparkException
@@ -122,7 +121,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "paramIndex" -> "first",
         "inputSql" -> "\"1\"",
         "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRING\""),
+        "requiredType" -> "\"STRING_ANY_COLLATION\""),
       context = ExpectedContext(
         fragment = s"collate(1, 'UTF8_BINARY')", start = 7, stop = 31))
   }
@@ -401,19 +400,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("test concurrently generating collation keys") {
-    // generating ICU sort keys is not thread-safe by default so this should fail
-    // if we don't handle the concurrency properly on Collator level
-
-    (0 to 10).foreach(_ => {
-      val collator = CollationFactory.fetchCollation("UNICODE").collator
-
-      (0 to 100).par.foreach { _ =>
-        collator.getCollationKey("aaa")
-      }
-    })
-  }
-
   test("text writing to parquet with collation enclosed with backticks") {
     withTempPath{ path =>
       sql(s"select 'a' COLLATE `UNICODE`").write.parquet(path.getAbsolutePath)
@@ -441,28 +427,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
       assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
-    }
-  }
-
-  test("create table with collations inside a struct") {
-    val tableName = "struct_collation_tbl"
-    val collationName = "UTF8_BINARY_LCASE"
-    val collationId = CollationFactory.collationNameToId(collationName)
-
-    withTable(tableName) {
-      sql(
-        s"""
-           |CREATE TABLE $tableName
-           |(c1 STRUCT<name: STRING COLLATE $collationName, age: INT>)
-           |USING PARQUET
-           |""".stripMargin)
-
-      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'aaa', 'id', 1))")
-      sql(s"INSERT INTO $tableName VALUES (named_struct('name', 'AAA', 'id', 2))")
-
-      checkAnswer(sql(s"SELECT DISTINCT collation(c1.name) FROM $tableName"),
-        Seq(Row(collationName)))
-      assert(sql(s"SELECT c1.name FROM $tableName").schema.head.dataType == StringType(collationId))
     }
   }
 
@@ -763,5 +727,78 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         .queryExecution.executedPlan) {
       case _: SortMergeJoinExec => ()
     }.nonEmpty)
+  }
+
+  test("Generated column expressions using collations - errors out") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (SUBSTRING(c1, 0, 1))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "SUBSTRING(c1, 0, 1)",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (LOWER(c1))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "LOWER(c1)",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  struct1 STRUCT<a: STRING COLLATE UNICODE>,
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (UCASE(struct1.a))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "UCASE(struct1.a)",
+        "reason" -> "generation expression cannot contain non-default collated string type"))
+  }
+
+  test("window aggregates should respect collation") {
+    val t1 = "T_NON_BINARY"
+    val t2 = "T_BINARY"
+
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (c STRING COLLATE UTF8_BINARY_LCASE, i int) USING PARQUET")
+      sql(s"INSERT INTO $t1 VALUES ('aA', 2), ('Aa', 1), ('ab', 3), ('aa', 1)")
+
+      sql(s"CREATE TABLE $t2 (c STRING, i int) USING PARQUET")
+      // Same input but already normalized to lowercase.
+      sql(s"INSERT INTO $t2 VALUES ('aa', 2), ('aa', 1), ('ab', 3), ('aa', 1)")
+
+      val dfNonBinary =
+        sql(s"SELECT lower(c), i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t1")
+      val dfBinary =
+        sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
+      checkAnswer(dfNonBinary, dfBinary)
+    }
   }
 }

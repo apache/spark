@@ -1018,7 +1018,10 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
+      case (any: AtomicType, StringType) if !any.isInstanceOf[StringType] => StringType
+      case (any: AtomicType, st: StringTypeCollated)
+        if !any.isInstanceOf[StringType] => st.defaultConcreteType
+
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.

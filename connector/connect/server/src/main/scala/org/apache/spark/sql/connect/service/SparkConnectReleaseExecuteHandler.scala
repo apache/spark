@@ -28,8 +28,10 @@ class SparkConnectReleaseExecuteHandler(
     extends Logging {
 
   def handle(v: proto.ReleaseExecuteRequest): Unit = {
+    // We do not validate the spark session for ReleaseExecute on the server,
+    // leaving the validation only to happen on the client side.
     val sessionHolder = SparkConnectService.sessionManager
-      .getIsolatedSession(SessionKey(v.getUserContext.getUserId, v.getSessionId))
+      .getIsolatedSession(SessionKey(v.getUserContext.getUserId, v.getSessionId), None)
 
     val responseBuilder = proto.ReleaseExecuteResponse
       .newBuilder()

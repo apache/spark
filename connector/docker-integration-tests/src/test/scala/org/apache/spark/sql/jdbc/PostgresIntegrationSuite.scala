@@ -20,12 +20,12 @@ package org.apache.spark.sql.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Connection, Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -161,6 +161,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO custom_type (type_array, type) VALUES" +
       "('{1,fds,fdsa}','fdasfasdf')").executeUpdate()
 
+    conn.prepareStatement(
+      "CREATE FUNCTION test_null() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE plpgsql")
+      .executeUpdate()
+
   }
 
   test("Type mapping for various types") {
@@ -284,15 +288,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(schema(1).dataType == ShortType)
   }
 
-  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
-    "should be recognized") {
-    // When using JDBC to read the columns of TIMESTAMP with TIME ZONE and TIME with TIME ZONE
-    // the actual types are java.sql.Types.TIMESTAMP and java.sql.Types.TIME
-    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-    val rows = dfRead.collect()
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
+  test("SPARK-47390: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
+    Seq(true, false).foreach { prefer =>
+      val rows = sqlContext.read
+        .option("preferTimestampNTZ", prefer)
+        .jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+        .collect()
+      rows.head.toSeq.tail.foreach(c => assert(c.isInstanceOf[java.sql.Timestamp]))
+    }
   }
 
   test("SPARK-22291: Conversion error when transforming array types of " +
@@ -451,11 +454,21 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val negativeInfinity = row(1).getAs[Timestamp]("timestamp_column")
     val infinitySeq = row(0).getAs[scala.collection.Seq[Timestamp]]("timestamp_array")
     val negativeInfinitySeq = row(1).getAs[scala.collection.Seq[Timestamp]]("timestamp_array")
-    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
-    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
+    val minTimeStamp = -62135596800000L
+    val maxTimestamp = 253402300799999L
     assert(infinity.getTime == maxTimestamp)
     assert(negativeInfinity.getTime == minTimeStamp)
     assert(infinitySeq.head.getTime == maxTimestamp)
     assert(negativeInfinitySeq.head.getTime == minTimeStamp)
+  }
+
+
+  test("SPARK-47407: Support java.sql.Types.NULL for NullType") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT test_null()")
+      .load()
+    assert(df.schema.head.dataType === NullType)
+    checkAnswer(df, Seq(Row(null)))
   }
 }

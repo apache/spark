@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
-import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTHON_USE_DAEMON}
+import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 
 
 private[spark] object StreamingPythonRunner {
@@ -68,17 +68,11 @@ private[spark] class StreamingPythonRunner(
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     envVars.put("SPARK_CONNECT_LOCAL_URL", connectUrl)
 
-    val prevConf = conf.get(PYTHON_USE_DAEMON)
-    conf.set(PYTHON_USE_DAEMON, false)
-    try {
-      val workerFactory =
-        new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap)
-      val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
-      pythonWorker = Some(worker)
-      pythonWorkerFactory = Some(workerFactory)
-    } finally {
-      conf.set(PYTHON_USE_DAEMON, prevConf)
-    }
+    val workerFactory =
+      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
+    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
+    pythonWorker = Some(worker)
+    pythonWorkerFactory = Some(workerFactory)
 
     val stream = new BufferedOutputStream(
       pythonWorker.get.channel.socket().getOutputStream, bufferSize)
