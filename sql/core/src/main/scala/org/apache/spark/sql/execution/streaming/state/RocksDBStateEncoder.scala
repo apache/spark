@@ -50,8 +50,8 @@ object RocksDBStateEncoder {
       case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
         new PrefixKeyScanStateEncoder(keySchema, numColsPrefixKey)
 
-      case RangeKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
-        new RangeKeyScanStateEncoder(keySchema, numColsPrefixKey)
+      case RangeKeyScanStateEncoderSpec(keySchema, numOrderingCols) =>
+        new RangeKeyScanStateEncoder(keySchema, numOrderingCols)
 
       case _ =>
         throw new IllegalArgumentException(s"Unsupported key state encoder spec: " +
@@ -201,12 +201,20 @@ class PrefixKeyScanStateEncoder(
 
 /**
  * RocksDB Key Encoder for UnsafeRow that supports range scan for fixed size fields
- * Note that for range scan, we have to encode the ordering columns using BIG_ENDIAN
- * encoding to allow for scanning keys in sorted order using the byte-wise comparison
- * method that RocksDB uses.
+ *
+ * To encode a row for range scan, we first project the first numOrderingCols needed
+ * for the range scan into an UnsafeRow; we then rewrite that UnsafeRow's fields in BIG_ENDIAN
+ * to allow for scanning keys in sorted order using the byte-wise comparison method that
+ * RocksDB uses.
+ * Then, for the rest of the fields, we project those into another UnsafeRow.
+ * We then effectively join these two UnsafeRows together, and finally take those bytes
+ * to get the resulting row.
+ * We cannot support variable sized fields given the UnsafeRow format which stores variable
+ * sized fields as offset and length pointers to the actual values, thereby changing the required
+ * ordering.
  *
  * @param keySchema - schema of the key to be encoded
- * @param numColsPrefixKey - number of columns to be used for prefix key
+ * @param numOrderingCols - number of columns to be used for range scan
  */
 class RangeKeyScanStateEncoder(
     keySchema: StructType,
