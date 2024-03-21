@@ -1514,7 +1514,7 @@ case class ExternalMapToCatalyst private(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = {
-    val rowBuffer = InternalRow.fromSeq(Array[Any](1).toImmutableArraySeq)
+    val rowBuffer = new GenericInternalRow(Array[Any](1))
     def rowWrapper(data: Any): InternalRow = {
       rowBuffer.update(0, data)
       rowBuffer

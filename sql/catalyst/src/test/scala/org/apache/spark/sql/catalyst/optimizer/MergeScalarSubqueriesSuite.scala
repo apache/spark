@@ -36,6 +36,9 @@ class MergeScalarSubqueriesSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").string)
+  val testRelationWithNonBinaryCollation = LocalRelation(
+    Symbol("ucs_basic").string("UCS_BASIC"),
+    Symbol("ucs_basic_lcase").string("UCS_BASIC_LCASE"))
 
   private def definitionNode(plan: LogicalPlan, cteIndex: Int) = {
     CTERelationDef(plan, cteIndex, underSubquery = true)
@@ -195,6 +198,17 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       Seq(definitionNode(analyzedHashAggregates, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Avoid merge when mixing sort and hash aggs") {
+    val subquery1 = ScalarSubquery(testRelationWithNonBinaryCollation.groupBy(
+      Symbol("ucs_basic"))(max(Symbol("ucs_basic")).as("max_ucs_basic")))
+    val subquery2 = ScalarSubquery(testRelationWithNonBinaryCollation.groupBy(
+      Symbol("ucs_basic_lcase"))(max(Symbol("ucs_basic_lcase")).as("ucs_basic_lcase")))
+    val originalQuery = testRelationWithNonBinaryCollation.select(subquery1, subquery2)
+    Optimize.execute(originalQuery.analyze).collect {
+      case WithCTE(_, _) => fail("Should not have merged")
+    }
   }
 
   test("Merging subqueries with filters") {

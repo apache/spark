@@ -53,6 +53,12 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       e)
   }
 
+  def stateStoreHandleNotInitialized(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",
+      messageParameters = Map.empty)
+  }
+
   def failToRecognizePatternAfterUpgradeError(
       pattern: String, e: Throwable): SparkUpgradeException = {
     new SparkUpgradeException(
@@ -127,13 +133,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
-  : SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2134",
-      messageParameters = Map(
-        "value" -> toSQLValue(value),
-        "pattern" -> toSQLValue(pattern),
-        "dataType" -> dataType.toString))
+  : Throwable = {
+    SparkException.internalError(
+      s"Cannot parse field value ${toSQLValue(value)} for pattern ${toSQLValue(pattern)} " +
+        s"as the target spark data type ${toSQLType(dataType)}.")
   }
 
   def unsupportedArrowTypeError(typeName: ArrowType): SparkUnsupportedOperationException = {
