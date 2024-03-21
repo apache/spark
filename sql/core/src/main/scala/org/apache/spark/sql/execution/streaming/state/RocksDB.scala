@@ -163,7 +163,7 @@ class RocksDB(
    */
   def load(version: Long, readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
-    acquire()
+    acquire("load_store")
     recordedMetrics = None
     logInfo(s"Loading $version")
     try {
@@ -646,7 +646,7 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    acquire()
+    acquire("rollback_store")
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
     changelogWriter.foreach(_.abort())
@@ -670,7 +670,7 @@ class RocksDB(
   def close(): Unit = {
     try {
       // Acquire DB instance lock and release at the end to allow for synchronized access
-      acquire()
+      acquire("close_store")
       closeDB()
 
       readOptions.close()
@@ -759,7 +759,7 @@ class RocksDB(
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
     try {
-      acquire()
+      acquire("report_store_metrics")
       rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
@@ -770,7 +770,7 @@ class RocksDB(
     rocksDBMetricsOpt
   }
 
-  private def acquire(): Unit = acquireLock.synchronized {
+  private def acquire(opType: String): Unit = acquireLock.synchronized {
     val newAcquiredThreadInfo = AcquiredThreadInfo()
     val waitStartTime = System.currentTimeMillis
     def timeWaitedMs = System.currentTimeMillis - waitStartTime
@@ -783,13 +783,14 @@ class RocksDB(
     }
     if (isAcquiredByDifferentThread) {
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString(),
-        acquiredThreadInfo.toString(), timeWaitedMs, stackTraceOutput)
+      throw QueryExecutionErrors.unreleasedThreadError(loggingId, opType,
+        newAcquiredThreadInfo.toString(), acquiredThreadInfo.toString(), timeWaitedMs,
+        stackTraceOutput)
     } else {
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ => this.release() })
-      logInfo(s"RocksDB instance was acquired by $acquiredThreadInfo")
+      logInfo(s"RocksDB instance was acquired by $acquiredThreadInfo for opType=$opType")
     }
   }
 
