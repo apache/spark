@@ -758,8 +758,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             executor.resourceProfileId,
             executor.totalCores,
             executor.resourcesInfo.map { case (name, rInfo) =>
-              val taskAmount = rp.taskResources.get(name).get.amount
-              (name, rInfo.totalParts(taskAmount))
+              (name, rInfo.totalAddressesAmount)
             }
           )
         }.unzip3

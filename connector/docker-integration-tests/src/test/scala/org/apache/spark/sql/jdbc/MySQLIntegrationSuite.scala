@@ -24,28 +24,20 @@ import java.util.Properties
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StructType}
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:8.0.31):
+ * To run this test suite for a specific version (e.g., mysql:8.3.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.0.31
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
  * }}}
  */
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
-    override val env = Map(
-      "MYSQL_ROOT_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort: Int = 3306
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
-  }
+  override val db = new MySQLDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
     // Since MySQL 5.7.14+, we need to disable strict mode
@@ -55,12 +47,25 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (17,'dave')").executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE bools (b1 BOOLEAN, b2 BIT(1), b3 TINYINT(1))")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO bools VALUES (TRUE, b'1', 1)").executeUpdate()
+
     conn.prepareStatement("CREATE TABLE numbers (onebit BIT(1), tenbits BIT(10), "
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
       + "dbl DOUBLE, tiny TINYINT)").executeUpdate()
+
     conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
       + "42.75, 1.0000000000000002, -128)").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE unsigned_numbers (" +
+      "tiny TINYINT UNSIGNED, small SMALLINT UNSIGNED, med MEDIUMINT UNSIGNED," +
+      "nor INT UNSIGNED, big BIGINT UNSIGNED, deci DECIMAL(40,20) UNSIGNED," +
+      "dbl DOUBLE UNSIGNED)").executeUpdate()
+
+    conn.prepareStatement("INSERT INTO unsigned_numbers VALUES (255, 65535, 16777215, 4294967295," +
+      "9223372036854775808, 123456789012345.123456789012345, 1.0000000000000002)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
       + "yr YEAR)").executeUpdate()
@@ -93,7 +98,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types.length == 10)
     assert(types(0).equals("class java.lang.Boolean"))
     assert(types(1).equals("class java.lang.Long"))
-    assert(types(2).equals("class java.lang.Integer"))
+    assert(types(2).equals("class java.lang.Short"))
     assert(types(3).equals("class java.lang.Integer"))
     assert(types(4).equals("class java.lang.Integer"))
     assert(types(5).equals("class java.lang.Long"))
@@ -103,7 +108,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(9).equals("class java.lang.Byte"))
     assert(rows(0).getBoolean(0) == false)
     assert(rows(0).getLong(1) == 0x225)
-    assert(rows(0).getInt(2) == 17)
+    assert(rows(0).getShort(2) == 17)
     assert(rows(0).getInt(3) == 77777)
     assert(rows(0).getInt(4) == 123456789)
     assert(rows(0).getLong(5) == 123456789012345L)
@@ -112,6 +117,25 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDouble(7) == 42.75)
     assert(rows(0).getDouble(8) == 1.0000000000000002)
     assert(rows(0).getByte(9) == 0x80.toByte)
+  }
+
+  test("SPARK-47462: Unsigned numeric types") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "unsigned_numbers", new Properties)
+    val rows = df.head()
+    assert(rows.get(0).isInstanceOf[Short])
+    assert(rows.get(1).isInstanceOf[Integer])
+    assert(rows.get(2).isInstanceOf[Integer])
+    assert(rows.get(3).isInstanceOf[Long])
+    assert(rows.get(4).isInstanceOf[BigDecimal])
+    assert(rows.get(5).isInstanceOf[BigDecimal])
+    assert(rows.get(6).isInstanceOf[Double])
+    assert(rows.getShort(0) === 255)
+    assert(rows.getInt(1) === 65535)
+    assert(rows.getInt(2) === 16777215)
+    assert(rows.getLong(3) === 4294967295L)
+    assert(rows.getAs[BigDecimal](4).equals(new BigDecimal("9223372036854775808")))
+    assert(rows.getAs[BigDecimal](5).equals(new BigDecimal("123456789012345.12345678901234500000")))
+    assert(rows.getDouble(6) === 1.0000000000000002)
   }
 
   test("Date types") {
@@ -209,5 +233,20 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect().toSet == expectedResult)
+  }
+
+
+  test("SPARK-47478: all boolean synonyms read-write roundtrip") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "bools", new Properties)
+    checkAnswer(df, Row(true, true, true))
+    df.write.mode("append").jdbc(jdbcUrl, "bools", new Properties)
+    checkAnswer(df, Seq(Row(true, true, true), Row(true, true, true)))
+    val mb = new MetadataBuilder()
+      .putBoolean("isTimestampNTZ", false)
+      .putLong("scale", 0)
+    assert(df.schema === new StructType()
+      .add("b1", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build())
+      .add("b2", BooleanType, nullable = true, mb.putBoolean("isSigned", false).build())
+      .add("b3", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build()))
   }
 }

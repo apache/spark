@@ -361,6 +361,52 @@ private[xml] trait TestXmlData {
           |</ROW>
           |""".stripMargin :: Nil
 
+  def nullsInArrays: Seq[String] =
+    """<ROW>
+         <field1>
+            <array1>
+              <array2>value1</array2>
+              <array2>value2</array2>
+            </array1>
+            <array1/>
+          </field1>
+          <field1/>
+        </ROW>""" ::
+    """
+        <ROW>
+          <field2/>
+          <field2>
+            <array1>
+              <Test>1</Test>
+            </array1>
+            <array1/>
+          </field2>
+        </ROW>""" ::
+    """
+        <ROW>
+          <field1/>
+          <field1><array1/></field1>
+          <field2/>
+        </ROW>""" :: Nil
+
+  def corruptRecords: Seq[String] =
+    """<ROW>""" ::
+    """""" ::
+    """<ROW>
+        |  <a>1</a>
+        |  <b>2</b>
+        |</ROW>""".stripMargin ::
+    """
+        |<ROW>
+        |  <a>str_a_4</a>
+        |  <b>str_b_4</b>
+        |  <c>str_c_4</c>
+        |</ROW>
+        |""".stripMargin ::
+    """
+        |</ROW>
+        |""".stripMargin :: Nil
+
   def emptyRecords: Seq[String] =
     """<ROW>
           <a><struct></struct></a>
@@ -378,4 +424,227 @@ private[xml] trait TestXmlData {
             <item/>
           </b>
         </ROW>""" :: Nil
+
+  def arrayAndStructRecords: Seq[String] =
+    """<ROW>
+          <a>
+            <b>1</b>
+          </a>
+        </ROW>""" ::
+    """<ROW>
+          <a><item/><item/></a>
+        </ROW>""" ::
+    Nil
+
+  def valueTagsTypeConflict: Seq[String] =
+    """
+      |<ROW>
+      |    13.1
+      |    <a>
+      |        11
+      |        <b>
+      |            true
+      |            <c>1</c>
+      |        </b>
+      |    </a>
+      |    string
+      |</ROW>
+      |""".stripMargin ::
+    """
+      |<ROW>
+      |    string
+      |    <a>
+      |        21474836470
+      |        <b>
+      |            false
+      |            <c>2</c>
+      |        </b>
+      |    </a>
+      |    true
+      |</ROW>
+      |""".stripMargin ::
+    """
+        |<ROW>
+        |<a>
+        |    <b>
+        |        12
+        |        <c>3</c>
+        |    </b>
+        |</a>
+        |92233720368547758070
+        |</ROW>
+        |""".stripMargin :: Nil
+
+  val emptyValueTags: Seq[String] =
+    """
+      |<ROW>
+      |    str1
+      |    <a>  <b>1</b>
+      |    </a>str2
+      |</ROW>
+      |""".stripMargin ::
+    """<ROW> <a><b/> value</a></ROW>""" ::
+    """<ROW><a><b>3</b> </a> </ROW>""" ::
+    """<ROW><a><b>4</b> </a>
+      |    str3
+      |</ROW>""".stripMargin :: Nil
+
+  val multilineValueTags =
+    """
+      |<ROW>
+      |    value1
+      |    <a>1</a>
+      |    value2
+      |</ROW>
+      |""".stripMargin ::
+    """
+      |<ROW>
+      |    value3
+      |    value4<a>1</a>
+      |</ROW>
+      |""".stripMargin :: Nil
+
+  val valueTagsAroundStructs =
+    """
+      |<ROW>
+      |    value1
+      |    <a>
+      |        value2
+      |        <b>
+      |            3
+      |            <c>1</c>
+      |        </b>
+      |        value4
+      |    </a>
+      |    value5
+      |</ROW>
+      |""".stripMargin ::
+    """
+      |<ROW>
+      |    value1
+      |    <a>
+      |        value2
+      |        <b>3</b>
+      |        value4
+      |    </a>
+      |</ROW>
+      |""".stripMargin ::
+  """
+      |<ROW>
+      |    <a>
+      |        <b></b>
+      |        value4
+      |        <!--First comment-->
+      |        value5
+      |    </a>
+      |    value6
+      |</ROW>
+      |""".stripMargin ::
+    """
+      |<ROW>
+      |    value1
+      |    <a>
+      |        value2
+      |        <b>
+      |            3
+      |            <c/>
+      |        </b>
+      |        value4
+      |    </a>
+      |    value5
+      |</ROW>
+      |""".stripMargin :: Nil
+
+  val valueTagsAroundArrays =
+    """
+      |<ROW>
+      |    value1
+      |    <array1>
+      |        value2
+      |        <array2>
+      |          1
+      |          <num>1</num>
+      |          2
+      |        </array2>
+      |        value3
+      |        <!--First comment--> <!--Second comment-->
+      |        value4<!--Third comment-->
+      |        value5
+      |        <array2>2</array2>value6
+      |        value7
+      |    </array1>
+      |    value8
+      |    <array1>
+      |        value9
+      |        <array2> <!--First comment--><num>2</num></array2>
+      |        value10
+      |        <array2></array2>
+      |        <array2> <!--First comment-->
+      |        <!--Second comment--></array2>
+      |        <array2>3</array2>
+      |        value11
+      |    </array1>
+      |    value12
+      |    <!--First comment-->
+      |    value13
+      |</ROW>
+      |""".stripMargin ::
+    """
+      |<ROW>
+      |    <array1>
+      |        value1
+      |    </array1>
+      |</ROW>
+      |""".stripMargin ::
+    """
+      |<ROW>
+      |    <array1>
+      |        <array2>
+      |            1
+      |        </array2>
+      |    </array1>
+      |    value1
+      |</ROW>
+      |""".stripMargin :: Nil
+
+  val valueTagConflictName =
+    """<ROW>
+      |    <a>1</a>
+      |    2
+      |</ROW>""".stripMargin :: Nil
+
+  val valueTagWithComments =
+    """
+      |<ROW>
+      |    <!--First comment-->
+      |    <!--Second comment-->
+      |    <a><!--First comment--></a>
+      |    <a attr="1"><!--First comment--> <!--Second comment--></a>
+      |    2
+      |</ROW>
+      |""".stripMargin :: Nil
+
+  val valueTagWithCDATA =
+    """
+      |<ROW>
+      |    <![CDATA[This is a CDATA section containing <sample1> text.]]>
+      |    <a>
+      |        <![CDATA[This is a CDATA section containing <sample2> text.]]>
+      |        <![CDATA[This is a CDATA section containing <sample3> text.]]>
+      |        <b>1</b>
+      |        <![CDATA[This is a CDATA section containing <sample4> text.]]>
+      |
+      |        <b>2</b>
+      |
+      |    </a>
+      |
+      |</ROW>
+      |""".stripMargin :: Nil
+
+  val valueTagIsNullValue =
+    """
+      |<ROW>
+      |    1
+      |</ROW>
+      |""".stripMargin :: Nil
 }

@@ -737,7 +737,7 @@ package object config {
         "application ends.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -2683,4 +2683,14 @@ package object config {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val SPARK_SHUTDOWN_TIMEOUT_MS =
+    ConfigBuilder("spark.shutdown.timeout")
+      .internal()
+      .doc("Defines the timeout period to wait for all shutdown hooks to be executed. " +
+        "This must be passed as a system property argument in the Java options, for example " +
+        "spark.driver.extraJavaOptions=\"-Dspark.shutdown.timeout=60s\".")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
 }

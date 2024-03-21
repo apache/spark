@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 20.04.
+# Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:focal-20221019
+FROM ubuntu:jammy-20240227
 
-ENV FULL_REFRESH_DATE 20240117
+ENV FULL_REFRESH_DATE 20240318
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -50,10 +50,8 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jdk-headless \
     pandoc \
     pkg-config \
-    python3-pip \
-    python3-setuptools \
-    python3.8 \
-    python3.9 \
+    python3.10 \
+    python3-psutil \
     qpdf \
     r-base \
     ruby \
@@ -64,10 +62,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
+RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
-RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
+RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
@@ -80,9 +78,6 @@ RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
-
-
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 
 
 RUN add-apt-repository ppa:pypy/ppa
@@ -98,41 +93,44 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=15.0.0 six==1.16.0 pandas<=2.2.1 scipy plotly
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.62.0 grpcio-status==1.62.0 protobuf==4.25.1 googleapis-common-protos==1.56.4"
 
-# Add torch as a testing dependency for TorchDistributor and DeepspeedTorchDistributor
-RUN python3.9 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
-    python3.9 -m pip install deepspeed torcheval && \
-    python3.9 -m pip cache purge
-
-# Install Python 3.10 at the last stage to avoid breaking Python 3.9
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y \
-    python3.10 python3.10-distutils \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python 3.10 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+RUN python3.10 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.10 -m pip install deepspeed torcheval && \
     python3.10 -m pip cache purge
 
-# Install Python 3.11 at the last stage to avoid breaking the existing Python installations
+# Install Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.11 python3.11-distutils \
+    python3.9 python3.9-distutils \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+RUN python3.9 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.9 -m pip install --force $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.9 -m pip install torcheval && \
+    python3.9 -m pip cache purge
+
+# Install Python 3.11 at the last stage to avoid breaking the existing Python installations
+RUN apt-get update && apt-get install -y \
+    python3.11 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+RUN python3.11 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.11 -m pip install deepspeed torcheval && \
     python3.11 -m pip cache purge
 
 # Install Python 3.12 at the last stage to avoid breaking the existing Python installations
-RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.12 python3.12-distutils \
+    python3.12 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
 # TODO(SPARK-46647) Add unittest-xml-reporting into Python 3.12 image when it supports Python 3.12
+RUN python3.12 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.12 -m pip install torcheval && \

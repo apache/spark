@@ -160,16 +160,21 @@ object SparkBuild extends PomBuild {
     val replacements = Map(
       """customId="println" level="error"""" -> """customId="println" level="warn""""
     )
-    var contents = Source.fromFile(in).getLines.mkString("\n")
-    for ((k, v) <- replacements) {
-      require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
-      contents = contents.replace(k, v)
+    val source = Source.fromFile(in)
+    try {
+      var contents = source.getLines.mkString("\n")
+      for ((k, v) <- replacements) {
+        require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
+        contents = contents.replace(k, v)
+      }
+      new PrintWriter(out) {
+        write(contents)
+        close()
+      }
+      out
+    } finally {
+      source.close()
     }
-    new PrintWriter(out) {
-      write(contents)
-      close()
-    }
-    out
   }
 
   // Return a cached scalastyle task for a given configuration (usually Compile or Test)
@@ -1078,6 +1083,7 @@ object ExcludedDependencies {
     // purpose only. Here we exclude them from the whole project scope and add them w/ yarn only.
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
+      ExclusionRule(organization = "ch.qos.logback"),
       ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
