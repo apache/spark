@@ -3505,7 +3505,7 @@
   },
   "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
     "message" : [
-      "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key = <groupingKey>."
+      "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
     ],
     "sqlState" : "42802"
   },
