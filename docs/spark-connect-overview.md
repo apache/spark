@@ -224,7 +224,7 @@ For the Scala shell, we use an Ammonite-based REPL that is currently not include
 To set up the new Scala shell, first download and install [Coursier CLI](https://get-coursier.io/docs/cli-installation).
 Then, install the REPL using the following command in a terminal window:
 {% highlight bash %}
-cs install –-contrib spark-connect-repl
+cs install --contrib spark-connect-repl
 {% endhighlight %}
 
 And now you can start the Ammonite-based Scala REPL/shell to connect to your Spark server like this:
