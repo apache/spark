@@ -485,8 +485,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       val timerTimestamps = Seq(931L, 8000L, 1L)
-      timerTimestamps.foreach { ts =>
-        (1 to 5).foreach { keyVal =>
+      timerTimestamps.zipWithIndex.foreach { case (ts, idx) =>
+        (1 to idx + 1).foreach { keyVal =>
           val keyRow = dataToKeyRowWithRangeScan(ts, keyVal.toString)
           val valueRow = dataToValueRow(1)
           store.put(keyRow, valueRow, cfName)
@@ -494,14 +494,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         }
       }
 
-      timerTimestamps.foreach { ts =>
+      timerTimestamps.zipWithIndex.foreach { case (ts, idx) =>
         val prefix = dataToPrefixKeyRowWithRangeScan(ts)
         val result = store.prefixScan(prefix, cfName).map { kv =>
           assert(valueRowToData(kv.value) === 1)
           val key = keyRowWithRangeScanToData(kv.key)
           key._2
         }.toSeq
-        assert(result.size === 5)
+        assert(result.size === idx + 1)
       }
     }
   }
