@@ -2156,8 +2156,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(namedObservation.get === expected)
   }
 
-
-  test("ServiceLoader support for JDBC dialects") {
+  test("SPARK-47496: ServiceLoader support for JDBC dialects") {
     var dialect = JdbcDialects.get("jdbc:dummy:dummy_host:dummy_port/dummy_db")
     assert(dialect.isInstanceOf[DummyDatabaseDialect])
     JdbcDialects.unregisterDialect(dialect)
