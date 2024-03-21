@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
 
   require(dialects.nonEmpty)
+
   override def canHandle(url : String): Boolean =
     dialects.map(_.canHandle(url)).reduce(_ && _)
 
