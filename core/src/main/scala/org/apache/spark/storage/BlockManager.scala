@@ -1561,8 +1561,8 @@ private[spark] class BlockManager(
           blockInfoManager.unlock(blockId)
         }
       } else {
-        removeBlockInternal(blockId, tellMaster = false)
         logWarning(s"Putting block $blockId failed")
+        removeBlockInternal(blockId, tellMaster = false)
       }
       res
     } catch {

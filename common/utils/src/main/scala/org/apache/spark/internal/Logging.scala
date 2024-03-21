@@ -196,7 +196,7 @@ private[spark] object Logging {
   val initLock = new Object()
   try {
     // We use reflection here to handle the case where users remove the
-    // slf4j-to-jul bridge order to route their logs to JUL.
+    // jul-to-slf4j bridge order to route their logs to JUL.
     val bridgeClass = SparkClassUtils.classForName("org.slf4j.bridge.SLF4JBridgeHandler")
     bridgeClass.getMethod("removeHandlersForRootLogger").invoke(null)
     val installed = bridgeClass.getMethod("isInstalled").invoke(null).asInstanceOf[Boolean]

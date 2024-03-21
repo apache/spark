@@ -66,6 +66,12 @@ message AnalyzePlanRequest {
   // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
   string session_id = 1;
 
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 17;
+
   // (Required) User context
   UserContext user_context = 2;
 
@@ -281,6 +287,12 @@ message ExecutePlanRequest {
   // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
   string session_id = 1;
 
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 8;
+
   // (Required) User context
   //
   // user_context.user_id and session+id both identify a unique remote spark session on the
@@ -443,6 +455,12 @@ message ConfigRequest {
   // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
   string session_id = 1;
 
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 8;
+
   // (Required) User context
   UserContext user_context = 2;
 
@@ -535,6 +553,12 @@ message AddArtifactsRequest {
 
   // User context
   UserContext user_context = 2;
+
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 7;
 
   // Provides optional information about the client sending the request. This field
   // can be used for language or version specific information and is only intended for
@@ -630,6 +654,12 @@ message ArtifactStatusesRequest {
   // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
   string session_id = 1;
 
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 5;
+
   // User context
   UserContext user_context = 2;
 
@@ -672,6 +702,12 @@ message InterruptRequest {
   // collate streaming responses from different queries within the dedicated session.
   // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
   string session_id = 1;
+
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 7;
 
   // (Required) User context
   UserContext user_context = 2;
@@ -738,6 +774,12 @@ message ReattachExecuteRequest {
   // This must be an id of existing session.
   string session_id = 1;
 
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 6;
+
   // (Required) User context
   //
   // user_context.user_id and session+id both identify a unique remote spark session on the
@@ -771,6 +813,12 @@ message ReleaseExecuteRequest {
   // The session_id of the request to reattach to.
   // This must be an id of existing session.
   string session_id = 1;
+
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 7;
 
   // (Required) User context
   //
@@ -855,6 +903,12 @@ message FetchErrorDetailsRequest {
   // The session_id specifies a Spark session for a user identified by user_context.user_id.
   // The id should be a UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`.
   string session_id = 1;
+
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 5;
 
   // User context
   UserContext user_context = 2;

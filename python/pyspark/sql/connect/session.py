@@ -968,8 +968,6 @@ def _test() -> None:
     # Spark Connect does not support to set master together.
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-    # RDD API is not supported in Spark Connect.
-    del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
 
     # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
     del pyspark.sql.connect.session.SparkSession.sql.__doc__

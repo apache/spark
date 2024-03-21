@@ -2744,6 +2744,16 @@ abstract class AvroSuite
       }
     }
   }
+
+  test("SPARK-46990: read an empty file where pastSync returns false at EOF") {
+    for (maxPartitionBytes <- Seq(100, 100000, 100000000)) {
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> s"$maxPartitionBytes") {
+        val file = getResourceAvroFilePath("empty_file.avro")
+        val df = spark.read.format("avro").load(file)
+        assert(df.count() == 0)
+      }
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {

@@ -121,7 +121,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "paramIndex" -> "first",
         "inputSql" -> "\"1\"",
         "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRING\""),
+        "requiredType" -> "\"STRING_ANY_COLLATION\""),
       context = ExpectedContext(
         fragment = s"collate(1, 'UTF8_BINARY')", start = 7, stop = 31))
   }
@@ -611,7 +611,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           s"""
              |CREATE TABLE testcat.test_table(
              |  c1 STRING COLLATE UNICODE,
-             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (c1 || 'a' COLLATE UNICODE)
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (LOWER(c1))
              |)
              |USING $v2Source
              |""".stripMargin)
@@ -619,7 +619,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
       parameters = Map(
         "fieldName" -> "c2",
-        "expressionStr" -> "c1 || 'a' COLLATE UNICODE",
+        "expressionStr" -> "LOWER(c1)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
 
     checkError(
@@ -628,7 +628,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           s"""
              |CREATE TABLE testcat.test_table(
              |  struct1 STRUCT<a: STRING COLLATE UNICODE>,
-             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (SUBSTRING(struct1.a, 0, 1))
+             |  c2 STRING COLLATE UNICODE GENERATED ALWAYS AS (UCASE(struct1.a))
              |)
              |USING $v2Source
              |""".stripMargin)
@@ -636,7 +636,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
       parameters = Map(
         "fieldName" -> "c2",
-        "expressionStr" -> "SUBSTRING(struct1.a, 0, 1)",
+        "expressionStr" -> "UCASE(struct1.a)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
   }
 
@@ -649,5 +649,25 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       df.groupBy("name").count(),
       Seq(Row("Alice", 1), Row("Bob", 2))
     )
+  }
+
+  test("window aggregates should respect collation") {
+    val t1 = "T_NON_BINARY"
+    val t2 = "T_BINARY"
+
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (c STRING COLLATE UTF8_BINARY_LCASE, i int) USING PARQUET")
+      sql(s"INSERT INTO $t1 VALUES ('aA', 2), ('Aa', 1), ('ab', 3), ('aa', 1)")
+
+      sql(s"CREATE TABLE $t2 (c STRING, i int) USING PARQUET")
+      // Same input but already normalized to lowercase.
+      sql(s"INSERT INTO $t2 VALUES ('aa', 2), ('aa', 1), ('ab', 3), ('aa', 1)")
+
+      val dfNonBinary =
+        sql(s"SELECT lower(c), i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t1")
+      val dfBinary =
+        sql(s"SELECT c, i, nth_value(i, 2) OVER (PARTITION BY c ORDER BY i) FROM $t2")
+      checkAnswer(dfNonBinary, dfBinary)
+    }
   }
 }

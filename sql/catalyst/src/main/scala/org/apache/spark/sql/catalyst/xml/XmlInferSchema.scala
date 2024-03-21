@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DropMalformedMode, FailFastMode, ParseMode, PermissiveMode, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.catalyst.xml.XmlInferSchema.compatibleType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -45,6 +44,8 @@ import org.apache.spark.sql.types._
 class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
     extends Serializable
     with Logging {
+
+  import org.apache.spark.sql.catalyst.xml.XmlInferSchema._
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -120,6 +121,7 @@ class XmlInferSchema(options: XmlOptions, caseSensitive: Boolean)
       case Some(st: StructType) => st
       case _ =>
         // canonicalizeType erases all empty structs, including the only one we want to keep
+        // XML shouldn't run into this line
         StructType(Seq())
     }
   }
@@ -541,6 +543,10 @@ object XmlInferSchema {
         // As this library can infer an element with attributes as StructType whereas
         // some can be inferred as other non-structural data types, this case should be
         // treated.
+        // 1. Without value tags, combining structs and primitive types defaults to string type
+        // 2. With value tags, combining structs and primitive types defaults to
+        //    a struct with value tags of compatible type
+        // This behavior keeps aligned with JSON
         case (st: StructType, dt: DataType) if st.fieldNames.contains(valueTag) =>
           val valueIndex = st.fieldNames.indexOf(valueTag)
           val valueField = st.fields(valueIndex)
