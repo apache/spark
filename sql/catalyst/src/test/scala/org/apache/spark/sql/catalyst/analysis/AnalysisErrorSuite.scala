@@ -119,7 +119,7 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
-class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase with SharedSparkSession {
+class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   import TestRelations._
 
   def errorTest(
@@ -296,6 +296,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase with Share
   }
 
   test("SPARK-47256: non deterministic FILTER expression in an aggregate function") {
+
     val plan =
       CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2")
     assertAnalysisErrorClass(
