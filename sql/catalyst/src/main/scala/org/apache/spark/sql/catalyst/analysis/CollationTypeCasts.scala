@@ -18,19 +18,18 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, CreateArray, Elt, ExpectsInputTypes, Expression, Predicate, SortOrder}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType, StructType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
 
-    case checkCastWithIndeterminate @ (_: Elt | _: ComplexTypeMergingExpression)
+    case checkCastWithIndeterminate @ (_: Elt | _: ComplexTypeMergingExpression | _: CreateArray)
       if shouldCast(checkCastWithIndeterminate.children) =>
       val newChildren =
         collateToSingleType(checkCastWithIndeterminate.children, failOnIndeterminate = false)
@@ -64,8 +63,10 @@ object CollationTypeCasts extends TypeCoercionRule {
   /**
    * Whether the data type contains StringType.
    */
-  def hasStringType(dt: DataType): Boolean = dt.existsRecursively {
+  @tailrec
+  def hasStringType(dt: DataType): Boolean = dt match {
     case _: StringType => true
+    case ArrayType(et, _) => hasStringType(et)
     case _ => false
   }
 
