@@ -174,7 +174,7 @@ private[kinesis] class KinesisReceiver[T](
 
       val withOptionalConfiguration = dynamoDBEndpointUrl match {
         case Some(endpoint) => baseClientLibConfiguration
-          .withDynamoDBEndpoint(endpoint).withMetricsLevel(metricsLevel)
+          .withDynamoDBEndpoint(endpoint)
         case _ => baseClientLibConfiguration
       }
 
