@@ -4631,6 +4631,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS_IN_SUBQUERY_EXPRESSIONS =
+    buildConf("spark.sql.analyzer.allowLambdasInSubqueryExpressions")
+      .internal()
+      .doc("When set to false, the analyzer will throw an error if a lambda expression is used " +
+        "in a subquery expression. When set to true, it restores the legacy behavior of " +
+        "allowing lambda expressions in subquery expressions.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   // Deprecate "spark.connect.copyFromLocalToFs.allowDestLocal" in favor of this config. This is
   // currently optional because we don't want to break existing users who are using the old config.
   // If this config is set, then we override the deprecated config.

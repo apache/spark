@@ -2547,6 +2547,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         e: SubqueryExpression,
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
+      // SPARK-47509: There is a correctness bug when lambdas or higher-order functions appear
+      // within subquery expression plans. Here we check for that case and return an error if the
+      // corresponding configuration indicates to do so.
+      if (e.containsAnyPattern(LAMBDA_FUNCTION, HIGH_ORDER_FUNCTION) &&
+        !conf.getConf(SQLConf.ALLOW_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS_IN_SUBQUERY_EXPRESSIONS)) {
+        throw QueryCompilationErrors
+          .lambdaOrHigherOrderFunctionInSubqueryExpressionNotAllowedError()
+      }
       val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
         executeSameContext(e.plan)
       }

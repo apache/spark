@@ -620,6 +620,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("prettyName" -> toSQLId(prettyName), "syntax" -> toSQLStmt(syntax)))
   }
 
+  def lambdaOrHigherOrderFunctionInSubqueryExpressionNotAllowedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.LAMBDA_OR_HIGHER_ORDER_FUNCTION",
+      messageParameters = Map.empty)
+  }
+
   def nonDeterministicFilterInAggregateError(): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1024",
