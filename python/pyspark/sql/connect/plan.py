@@ -2410,6 +2410,7 @@ class CommonInlineUserDefinedTableFunction(LogicalPlan):
 
 class PythonDataSource:
     """Represents a user-defined Python data source."""
+
     def __init__(self, data_source: Type, python_ver: str):
         self._data_source = data_source
         self._python_ver = python_ver
@@ -2442,9 +2443,7 @@ class CommonInlineUserDefinedDataSource(LogicalPlan):
     ) -> "proto.CommonInlineUserDefinedDataSource":
         plan = proto.CommonInlineUserDefinedDataSource()
         plan.name = self._name
-        plan.python_data_source.CopyFrom(
-            cast(proto.PythonDataSource, self._data_source.to_plan(session))  # type: ignore[arg-type]
-        )
+        plan.python_data_source.CopyFrom(self._data_source.to_plan(session))
         return plan
 
 

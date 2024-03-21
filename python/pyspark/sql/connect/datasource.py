@@ -18,14 +18,12 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import List, Type, TYPE_CHECKING, Optional, Union
+from typing import Type, TYPE_CHECKING
 
 from pyspark.sql.datasource import DataSourceRegistration as PySparkDataSourceRegistration
 
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
-    from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.datasource import DataSource
     from pyspark.sql.connect.session import SparkSession
 
@@ -41,8 +39,8 @@ class DataSourceRegistration:
         self.sparkSession = sparkSession
 
     def register(
-            self,
-            dataSource: Type["DataSource"],
+        self,
+        dataSource: Type["DataSource"],
     ) -> None:
         self.sparkSession._client.register_data_source(dataSource)
 
