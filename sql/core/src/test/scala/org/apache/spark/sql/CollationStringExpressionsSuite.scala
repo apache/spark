@@ -27,7 +27,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession {
 
   case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
-
   case class CollationTestFail[R](s1: String, s2: String, collation: String)
 
   test("Support ConcatWs string expression with Collation") {
