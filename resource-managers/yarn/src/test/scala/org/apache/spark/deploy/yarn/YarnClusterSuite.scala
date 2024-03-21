@@ -35,6 +35,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
+import org.slf4j.bridge.SLF4JBridgeHandler
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonUtils
@@ -322,6 +323,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       classOf[LogManager].getProtectionDomain().getCodeSource().getLocation().toString)
     System.err.println(
         classOf[Log4jLogger].getProtectionDomain().getCodeSource().getLocation().toString)
+    System.err.println(
+        classOf[SLF4JBridgeHandler].getProtectionDomain().getCodeSource().getLocation().toString)
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
       mainClassName(YarnClusterDriver.getClass),
@@ -330,7 +333,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         classOf[org.apache.log4j.Appender].getProtectionDomain().getCodeSource().getLocation()
           .toString,
         classOf[LogManager].getProtectionDomain().getCodeSource().getLocation().toString,
-        classOf[Log4jLogger].getProtectionDomain().getCodeSource().getLocation().toString),
+        classOf[Log4jLogger].getProtectionDomain().getCodeSource().getLocation().toString,
+        classOf[SLF4JBridgeHandler].getProtectionDomain().getCodeSource().getLocation().toString),
       extraEnv = Map("SPARK_CONF_DIR" -> confDir.getAbsolutePath),
       extraConf = Map(CLIENT_INCLUDE_DRIVER_LOGS_LINK.key -> true.toString))
     checkResult(finalState, result)
