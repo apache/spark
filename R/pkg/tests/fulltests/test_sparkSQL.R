@@ -1648,12 +1648,6 @@ test_that("column functions", {
   expected_entries <- list(as.environment(list(x = 1, y = 2, a = 3, b = 4)))
   expect_equal(result, expected_entries)
 
-  # Test map_sort
-  df <- createDataFrame(list(list(map1 = as.environment(list(c = 3, a = 1, b = 2)))))
-  result <- collect(select(df, map_sort(df[[1]])))[[1]]
-  expected_entries <- list(as.environment(list(a = 1, b = 2, c = 3)))
-  expect_equal(result, expected_entries)
-
   # Test map_entries(), map_keys(), map_values() and element_at()
   df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
   result <- collect(select(df, map_entries(df$map)))[[1]]

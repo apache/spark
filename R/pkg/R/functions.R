@@ -4553,23 +4553,6 @@ setMethod("map_zip_with",
           })
 
 #' @details
-#' \code{map_sort}: Sorts the input map in ascending or descending order according to
-#' the natural ordering of the map keys.
-#'
-#' @rdname column_collection_functions
-#' @param asc a logical flag indicating the sorting order.
-#'            TRUE, sorting is in ascending order.
-#'            FALSE, sorting is in descending order.
-#' @aliases map_sort map_sort,Column-method
-#' @note map_sort since 4.0.0
-setMethod("map_sort",
-          signature(x = "Column"),
-          function(x, asc = TRUE) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "map_sort", x@jc, asc)
-            column(jc)
-          })
-
-#' @details
 #' \code{element_at}: Returns element of array at given index in \code{extraction} if
 #' \code{x} is array. Returns value for the given key in \code{extraction} if \code{x} is map.
 #' Note: The position is not zero based, but 1 based index.

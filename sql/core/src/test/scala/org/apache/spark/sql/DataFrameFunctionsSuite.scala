@@ -25,7 +25,7 @@ import java.sql.{Date, Timestamp}
 import scala.util.Random
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -777,86 +777,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         ExpectedContext(
           fragment = "array_sort",
           callSitePattern = getCurrentClassCallSitePattern))
-    )
-  }
-
-  test("map_sort function") {
-    val df1 = Seq(
-      Map[Int, Int](2 -> 2, 1 -> 1, 3 -> 3)
-    ).toDF("a")
-
-    checkAnswer(
-      df1.selectExpr("map_sort(a)"),
-      Seq(
-        Row(Map(1 -> 1, 2 -> 2, 3 -> 3))
-      )
-    )
-    checkAnswer(
-      df1.selectExpr("map_sort(a, true)"),
-      Seq(
-        Row(Map(1 -> 1, 2 -> 2, 3 -> 3))
-      )
-    )
-    checkAnswer(
-      df1.select(map_sort($"a", asc = false)),
-      Seq(
-        Row(Map(3 -> 3, 2 -> 2, 1 -> 1))
-      )
-    )
-
-    val df2 = Seq(Map.empty[Int, Int]).toDF("a")
-
-    checkAnswer(
-      df2.selectExpr("map_sort(a, true)"),
-      Seq(Row(Map()))
-    )
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        df2.orderBy("a")
-      },
-      errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
-      parameters = Map(
-        "functionName" -> "`sortorder`",
-        "dataType" -> "\"MAP<INT, INT>\"",
-        "sqlExpr" -> "\"a ASC NULLS FIRST\"")
-    )
-
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        sql("SELECT map_sort(map(null, 1))").collect()
-      },
-      errorClass = "NULL_MAP_KEY"
-    )
-
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT map_sort(map(1,1,2,2), \"asc\")").collect()
-      },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-      parameters = Map(
-        "sqlExpr" -> "\"map_sort(map(1, 1, 2, 2), asc)\"",
-        "paramIndex" -> "second",
-        "inputSql" -> "\"asc\"",
-        "inputType" -> "\"STRING\"",
-        "requiredType" -> "\"BOOLEAN\""
-      ),
-      queryContext = Array(ExpectedContext("", "", 7, 35, "map_sort(map(1,1,2,2), \"asc\")"))
-    )
-
-    checkError(
-      exception = intercept[ExtendedAnalysisException] {
-        sql("SELECT map_sort(map(1,1,2,2), \"asc\")").collect()
-      },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-      parameters = Map(
-        "sqlExpr" -> "\"map_sort(map(1, 1, 2, 2), asc)\"",
-        "paramIndex" -> "second",
-        "inputSql" -> "\"asc\"",
-        "inputType" -> "\"STRING\"",
-        "requiredType" -> "\"BOOLEAN\""
-      ),
-      queryContext = Array(ExpectedContext("", "", 7, 35, "map_sort(map(1,1,2,2), \"asc\")"))
     )
   }
 
