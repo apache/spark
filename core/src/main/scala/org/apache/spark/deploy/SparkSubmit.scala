@@ -46,6 +46,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkExitCode.EXIT_FAILURE
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -1003,20 +1004,17 @@ private[spark] class SparkSubmit extends Logging {
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
           !isConnectServer(args.mainClass)) {
         try {
-          logWarning("Begin to close SparkContext inside driver pod......")
           SparkContext.getActive.foreach(_.stop())
         } catch {
           case e: Throwable => logError(s"Failed to close SparkContext: $e")
         } finally {
           if (SparkContext.getActive.isEmpty) {
-            logWarning("Finished to close SparkContext inside driver pod successfully.")
             if (!DriverPodIsNormal) {
               logError(s"Driver Pod will exit because: $driverThrow")
-              System.exit(1)
+              System.exit(EXIT_FAILURE)
             }
-          } else {
-            logWarning("Failed to close SparkContext.")
           }
+        }
       }
     }
   }
