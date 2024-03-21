@@ -2529,10 +2529,37 @@ class SparkConnectPlanner(
   }
 
   private def handleSqlCommand(
-      sqlCommand: SqlCommand,
+      command: SqlCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
-    val df = executeSQLCommand(sqlCommand, tracker)
+
+    val relation = if (command.hasInput) {
+      command.getInput
+    } else {
+      // for backward compatibility
+      proto.Relation
+        .newBuilder()
+        .setSql(
+          proto.SQL
+            .newBuilder()
+            .setQuery(command.getSql)
+            .putAllArgs(command.getArgsMap)
+            .putAllNamedArguments(command.getNamedArgumentsMap)
+            .addAllPosArgs(command.getPosArgsList)
+            .addAllPosArguments(command.getPosArgumentsList)
+            .build())
+        .build()
+    }
+
+    val df = relation.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.SQL =>
+        executeSQL(relation.getSql, tracker)
+      case proto.Relation.RelTypeCase.WITH_RELATIONS =>
+        executeSQLWithRefs(relation.getWithRelations, tracker)
+      case other =>
+        throw InvalidPlanInput(
+          s"SQL command expects either a SQL or a WithRelations, but got $other")
+    }
 
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
@@ -2584,7 +2611,7 @@ class SparkConnectPlanner(
     } else {
       // No execution triggered for relations. Manually set ready
       tracker.setReadyForExecution()
-      result.setRelation(sqlCommand.getInput)
+      result.setRelation(relation)
     }
     executeHolder.eventsManager.postFinished(Some(rows.size))
     // Exactly one SQL Command Result Batch
@@ -2606,20 +2633,6 @@ class SparkConnectPlanner(
           .setServerSideSessionId(sessionHolder.serverSessionId)
           .setMetrics(metrics.build)
           .build)
-    }
-  }
-
-  private def executeSQLCommand(
-      command: SqlCommand,
-      tracker: QueryPlanningTracker = new QueryPlanningTracker) = {
-    command.getInput.getRelTypeCase match {
-      case proto.Relation.RelTypeCase.SQL =>
-        executeSQL(command.getInput.getSql, tracker)
-      case proto.Relation.RelTypeCase.WITH_RELATIONS =>
-        executeSQLWithRefs(command.getInput.getWithRelations, tracker)
-      case other =>
-        throw InvalidPlanInput(
-          s"SQL command expects either a SQL or a WithRelations, but got $other")
     }
   }
 

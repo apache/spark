@@ -63,14 +63,17 @@ class LogicalPlan:
 
     def __init__(self, child: Optional["LogicalPlan"]) -> None:
         self._child = child
+        self._plan_id = LogicalPlan._fresh_plan_id()
 
+    @staticmethod
+    def _fresh_plan_id() -> int:
         plan_id: Optional[int] = None
         with LogicalPlan._lock:
             plan_id = LogicalPlan._nextPlanId
             LogicalPlan._nextPlanId += 1
 
         assert plan_id is not None
-        self._plan_id = plan_id
+        return plan_id
 
     def _create_proto_relation(self) -> proto.Relation:
         plan = proto.Relation()
@@ -1171,6 +1174,26 @@ class SubqueryAlias(LogicalPlan):
         return plan
 
 
+class WithRelations(LogicalPlan):
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        references: Sequence["LogicalPlan"],
+    ) -> None:
+        super().__init__(child)
+        assert references is not None and len(references) > 0
+        assert all(isinstance(ref, LogicalPlan) for ref in references)
+        self._references = references
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        if self._child is not None:
+            plan.with_relations.root.CopyFrom(self._child.plan(session))
+        for ref in self._references:
+            plan.with_relations.references.append(ref.plan(session))
+        return plan
+
+
 class SQL(LogicalPlan):
     def __init__(
         self,
@@ -1219,7 +1242,8 @@ class SQL(LogicalPlan):
 
         if self._views is not None and len(self._views) > 0:
             old_plan = plan
-            plan = self._create_proto_relation()
+            plan = proto.Relation()
+            plan.common.plan_id = LogicalPlan._fresh_plan_id()
             plan.with_relations.root.CopyFrom(old_plan)
             for view in self._views:
                 plan.with_relations.references.append(view.plan(session))
