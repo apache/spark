@@ -4627,25 +4627,32 @@
     ],
     "sqlState" : "42KDF"
   },
-  "AGGREGATE_FILTER_EXPRESSION_NON_DETERMINISTIC" : {
+  "AGGREGATE_FILTER_EXPRESSION_ERROR" : {
     "message" : [
-      "FILTER expression is non-deterministic. Such expression cannot be used in an aggregate function."
-    ]
-  },
-  "AGGREGATE_FILTER_EXPRESSION_NOT_BOOLEAN" : {
-    "message" : [
-      "FILTER expression is not of boolean type. Such expression cannot be used in an aggregate function."
-    ]
-  },
-  "AGGREGATE_FILTER_EXPRESSION_CONTAINS_AGGREGATE" : {
-    "message" : [
-      "FILTER expression contains an aggregation. Such expression cannot be used in an aggregate function."
-    ]
-  },
-  "AGGREGATE_FILTER_EXPRESSION_CONTAINS_WINDOW_FUNCTION" : {
-    "message" : [
-      "FILTER expression contains window function. Such expression cannot be used in an aggregate function."
-    ]
+      "FILTER expression in aggregate function has errors:"
+    ],
+    "subClass" : {
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "FILTER expression is non-deterministic."
+        ]
+      },
+      "NOT_BOOLEAN" : {
+        "message" : [
+          "FILTER expression is not of boolean type."
+        ]
+      },
+      "CONTAINS_AGGREGATE" : {
+        "message" : [
+          "FILTER expression contains an aggregation."
+        ]
+      },
+      "CONTAINS_WINDOW_FUNCTION" : {
+        "message" : [
+          "FILTER expression contains window function."
+        ]
+      }
+    }
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [

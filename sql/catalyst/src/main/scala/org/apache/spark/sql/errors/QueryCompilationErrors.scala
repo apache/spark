@@ -622,25 +622,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def nonDeterministicFilterInAggregateError(): Throwable = {
     new AnalysisException(
-      errorClass = "AGGREGATE_FILTER_EXPRESSION_NON_DETERMINISTIC",
+      errorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.NON_DETERMINISTIC",
       messageParameters = Map.empty)
   }
 
   def nonBooleanFilterInAggregateError(): Throwable = {
     new AnalysisException(
-      errorClass = "AGGREGATE_FILTER_EXPRESSION_NOT_BOOLEAN",
+      errorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.NOT_BOOLEAN",
       messageParameters = Map.empty)
   }
 
   def aggregateInAggregateFilterError(): Throwable = {
     new AnalysisException(
-      errorClass = "AGGREGATE_FILTER_EXPRESSION_CONTAINS_AGGREGATE",
+      errorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.CONTAINS_AGGREGATE",
       messageParameters = Map.empty)
   }
 
   def windowFunctionInAggregateFilterError(): Throwable = {
     new AnalysisException(
-      errorClass = "AGGREGATE_FILTER_EXPRESSION_CONTAINS_WINDOW_FUNCTION",
+      errorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.CONTAINS_WINDOW_FUNCTION",
       messageParameters = Map.empty)
   }
 

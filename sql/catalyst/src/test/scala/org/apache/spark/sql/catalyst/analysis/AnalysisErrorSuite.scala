@@ -119,7 +119,7 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
-class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
+class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase with SharedSparkSession {
   import TestRelations._
 
   def errorTest(
@@ -300,7 +300,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2")
     assertAnalysisErrorClass(
       inputPlan = plan,
-      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_NON_DETERMINISTIC",
+      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.NON_DETERMINISTIC",
       expectedMessageParameters = Map.empty,
       queryContext = Array(
         ExpectedContext("count(a) FILTER (WHERE rand(int(c)) > 1)", 7, 46)))
@@ -311,7 +311,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       CatalystSqlParser.parsePlan("SELECT sum(c) FILTER (WHERE e) FROM TaBlE2")
     assertAnalysisErrorClass(
       inputPlan = plan,
-      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_NOT_BOOLEAN",
+      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.NOT_BOOLEAN",
       expectedMessageParameters = Map.empty,
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE e)", 7, 29)))
@@ -322,7 +322,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       CatalystSqlParser.parsePlan("SELECT sum(c) FILTER (WHERE max(e) > 1) FROM TaBlE2")
     assertAnalysisErrorClass(
       inputPlan = plan,
-      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_CONTAINS_AGGREGATE",
+      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.CONTAINS_AGGREGATE",
       expectedMessageParameters = Map.empty,
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE max(e) > 1)", 7, 38)))
@@ -334,7 +334,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "SELECT sum(c) FILTER (WHERE nth_value(e, 2) OVER(ORDER BY b) > 1) FROM TaBlE2")
     assertAnalysisErrorClass(
       inputPlan = plan,
-      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_CONTAINS_WINDOW_FUNCTION",
+      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.CONTAINS_WINDOW_FUNCTION",
       expectedMessageParameters = Map.empty,
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE nth_value(e, 2) OVER(ORDER BY b) > 1)", 7, 64)))
