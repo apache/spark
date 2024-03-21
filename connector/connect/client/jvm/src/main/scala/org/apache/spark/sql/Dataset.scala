@@ -28,6 +28,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -3337,9 +3338,14 @@ class Dataset[T] private[sql] (
     }
   }
 
-  def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
-    throw new UnsupportedOperationException("observe is not implemented.")
-  }
+  def observe(name: String, expr: Column, exprs: Column*): Dataset[T] =
+    sparkSession.newDataset(agnosticEncoder) {
+      builder =>
+        builder.getCollectMetricsBuilder
+          .setInput(plan.getRoot)
+          .setName(name)
+          .addAllMetrics((expr +: exprs).map(_.expr).asJava)
+    }
 
   def checkpoint(): Dataset[T] = {
     throw new UnsupportedOperationException("checkpoint is not implemented.")
@@ -3398,6 +3404,10 @@ class Dataset[T] private[sql] (
   }
 
   def collectResult(): SparkResult[T] = sparkSession.execute(plan, agnosticEncoder)
+
+  def collectObservation(): Seq[ObservedMetrics] = {
+    sparkSession.execute(plan).flatMap(r => r.getObservedMetricsList().asScala).toSeq
+  }
 
   private[sql] def withResult[E](f: SparkResult[T] => E): E = {
     val result = collectResult()

@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
@@ -550,14 +550,17 @@ class SparkSession private[sql] (
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     // .foreach forces that the iterator is consumed and closed
-    client.execute(plan).foreach(_ => ())
+    execute(plan).foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toSeq forces that the iterator is consumed and closed
-    client.execute(plan).toSeq
+    execute(plan).toSeq
   }
+
+  private[sql] def execute(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] =
+    client.execute(plan)
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()

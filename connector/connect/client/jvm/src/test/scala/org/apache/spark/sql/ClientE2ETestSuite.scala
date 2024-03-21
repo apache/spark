@@ -321,6 +321,11 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       .load()
     val outputFolderPath = Files.createTempDirectory("output").toAbsolutePath
 
+    val dd =
+      df.observe("observation", min("age"), max("age"), sum("age"))
+
+    val ob = dd.collectObservation()
+
     df.write
       .format("csv")
       .mode("overwrite")
