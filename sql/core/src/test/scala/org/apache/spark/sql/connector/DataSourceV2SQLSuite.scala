@@ -814,12 +814,11 @@ class DataSourceV2SQLSuiteV1Filter
         if (nullable) {
           insertNullValueAndCheck()
         } else {
-          // TODO assign a error-classes name
           checkError(
             exception = intercept[SparkException] {
               insertNullValueAndCheck()
             },
-            errorClass = null,
+            errorClass = "UNCLASSIFIED",
             parameters = Map.empty
           )
         }
