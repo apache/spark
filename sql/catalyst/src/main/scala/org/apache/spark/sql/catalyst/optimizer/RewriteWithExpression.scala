@@ -63,13 +63,17 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         // Rewrite nested With expressions first
         val child = rewriteWithExprAndInputPlans(w.child, inputPlans)
         val defs = w.defs.map(rewriteWithExprAndInputPlans(_, inputPlans))
-        val refToExpr = mutable.HashMap.empty[Long, Expression]
+        val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
         val childProjections = Array.fill(inputPlans.length)(mutable.ArrayBuffer.empty[Alias])
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
           if (child.containsPattern(COMMON_EXPR_REF)) {
             throw SparkException.internalError(
               "Common expression definition cannot reference other Common expression definitions")
+          }
+          if (id.canonicalized) {
+            throw SparkException.internalError(
+              "Cannot rewrite canonicalized Common expression definitions")
           }
 
           if (CollapseProject.isCheap(child)) {
@@ -113,6 +117,10 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           case ref: CommonExpressionRef =>
             if (!refToExpr.contains(ref.id)) {
               throw SparkException.internalError("Undefined common expression id " + ref.id)
+            }
+            if (ref.id.canonicalized) {
+              throw SparkException.internalError(
+                "Cannot rewrite canonicalized Common expression references")
             }
             refToExpr(ref.id)
         }
