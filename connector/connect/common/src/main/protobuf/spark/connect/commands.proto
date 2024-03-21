@@ -77,8 +77,7 @@ message SqlCommand {
   // It cannot coexist with `named_arguments`.
   repeated Expression pos_arguments = 5 [deprecated=true];
 
-  // (Optional) this relation should be either a 'SQL' Relation,
-  // or a 'WithRelations' with a 'SQL' as the root.
+  // (Optional) The relation that this SQL command will be built on.
   optional Relation input = 6;
 }
 

@@ -350,9 +350,7 @@ class SqlCommand(google.protobuf.message.Message):
         """
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
-        """(Optional) this relation should be either a 'SQL' Relation,
-        or a 'WithRelations' with a 'SQL' as the root.
-        """
+        """(Optional) The relation that this SQL command will be built on."""
     def __init__(
         self,
         *,
