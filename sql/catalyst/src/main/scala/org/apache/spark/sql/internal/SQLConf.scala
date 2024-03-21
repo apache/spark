@@ -759,7 +759,8 @@ object SQLConf {
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
-      .doc("Default collation when considering casting rules.")
+      .doc("Sets default collation to use for string literals, parameter markers or the string" +
+        " produced by a builtin function such as to_char or CAST")
       .version("4.0.0")
       .stringConf
       .createWithDefault("UTF8_BINARY")

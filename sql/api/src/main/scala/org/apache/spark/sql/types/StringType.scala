@@ -19,7 +19,6 @@ package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.catalyst.util.SparkStringTypeUtils.isDefaultCollation
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -36,10 +35,11 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * equality and hashing).
    */
   def isBinaryCollation: Boolean = CollationFactory.fetchCollation(collationId).isBinaryCollation
-  def isLowercaseCollation: Boolean = collationId == CollationFactory.LOWERCASE_COLLATION_ID
+  def isUTF8BinaryLcaseCollation: Boolean =
+    collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID
 
   /**
-   * Spark internal collation implies that strings are considered equal only if they are
+   * UTF8 Binary collation implies that strings are considered equal only if they are
    * byte for byte equal. E.g. all accent or case-insensitive collations are considered non-binary.
    * Also their comparison does not require ICU library calls, as ordering follows
    * spark internal implementation. If this field is true, byte level operations can be

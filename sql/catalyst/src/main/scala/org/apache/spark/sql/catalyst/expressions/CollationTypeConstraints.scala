@@ -65,7 +65,7 @@ case object StringTypeBinaryLcase extends StringTypeCollated {
   override private[sql] def simpleString: String = "string_binary_lcase"
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].isBinaryCollation ||
-      other.asInstanceOf[StringType].isLowercaseCollation)
+      other.asInstanceOf[StringType].isUTF8BinaryLcaseCollation)
 }
 
 /**
