@@ -185,6 +185,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (_: StringType, StringType) => None
       case (_: StringType, _: StringTypeCollated) => None
 
+      // If a function expects integral type, fractional input is not allowed.
+      case (_: FractionalType, IntegralType) => None
+
       // Ideally the implicit cast rule should be the same as `Cast.canANSIStoreAssign` so that it's
       // consistent with table insertion. To avoid breaking too many existing Spark SQL queries,
       // we make the system to allow implicitly converting String type as other primitive types.
