@@ -27,6 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession {
 
   case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
+
   case class CollationTestFail[R](s1: String, s2: String, collation: String)
 
   test("Support ConcatWs string expression with Collation") {
@@ -65,6 +66,52 @@ class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession 
           fragment = s"$expr",
           start = 7,
           stop = 73 + 3 * ct.collation.length
+        )
+      )
+    })
+  }
+
+  case class SubstringIndexTestFail[R](s1: String, s2: String, c1: String, c2: String)
+
+  test("Support SubstringIndex with Collation") {
+    // Supported collations
+    val checks = Seq(
+      CollationTestCase("The quick brown fox jumps over the dog.", "fox", "UTF8_BINARY", 17),
+      CollationTestCase("The quick brown fox jumps over the dog.", "FOX", "UTF8_BINARY", 0),
+      CollationTestCase("The quick brown fox jumps over the dog.", "FOX", "UTF8_BINARY_LCASE", 17),
+      CollationTestCase("The quick brown fox jumps over the dog.", "fox", "UNICODE", 17),
+      CollationTestCase("The quick brown fox jumps over the dog.", "FOX", "UNICODE", 0),
+      CollationTestCase("The quick brown fox jumps over the dog.", "FOX", "UNICODE_CI", 17)
+    )
+    checks.foreach(ct => {
+      checkAnswer(sql(s"SELECT instr(collate('${ct.s1}', '${ct.collation}'), " +
+        s"collate('${ct.s2}', '${ct.collation}'))"),
+        Row(ct.expectedResult))
+    })
+    // Unsupported collation pairs
+    val fails = Seq(
+      SubstringIndexTestFail("The quick brown fox jumps over the dog.",
+        "Fox", "UTF8_BINARY_LCASE", "UTF8_BINARY"),
+      SubstringIndexTestFail("The quick brown fox jumps over the dog.",
+        "FOX", "UNICODE_CI", "UNICODE")
+    )
+    fails.foreach(ct => {
+      val expr = s"instr(collate('${ct.s1}', '${ct.c1}'), collate('${ct.s2}', '${ct.c2}'))"
+      checkError(
+        exception = intercept[ExtendedAnalysisException] {
+          sql(s"SELECT $expr")
+        },
+        errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
+        sqlState = "42K09",
+        parameters = Map(
+          "sqlExpr" -> s"\"instr(collate(${ct.s1}), collate(${ct.s2}))\"",
+          "collationNameLeft" -> s"${ct.c1}",
+          "collationNameRight" -> s"${ct.c2}"
+        ),
+        context = ExpectedContext(
+          fragment = s"$expr",
+          start = 7,
+          stop = 45 + ct.s1.length + ct.c1.length + ct.s2.length + ct.c2.length
         )
       )
     })
