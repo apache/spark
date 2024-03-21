@@ -30,7 +30,7 @@ object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
 
-    case checkCastWithIndeterminate @ (_: Elt | _: ComplexTypeMergingExpression | _: CreateArray)
+    case checkCastWithIndeterminate @ (_: ComplexTypeMergingExpression | _: CreateArray)
       if shouldCast(checkCastWithIndeterminate.children) =>
       val newChildren =
         collateToSingleType(checkCastWithIndeterminate.children, failOnIndeterminate = false)
@@ -39,7 +39,6 @@ object CollationTypeCasts extends TypeCoercionRule {
     case checkCastWithoutIndeterminate @ (_: BinaryExpression
                                           | _: Predicate
                                           | _: SortOrder
-                                          | _: CreateArray
                                           | _: ExpectsInputTypes)
       if shouldCast(checkCastWithoutIndeterminate.children) =>
       val newChildren = collateToSingleType(checkCastWithoutIndeterminate.children)
@@ -48,7 +47,6 @@ object CollationTypeCasts extends TypeCoercionRule {
     case checkIndeterminate@(_: BinaryExpression
                              | _: Predicate
                              | _: SortOrder
-                             | _: CreateArray
                              | _: ExpectsInputTypes)
       if hasIndeterminate(checkIndeterminate.children
         .filter(e => hasStringType(e.dataType))
