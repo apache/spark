@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, FunctionSignature, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
@@ -620,28 +620,36 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("prettyName" -> toSQLId(prettyName), "syntax" -> toSQLStmt(syntax)))
   }
 
-  def nonDeterministicFilterInAggregateError(): Throwable = {
+  def nonDeterministicFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.NON_DETERMINISTIC",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
+      messageParameters = Map("filterExpr" -> toPrettySQL(filterExpr)))
   }
 
-  def nonBooleanFilterInAggregateError(): Throwable = {
+  def nonBooleanFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.NOT_BOOLEAN",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
+      messageParameters = Map("filterExpr" -> toPrettySQL(filterExpr)))
   }
 
-  def aggregateInAggregateFilterError(): Throwable = {
+  def aggregateInAggregateFilterError(
+      filterExpr: Expression,
+      aggExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.CONTAINS_AGGREGATE",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
+      messageParameters = Map(
+        "filterExpr" -> toPrettySQL(filterExpr),
+        "aggExpr" -> toPrettySQL(aggExpr)))
   }
 
-  def windowFunctionInAggregateFilterError(): Throwable = {
+  def windowFunctionInAggregateFilterError(
+      filterExpr: Expression,
+      windowExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.CONTAINS_WINDOW_FUNCTION",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
+      messageParameters = Map(
+        "filterExpr" -> toPrettySQL(filterExpr),
+        "windowExpr" -> toPrettySQL(windowExpr)))
   }
 
   def distinctInverseDistributionFunctionUnsupportedError(funcName: String): Throwable = {

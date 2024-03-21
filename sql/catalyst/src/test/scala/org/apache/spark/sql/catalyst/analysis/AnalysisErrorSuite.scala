@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -296,13 +296,17 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   }
 
   test("SPARK-47256: non deterministic FILTER expression in an aggregate function") {
-
     val plan =
       CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2")
     assertAnalysisErrorClass(
       inputPlan = plan,
-      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.NON_DETERMINISTIC",
-      expectedMessageParameters = Map.empty,
+      expectedErrorClass = "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
+      expectedMessageParameters = Map(
+        "filterExpr" -> toPrettySQL(
+          GreaterThan(
+            Rand(Cast(Literal("c"), IntegerType)),
+            Literal(1)))
+      ),
       queryContext = Array(
         ExpectedContext("count(a) FILTER (WHERE rand(int(c)) > 1)", 7, 46)))
   }
@@ -312,8 +316,10 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       CatalystSqlParser.parsePlan("SELECT sum(c) FILTER (WHERE e) FROM TaBlE2")
     assertAnalysisErrorClass(
       inputPlan = plan,
-      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.NOT_BOOLEAN",
-      expectedMessageParameters = Map.empty,
+      expectedErrorClass = "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
+      expectedMessageParameters = Map(
+        "filterExpr" -> toPrettySQL(Literal("e"))
+      ),
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE e)", 7, 29)))
   }
@@ -323,8 +329,14 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       CatalystSqlParser.parsePlan("SELECT sum(c) FILTER (WHERE max(e) > 1) FROM TaBlE2")
     assertAnalysisErrorClass(
       inputPlan = plan,
-      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.CONTAINS_AGGREGATE",
-      expectedMessageParameters = Map.empty,
+      expectedErrorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
+      expectedMessageParameters = Map(
+        "filterExpr" -> toPrettySQL(
+          GreaterThan(
+            Max(Literal("e")),
+            Literal(1))),
+        "aggExpr" -> toPrettySQL(Max(Literal("e")))
+      ),
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE max(e) > 1)", 7, 38)))
   }
@@ -335,8 +347,34 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "SELECT sum(c) FILTER (WHERE nth_value(e, 2) OVER(ORDER BY b) > 1) FROM TaBlE2")
     assertAnalysisErrorClass(
       inputPlan = plan,
-      expectedErrorClass = "AGGREGATE_FILTER_EXPRESSION_ERROR.CONTAINS_WINDOW_FUNCTION",
-      expectedMessageParameters = Map.empty,
+      expectedErrorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
+      expectedMessageParameters = Map(
+        "filterExpr" -> toPrettySQL(
+          GreaterThan(
+            WindowExpression(
+              NthValue(
+                input = Literal("e"),
+                offset = Literal(2),
+                ignoreNulls = false),
+              WindowSpecDefinition(
+                partitionSpec = Seq.empty,
+                orderSpec = Seq(SortOrder(Literal("b"), Ascending, NullsFirst, Seq.empty)),
+                frameSpecification = SpecifiedWindowFrame(
+                  RangeFrame, UnboundedPreceding, CurrentRow))),
+            Literal(1))),
+        "windowExpr" -> toPrettySQL(
+          WindowExpression(
+            NthValue(
+              input = Literal("e"),
+              offset = Literal(2),
+              ignoreNulls = false),
+            WindowSpecDefinition(
+              partitionSpec = Seq.empty,
+              orderSpec = Seq(SortOrder(Literal("b"), Ascending, NullsFirst, Seq.empty)),
+              frameSpecification = SpecifiedWindowFrame(
+                RangeFrame, UnboundedPreceding, CurrentRow)))
+        )
+      ),
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE nth_value(e, 2) OVER(ORDER BY b) > 1)", 7, 64)))
   }

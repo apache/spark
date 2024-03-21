@@ -1,32 +1,4 @@
 {
-  "AGGREGATE_FILTER_EXPRESSION_ERROR" : {
-    "message" : [
-      "FILTER expression in aggregate function has errors:"
-    ],
-    "subClass" : {
-      "CONTAINS_AGGREGATE" : {
-        "message" : [
-          "FILTER expression contains an aggregation."
-        ]
-      },
-      "CONTAINS_WINDOW_FUNCTION" : {
-        "message" : [
-          "FILTER expression contains window function."
-        ]
-      },
-      "NON_DETERMINISTIC" : {
-        "message" : [
-          "FILTER expression is non-deterministic."
-        ]
-      },
-      "NOT_BOOLEAN" : {
-        "message" : [
-          "FILTER expression is not of boolean type."
-        ]
-      }
-    },
-    "sqlState" : "42903"
-  },
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -1773,6 +1745,34 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
     ],
     "sqlState" : "22012"
+  },
+  "INVALID_AGGREGATE_FILTER" : {
+    "message" : [
+      "The FILTER expression <filterExpr> in an aggregate function is invalid."
+    ],
+    "subClass" : {
+      "CONTAINS_AGGREGATE" : {
+        "message" : [
+          "Expected a FILTER expression without aggregation, but found <aggExpr>."
+        ]
+      },
+      "CONTAINS_WINDOW_FUNCTION" : {
+        "message" : [
+          "Expected a FILTER expression without window functions, but found <windowExpr>."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Expected non-deterministic FILTER expression."
+        ]
+      },
+      "NOT_BOOLEAN" : {
+        "message" : [
+          "Expected FILTER expression of boolean type."
+        ]
+      }
+    },
+    "sqlState" : "42903"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [

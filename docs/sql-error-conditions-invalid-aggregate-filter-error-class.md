@@ -1,7 +1,7 @@
 ---
 layout: global
-title: AGGREGATE_FILTER_EXPRESSION_ERROR error class
-displayTitle: AGGREGATE_FILTER_EXPRESSION_ERROR error class
+title: INVALID_AGGREGATE_FILTER error class
+displayTitle: INVALID_AGGREGATE_FILTER error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -26,24 +26,24 @@ license: |
 
 [SQLSTATE: 42903](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-FILTER expression in aggregate function has errors:
+The FILTER expression `<filterExpr>` in an aggregate function is invalid.
 
 This error class has the following derived error classes:
 
 ## CONTAINS_AGGREGATE
 
-FILTER expression contains an aggregation.
+Expected a FILTER expression without aggregation, but found `<aggExpr>`.
 
 ## CONTAINS_WINDOW_FUNCTION
 
-FILTER expression contains window function.
+Expected a FILTER expression without window functions, but found `<windowExpr>`.
 
 ## NON_DETERMINISTIC
 
-FILTER expression is non-deterministic.
+Expected non-deterministic FILTER expression.
 
 ## NOT_BOOLEAN
 
-FILTER expression is not of boolean type.
+Expected FILTER expression of boolean type.
 
 

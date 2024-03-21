@@ -28,14 +28,6 @@ This is a list of common, named error conditions returned by Spark SQL.
 
 Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
 
-### [AGGREGATE_FILTER_EXPRESSION_ERROR](sql-error-conditions-aggregate-filter-expression-error-error-class.html)
-
-[SQLSTATE: 42903](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-FILTER expression in aggregate function has errors:
-
-For more details see [AGGREGATE_FILTER_EXPRESSION_ERROR](sql-error-conditions-aggregate-filter-expression-error-error-class.html)
-
 ### AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION
 
 [SQLSTATE: 42845](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1063,6 +1055,14 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 [SQLSTATE: 22012](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
+
+### [INVALID_AGGREGATE_FILTER](sql-error-conditions-invalid-aggregate-filter-error-class.html)
+
+[SQLSTATE: 42903](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The FILTER expression `<filterExpr>` in an aggregate function is invalid.
+
+For more details see [INVALID_AGGREGATE_FILTER](sql-error-conditions-invalid-aggregate-filter-error-class.html)
 
 ### INVALID_ARRAY_INDEX
 
