@@ -647,24 +647,26 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   trait ArrayCheckSimple extends ArrayCheck {
-    override def dataType: String = s"array<string>"
-    override def dataTypeCollated: String = s"array<string collate utf8_binary_lcase>"
+    override def dataType: String = "array<string>"
+    override def dataTypeCollated: String = "array<string collate utf8_binary_lcase>"
   }
 
   trait ArrayCheckNested extends ArrayCheck {
-    override def dataType: String = s"array<array<string>>"
-    override def dataTypeCollated: String = s"array<array<string collate utf8_binary_lcase>>"
+    override def dataType: String = "array<array<string>>"
+    override def dataTypeCollated: String = "array<array<string collate utf8_binary_lcase>>"
   }
 
   test("Aggregation of arrays built on collated strings") {
     abstract class AggCheck(val rows: Seq[String], val result: Seq[(Any, Int)]) extends ArrayCheck
 
-    case class AggCheckSimple(override val rows: Seq[String],
-                              override val result: Seq[(Seq[String], Int)])
+    case class AggCheckSimple(
+        override val rows: Seq[String],
+        override val result: Seq[(Seq[String], Int)])
       extends AggCheck(rows, result) with ArrayCheckSimple
 
-    case class AggCheckNested(override val rows: Seq[String],
-                              override val result: Seq[(Seq[Seq[String]], Int)])
+    case class AggCheckNested(
+        override val rows: Seq[String],
+        override val result: Seq[(Seq[Seq[String]], Int)])
       extends AggCheck(rows, result) with ArrayCheckNested
 
     val tableName = "test_agg_arr_collated"
@@ -735,19 +737,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("Join on arrays of collated strings") {
-    abstract class JoinCheck(val leftRows: Seq[String],
-                             val rightRows: Seq[String],
-                             val resultRows: Seq[Any])
+    abstract class JoinCheck(
+        val leftRows: Seq[String],
+        val rightRows: Seq[String],
+        val resultRows: Seq[Any])
       extends ArrayCheck
 
-    case class JoinSimpleCheck(override val leftRows: Seq[String],
-                               override val rightRows: Seq[String],
-                               override val resultRows: Seq[Seq[String]])
+    case class JoinSimpleCheck(
+        override val leftRows: Seq[String],
+        override val rightRows: Seq[String],
+        override val resultRows: Seq[Seq[String]])
       extends JoinCheck(leftRows, rightRows, resultRows) with ArrayCheckSimple
 
-    case class JoinNestedCheck(override val leftRows: Seq[String],
-                               override val rightRows: Seq[String],
-                               override val resultRows: Seq[Seq[Seq[String]]])
+    case class JoinNestedCheck(
+        override val leftRows: Seq[String],
+        override val rightRows: Seq[String],
+        override val resultRows: Seq[Seq[Seq[String]]])
       extends JoinCheck(leftRows, rightRows, resultRows) with ArrayCheckNested
 
     val tablePrefix = "test_join_arr_collated"
