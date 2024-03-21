@@ -48,6 +48,6 @@ The target relation `<relationId>` is also being read from.
 
 ## MULTI_PATH
 
-Can only write data to relations with a single path but given paths are <paths>.
+Can only write data to relations with a single path but given paths are `<paths>`.
 
 
