@@ -888,27 +888,6 @@ case class MapFromEntries(child: Expression)
     copy(child = newChild)
 }
 
-@ExpressionDescription(
-  usage = """
-    _FUNC_(map[, ascendingOrder]) - Sorts the input map in ascending or descending order
-      according to the natural ordering of the map keys. The algorithm used for sorting is
-      an adaptive, stable and iterative algorithm. If the input map is empty, function
-      returns an empty map.
-  """,
-  arguments =
-    """
-    Arguments:
-      * map - The map that will be sorted.
-      * ascendingOrder - A boolean value describing the order in which the map will be sorted.
-          This can be either be ascending (true) or descending (false).
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(map(3, 'c', 1, 'a', 2, 'b'), true);
-       {1:"a",2:"b",3:"c"}
-  """,
-  group = "map_funcs",
-  since = "4.0.0")
 case class MapSort(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with NullIntolerant with QueryErrorsBase {
 
