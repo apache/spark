@@ -786,12 +786,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Default jdbc dialect registration") {
-    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
-    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
-    assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
-    assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
-    assert(JdbcDialects.get("jdbc:derby:db") == DerbyDialect)
-    assert(JdbcDialects.get("test.invalid") == NoopDialect)
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") === MySQLDialect())
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") === PostgresDialect())
+    assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") === DB2Dialect())
+    assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") === MsSqlServerDialect())
+    assert(JdbcDialects.get("jdbc:derby:db") === DerbyDialect())
+    assert(JdbcDialects.get("test.invalid") === NoopDialect)
   }
 
   test("quote column names by jdbc dialect") {
@@ -846,13 +846,13 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("Dialect unregister") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(H2Dialect())
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       JdbcDialects.unregisterDialect(testH2Dialect)
       assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
     } finally {
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(H2Dialect())
     }
   }
 
@@ -997,7 +997,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
     assert(
-      OracleDialect
+      OracleDialect()
         .getJdbcSQLQueryBuilder(options)
         .withColumns(Array("a", "b"))
         .withLimit(123)
@@ -1053,7 +1053,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
     assert(
-      MsSqlServerDialect
+      MsSqlServerDialect()
         .getJdbcSQLQueryBuilder(options)
         .withColumns(Array("a", "b"))
         .withLimit(123)
@@ -1066,7 +1066,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
     assert(
-      DB2Dialect
+      DB2Dialect()
         .getJdbcSQLQueryBuilder(options)
         .withColumns(Array("a", "b"))
         .withLimit(123)
@@ -1938,20 +1938,20 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-28552: Case-insensitive database URLs in JdbcDialect") {
-    assert(JdbcDialects.get("jdbc:mysql://localhost/db") === MySQLDialect)
-    assert(JdbcDialects.get("jdbc:MySQL://localhost/db") === MySQLDialect)
-    assert(JdbcDialects.get("jdbc:postgresql://localhost/db") === PostgresDialect)
-    assert(JdbcDialects.get("jdbc:postGresql://localhost/db") === PostgresDialect)
-    assert(JdbcDialects.get("jdbc:db2://localhost/db") === DB2Dialect)
-    assert(JdbcDialects.get("jdbc:DB2://localhost/db") === DB2Dialect)
-    assert(JdbcDialects.get("jdbc:sqlserver://localhost/db") === MsSqlServerDialect)
-    assert(JdbcDialects.get("jdbc:sqlServer://localhost/db") === MsSqlServerDialect)
-    assert(JdbcDialects.get("jdbc:derby://localhost/db") === DerbyDialect)
-    assert(JdbcDialects.get("jdbc:derBy://localhost/db") === DerbyDialect)
-    assert(JdbcDialects.get("jdbc:oracle://localhost/db") === OracleDialect)
-    assert(JdbcDialects.get("jdbc:Oracle://localhost/db") === OracleDialect)
-    assert(JdbcDialects.get("jdbc:teradata://localhost/db") === TeradataDialect)
-    assert(JdbcDialects.get("jdbc:Teradata://localhost/db") === TeradataDialect)
+    assert(JdbcDialects.get("jdbc:mysql://localhost/db") === MySQLDialect())
+    assert(JdbcDialects.get("jdbc:MySQL://localhost/db") === MySQLDialect())
+    assert(JdbcDialects.get("jdbc:postgresql://localhost/db") === PostgresDialect())
+    assert(JdbcDialects.get("jdbc:postGresql://localhost/db") === PostgresDialect())
+    assert(JdbcDialects.get("jdbc:db2://localhost/db") === DB2Dialect())
+    assert(JdbcDialects.get("jdbc:DB2://localhost/db") === DB2Dialect())
+    assert(JdbcDialects.get("jdbc:sqlserver://localhost/db") === MsSqlServerDialect())
+    assert(JdbcDialects.get("jdbc:sqlServer://localhost/db") === MsSqlServerDialect())
+    assert(JdbcDialects.get("jdbc:derby://localhost/db") === DerbyDialect())
+    assert(JdbcDialects.get("jdbc:derBy://localhost/db") === DerbyDialect())
+    assert(JdbcDialects.get("jdbc:oracle://localhost/db") === OracleDialect())
+    assert(JdbcDialects.get("jdbc:Oracle://localhost/db") === OracleDialect())
+    assert(JdbcDialects.get("jdbc:teradata://localhost/db") === TeradataDialect())
+    assert(JdbcDialects.get("jdbc:Teradata://localhost/db") === TeradataDialect())
   }
 
   test("SQLContext.jdbc (deprecated)") {
@@ -2099,7 +2099,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-45139: DatabricksDialect url handling") {
-    assert(JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com") == DatabricksDialect)
+    assert(JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com") ===
+      DatabricksDialect())
   }
 
   test("SPARK-45139: DatabricksDialect catalyst type mapping") {
@@ -2153,5 +2154,13 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
     val expected = Map("percentile_approx_val" -> 49)
     assert(namedObservation.get === expected)
+  }
+
+  test("SPARK-47496: ServiceLoader support for JDBC dialects") {
+    var dialect = JdbcDialects.get("jdbc:dummy:dummy_host:dummy_port/dummy_db")
+    assert(dialect.isInstanceOf[DummyDatabaseDialect])
+    JdbcDialects.unregisterDialect(dialect)
+    dialect = JdbcDialects.get("jdbc:dummy:dummy_host:dummy_port/dummy_db")
+    assert(dialect === NoopDialect)
   }
 }
