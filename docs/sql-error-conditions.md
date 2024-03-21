@@ -28,6 +28,14 @@ This is a list of common, named error conditions returned by Spark SQL.
 
 Also see [SQLSTATE Codes](sql-error-conditions-sqlstates.html).
 
+### [AGGREGATE_FILTER_EXPRESSION_ERROR](sql-error-conditions-aggregate-filter-expression-error-error-class.html)
+
+[SQLSTATE: 42903](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+FILTER expression in aggregate function has errors:
+
+For more details see [AGGREGATE_FILTER_EXPRESSION_ERROR](sql-error-conditions-aggregate-filter-expression-error-error-class.html)
+
 ### AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION
 
 [SQLSTATE: 42845](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

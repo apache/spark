@@ -4,16 +4,6 @@
       "FILTER expression in aggregate function has errors:"
     ],
     "subClass" : {
-      "NON_DETERMINISTIC" : {
-        "message" : [
-          "FILTER expression is non-deterministic."
-        ]
-      },
-      "NOT_BOOLEAN" : {
-        "message" : [
-          "FILTER expression is not of boolean type."
-        ]
-      },
       "CONTAINS_AGGREGATE" : {
         "message" : [
           "FILTER expression contains an aggregation."
@@ -22,6 +12,16 @@
       "CONTAINS_WINDOW_FUNCTION" : {
         "message" : [
           "FILTER expression contains window function."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "FILTER expression is non-deterministic."
+        ]
+      },
+      "NOT_BOOLEAN" : {
+        "message" : [
+          "FILTER expression is not of boolean type."
         ]
       }
     },
