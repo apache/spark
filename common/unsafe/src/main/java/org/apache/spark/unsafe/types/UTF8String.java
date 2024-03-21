@@ -549,7 +549,48 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return 0;
   }
 
-  /**
+  public int findInSet(UTF8String match, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.findInSet(match);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return this.toLowerCase().findInSet(match.toLowerCase());
+    }
+    return collatedFindInSet(match, collationId);
+}
+
+  private int collatedFindInSet(UTF8String match, int collationId) {
+    if (match.contains(COMMA_UTF8)) {
+      return 0;
+    }
+
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, match, collationId);
+
+    String setString = this.toString();
+    int wordStart = 0;
+    while ((wordStart = stringSearch.next()) != StringSearch.DONE) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
+        boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
+                || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
+
+        if(isValidStart && isValidEnd) {
+          int pos = 0;
+          for(int i = 0; i < setString.length() && i < wordStart; i++) {
+            if(setString.charAt(i) == ',') {
+              pos++;
+            }
+          }
+
+          return pos + 1;
+        }
+      }
+    }
+
+    return 0;
+  }
+
+    /**
    * Copy the bytes from the current UTF8String, and make a new UTF8String.
    * @param start the start position of the current UTF8String in bytes.
    * @param end the end position of the current UTF8String in bytes.

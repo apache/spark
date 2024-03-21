@@ -117,6 +117,51 @@ class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession 
     })
   }
 
+  test("Support FindInSet with Collation") {
+    // Supported collations
+    val checks = Seq(
+      CollationTestCase("a", "abc,b,ab,c,def", "UTF8_BINARY", 0),
+      CollationTestCase("c", "abc,b,ab,c,def", "UTF8_BINARY", 4),
+      CollationTestCase("abc", "abc,b,ab,c,def", "UTF8_BINARY", 1),
+      CollationTestCase("ab", "abc,b,ab,c,def", "UTF8_BINARY", 3),
+      CollationTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
+      CollationTestCase("Ab", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 3),
+      CollationTestCase("ab", "abc,b,ab,c,def", "UNICODE", 3),
+      CollationTestCase("aB", "abc,b,ab,c,def", "UNICODE", 0),
+      CollationTestCase("AB", "abc,b,ab,c,def", "UNICODE_CI", 3)
+    )
+    checks.foreach(ct => {
+      checkAnswer(sql(s"SELECT find_in_set(collate('${ct.s1}', '${ct.collation}'), " +
+        s"collate('${ct.s2}', '${ct.collation}'))"),
+        Row(ct.expectedResult))
+    })
+    // Unsupported collation pairs
+    val fails = Seq(
+      SubstringIndexTestFail("a", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", "UTF8_BINARY"),
+      SubstringIndexTestFail("a", "abc,b,ab,c,def", "UNICODE_CI", "UNICODE")
+    )
+    fails.foreach(ct => {
+      val expr = s"find_in_set(collate('${ct.s1}', '${ct.c1}'), collate('${ct.s2}', '${ct.c2}'))"
+      checkError(
+        exception = intercept[ExtendedAnalysisException] {
+          sql(s"SELECT $expr")
+        },
+        errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
+        sqlState = "42K09",
+        parameters = Map(
+          "sqlExpr" -> s"\"find_in_set(collate(${ct.s1}), collate(${ct.s2}))\"",
+          "collationNameLeft" -> s"${ct.c1}",
+          "collationNameRight" -> s"${ct.c2}"
+        ),
+        context = ExpectedContext(
+          fragment = s"$expr",
+          start = 7,
+          stop = 51 + ct.s1.length + ct.c1.length + ct.s2.length + ct.c2.length
+        )
+      )
+    })
+  }
+
   // TODO: Add more tests for other string expressions
 
 }

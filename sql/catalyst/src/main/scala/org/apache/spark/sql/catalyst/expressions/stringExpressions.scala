@@ -1002,15 +1002,28 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
-  override protected def nullSafeEval(word: Any, set: Any): Any =
-    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
+  override protected def nullSafeEval(word: Any, set: Any): Any = {
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String], collationId)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (word, set) =>
       s"${ev.value} = $set.findInSet($word);"
     )
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
   }
 
   override def dataType: DataType = IntegerType
