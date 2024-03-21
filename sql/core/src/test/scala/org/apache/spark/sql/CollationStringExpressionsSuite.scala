@@ -79,7 +79,7 @@ class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession 
       RepeatCollationTestCase("Spark", 2, "UTF8_BINARY", "SparkSpark"),
       RepeatCollationTestCase("Spark", 2, "UTF8_BINARY_LCASE", "SparkSpark"),
       RepeatCollationTestCase("Spark", 2, "UNICODE", "SparkSpark"),
-      RepeatCollationTestCase("Spark", 2, "UNICODE_CI", "SparkSpark"),
+      RepeatCollationTestCase("Spark", 2, "UNICODE_CI", "SparkSpark")
     )
     checksRepeat.foreach(ct => {
       checkAnswer(sql(s"SELECT repeat(collate('${ct.s}', '${ct.collation}'), ${ct.n})"),
@@ -91,7 +91,7 @@ class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession 
       RepeatCollationTestCase("Spark", 2, "UTF8_BINARY", "UTF8_BINARY"),
       RepeatCollationTestCase("Spark", 2, "UTF8_BINARY_LCASE", "UTF8_BINARY_LCASE"),
       RepeatCollationTestCase("Spark", 2, "UNICODE", "UNICODE"),
-      RepeatCollationTestCase("Spark", 2, "UNICODE_CI", "UNICODE_CI"),
+      RepeatCollationTestCase("Spark", 2, "UNICODE_CI", "UNICODE_CI")
     )
     checksReturnType.foreach(ct => {
       checkAnswer(sql(s"SELECT collation(repeat(collate('${ct.s}', '${ct.collation}'), ${ct.n}))"),
