@@ -23,13 +23,13 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts.{castStringType, getOutputCollation, hasStringType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -609,9 +609,9 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
+        val collationId = getOutputCollation(c.children, failOnIndeterminate = false)
         val newChildren = c.children.map { e =>
-          if (e.dataType.isInstanceOf[StringType]) e
-          else implicitCast(e, StringType).getOrElse(e)
+          implicitCast(e, StringType(collationId)).getOrElse(e)
         }
 
         c.copy(children = newChildren)
@@ -659,9 +659,9 @@ abstract class TypeCoercionBase {
         val newIndex = implicitCast(index, IntegerType).getOrElse(index)
         val newInputs = if (conf.eltOutputAsString ||
           !children.tail.map(_.dataType).forall(_ == BinaryType)) {
+          val collationId = getOutputCollation(children, failOnIndeterminate = false)
           children.tail.map { e =>
-            if (e.dataType.isInstanceOf[StringType]) e
-            else implicitCast(e, StringType).getOrElse(e)
+            implicitCast(e, StringType(collationId)).getOrElse(e)
           }
         } else {
           children.tail
@@ -706,31 +706,39 @@ abstract class TypeCoercionBase {
         }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-        if (!e.children.exists(e => CollationTypeCasts.hasStringType(e.dataType))) {
-          val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
-            // If we cannot do the implicit cast, just use the original input.
-            case (in, expected) => implicitCast(in, expected).getOrElse(in)
-          }
-          e.withNewChildren(children)
+        val childrenBeforeCollations: Seq[Expression] = e.children.zip(e.inputTypes).map {
+          // If we cannot do the implicit cast, just use the original input.
+          case (in, expected) => implicitCast(in, expected).getOrElse(in)
         }
-        else {
-          e
+        val collationId = getOutputCollation(childrenBeforeCollations)
+        val children: Seq[Expression] = childrenBeforeCollations.map {
+          case in if hasStringType(in.dataType) =>
+            castStringType(in, collationId).getOrElse(in)
+          case in => in
         }
+        e.withNewChildren(children)
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
         // general implicit casting.
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+        val childrenBeforeCollations: Seq[Expression] =
+          e.children.zip(e.inputTypes).map { case (in, expected) =>
           if (in.dataType == NullType && !expected.acceptsType(NullType)) {
             Literal.create(null, expected.defaultConcreteType)
           } else {
             in
           }
         }
+        val collationId = getOutputCollation(childrenBeforeCollations)
+        val children: Seq[Expression] = childrenBeforeCollations.map {
+          case in if hasStringType(in.dataType) =>
+            castStringType(in, collationId).getOrElse(in)
+          case in => in
+        }
         e.withNewChildren(children)
 
       case udf: ScalaUDF if udf.inputTypes.nonEmpty =>
-        val children = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
+        val childrenBeforeCollations = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
           // Currently Scala UDF will only expect `AnyDataType` at top level, so this trick works.
           // In the future we should create types like `AbstractArrayType`, so that Scala UDF can
           // accept inputs of array type of arbitrary element type.
@@ -742,7 +750,12 @@ abstract class TypeCoercionBase {
               udfInputToCastType(in.dataType, expected.asInstanceOf[DataType])
             ).getOrElse(in)
           }
-
+        }
+        val collationId = getOutputCollation(childrenBeforeCollations)
+        val children: Seq[Expression] = childrenBeforeCollations.map {
+          case in if hasStringType(in.dataType) =>
+            castStringType(in, collationId).getOrElse(in)
+          case in => in
         }
         udf.copy(children = children)
     }
@@ -769,184 +782,6 @@ abstract class TypeCoercionBase {
             field.copy(dataType = newDt)
           })
         case (_, other) => other
-      }
-    }
-  }
-
-  object CollationTypeCasts extends TypeCoercionRule {
-    override val transform: PartialFunction[Expression, Expression] = {
-      case e if !e.childrenResolved => e
-
-      case checkCastWithIndeterminate: Concat
-        if shouldCast(checkCastWithIndeterminate.children) =>
-        val newChildren =
-          collateToSingleType(checkCastWithIndeterminate.children, failOnIndeterminate = false)
-        checkCastWithIndeterminate.withNewChildren(newChildren)
-
-      case checkCastWithoutIndeterminate@(_: BinaryExpression | _: In | _: SortOrder)
-        if shouldCast(checkCastWithoutIndeterminate.children) =>
-        val newChildren = collateToSingleType(checkCastWithoutIndeterminate.children)
-        checkCastWithoutIndeterminate.withNewChildren(newChildren)
-
-      case checkIndeterminate@(_: BinaryExpression | _: In | _: SortOrder)
-        if hasIndeterminate(checkIndeterminate.children
-          .filter(e => hasStringType(e.dataType))
-          .map(e => extractStringType(e.dataType))) =>
-        throw QueryCompilationErrors.indeterminateCollationError()
-
-      case checkImplicitCastInputTypes: ImplicitCastInputTypes
-        if checkImplicitCastInputTypes.children.exists(e => hasStringType(e.dataType))
-          && checkImplicitCastInputTypes.inputTypes.nonEmpty =>
-        val collationId: Int =
-          getOutputCollation(checkImplicitCastInputTypes
-            .children.filter { e => hasStringType(e.dataType) })
-        val children: Seq[Expression] = checkImplicitCastInputTypes
-          .children.zip(checkImplicitCastInputTypes.inputTypes).map {
-            case (e, st) if hasStringType(st) =>
-              castStringType(e, collationId, Some(st)).getOrElse(e)
-            case (e, TypeCollection(types)) if types.exists(hasStringType) =>
-              types.flatMap{ dt =>
-                if (hasStringType(dt)) {
-                  castStringType(e, collationId, Some(dt))
-                } else {
-                  implicitCast(e, dt)
-                }
-              }.headOption.getOrElse(e)
-            case (in, expected) => implicitCast(in, expected).getOrElse(in)
-          }
-        checkImplicitCastInputTypes.withNewChildren(children)
-
-      case checkExpectsInputType: ExpectsInputTypes
-        if checkExpectsInputType.children.exists(e => hasStringType(e.dataType))
-          && checkExpectsInputType.inputTypes.nonEmpty =>
-          val collationId: Int = getOutputCollation(
-            checkExpectsInputType.children.filter {e => hasStringType(e.dataType)})
-          val children: Seq[Expression] = checkExpectsInputType
-            .children.zip(checkExpectsInputType.inputTypes).map {
-            case (st, _) if hasStringType(st.dataType) =>
-              castStringType(st, collationId).getOrElse(st)
-            case (nt, e)
-              if hasStringType(e) && nt.dataType == NullType =>
-              castStringType(nt, collationId, Some(e)).getOrElse(nt)
-            case (nt, e: TypeCollection)
-              if hasStringType(e.defaultConcreteType) && nt.dataType == NullType =>
-              castStringType(nt, collationId, Some(e.defaultConcreteType)).getOrElse(nt)
-            case (in, _) => in
-            }
-          checkExpectsInputType.withNewChildren(children)
-    }
-
-    def shouldCast(types: Seq[Expression]): Boolean = {
-      types.filter(e => hasStringType(e.dataType))
-        .map(e => extractStringType(e.dataType).collationId).distinct.size > 1
-    }
-
-    /**
-     * Whether the data type contains StringType.
-     */
-    @tailrec
-    def hasStringType(dt: AbstractDataType): Boolean = dt match {
-      case _: StringType => true
-      case ArrayType(et, _) => hasStringType(et)
-      case _ => false
-    }
-
-    /**
-     * Extracts StringTypes from filtered hasStringType
-     */
-    @tailrec
-    private def extractStringType(dt: AbstractDataType): StringType = dt match {
-      case st: StringType => st
-      case ArrayType(et, _) => extractStringType(et)
-    }
-
-    private def castStringType(expr: Expression,
-                               collationId: Int,
-                               expected: Option[AbstractDataType] = None): Option[Expression] =
-      castStringType(expr.dataType, collationId, expected).map { dt =>
-        if (dt == expr.dataType) expr else Cast(expr, dt)
-      }
-
-    private def castStringType(inType: AbstractDataType,
-                               collationId: Int,
-                               expected: Option[AbstractDataType]): Option[DataType] = {
-      @Nullable val ret: DataType = inType match {
-        case st: StringType if st.collationId == collationId =>
-          st
-        case _: AtomicType
-          if expected.isEmpty || expected.get.defaultConcreteType.isInstanceOf[StringType] =>
-          StringType(collationId)
-        case ArrayType(arrType, nullable)
-          if expected.isEmpty || expected.get.defaultConcreteType.isInstanceOf[ArrayType] =>
-          castStringType(arrType, collationId, expected).map(ArrayType(_, nullable)).orNull
-        case _: NullType if expected.nonEmpty =>
-          castStringType(
-            expected.get.defaultConcreteType,
-            collationId,
-            expected).orNull
-        case _ => null
-      }
-      Option(ret)
-    }
-
-    /**
-     *  Collates the input expressions to a single collation.
-     */
-    def collateToSingleType(exprs: Seq[Expression],
-                            failOnIndeterminate: Boolean = true): Seq[Expression] = {
-      val collationId = getOutputCollation(exprs, failOnIndeterminate)
-
-      exprs.map(e => castStringType(e, collationId).getOrElse(e))
-    }
-
-    /**
-     * Based on the data types of the input expressions this method determines
-     * a collation type which the output will have.
-     */
-    def getOutputCollation(exprs: Seq[Expression], failOnIndeterminate: Boolean = true): Int = {
-      val explicitTypes = exprs.filter(hasExplicitCollation)
-        .map(e => extractStringType(e.dataType).collationId).distinct
-
-      explicitTypes.size match {
-        case 1 => explicitTypes.head
-        case size if size > 1 =>
-          throw QueryCompilationErrors
-            .explicitCollationMismatchError(
-              explicitTypes.map(t => StringType(t).typeName)
-            )
-        case 0 =>
-          val dataTypes = exprs.filter(e => hasStringType(e.dataType))
-            .map(e => extractStringType(e.dataType))
-
-          if (hasMultipleImplicits(dataTypes)) {
-            if (failOnIndeterminate) {
-              throw QueryCompilationErrors.implicitCollationMismatchError()
-            } else {
-              CollationFactory.INDETERMINATE_COLLATION_ID
-            }
-          }
-          else {
-            dataTypes.find(!_.isDefaultCollation)
-              .getOrElse(StringType)
-              .collationId
-          }
-      }
-    }
-
-    private def hasIndeterminate(dataTypes: Seq[DataType]): Boolean =
-      dataTypes.exists(dt => dt.isInstanceOf[StringType]
-        && dt.asInstanceOf[StringType].isIndeterminateCollation)
-
-
-    private def hasMultipleImplicits(dataTypes: Seq[StringType]): Boolean =
-      dataTypes.filter(!_.isDefaultCollation).map(_.collationId).distinct.size > 1
-
-    private def hasExplicitCollation(expression: Expression): Boolean = {
-      expression match {
-        case _: Collate => true
-        case e if e.dataType.isInstanceOf[ArrayType]
-        => expression.children.exists(hasExplicitCollation)
-        case _ => false
       }
     }
   }

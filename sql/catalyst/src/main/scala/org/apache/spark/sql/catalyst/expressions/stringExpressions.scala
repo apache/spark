@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{CollationTypeCasts, ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -304,7 +304,7 @@ case class Elt(
             "inputSql" -> toSQLExpr(indexExpr),
             "inputType" -> toSQLType(indexType)))
       }
-      if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+      if (inputTypes.exists(tpe => !tpe.isInstanceOf[StringType] && tpe != BinaryType)) {
         return DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
@@ -509,8 +509,7 @@ abstract class StringPredicate extends BinaryExpression
       return checkResult
     }
     // Additional check needed for collation compatibility
-    val outputCollationId: Int = TypeCoercion
-      .CollationTypeCasts
+    val outputCollationId: Int = CollationTypeCasts
       .getOutputCollation(Seq(left, right))
     TypeCheckResult.TypeCheckSuccess
   }
