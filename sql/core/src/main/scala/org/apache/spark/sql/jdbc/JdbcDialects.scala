@@ -157,6 +157,14 @@ abstract class JdbcDialect extends Serializable with Logging {
   def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
 
   /**
+   * Converts an instance of `java.sql.Date` to a custom `java.sql.Date` value.
+   * @param d the date value returned from JDBC ResultSet getDate method.
+   * @return the date value after conversion
+   */
+  @Since("4.0.0")
+  def convertDateToDate(d: Date): Date = d
+
+  /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
    * value stored in a remote database.
    * JDBC dialects should override this function to provide implementations that suit their
