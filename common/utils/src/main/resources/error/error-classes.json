@@ -4364,6 +4364,11 @@
         "message" : [
           "The target relation <relationId> is also being read from."
         ]
+      },
+      "MULTI_PATH" : {
+        "message" : [
+          "Can only write data to relations with a single path but given paths are <paths>."
+        ]
       }
     },
     "sqlState" : "42809"
@@ -5267,11 +5272,6 @@
   "_LEGACY_ERROR_TEMP_1147" : {
     "message" : [
       "The ordering of partition columns is <partColumns>. All partition columns having constant values need to appear before other partition columns that do not have an assigned constant value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1148" : {
-    "message" : [
-      "Can only write data to relations with a single path but given paths are <paths>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1149" : {

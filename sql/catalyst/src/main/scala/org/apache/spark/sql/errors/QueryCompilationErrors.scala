@@ -1711,7 +1711,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotWriteDataToRelationsWithMultiplePathsError(paths: Seq[Path]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1148",
+      errorClass = "UNSUPPORTED_INSERT.MULTI_PATH",
       messageParameters = Map(
         "paths" -> paths.mkString("[", ",", "]")))
   }
