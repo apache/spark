@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
+
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, CreateArray, Elt, ExpectsInputTypes, Expression, Predicate, SortOrder}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
