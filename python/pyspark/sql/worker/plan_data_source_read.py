@@ -249,7 +249,7 @@ def main(infile: IO, outfile: IO) -> None:
         if not is_streaming:
             # The partitioning of python batch source read is determined before query execution.
             try:
-                partitions = reader.partitions()
+                partitions = reader.partitions()  # type: ignore[attr-defined]
                 if not isinstance(partitions, list):
                     raise PySparkRuntimeError(
                         error_class="DATA_SOURCE_TYPE_MISMATCH",
