@@ -1,4 +1,32 @@
 {
+  "AGGREGATE_FILTER_EXPRESSION_ERROR" : {
+    "message" : [
+      "FILTER expression in aggregate function has errors:"
+    ],
+    "subClass" : {
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "FILTER expression is non-deterministic."
+        ]
+      },
+      "NOT_BOOLEAN" : {
+        "message" : [
+          "FILTER expression is not of boolean type."
+        ]
+      },
+      "CONTAINS_AGGREGATE" : {
+        "message" : [
+          "FILTER expression contains an aggregation."
+        ]
+      },
+      "CONTAINS_WINDOW_FUNCTION" : {
+        "message" : [
+          "FILTER expression contains window function."
+        ]
+      }
+    },
+    "sqlState" : "42903"
+  },
   "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION" : {
     "message" : [
       "Non-deterministic expression <sqlExpr> should not appear in the arguments of an aggregate function."
@@ -4626,33 +4654,6 @@
       "<rowTag> option is required for reading files in XML format."
     ],
     "sqlState" : "42KDF"
-  },
-  "AGGREGATE_FILTER_EXPRESSION_ERROR" : {
-    "message" : [
-      "FILTER expression in aggregate function has errors:"
-    ],
-    "subClass" : {
-      "NON_DETERMINISTIC" : {
-        "message" : [
-          "FILTER expression is non-deterministic."
-        ]
-      },
-      "NOT_BOOLEAN" : {
-        "message" : [
-          "FILTER expression is not of boolean type."
-        ]
-      },
-      "CONTAINS_AGGREGATE" : {
-        "message" : [
-          "FILTER expression contains an aggregation."
-        ]
-      },
-      "CONTAINS_WINDOW_FUNCTION" : {
-        "message" : [
-          "FILTER expression contains window function."
-        ]
-      }
-    }
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
