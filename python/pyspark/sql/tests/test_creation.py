@@ -1,0 +1,177 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+import platform
+from decimal import Decimal
+import os
+import time
+import unittest
+
+from pyspark.sql import Row
+from pyspark.sql.types import (
+    DateType,
+    TimestampType,
+    TimestampNTZType,
+)
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkValueError,
+)
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    have_pandas,
+    pandas_requirement_message,
+)
+from pyspark.testing.utils import QuietTest
+
+
+class DataFrameCreationTestsMixin:
+    def test_create_dataframe_from_array_of_long(self):
+        import array
+
+        data = [Row(longarray=array.array("l", [-9223372036854775808, 0, 9223372036854775807]))]
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_create_dataframe_from_pandas_with_timestamp(self):
+        import pandas as pd
+        from datetime import datetime
+
+        pdf = pd.DataFrame(
+            {"ts": [datetime(2017, 10, 31, 1, 1, 1)], "d": [pd.Timestamp.now().date()]},
+            columns=["d", "ts"],
+        )
+        # test types are inferred correctly without specifying schema
+        df = self.spark.createDataFrame(pdf)
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
+        # test with schema will accept pdf as input
+        df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
+        df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp_ntz")
+        self.assertIsInstance(df.schema["ts"].dataType, TimestampNTZType)
+        self.assertIsInstance(df.schema["d"].dataType, DateType)
+
+    @unittest.skipIf(have_pandas, "Required Pandas was found.")
+    def test_create_dataframe_required_pandas_not_found(self):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                ImportError, "(Pandas >= .* must be installed|No module named '?pandas'?)"
+            ):
+                import pandas as pd
+                from datetime import datetime
+
+                pdf = pd.DataFrame(
+                    {"ts": [datetime(2017, 10, 31, 1, 1, 1)], "d": [pd.Timestamp.now().date()]}
+                )
+                self.spark.createDataFrame(pdf)
+
+    # Regression test for SPARK-23360
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    def test_create_dataframe_from_pandas_with_dst(self):
+        import pandas as pd
+        from pandas.testing import assert_frame_equal
+        from datetime import datetime
+
+        pdf = pd.DataFrame({"time": [datetime(2015, 10, 31, 22, 30)]})
+
+        df = self.spark.createDataFrame(pdf)
+        assert_frame_equal(pdf, df.toPandas())
+
+        orig_env_tz = os.environ.get("TZ", None)
+        try:
+            tz = "America/Los_Angeles"
+            os.environ["TZ"] = tz
+            time.tzset()
+            with self.sql_conf({"spark.sql.session.timeZone": tz}):
+                df = self.spark.createDataFrame(pdf)
+                assert_frame_equal(pdf, df.toPandas())
+        finally:
+            del os.environ["TZ"]
+            if orig_env_tz is not None:
+                os.environ["TZ"] = orig_env_tz
+            time.tzset()
+
+    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(),
+        "Fails in PyPy Python 3.8, should enable.",
+    )
+    def test_create_dataframe_from_pandas_with_day_time_interval(self):
+        # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
+        import pandas as pd
+        from datetime import timedelta
+
+        df = self.spark.createDataFrame(pd.DataFrame({"a": [timedelta(microseconds=123)]}))
+        self.assertEqual(df.toPandas().a.iloc[0], timedelta(microseconds=123))
+
+    # test for SPARK-36337
+    def test_create_nan_decimal_dataframe(self):
+        self.assertEqual(
+            self.spark.createDataFrame(data=[Decimal("NaN")], schema="decimal").collect(),
+            [Row(value=None)],
+        )
+
+    def test_invalid_argument_create_dataframe(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame([(1, 2)], schema=123)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+            message_parameters={"arg_name": "schema", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.createDataFrame(self.spark.range(1))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_TYPE",
+            message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
+        )
+
+    def test_partial_inference_failure(self):
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.createDataFrame([(None, 1)])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_DETERMINE_TYPE",
+            message_parameters={},
+        )
+
+
+class DataFrameCreationTests(
+    DataFrameCreationTestsMixin,
+    ReusedSQLTestCase,
+):
+    pass
+
+
+if __name__ == "__main__":
+    from pyspark.sql.tests.test_creation import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
