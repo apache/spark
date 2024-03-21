@@ -427,8 +427,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
 
   def convert(v: UTF8String): UTF8String
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType)
+  override def dataType: DataType = child.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   protected override def nullSafeEval(input: Any): Any =
     convert(input.asInstanceOf[UTF8String])
@@ -501,26 +501,15 @@ abstract class StringPredicate extends BinaryExpression
 
   def compare(l: UTF8String, r: UTF8String): Boolean
 
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val checkResult = super.checkInputDataTypes()
-    if (checkResult.isFailure) {
-      return checkResult
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
     }
-    // Additional check needed for collation compatibility
-    val rightCollationId: Int = right.dataType.asInstanceOf[StringType].collationId
-    if (collationId != rightCollationId) {
-      DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> CollationFactory.fetchCollation(collationId).collationName,
-          "collationNameRight" -> CollationFactory.fetchCollation(rightCollationId).collationName
-        )
-      )
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
+    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
   }
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
@@ -1976,7 +1965,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   override def dataType: DataType = str.dataType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
+    Seq(TypeCollection(StringTypeAnyCollation, BinaryType), IntegerType, IntegerType)
 
   override def first: Expression = str
   override def second: Expression = pos

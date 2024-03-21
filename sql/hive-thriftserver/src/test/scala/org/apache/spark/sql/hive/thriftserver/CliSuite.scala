@@ -159,7 +159,7 @@ class CliSuite extends SparkFunSuite {
         }
       } else {
         errorResponses.foreach { r =>
-          if (line.contains(r)) {
+          if (line.contains(r) && !line.contains("IntentionallyFaultyConnectionProvider")) {
             foundAllExpectedAnswers.tryFailure(
               new RuntimeException(s"Failed with error line '$line'"))
           }
