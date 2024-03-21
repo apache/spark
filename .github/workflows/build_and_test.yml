@@ -396,6 +396,12 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
+    - name: Free up disk space
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        if [ -f ./dev/free_disk_space_container ]; then
+          ./dev/free_disk_space_container
+        fi
     - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v3
       with:
@@ -493,6 +499,12 @@ jobs:
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           sparkr-coursier-
+    - name: Free up disk space
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        if [ -f ./dev/free_disk_space_container ]; then
+          ./dev/free_disk_space_container
+        fi
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v3
       with:
@@ -571,6 +583,11 @@ jobs:
         key: docs-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           docs-maven-
+    - name: Free up disk space
+      run: |
+        if [ -f ./dev/free_disk_space_container ]; then
+          ./dev/free_disk_space_container
+        fi
     - name: Install Java 8
       uses: actions/setup-java@v3
       with:
