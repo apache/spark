@@ -980,6 +980,7 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
     val c = ctx.freshName("c")
     val newKeys = ctx.freshName("newKeys")
     val newValues = ctx.freshName("newValues")
+    val sortOrder = ctx.freshName("sortOrder")
 
     val boxedKeyType = CodeGenerator.boxedType(keyType)
     val boxedValueType = CodeGenerator.boxedType(valueType)
@@ -1011,13 +1012,13 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
        |    ${CodeGenerator.getValue(keys, keyType, i)},
        |    ${CodeGenerator.getValue(values, valueType, i)});
        |}
-       |
+       |final int $sortOrder = $order ? 1 : -1;
        |java.util.Arrays.sort($sortArray, new java.util.Comparator<Object>() {
        |  @Override public int compare(Object $o1entry, Object $o2entry) {
        |    Object $o1 = (($simpleEntryType) $o1entry).getKey();
        |    Object $o2 = (($simpleEntryType) $o2entry).getKey();
        |    $comp;
-       |    return $order ? $c : -$c;
+       |    return $sortOrder * $c;
        |  }
        |});
        |
