@@ -322,8 +322,8 @@ case class TransformWithStateExec(
 
     if (hasInitialState) {
       val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
-      val hadoopConfBroadcast =
-        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf())
+      val hadoopConfBroadcast = sparkContext.broadcast(
+        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
       child.execute().stateStoreAwareZipPartitions(
         initialState.execute(),
         getStateInfo,
@@ -344,7 +344,7 @@ case class TransformWithStateExec(
               version = stateInfo.get.storeVersion,
               useColumnFamilies = true,
               storeConf = storeConf,
-              hadoopConf = hadoopConfBroadcast.value
+              hadoopConf = hadoopConfBroadcast.value.value
             )
 
             processDataWithInitialState(store, childDataIterator, initStateIterator)
@@ -366,7 +366,7 @@ case class TransformWithStateExec(
               numColsPrefixKey = 0,
               useColumnFamilies = true,
               storeConf = new StateStoreConf(sqlConf),
-              hadoopConf = hadoopConfBroadcast.value,
+              hadoopConf = hadoopConfBroadcast.value.value,
               useMultipleValuesPerKey = true)
             val store = stateStoreProvider.getStore(0)
 
