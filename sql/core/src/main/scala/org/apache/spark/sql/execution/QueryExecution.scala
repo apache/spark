@@ -258,11 +258,11 @@ class QueryExecution(
       QueryPlan.append(executedPlan,
         append, verbose = false, addSuffix = false, maxFields = maxFields)
     }
-    if (sparkSession.sessionState.conf.planExplainExtensionsEnabled) {
-      val extensionsInfo = executedPlan.extensionsInfo()
-      if (extensionsInfo.nonEmpty) {
-        append("\n== Extended Information ==\n")
-        append(extensionsInfo)
+    if (sparkSession.sessionState.conf.enableExtensionInfo) {
+      val extInfo = extensionInfo()
+      if (extInfo.nonEmpty) {
+        append(s"\n== Extended Information ==\n")
+        append(extInfo)
       }
     }
     append("\n")
@@ -306,6 +306,18 @@ class QueryExecution(
     }
   }
 
+  def extensionInfo(mode: ExplainMode = SimpleMode): String = {
+    mode match {
+      case SimpleMode =>
+        executedPlan.summaryExtensionInfoSimple().mkString("\n")
+      case ExtendedMode =>
+        val sb = new StringBuilder
+        executedPlan.summaryExtensionInfo(0, sb)
+        sb.toString
+      case _ => ""
+    }
+  }
+
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
     append("== Parsed Logical Plan ==\n")
@@ -324,11 +336,11 @@ class QueryExecution(
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
       append("\n== Physical Plan ==\n")
       QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
-      if (sparkSession.sessionState.conf.planExplainExtensionsEnabled) {
-        val extensionsInfo = executedPlan.extensionsInfo()
-        if (extensionsInfo.nonEmpty) {
+      if (sparkSession.sessionState.conf.enableExtensionInfo) {
+        val extInfo = extensionInfo()
+        if (extInfo.nonEmpty) {
           append("\n== Extended Information ==\n")
-          append(extensionsInfo)
+          append(extInfo)
         }
       }
     } catch {

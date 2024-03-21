@@ -134,12 +134,12 @@ abstract class QueryStageExec extends LeafExecNode {
     lastChildren.remove(lastChildren.size() - 1)
   }
 
-  override def summaryExtensionsInfo(indent: Int, sb: StringBuilder): Unit = {
-    plan.summaryExtensionsInfo(indent, sb)
+  override def summaryExtensionInfo(indent: Int, sb: StringBuilder): Unit = {
+    plan.summaryExtensionInfo(indent, sb)
   }
 
-  override def summaryExtensionsInfoSimple(): mutable.Set[String] = {
-    plan.summaryExtensionsInfoSimple()
+  override def summaryExtensionInfoSimple(): mutable.Set[String] = {
+    plan.summaryExtensionInfoSimple()
   }
 
   override protected[sql] def cleanupResources(): Unit = {

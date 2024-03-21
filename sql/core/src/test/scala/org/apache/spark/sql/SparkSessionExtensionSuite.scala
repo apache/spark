@@ -545,13 +545,13 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
-  test("explain info") {
+  test("SPARK-47289: explain info") {
     val extensions = create { extensions =>
-      extensions.injectQueryStagePrepRule { _ => AddTagRule() }
+      extensions.injectQueryStagePrepRule { _ => ExplainPlanInfoTagRule() }
     }
     withSession(extensions) { session =>
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         import session.sqlContext.implicits._
         val left = Seq((1, 10L), (2, 100L), (3, 1000L)).toDF("l1", "l2")
         val right = Seq((1, 2), (2, 3), (3, 5)).toDF("r1", "r2")
@@ -559,8 +559,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         val df = data.selectExpr("l2 + r2")
         // execute the plan so that the final adaptive plan is available
         df.collect()
-        val info = df.queryExecution.executedPlan.extensionsInfo("extended")
-        val simpleInfo = df.queryExecution.executedPlan.extensionsInfo()
+        val info = df.queryExecution.extensionInfo(ExtendedMode)
+        val simpleInfo = df.queryExecution.extensionInfo()
         val expected = "  Project info: Project\n" +
           "    SMJ Info: SortMergeJoin\n" +
           "      Scan Info: LocalTableScan\n" +
@@ -611,19 +611,19 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
     delegate.parseQuery(sqlText)
 }
 
-case class AddTagRule() extends Rule[SparkPlan] {
+case class ExplainPlanInfoTagRule() extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = {
     plan.transform {
       case s: LocalTableScanExec =>
-        s.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO, s"Scan Info: ${s.nodeName}")
-        s.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO_SIMPLE, s"Scan Simple Info: ${s.nodeName}")
+        s.setTagValue(QueryPlan.EXTENSION_INFO, s"Scan Info: ${s.nodeName}")
+        s.setTagValue(QueryPlan.EXTENSION_INFO_SIMPLE, s"Scan Simple Info: ${s.nodeName}")
         s.withNewChildren(s.children)
       case s: SortMergeJoinExec =>
-        s.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO, s"SMJ Info: ${s.nodeName}")
-        s.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO_SIMPLE, s"SMJ Simple Info: ${s.nodeName}")
+        s.setTagValue(QueryPlan.EXTENSION_INFO, s"SMJ Info: ${s.nodeName}")
+        s.setTagValue(QueryPlan.EXTENSION_INFO_SIMPLE, s"SMJ Simple Info: ${s.nodeName}")
         s.withNewChildren(s.children)
       case p: ProjectExec =>
-        p.setTagValue(QueryPlan.EXPLAIN_PLAN_INFO, s"Project info: ${p.nodeName}")
+        p.setTagValue(QueryPlan.EXTENSION_INFO, s"Project info: ${p.nodeName}")
         p.withNewChildren(p.children)
     }
   }
