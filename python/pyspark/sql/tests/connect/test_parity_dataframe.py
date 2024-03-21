@@ -22,10 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_help_command(self):
-        super().test_help_command()
-
     # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
     def test_sample(self):
         super().test_sample()

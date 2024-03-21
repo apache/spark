@@ -136,8 +136,7 @@ class DataFrameTestsMixin:
 
     def test_help_command(self):
         # Regression test for SPARK-5464
-        rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
-        df = self.spark.read.json(rdd)
+        df = self.spark.createDataFrame([Row(foo="bar"), Row(foo="baz")])
         # render_doc() reproduces the help() exception without printing output
         pydoc.render_doc(df)
         pydoc.render_doc(df.foo)
