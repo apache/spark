@@ -1758,7 +1758,7 @@
       },
       "CONTAINS_WINDOW_FUNCTION" : {
         "message" : [
-          "Expected a FILTER expression without window functions, but found <windowExpr>."
+          "Expected a FILTER expression without window function, but found <windowExpr>."
         ]
       },
       "NON_DETERMINISTIC" : {

@@ -372,8 +372,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
               partitionSpec = Seq.empty,
               orderSpec = Seq(SortOrder(Literal("b"), Ascending, NullsFirst, Seq.empty)),
               frameSpecification = SpecifiedWindowFrame(
-                RangeFrame, UnboundedPreceding, CurrentRow)))
-        )
+                RangeFrame, UnboundedPreceding, CurrentRow))))
       ),
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE nth_value(e, 2) OVER(ORDER BY b) > 1)", 7, 64)))
