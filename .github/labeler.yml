@@ -129,8 +129,8 @@ DSTREAM:
     - any-glob-to-any-file: [
      'streaming/**/*',
      'data/streaming/**/*',
-     'connector/kinesis*',
-     'connector/kafka*',
+     'connector/kinesis*/**/*',
+     'connector/kafka*/**/*',
      'python/pyspark/streaming/**/*'
     ]
 
