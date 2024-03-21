@@ -38,12 +38,12 @@ public final class Variant {
     this.metadata = metadata;
     // There is currently only one allowed version.
     if (metadata.length < 1 || (metadata[0] & VERSION_MASK) != VERSION) {
-      throw new MalformedVariantException();
+      throw malformedVariant();
     }
     // Don't attempt to use a Variant larger than 16 MiB. We'll never produce one, and it risks
     // memory instability.
     if (metadata.length > SIZE_LIMIT || value.length > SIZE_LIMIT) {
-      throw new VariantConstructorSizeLimitException();
+      throw variantConstructorSizeLimit();
     }
   }
 
@@ -56,7 +56,7 @@ public final class Variant {
   }
 
   // Stringify the variant in JSON format.
-  // Throw `MalformedVariantException` if the variant is malformed.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public String toJson() {
     StringBuilder sb = new StringBuilder();
     toJsonImpl(value, metadata, 0, sb);

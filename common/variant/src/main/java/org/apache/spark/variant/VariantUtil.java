@@ -17,6 +17,10 @@
 
 package org.apache.spark.variant;
 
+import org.apache.spark.QueryContext;
+import org.apache.spark.SparkRuntimeException;
+import scala.collection.immutable.Map$;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
@@ -145,10 +149,25 @@ public class VariantUtil {
         ((offsetSize - 1) << BASIC_TYPE_BITS) | ARRAY);
   }
 
-  // Check the validity of an array index `pos`. Throw `MalformedVariantException` if it is out of
-  // bound, meaning that the variant is malformed.
+  // An exception indicating that the variant value or metadata doesn't
+  static SparkRuntimeException malformedVariant() {
+    return new SparkRuntimeException("MALFORMED_VARIANT",
+        Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
+  }
+
+  // An exception indicating that an external caller tried to call the Variant constructor with
+  // value or metadata exceeding the 16MiB size limit. We will never construct a Variant this large,
+  // so it should only be possible to encounter this exception when reading a Variant produced by
+  // another tool.
+  static SparkRuntimeException variantConstructorSizeLimit() {
+    return new SparkRuntimeException("VARIANT_CONSTRUCTOR_SIZE_LIMIT",
+        Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
+  }
+
+  // Check the validity of an array index `pos`. Throw `MALFORMED_VARIANT` if it is out of bound,
+  // meaning that the variant is malformed.
   static void checkIndex(int pos, int length) {
-    if (pos < 0 || pos >= length) throw new MalformedVariantException();
+    if (pos < 0 || pos >= length) throw malformedVariant();
   }
 
   // Read a little-endian signed long value from `bytes[pos, pos + numBytes)`.
@@ -178,7 +197,7 @@ public class VariantUtil {
       int unsignedByteValue = bytes[pos + i] & 0xFF;
       result |= unsignedByteValue << (8 * i);
     }
-    if (result < 0) throw new MalformedVariantException();
+    if (result < 0) throw malformedVariant();
     return result;
   }
 
@@ -198,7 +217,7 @@ public class VariantUtil {
   // Get the value type of variant value `value[pos...]`. It is only legal to call `get*` if
   // `getType` returns this type (for example, it is only legal to call `getLong` if `getType`
   // returns `Type.Long`).
-  // Throw `MalformedVariantException` if the variant is malformed.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static Type getType(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
@@ -231,7 +250,7 @@ public class VariantUtil {
           case LONG_STR:
             return Type.STRING;
           default:
-            throw new MalformedVariantException();
+            throw malformedVariant();
         }
     }
   }
@@ -241,7 +260,7 @@ public class VariantUtil {
   }
 
   // Get a boolean value from variant value `value[pos...]`.
-  // Throw `MalformedVariantException` if the variant is malformed.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static boolean getBoolean(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
@@ -253,7 +272,7 @@ public class VariantUtil {
   }
 
   // Get a long value from variant value `value[pos...]`.
-  // Throw `MalformedVariantException` if the variant is malformed.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static long getLong(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
@@ -274,7 +293,7 @@ public class VariantUtil {
   }
 
   // Get a double value from variant value `value[pos...]`.
-  // Throw `MalformedVariantException` if the variant is malformed.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static double getDouble(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
@@ -284,7 +303,7 @@ public class VariantUtil {
   }
 
   // Get a decimal value from variant value `value[pos...]`.
-  // Throw `MalformedVariantException` if the variant is malformed.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static BigDecimal getDecimal(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
@@ -316,7 +335,7 @@ public class VariantUtil {
   }
 
   // Get a string value from variant value `value[pos...]`.
-  // Throw `MalformedVariantException` if the variant is malformed.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static String getString(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
@@ -402,21 +421,21 @@ public class VariantUtil {
   }
 
   // Get a key at `id` in the variant metadata.
-  // Throw `MalformedVariantException` if the variant is malformed. An out-of-bound `id` is also
-  // considered a malformed variant because it is read from the corresponding variant value.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
+  // a malformed variant because it is read from the corresponding variant value.
   public static String getMetadataKey(byte[] metadata, int id) {
     checkIndex(0, metadata.length);
     // Extracts the highest 2 bits in the metadata header to determine the integer size of the
     // offset list.
     int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
     int dictSize = readUnsigned(metadata, 1, offsetSize);
-    if (id >= dictSize) throw new MalformedVariantException();
+    if (id >= dictSize) throw malformedVariant();
     // There are a header byte, a `dictSize` with `offsetSize` bytes, and `(dictSize + 1)` offsets
     // before the string data.
     int stringStart = 1 + (dictSize + 2) * offsetSize;
     int offset = readUnsigned(metadata, 1 + (id + 1) * offsetSize, offsetSize);
     int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
-    if (offset > nextOffset) throw new MalformedVariantException();
+    if (offset > nextOffset) throw malformedVariant();
     checkIndex(stringStart + nextOffset - 1, metadata.length);
     return new String(metadata, stringStart + offset, nextOffset - offset);
   }
