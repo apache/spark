@@ -25,7 +25,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
@@ -89,19 +90,14 @@ private object MsSqlServerDialect extends JdbcDialect {
 
     override def build(expr: Expression): String = {
       def isChildBooleanExpression(child: Expression): Boolean = child match {
-        case gse: GeneralScalarExpression =>
-          gse.name() match {
-            case "STARTS_WITH" | "ENDS_WITH" | "CONTAINS" | "IN" | "IS_NULL" | "IS_NOT_NULL" |
-                 "AND" | "OR" | "NOT" => true
-            case _ => false
-          }
+        case _: Predicate => true
         case _ => false
       }
 
       // MsSqlServer does not support boolean comparison using standard comparison operators
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
-        case e: GeneralScalarExpression =>
+        case e: Predicate =>
           e.name() match {
             case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
               if (isChildBooleanExpression(e.children()(0))
