@@ -590,7 +590,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return 0;
   }
 
-    /**
+  /**
    * Copy the bytes from the current UTF8String, and make a new UTF8String.
    * @param start the start position of the current UTF8String in bytes.
    * @param end the end position of the current UTF8String in bytes.
