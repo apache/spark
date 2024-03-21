@@ -294,6 +294,10 @@ private[spark] object SchemaUtils {
    */
   def escapeMetaCharacters(str: String): String = SparkSchemaUtils.escapeMetaCharacters(str)
 
+//  def convertCollatedToUTFBinarySchema(schema: StructType): StructType = {
+//    schema.existsRecursively()
+//  }
+
   /**
    * Checks if a given data type has a non-default collation string type.
    */
