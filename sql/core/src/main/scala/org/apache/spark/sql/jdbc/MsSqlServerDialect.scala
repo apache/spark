@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
-private object MsSqlServerDialect extends JdbcDialect {
+private case class MsSqlServerDialect() extends JdbcDialect {
 
   // Special JDBC types in Microsoft SQL Server.
   // https://github.com/microsoft/mssql-jdbc/blob/v9.4.1/src/main/java/microsoft/sql/Types.java

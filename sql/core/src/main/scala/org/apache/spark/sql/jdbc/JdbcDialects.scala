@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.ServiceLoader
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
@@ -46,6 +47,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -825,16 +827,14 @@ object JdbcDialects {
 
   private[this] var dialects = List[JdbcDialect]()
 
-  registerDialect(MySQLDialect)
-  registerDialect(PostgresDialect)
-  registerDialect(DB2Dialect)
-  registerDialect(MsSqlServerDialect)
-  registerDialect(DerbyDialect)
-  registerDialect(OracleDialect)
-  registerDialect(TeradataDialect)
-  registerDialect(H2Dialect)
-  registerDialect(SnowflakeDialect)
-  registerDialect(DatabricksDialect)
+  private def registerDialects(): Unit = {
+    val loader = ServiceLoader.load(classOf[JdbcDialect], Utils.getContextOrSparkClassLoader)
+    val iter = loader.iterator()
+    while (iter.hasNext) {
+      registerDialect(iter.next())
+    }
+  }
+  registerDialects()
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
