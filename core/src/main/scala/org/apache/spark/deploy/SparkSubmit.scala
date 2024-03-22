@@ -45,6 +45,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkExitCode.EXIT_FAILURE
 
 /**
  * Whether to submit, kill, or request the status of an application.
@@ -983,11 +984,19 @@ private[spark] class SparkSubmit extends Logging {
         e
     }
 
+    var DriverPodIsNormal: Boolean = if (args.master.startsWith("k8s")) true else false
+    var driverThrow: Throwable = null
     try {
       app.start(childArgs.toArray, sparkConf)
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        logWarning("Some ERR/Exception happened when app is running.")
+        if (args.master.startsWith("k8s")) {
+          DriverPodIsNormal = false
+          driverThrow = t
+        } else {
+          throw findCause(t)
+        }
     } finally {
       if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
@@ -996,6 +1005,13 @@ private[spark] class SparkSubmit extends Logging {
           SparkContext.getActive.foreach(_.stop())
         } catch {
           case e: Throwable => logError(s"Failed to close SparkContext: $e")
+        } finally {
+          if (SparkContext.getActive.isEmpty) {
+            if (!DriverPodIsNormal) {
+              logError(s"Driver Pod will exit because: $driverThrow")
+              System.exit(EXIT_FAILURE)
+            }
+          }
         }
       }
     }
