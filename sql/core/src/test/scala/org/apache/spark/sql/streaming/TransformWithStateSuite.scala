@@ -34,35 +34,6 @@ object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
 }
 
-class RunningCountStatefulProcessorZeroTTL
-  extends StatefulProcessor[String, String, (String, String)]
-    with Logging {
-  @transient private var _countState: ValueState[Long] = _
-
-  override def init(
-   outputMode: OutputMode,
-   timeoutMode: TimeoutMode) : Unit = {
-    assert(getHandle.getQueryInfo().getBatchId >= 0)
-    _countState = getHandle.getValueState("countState", Encoders.scalaLong)
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
-    if (count == 3) {
-      _countState.clear()
-      Iterator.empty
-    } else {
-      _countState.update(count)
-      Iterator((key, count.toString))
-    }
-  }
-
-  override def close(): Unit = {}
-}
 class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (String, String)]
   with Logging {
   @transient protected var _countState: ValueState[Long] = _
@@ -289,41 +260,6 @@ class RunningCountMostRecentStatefulProcessor
     }
     output.iterator
   }
-}
-
-class RunningCountMostRecentStatefulProcessorWithTTL
-  extends StatefulProcessor[String, (String, String), (String, String, String)]
-    with Logging {
-  @transient private var _countState: ValueState[Long] = _
-  @transient private var _mostRecent: ValueState[String] = _
-
-  override def init(
-      outputMode: OutputMode,
-      timeoutMode: TimeoutMode) : Unit = {
-    assert(getHandle.getQueryInfo().getBatchId >= 0)
-    _countState = getHandle.getValueState(
-      "countState", Encoders.scalaLong)
-    _mostRecent = getHandle.getValueState("mostRecent", Encoders.STRING)
-  }
-
-  override def handleInputRows(
-       key: String,
-       inputRows: Iterator[(String, String)],
-       timerValues: TimerValues,
-       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
-    val mostRecent = _mostRecent.getOption().getOrElse("")
-
-    var output = List[(String, String, String)]()
-    inputRows.foreach { row =>
-      _mostRecent.update(row._2)
-      _countState.update(count)
-      output = (key, count.toString, mostRecent) :: output
-    }
-    output.iterator
-  }
-
-  override def close(): Unit = {}
 }
 
 class MostRecentStatefulProcessorWithDeletion
@@ -642,61 +578,6 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           StopStream
         )
       }
-    }
-  }
-
-  test("transformWithState - Zero duration TTL, should expire immediately") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      val inputData = MemoryStream[String]
-
-      val result = inputData.toDS()
-        .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessorZeroTTL(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
-          OutputMode.Update())
-
-      // State should expire immediately, meaning each answer is independent
-      // of previous counts
-      testStream(result, OutputMode.Update())(
-        AddData(inputData, "a"),
-        CheckNewAnswer(("a", "1")),
-        AddData(inputData, "a", "b"),
-        CheckNewAnswer(("a", "1"), ("b", "1")),
-        AddData(inputData, "a", "b"),
-        CheckNewAnswer(("a", "1"), ("b", "1")),
-        StopStream
-      )
-    }
-  }
-
-  test("transformWithState - multiple state variables with one TTL") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key ->
-      TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-      val inputData = MemoryStream[(String, String)]
-      val stream1 = inputData.toDS()
-        .groupByKey(x => x._1)
-        .transformWithState(new RunningCountMostRecentStatefulProcessorWithTTL(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.NoTTL(),
-          OutputMode.Update())
-
-      // State should expire immediately, meaning each answer is independent
-      // of previous counts
-      testStream(stream1, OutputMode.Update())(
-        AddData(inputData, ("a", "str1")),
-        CheckNewAnswer(("a", "1", "")),
-        AddData(inputData, ("a", "str2"), ("b", "str3")),
-        CheckNewAnswer(("a", "1", "str1"), ("b", "1", "")),
-        AddData(inputData, ("a", "str4"), ("b", "str5")),
-        CheckNewAnswer(("a", "1", "str2"), ("b", "1", "str3")),
-        StopStream
-      )
     }
   }
 

@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.time.Duration
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
@@ -45,14 +46,15 @@ class SingleKeyTTLState(
     stateName: String,
     store: StateStore,
     batchTimestampMs: Option[Long],
-    eventTimeWatermarkMs: Option[Long],
-    state: StateVariableTTLSupport)
-  extends TTLState {
+    eventTimeWatermarkMs: Option[Long])
+  extends TTLState
+  with Logging {
 
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
 
   private val ttlColumnFamilyName = s"_ttl_$stateName"
   private val ttlKeyEncoder = UnsafeProjection.create(KEY_ROW_SCHEMA)
+  private var state: StateVariableTTLSupport = _
 
   // empty row used for values
   private val EMPTY_ROW =
@@ -82,6 +84,11 @@ class SingleKeyTTLState(
         store.remove(kv.key, ttlColumnFamilyName)
       }
     }
+  }
+
+  private[sql] def setStateVariable(
+      state: StateVariableTTLSupport): Unit = {
+    this.state = state
   }
 }
 

@@ -61,7 +61,7 @@ class ValueStateImpl[S](
 
     if (ttlMode != TTLMode.NoTTL()) {
       val _ttlState = new SingleKeyTTLState(ttlMode, stateName, store,
-        batchTimestampMs, eventTimeWatermarkMs, this)
+        batchTimestampMs, eventTimeWatermarkMs)
       ttlState = Some(_ttlState)
     }
   }
