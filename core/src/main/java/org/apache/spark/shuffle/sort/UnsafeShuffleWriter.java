@@ -52,12 +52,14 @@ import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
@@ -219,7 +221,15 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     updatePeakMemoryUsed();
     serBuffer = null;
     serOutputStream = null;
-    final SpillInfo[] spills = sorter.closeAndGetSpills();
+    Optional<File> finalDataFileDir;
+    if (shuffleExecutorComponents instanceof LocalDiskShuffleExecutorComponents) {
+      File dataFile =
+        new IndexShuffleBlockResolver(sparkConf, blockManager).getDataFile(shuffleId, mapId);
+      finalDataFileDir = Optional.of(dataFile.getParentFile());
+    } else {
+      finalDataFileDir = Optional.empty();
+    }
+    final SpillInfo[] spills = sorter.closeAndGetSpills(finalDataFileDir);
     try {
       partitionLengths = mergeSpills(spills);
     } finally {
