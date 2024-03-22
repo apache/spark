@@ -52,8 +52,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte) ++
     Array.fill(15)(0.toByte)
 
+  private val h2Dialect = JdbcDialects.get(url).asInstanceOf[H2Dialect]
+
   val testH2Dialect = new JdbcDialect {
-    override def canHandle(url: String): Boolean = H2Dialect.canHandle(url)
+    val h2 = JdbcDialects.get(url).asInstanceOf[H2Dialect]
+
+    override def canHandle(url: String): Boolean = h2.canHandle(url)
 
     override def supportsLimit: Boolean = false
 
@@ -102,7 +106,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       }
     }
 
-    override def functions: Seq[(String, UnboundFunction)] = H2Dialect.functions
+    override def functions: Seq[(String, UnboundFunction)] = h2.functions
   }
 
   case object CharLength extends ScalarFunction[Int] {
@@ -225,15 +229,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       stmt.setBytes(2, testBytes)
       stmt.executeUpdate()
     }
-    H2Dialect.registerFunction("my_avg", IntegralAverage)
-    H2Dialect.registerFunction("my_strlen", StrLen(CharLength))
-    H2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
-    H2Dialect.registerFunction(
+    h2Dialect.registerFunction("my_avg", IntegralAverage)
+    h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
+    h2Dialect.registerFunction("my_strlen_magic", StrLen(CharLengthWithMagicMethod))
+    h2Dialect.registerFunction(
       "my_strlen_static_magic", StrLen(new JavaStrLenStaticMagic()))
   }
 
   override def afterAll(): Unit = {
-    H2Dialect.clearFunctions()
+    h2Dialect.clearFunctions()
     Utils.deleteRecursively(tempDir)
     super.afterAll()
   }
@@ -340,7 +344,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df5, "PushedFilters: []")
     checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
 
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df6 = spark.read.table("h2.test.employee")
@@ -350,7 +354,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df6, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -437,7 +441,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df6, "PushedFilters: []")
     checkAnswer(df6, Seq(Row(10000.00, 1300.0, "dav"), Row(9000.00, 1200.0, "cat")))
 
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df7 = spark.read
@@ -450,7 +454,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df7, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -1590,7 +1594,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with filter push-down with UDF") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen(name) > 2")
@@ -1610,12 +1614,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
   test("scan with filter push-down with UDF that has magic method") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_magic(name) > 2")
@@ -1636,12 +1640,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
   test("scan with filter push-down with UDF that has static magic method") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT * FROM h2.test.people where h2.my_strlen_static_magic(name) > 2")
@@ -1662,7 +1666,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       checkAnswer(df2, Seq(Row("fred", 1), Row("mary", 2)))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -2872,8 +2876,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("register dialect specific functions") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+  test("register h2Dialect specific functions") {
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df = sql("SELECT h2.my_avg(id) FROM h2.test.people")
@@ -2905,12 +2909,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           stop = 20))
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
   test("scan with aggregate push-down: complete push-down UDAF") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       val df1 = sql("SELECT h2.my_avg(id) FROM h2.test.people")
@@ -2959,7 +2963,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       }
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -3006,7 +3010,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
   test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
     "jdbc function doesn't support identifiers consisting of more than 2 parts") {
-    JdbcDialects.unregisterDialect(H2Dialect)
+    JdbcDialects.unregisterDialect(h2Dialect)
     try {
       JdbcDialects.registerDialect(testH2Dialect)
       checkError(
@@ -3019,7 +3023,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       )
     } finally {
       JdbcDialects.unregisterDialect(testH2Dialect)
-      JdbcDialects.registerDialect(H2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 

@@ -39,6 +39,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{DebugFilesystem, SparkException, SparkFileNotFoundException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -1302,6 +1303,42 @@ class XmlSuite
     assert(result.select("decoded._corrupt_record").head().getString(0).nonEmpty)
   }
 
+  test("schema_of_xml with DROPMALFORMED parse error test") {
+    val e = intercept[AnalysisException] {
+       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
+         .collect()
+    }
+    checkError(
+      exception = e,
+      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      parameters = Map(
+        "funcName" -> "schema_of_xml",
+        "mode" -> "DROPMALFORMED",
+        "permissiveMode" -> "PERMISSIVE",
+        "failFastMode" -> FailFastMode.name)
+    )
+  }
+
+  test("schema_of_xml with FAILFAST parse error test") {
+    val e = intercept[SparkException] {
+       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
+         .collect()
+    }
+    checkError(
+      exception = e,
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map(
+        "failFastMode" -> FailFastMode.name)
+    )
+  }
+
+  test("schema_of_xml with PERMISSIVE check no error test") {
+      val s = spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'PERMISSIVE'))""")
+        .collect()
+      assert(s.head.get(0) == "STRUCT<_corrupt_record: STRING>")
+  }
+
+
   test("from_xml with PERMISSIVE parse mode with no corrupt col schema") {
     // XML contains error
     val xmlData =
@@ -1345,6 +1382,23 @@ class XmlSuite
     val df3 = df2.select(col("fromXML.*"))
     assert(df3.collect().length === 3)
     checkAnswer(df3, df)
+  }
+
+  test("to_xml: input must be struct data type") {
+    val df = Seq(1, 2).toDF("value")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_xml($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"to_xml(value)\"",
+        "paramIndex" -> ordinalNumber(0),
+        "inputSql" -> "\"value\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(fragment = "to_xml", getCurrentClassCallSitePattern)
+    )
   }
 
   test("decimals with scale greater than precision") {

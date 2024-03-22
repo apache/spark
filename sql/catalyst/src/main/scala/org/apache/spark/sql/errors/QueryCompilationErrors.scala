@@ -1709,10 +1709,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "partColumns" -> targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")))
   }
 
-  def cannotWriteDataToRelationsWithMultiplePathsError(): Throwable = {
+  def cannotWriteDataToRelationsWithMultiplePathsError(paths: Seq[Path]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1148",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_INSERT.MULTI_PATH",
+      messageParameters = Map(
+        "paths" -> paths.mkString("[", ",", "]")))
   }
 
   def failedToRebuildExpressionError(filter: Filter): Throwable = {
@@ -1866,6 +1867,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "sortCol" -> sortCol,
         "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
+  }
+
+  def invalidBucketColumnDataTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+      messageParameters = Map("type" -> toSQLType(dataType)))
   }
 
   def requestedPartitionsMismatchTablePartitionsError(
@@ -3957,6 +3964,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     throw new AnalysisException(
       errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
       messageParameters = Map("varType" -> toSQLType(dataType)))
+  }
+
+  def nullSQLStringExecuteImmediate(varName: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+      messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
   def invalidStatementForExecuteInto(queryString: String): Throwable = {

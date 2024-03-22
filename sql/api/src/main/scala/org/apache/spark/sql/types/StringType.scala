@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 @Stable
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
   /**
-   * Returns whether assigned collation is the default spark collation (UCS_BASIC).
+   * Returns whether assigned collation is the default spark collation (UTF8_BINARY).
    */
   def isDefaultCollation: Boolean = collationId == CollationFactory.DEFAULT_COLLATION_ID
 
@@ -40,21 +40,20 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
    * equality and hashing).
    */
   def isBinaryCollation: Boolean = CollationFactory.fetchCollation(collationId).isBinaryCollation
+  def isLowercaseCollation: Boolean = collationId == CollationFactory.LOWERCASE_COLLATION_ID
 
   /**
    * Type name that is shown to the customer.
-   * If this is an UCS_BASIC collation output is `string` due to backwards compatibility.
+   * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
    */
   override def typeName: String =
     if (isDefaultCollation) "string"
-    else s"string COLLATE '${CollationFactory.fetchCollation(collationId).collationName}'"
+    else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
   override def equals(obj: Any): Boolean =
     obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
 
   override def hashCode(): Int = collationId.hashCode()
-
-  override private[sql] def acceptsType(other: DataType): Boolean = other.isInstanceOf[StringType]
 
   /**
    * The default size of a value of the StringType is 20 bytes.
@@ -65,6 +64,8 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 }
 
 /**
+ * Use StringType for expressions supporting only binary collation.
+ *
  * @since 1.3.0
  */
 @Stable
