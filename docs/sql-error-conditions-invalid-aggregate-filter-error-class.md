@@ -32,18 +32,18 @@ This error class has the following derived error classes:
 
 ## CONTAINS_AGGREGATE
 
-Expected a FILTER expression without aggregation, but found `<aggExpr>`.
+Expected a FILTER expression without an aggregation, but found `<aggExpr>`.
 
 ## CONTAINS_WINDOW_FUNCTION
 
-Expected a FILTER expression without window functions, but found `<windowExpr>`.
+Expected a FILTER expression without a window function, but found `<windowExpr>`.
 
 ## NON_DETERMINISTIC
 
-Expected non-deterministic FILTER expression.
+Expected a deterministic FILTER expression.
 
 ## NOT_BOOLEAN
 
-Expected FILTER expression of boolean type.
+Expected a FILTER expression of the BOOLEAN type.
 
 

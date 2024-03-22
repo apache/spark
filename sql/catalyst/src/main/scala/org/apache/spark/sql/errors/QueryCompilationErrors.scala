@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, FunctionSignature, Join, LogicalPlan, SerdeInfo, Window}
 import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
@@ -623,13 +623,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def nonDeterministicFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
-      messageParameters = Map("filterExpr" -> toPrettySQL(filterExpr)))
+      messageParameters = Map("filterExpr" -> toSQLExpr(filterExpr)))
   }
 
   def nonBooleanFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
-      messageParameters = Map("filterExpr" -> toPrettySQL(filterExpr)))
+      messageParameters = Map("filterExpr" -> toSQLExpr(filterExpr)))
   }
 
   def aggregateInAggregateFilterError(
@@ -638,8 +638,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
       messageParameters = Map(
-        "filterExpr" -> toPrettySQL(filterExpr),
-        "aggExpr" -> toPrettySQL(aggExpr)))
+        "filterExpr" -> toSQLExpr(filterExpr),
+        "aggExpr" -> toSQLExpr(aggExpr)))
   }
 
   def windowFunctionInAggregateFilterError(
@@ -648,8 +648,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
       messageParameters = Map(
-        "filterExpr" -> toPrettySQL(filterExpr),
-        "windowExpr" -> toPrettySQL(windowExpr)))
+        "filterExpr" -> toSQLExpr(filterExpr),
+        "windowExpr" -> toSQLExpr(windowExpr)))
   }
 
   def distinctInverseDistributionFunctionUnsupportedError(funcName: String): Throwable = {

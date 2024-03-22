@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, ArrayBasedMapData, GenericArrayData, MapData}
-import org.apache.spark.sql.errors.DataTypeErrorsBase
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -119,7 +119,7 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
-class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
+class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase with QueryErrorsBase {
   import TestRelations._
 
   def errorTest(
@@ -302,7 +302,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       inputPlan = plan,
       expectedErrorClass = "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
       expectedMessageParameters = Map(
-        "filterExpr" -> toPrettySQL(
+        "filterExpr" -> toSQLExpr(
           GreaterThan(
             Rand(Cast(Literal("c"), IntegerType)),
             Literal(1)))
@@ -318,7 +318,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       inputPlan = plan,
       expectedErrorClass = "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
       expectedMessageParameters = Map(
-        "filterExpr" -> toPrettySQL(Literal("e"))
+        "filterExpr" -> toSQLExpr(Literal("e"))
       ),
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE e)", 7, 29)))
@@ -331,11 +331,11 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       inputPlan = plan,
       expectedErrorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
       expectedMessageParameters = Map(
-        "filterExpr" -> toPrettySQL(
+        "filterExpr" -> toSQLExpr(
           GreaterThan(
             Max(Literal("e")),
             Literal(1))),
-        "aggExpr" -> toPrettySQL(Max(Literal("e")))
+        "aggExpr" -> toSQLExpr(Max(Literal("e")))
       ),
       queryContext = Array(
         ExpectedContext("sum(c) FILTER (WHERE max(e) > 1)", 7, 38)))
@@ -349,7 +349,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       inputPlan = plan,
       expectedErrorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
       expectedMessageParameters = Map(
-        "filterExpr" -> toPrettySQL(
+        "filterExpr" -> toSQLExpr(
           GreaterThan(
             WindowExpression(
               NthValue(
@@ -362,7 +362,7 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
                 frameSpecification = SpecifiedWindowFrame(
                   RangeFrame, UnboundedPreceding, CurrentRow))),
             Literal(1))),
-        "windowExpr" -> toPrettySQL(
+        "windowExpr" -> toSQLExpr(
           WindowExpression(
             NthValue(
               input = Literal("e"),
