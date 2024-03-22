@@ -260,9 +260,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-set spark.sql.optimizer.rewriteNestedDataCorrelation.enabled = false
+set spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled = false
 -- !query analysis
-SetCommand (spark.sql.optimizer.rewriteNestedDataCorrelation.enabled,Some(false))
+SetCommand (spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled,Some(false))
 
 
 -- !query

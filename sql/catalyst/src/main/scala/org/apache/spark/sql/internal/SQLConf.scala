@@ -3514,7 +3514,7 @@ object SQLConf {
       .internal()
       .doc("Handle correlation over nested data extract expressions by pulling out the " +
         "expression into the outer plan. This enables correlation on map attributes for example.")
-      .version("3.5.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
 

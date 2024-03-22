@@ -34,9 +34,9 @@ select * from x join lateral (select xm[1], xm[1] as s1, xm[1] - ym[1] as s2 fro
 select * from x join lateral (select xm[1], sum(ym[1]), xm[1] - sum(ym[1]) from y group by xm[1]);
 
 -- Unsupported when disabled due to DomainJoin over map
-set spark.sql.optimizer.rewriteNestedDataCorrelation.enabled = false;
+set spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled = false;
 select * from x where (select sum(y2) from y where xm[1] = ym[1]) > 2;
-reset spark.sql.optimizer.rewriteNestedDataCorrelation.enabled ;
+reset spark.sql.optimizer.rewriteNestedDataCorrelation.enabled;
 
 drop table x;
 drop table y;
