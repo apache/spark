@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.benchmark
 
-import scala.util.Random
-
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame}
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -44,11 +42,11 @@ object CollationBenchmark extends SqlBasedBenchmark {
     // Generate n UTF8Strings
     Seq("ABC", "aBC", "abc", "DEF", "def", "GHI", "ghi", "JKL", "jkl",
       "MNO", "mno", "PQR", "pqr", "STU", "stu", "VWX", "vwx", "YZ").map(UTF8String.fromString) ++
-    (18 to n).map(i => UTF8String.fromString(Random.nextString(i % 25))).sortBy(_.hashCode())
+    (18 to n).map(i => UTF8String.fromString(i.toOctalString))
   }
 
   def benchmarkUTFString(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
-    val sublistStrings = utf8Strings.slice(0, 200)
+    val sublistStrings = utf8Strings
     val benchmark = collationTypes.foldLeft(
       new Benchmark(s"collation unit benchmarks", utf8Strings.size, output = output)) {
       (b, collationType) =>
@@ -88,34 +86,29 @@ object CollationBenchmark extends SqlBasedBenchmark {
     d
   }
 
-  def collationBenchmarkFilterEqual(
-      collationTypes: Seq[String],
-      utf8Strings: Seq[UTF8String]): Unit = {
+  def collationBenchmarkFilterEqual(collationTypes: Seq[String]): Unit = {
     val N = 2 << 20
 
     val benchmark = collationTypes.foldLeft(
-      new Benchmark(s"filter df column with collation", utf8Strings.size, output = output)) {
+      new Benchmark(s"filter df column with collation", 11, output = output)) {
       (b, collationType) =>
         b.addCase(s"filter df column with collation - $collationType") { _ =>
           val df = df1.selectExpr(
             s"collate(s2, '$collationType') as k2_$collationType",
             s"collate(s1, '$collationType') as k1_$collationType")
 
-          (0 to 10).foreach(_ =>
           df.where(col(s"k1_$collationType") === col(s"k2_$collationType"))
                 .queryExecution.executedPlan.executeCollect()
-          )
+
         }
         b
     }
     benchmark.run()
   }
 
-  // How to benchmark "without the rest of the spark stack"?
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val utf8Strings = generateUTF8Strings(1000) // Adjust the size as needed
-    collationBenchmarkFilterEqual(collationTypes.reverse, utf8Strings.slice(0, 20))
-    benchmarkUTFString(collationTypes, utf8Strings)
+    collationBenchmarkFilterEqual(collationTypes.reverse)
+    benchmarkUTFString(collationTypes, generateUTF8Strings(200))
   }
 }
