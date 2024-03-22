@@ -208,7 +208,7 @@ class UnivocityGenerator(
         builder.toString()
 
     case dt: DataType =>
-      (getter: SpecializedGetters, ordinal: Int) => getter.get(ordinal, dt).toString
+      (getter, ordinal) => getter.get(ordinal, dt).toString
   }
 
   private def convertRow(row: InternalRow): Seq[String] = {
