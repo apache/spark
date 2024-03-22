@@ -60,6 +60,11 @@ case class DynamicPruningSubquery(
 
   override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
 
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): DynamicPruningSubquery = {
+    assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
+    copy()
+  }
+
   override def withNewHint(hint: Option[HintInfo]): SubqueryExpression = copy(hint = hint)
 
   override lazy val resolved: Boolean = {
