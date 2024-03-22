@@ -15584,7 +15584,19 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     |      2,Alice|
     +-------------+
 
-    Example 2: Converting a StructType with null values to a CSV string
+    Example 2: Converting a complex StructType to a CSV string
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> data = [(1, Row(age=2, name='Alice', scores=[100, 200, 300]))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(sf.to_csv(df.value)).show(truncate=False)
+    +-----------------------+
+    |to_csv(value)          |
+    +-----------------------+
+    |2,Alice,"[100,200,300]"|
+    +-----------------------+
+
+    Example 3: Converting a StructType with null values to a CSV string
 
     >>> from pyspark.sql import Row, functions as sf
     >>> from pyspark.sql.types import StructType, StructField, IntegerType, StringType
