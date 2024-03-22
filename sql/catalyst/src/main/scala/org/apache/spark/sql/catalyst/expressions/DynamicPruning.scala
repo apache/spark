@@ -61,6 +61,8 @@ case class DynamicPruningSubquery(
   override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
 
   override def withNewOuterAttrs(outerAttrs: Seq[Expression]): DynamicPruningSubquery = {
+    // Updating outer attrs of DynamicPruningSubquery is unsupported; assert that they match
+    // pruningKey and return a copy without any changes.
     assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
     copy()
   }
