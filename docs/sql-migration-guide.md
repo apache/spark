@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
-- Since 3.5.2, MySQL JDBC datasource will read TINYINT UNSIGNED as ShortType, while in 3.5.0 and 3.5.1, it was wrongly read as ByteType.
+- Since 3.5.2, MySQL JDBC datasource will read TINYINT UNSIGNED as ShortType, while in 3.5.1, it was wrongly read as ByteType.
 
 ## Upgrading from Spark SQL 3.5.0 to 3.5.1
 
