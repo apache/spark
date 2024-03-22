@@ -22,36 +22,53 @@ import java.time.Duration
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.state.{RocksDB, RocksDBConf, RocksDBStateStoreProvider, StateStoreConf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
+case class InputEvent(
+    key: String,
+    action: String,
+    value: Int,
+    ttl: Duration)
+
+case class OutputEvent(
+    key: String,
+    exists: Boolean,
+    value: Int)
+
 class ValueStateTTLProcessor
-  extends StatefulProcessor[String, String, (String, Long)]
+  extends StatefulProcessor[String, InputEvent, OutputEvent]
   with Logging {
 
-  @transient private var _countState: ValueState[Long] = _
+  @transient private var _valueState: ValueState[Int] = _
 
   override def init(outputMode: OutputMode, timeoutMode: TimeoutMode): Unit = {
-    _countState = getHandle.getValueState("countState", Encoders.scalaLong)
+    _valueState = getHandle.getValueState("valueState", Encoders.scalaInt)
   }
 
   override def handleInputRows(
       key: String,
-      inputRows: Iterator[String],
+      inputRows: Iterator[InputEvent],
       timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Long)] = {
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+    var results = List[OutputEvent]()
 
-    val currValueOption = _countState.getOption()
+    for (row <- inputRows) {
+      if (row.action == "get") {
+        val currState = _valueState.getOption()
 
-    var totalLogins: Long = inputRows.size
-    if (currValueOption.isDefined) {
-      totalLogins = totalLogins + currValueOption.get
+        if (currState.isDefined) {
+          results = OutputEvent(key, exists = true, currState.get) :: results
+        } else {
+          results = OutputEvent(key, exists = false, -1) :: results
+        }
+      } else if (row.action == "put") {
+        _valueState.update(row.value, row.ttl)
+      }
     }
 
-    _countState.update(totalLogins, Duration.ofMinutes(1))
-
-    Iterator.single((key, totalLogins))
+    results.iterator
   }
 }
 
@@ -60,13 +77,12 @@ class TransformWithStateTTLSuite
   import testImplicits._
 
   test("validate state is evicted at ttl expiry") {
-
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val inputStream = MemoryStream[String]
+      val inputStream = MemoryStream[InputEvent]
       val result = inputStream.toDS()
-        .groupByKey(x => x)
+        .groupByKey(x => x.key)
         .transformWithState(
           new ValueStateTTLProcessor(),
           TimeoutMode.NoTimeouts(),
@@ -75,14 +91,22 @@ class TransformWithStateTTLSuite
       val clock = new StreamManualClock
       testStream(result)(
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-        AddData(inputStream, "k1"),
+        AddData(inputStream, InputEvent("k1", "put", 1, Duration.ofMinutes(1))),
+        // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("k1", 1L)),
+        CheckNewAnswer(),
+        // get this state
+        AddData(inputStream, InputEvent("k1", "get", 1, null)),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(OutputEvent("k1", exists = true, 1)),
         // advance clock so that state expires
         AdvanceManualClock(60 * 1000),
-        AddData(inputStream, "k1"),
+        AddData(inputStream, InputEvent("k1", "get", -1, null)),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("k1", 1))
+        // validate state does not exist anymore
+        CheckNewAnswer(OutputEvent("k1", exists = false, -1))
+        // ensure this state does not exist any longer in State
       )
     }
   }

@@ -33,14 +33,48 @@ object StateTTLSchema {
     StructType(Array(StructField("__dummy__", NullType)))
 }
 
-trait StateVariableTTLSupport {
+/**
+ * Represents a State variable which supports TTL.
+ */
+trait StateVariableWithTTLSupport {
+
+  /**
+   * Clears the user state associated with this grouping key
+   * if it has expired. This function is called by Spark to perform
+   * cleanup at the end of transformWithState processing.
+   *
+   * Spark uses a secondary index to determine if the user state for
+   * this grouping key has expired. However, its possible that the user
+   * has updated the TTL and secondary index is out of date. Implementations
+   * must validate that the user State has actually expired before cleanup based
+   * on their own State data.
+   *
+   * @param groupingKey grouping key for which cleanup should be performed.
+   */
   def clearIfExpired(groupingKey: Array[Byte]): Unit
 }
 
+/**
+ * Represents the underlying state for secondary TTL Index for a user defined
+ * state variable.
+ *
+ * This state allows Spark to query ttl values based on expiration time
+ * allowing efficient ttl cleanup.
+ */
 trait TTLState {
+
+  /**
+   * Perform the user state clean yp based on ttl values stored in
+   * this state. NOTE that its not safe to call this operation concurrently
+   * when the user can also modify the underlying State. Cleanup should be initiated
+   * after arbitrary state operations are completed by the user.
+   */
   def clearExpiredState(): Unit
 }
 
+/**
+ * Manages the ttl information for user state keyed with a single key (grouping key).
+ */
 class SingleKeyTTLState(
     ttlMode: TTLMode,
     stateName: String,
@@ -54,7 +88,7 @@ class SingleKeyTTLState(
 
   private val ttlColumnFamilyName = s"_ttl_$stateName"
   private val ttlKeyEncoder = UnsafeProjection.create(KEY_ROW_SCHEMA)
-  private var state: StateVariableTTLSupport = _
+  private var state: StateVariableWithTTLSupport = _
 
   // empty row used for values
   private val EMPTY_ROW =
@@ -87,11 +121,14 @@ class SingleKeyTTLState(
   }
 
   private[sql] def setStateVariable(
-      state: StateVariableTTLSupport): Unit = {
+      state: StateVariableWithTTLSupport): Unit = {
     this.state = state
   }
 }
 
+/**
+ * Helper methods for user State TTL.
+ */
 object StateTTL {
   def calculateExpirationTimeForDuration(
       ttlMode: TTLMode,
@@ -103,7 +140,8 @@ object StateTTL {
     } else if (ttlMode == TTLMode.EventTimeTTL()) {
       eventTimeWatermarkMs.get + ttlDuration.toMillis
     } else {
-      -1L
+      throw new IllegalStateException(s"cannot calculate expiration time for" +
+        s" unknown ttl Mode $ttlMode")
     }
   }
 
@@ -117,7 +155,8 @@ object StateTTL {
     } else if (ttlMode == TTLMode.EventTimeTTL()) {
       eventTimeWatermarkMs.get > expirationMs
     } else {
-      false
+      throw new IllegalStateException(s"cannot evaluate expiry condition for" +
+        s" unknown ttl Mode $ttlMode")
     }
   }
 }

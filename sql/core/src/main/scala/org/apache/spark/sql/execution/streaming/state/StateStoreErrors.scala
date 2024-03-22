@@ -39,6 +39,13 @@ object StateStoreErrors {
     )
   }
 
+  def missingTTLValues(ttlMode: String): SparkException = {
+    SparkException.internalError(
+      msg = s"Failed to find timeout values for ttlMode=$ttlMode",
+      category = "TWS"
+    )
+  }
+
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
     StateStoreUnsupportedOperationOnMissingColumnFamily = {
     new StateStoreUnsupportedOperationOnMissingColumnFamily(operationName, colFamilyName)
@@ -47,11 +54,6 @@ object StateStoreErrors {
   def multipleColumnFamiliesNotSupported(stateStoreProvider: String):
     StateStoreMultipleColumnFamiliesNotSupportedException = {
     new StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider)
-  }
-
-  def ttlNotSupportedWithProvider(stateStoreProvider: String):
-  StateStoreTTLNotSupportedException = {
-    new StateStoreTTLNotSupportedException(stateStoreProvider)
   }
 
   def removingColumnFamiliesNotSupported(stateStoreProvider: String):
@@ -122,19 +124,17 @@ object StateStoreErrors {
     StatefulProcessorCannotReInitializeState = {
     new StatefulProcessorCannotReInitializeState(groupingKey)
   }
+
+  def cannotProvideTTLDurationForNoTTLMode(operationType: String,
+      stateName: String): StatefulProcessorCannotAssignTTLInNoTTLMode = {
+    new StatefulProcessorCannotAssignTTLInNoTTLMode(operationType, stateName)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
-    messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
-  )
-
-class StateStoreTTLNotSupportedException(stateStoreProvider: String)
-  extends SparkUnsupportedOperationException(
-    errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_TTL",
-    messageParameters = Map("stateStoreProvider" -> stateStoreProvider)
-  )
+    messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
 
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
@@ -204,3 +204,10 @@ class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: Strin
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
     messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StatefulProcessorCannotAssignTTLInNoTTLMode(
+    operationType: String,
+    stateName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE",
+    messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))

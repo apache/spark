@@ -42,7 +42,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  * @param groupingAttributes used to group the data
  * @param dataAttributes used to read the data
  * @param statefulProcessor processor methods called on underlying data
- * @param ttlMode defines the ttl Mode
+ * @param ttlMode defines the ttl Mode for user state
  * @param timeoutMode defines the timeout mode
  * @param outputMode defines the output mode for the statefulProcessor
  * @param keyEncoder expression encoder for the key type
@@ -282,7 +282,7 @@ case class TransformWithStateExec(
       allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
       commitTimeMs += timeTakenMs {
         if (isStreaming) {
-          // join ttlBackgroundThread forkjoinpool
+          // clean up any expired user state
           processorHandle.doTtlCleanup()
           store.commit()
         } else {
@@ -300,20 +300,8 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
-    // TODO(sahnib) add validation for ttlMode
-    timeoutMode match {
-      case ProcessingTime =>
-        if (batchTimestampMs.isEmpty) {
-          StateStoreErrors.missingTimeoutValues(timeoutMode.toString)
-        }
-
-      case EventTime =>
-        if (eventTimeWatermarkForEviction.isEmpty) {
-          StateStoreErrors.missingTimeoutValues(timeoutMode.toString)
-        }
-
-      case _ =>
-    }
+    validateTTLMode()
+    validateTimeoutMode()
 
     if (hasInitialState) {
       val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
@@ -463,6 +451,38 @@ case class TransformWithStateExec(
     }
 
     processDataWithPartition(childDataIterator, store, processorHandle)
+  }
+
+  private def validateTimeoutMode(): Unit = {
+    timeoutMode match {
+      case ProcessingTime =>
+        if (batchTimestampMs.isEmpty) {
+          StateStoreErrors.missingTimeoutValues(timeoutMode.toString)
+        }
+
+      case EventTime =>
+        if (eventTimeWatermarkForEviction.isEmpty) {
+          StateStoreErrors.missingTimeoutValues(timeoutMode.toString)
+        }
+
+      case _ =>
+    }
+  }
+
+  private def validateTTLMode(): Unit = {
+    ttlMode match {
+      case ProcessingTimeTTL =>
+        if (batchTimestampMs.isEmpty) {
+          StateStoreErrors.missingTTLValues(timeoutMode.toString)
+        }
+
+      case EventTimeTTL =>
+        if (eventTimeWatermarkForEviction.isEmpty) {
+          StateStoreErrors.missingTTLValues(timeoutMode.toString)
+        }
+
+      case _ =>
+    }
   }
 }
 

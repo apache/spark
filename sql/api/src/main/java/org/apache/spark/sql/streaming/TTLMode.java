@@ -22,30 +22,30 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.plans.logical.*;
 
 /**
- * Represents the type of ttl modes possible for user defined state
- * in [[StatefulProcessor]].
+ * Represents the type of ttl modes possible for the Dataset operations
+ * {@code transformWithState}.
  */
 @Experimental
 @Evolving
 public class TTLMode {
 
     /**
-     * Specifies that there is no TTL for the state object. Such objects would not
+     * Specifies that there is no TTL for the user state. User state would not
      * be cleaned up by Spark automatically.
      */
-    public static final TTLMode NoTTL() {
+    public static TTLMode NoTTL() {
         return NoTTL$.MODULE$;
     }
 
     /**
-     * Specifies that the specified ttl is in processing time.
+     * Specifies that all ttl durations for user state are in processing time.
      */
-    public static final TTLMode ProcessingTimeTTL() {
+    public static TTLMode ProcessingTimeTTL() {
         return ProcessingTimeTTL$.MODULE$;
     }
 
     /**
-     * Specifies that the specified ttl is in event time.
+     * Specifies that all ttl durations for user state are in event time.
      */
-    public static final TTLMode EventTimeTTL() { return EventTimeTTL$.MODULE$; }
+    public static TTLMode EventTimeTTL() { return EventTimeTTL$.MODULE$; }
 }

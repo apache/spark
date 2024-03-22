@@ -110,12 +110,6 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
-  private def verify(condition: => Boolean, msg: String): Unit = {
-    if (!condition) {
-      throw new IllegalStateException(msg)
-    }
-  }
-
   def setHandleState(newState: StatefulProcessorHandleState): Unit = {
     currState = newState
   }
@@ -203,6 +197,10 @@ class StatefulProcessorHandleImpl(
     timerState.listTimers()
   }
 
+  /**
+   * Performs the user state cleanup based on assigned TTl values. Any state
+   * which is expired will be cleaned up from StateStore.
+   */
   def doTtlCleanup(): Unit = {
     ttlStates.forEach { s =>
       s.clearExpiredState()

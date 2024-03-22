@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.streaming.TTLMode
 
-/** Types of timeouts used in tranformWithState operator */
+/** TTL types used in tranformWithState operator */
 case object NoTTL extends TTLMode
 
 case object ProcessingTimeTTL extends TTLMode

@@ -70,6 +70,8 @@ class StateTypesEncoder[GK, V](
   private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
   private val reusedValRow = new UnsafeRow(valEncoder.schema.fields.length)
 
+  private val NO_TTL_ENCODED_VALUE: Long = -1L
+
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
   def encodeGroupingKey(): UnsafeRow = {
@@ -77,6 +79,12 @@ class StateTypesEncoder[GK, V](
     keyRow
   }
 
+  /**
+   * Encodes the provided grouping key into Spark UnsafeRow.
+   *
+   * @param groupingKeyBytes serialized grouping key byte array
+   * @return encoded UnsafeRow
+   */
   def encodeSerializedGroupingKey(
       groupingKeyBytes: Array[Byte]): UnsafeRow = {
     val keyRow = keyProjection(InternalRow(groupingKeyBytes))
@@ -92,13 +100,21 @@ class StateTypesEncoder[GK, V](
     keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
   }
 
+  /**
+   * Encode the specified value in Spark UnsafeRow with no ttl.
+   * The ttl expiration will be set to -1, specifying no TTL.
+   */
   def encodeValue(value: V): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
     val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
-    val valRow = valueProjection(InternalRow(bytes, 0L))
+    val valRow = valueProjection(InternalRow(bytes, NO_TTL_ENCODED_VALUE))
     valRow
   }
 
+  /**
+   * Encode the specified value in Spark UnsafeRow
+   * with provided ttl expiration.
+   */
   def encodeValue(value: V, expirationMs: Long = -1): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
     val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
@@ -113,9 +129,19 @@ class StateTypesEncoder[GK, V](
     value
   }
 
-  def decodeTtlExpirationMs(row: UnsafeRow): Long = {
+  /**
+   * Decode the ttl information out of Value row. If the ttl has
+   * not been set (-1L specifies no user defined value), the API will
+   * return None.
+   */
+  def decodeTtlExpirationMs(row: UnsafeRow): Option[Long] = {
     val expirationMs = row.getLong(1)
-    expirationMs
+
+    if (expirationMs == NO_TTL_ENCODED_VALUE) {
+      None
+    } else {
+      Some(expirationMs)
+    }
   }
 }
 

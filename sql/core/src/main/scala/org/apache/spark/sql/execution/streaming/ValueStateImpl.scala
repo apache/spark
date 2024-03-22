@@ -21,8 +21,9 @@ import java.time.Duration
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{TTLMode, ValueState}
 
 /**
@@ -32,9 +33,10 @@ import org.apache.spark.sql.streaming.{TTLMode, ValueState}
  * @param stateName - name of logical state partition
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
- * @param ttlMode ttl Mode to evict expired values from state
+ * @param ttlMode - TTL Mode for values  stored in this state
  * @param batchTimestampMs processing timestamp of the current batch.
- * @param eventTimeWatermarkMs event time watermark for state eviction
+ * @param eventTimeWatermarkMs event time watermark for streaming query
+ *                             (same as watermark for state eviction)
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImpl[S](
@@ -47,7 +49,7 @@ class ValueStateImpl[S](
     eventTimeWatermarkMs: Option[Long])
   extends ValueState[S]
     with Logging
-    with StateVariableTTLSupport {
+    with StateVariableWithTTLSupport {
 
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
@@ -84,11 +86,7 @@ class ValueStateImpl[S](
     if (retRow != null) {
       val resState = stateTypesEncoder.decodeValue(retRow)
 
-      val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(retRow)
-      val isExpired = StateTTL.isExpired(ttlMode,
-        expirationMs, batchTimestampMs, eventTimeWatermarkMs)
-
-      if (!isExpired) {
+      if (!isExpired(retRow)) {
         resState
       } else {
         null.asInstanceOf[S]
@@ -104,8 +102,7 @@ class ValueStateImpl[S](
       ttlDuration: Duration = Duration.ZERO): Unit = {
 
     if (ttlDuration != Duration.ZERO && ttlState.isEmpty) {
-      // TODO(sahnib) throw a StateStoreError here
-      throw new RuntimeException()
+      throw StateStoreErrors.cannotProvideTTLDurationForNoTTLMode("update", stateName)
     }
 
     var expirationMs: Long = -1
@@ -131,13 +128,17 @@ class ValueStateImpl[S](
     val retRow = store.get(encodedGroupingKey, stateName)
 
     if (retRow != null) {
-      val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(retRow)
-      val isExpired = StateTTL.isExpired(ttlMode,
-        expirationMs, batchTimestampMs, eventTimeWatermarkMs)
-
-      if (!isExpired) {
+      if (isExpired(retRow)) {
         store.remove(encodedGroupingKey, stateName)
       }
     }
+  }
+
+  private def isExpired(valueRow: UnsafeRow): Boolean = {
+    val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(valueRow)
+    val isExpired = expirationMs.map(
+      StateTTL.isExpired(ttlMode, _, batchTimestampMs, eventTimeWatermarkMs))
+
+    isExpired.isDefined && isExpired.get
   }
 }
