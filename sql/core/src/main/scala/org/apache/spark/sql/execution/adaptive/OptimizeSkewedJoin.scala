@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -157,7 +155,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
           left.mapStats.get.shuffleId, partitionIndex, leftTargetSize)
         if (skewSpecs.isDefined) {
           logDebug(s"Left side partition $partitionIndex " +
-            s"(${FileUtils.byteCountToDisplaySize(leftSize)}) is skewed, " +
+            s"(${Utils.bytesToString(leftSize)}) is skewed, " +
             s"split it into ${skewSpecs.get.length} parts.")
           numSkewedLeft += 1
         }
@@ -171,7 +169,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
           right.mapStats.get.shuffleId, partitionIndex, rightTargetSize)
         if (skewSpecs.isDefined) {
           logDebug(s"Right side partition $partitionIndex " +
-            s"(${FileUtils.byteCountToDisplaySize(rightSize)}) is skewed, " +
+            s"(${Utils.bytesToString(rightSize)}) is skewed, " +
             s"split it into ${skewSpecs.get.length} parts.")
           numSkewedRight += 1
         }
