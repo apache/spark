@@ -21,13 +21,15 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Collate, Collation, ExpressionEvalHelper, Literal, StringRepeat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StringType
 
-class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession {
+class CollationStringExpressionsSuite extends QueryTest
+  with SharedSparkSession with ExpressionEvalHelper {
 
   case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
-
   case class CollationTestFail[R](s1: String, s2: String, collation: String)
 
   test("Support ConcatWs string expression with Collation") {
@@ -71,32 +73,29 @@ class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession 
     })
   }
 
-  case class RepeatCollationTestCase[R](s: String, n: Int, collation: String, expectedResult: R)
+  test("REPEAT check output type on non-explicit default collation") {
+    checkEvaluation(Collation(StringRepeat(Literal("hi"), Literal(2))).replacement, "UTF8_BINARY")
+  }
 
-  test("Support Repeat string expression with Collation") {
-    // Supported collations
-    val checksRepeat = Seq(
-      RepeatCollationTestCase("Spark", 2, "UTF8_BINARY", "SparkSpark"),
-      RepeatCollationTestCase("Spark", 2, "UTF8_BINARY_LCASE", "SparkSpark"),
-      RepeatCollationTestCase("Spark", 2, "UNICODE", "SparkSpark"),
-      RepeatCollationTestCase("Spark", 2, "UNICODE_CI", "SparkSpark")
-    )
-    checksRepeat.foreach(ct => {
-      checkAnswer(sql(s"SELECT repeat(collate('${ct.s}', '${ct.collation}'), ${ct.n})"),
-        Row(ct.expectedResult))
-    })
+  test("REPEAT check output type on explicitly collated string") {
+    checkEvaluation(
+      Collation(StringRepeat(Literal.create("abc", StringType(1)), Literal(2))).replacement,
+      "UTF8_BINARY_LCASE")
+    checkEvaluation(
+      Collation(StringRepeat(Collate(Literal("aBc"), "UTF8_BINARY_LCASE"), Literal(3))).replacement,
+      "UTF8_BINARY_LCASE")
+    checkEvaluation(
+      Collation(StringRepeat(Literal.create("abc", StringType(2)), Literal(4))).replacement,
+      "UNICODE")
+    checkEvaluation(
+      Collation(StringRepeat(Collate(Literal("aBc"), "UNICODE_CI"), Literal(3))).replacement,
+      "UNICODE_CI")
+  }
 
-    // Check return type
-    val checksReturnType = Seq(
-      RepeatCollationTestCase("Spark", 2, "UTF8_BINARY", "UTF8_BINARY"),
-      RepeatCollationTestCase("Spark", 2, "UTF8_BINARY_LCASE", "UTF8_BINARY_LCASE"),
-      RepeatCollationTestCase("Spark", 2, "UNICODE", "UNICODE"),
-      RepeatCollationTestCase("Spark", 2, "UNICODE_CI", "UNICODE_CI")
-    )
-    checksReturnType.foreach(ct => {
-      checkAnswer(sql(s"SELECT collation(repeat(collate('${ct.s}', '${ct.collation}'), ${ct.n}))"),
-        Row(ct.expectedResult))
-    })
+  test("REPEAT check result") {
+    checkEvaluation(StringRepeat(Literal.create("abc", StringType(1)), Literal(2)), "abcabc")
+    checkEvaluation(StringRepeat(Literal.create("aBc", StringType(2)), Literal(2)), "aBcaBc")
+    checkEvaluation(StringRepeat(Literal.create("abC", StringType(3)), Literal(2)), "abCabC")
   }
 
   // TODO: Add more tests for other string expressions
