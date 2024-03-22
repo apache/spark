@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.{DataFrame}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.functions._
 import org.apache.spark.unsafe.types.UTF8String
@@ -66,7 +66,7 @@ object CollationBenchmark extends SqlBasedBenchmark {
           )
         }
         b.addCase(s"hashFunction - $collationType") { _ =>
-          sublistStrings.foreach(s1 =>
+          sublistStrings.foreach(_ =>
             utf8Strings.foreach(s =>
               collation.hashFunction.applyAsLong(s)
             )
@@ -87,8 +87,6 @@ object CollationBenchmark extends SqlBasedBenchmark {
   }
 
   def collationBenchmarkFilterEqual(collationTypes: Seq[String]): Unit = {
-    val N = 2 << 20
-
     val benchmark = collationTypes.foldLeft(
       new Benchmark(s"filter df column with collation", 11, output = output)) {
       (b, collationType) =>
