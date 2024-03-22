@@ -1296,7 +1296,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, map2)\"",
-        "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING_ANY_COLLATION, INT>\")",
+        "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING, INT>\")",
         "functionName" -> "`map_concat`"),
       context = ExpectedContext(
         fragment = "map_concat(map1, map2)",
@@ -1312,7 +1312,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"map_concat(map1, map2)\"",
-        "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING_ANY_COLLATION, INT>\")",
+        "dataType" -> "(\"MAP<ARRAY<INT>, INT>\" or \"MAP<STRING, INT>\")",
         "functionName" -> "`map_concat`"),
       context =
         ExpectedContext(
@@ -2552,7 +2552,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"concat(map(1, 2), map(3, 4))\"",
         "paramIndex" -> "first",
-        "requiredType" -> "(\"STRING\" or \"BINARY\" or \"ARRAY\")",
+        "requiredType" -> "(\"STRING_ANY_COLLATION\" or \"BINARY\" or \"ARRAY\")",
         "inputSql" -> "\"map(1, 2)\"",
         "inputType" -> "\"MAP<INT, INT>\""
       ),
