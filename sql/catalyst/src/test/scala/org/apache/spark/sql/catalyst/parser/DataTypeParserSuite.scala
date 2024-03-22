@@ -57,6 +57,7 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("Dec(10, 5)", DecimalType(10, 5))
   checkDataType("deC", DecimalType.USER_DEFAULT)
   checkDataType("DATE", DateType)
+  checkDataType("time", TimestampType)
   checkDataType("timestamp", TimestampType)
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)

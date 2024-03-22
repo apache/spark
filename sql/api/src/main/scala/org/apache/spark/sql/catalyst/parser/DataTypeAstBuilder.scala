@@ -69,7 +69,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (FLOAT | REAL, Nil) => FloatType
       case (DOUBLE, Nil) => DoubleType
       case (DATE, Nil) => DateType
-      case (TIMESTAMP, Nil) => SqlApiConf.get.timestampType
+      case (TIMESTAMP | TIME, Nil) => SqlApiConf.get.timestampType
       case (TIMESTAMP_NTZ, Nil) => TimestampNTZType
       case (TIMESTAMP_LTZ, Nil) => TimestampType
       case (STRING, Nil) =>
