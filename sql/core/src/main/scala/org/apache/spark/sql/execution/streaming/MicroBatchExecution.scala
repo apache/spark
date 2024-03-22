@@ -831,6 +831,8 @@ class MicroBatchExecution(
 
     val nextBatch =
       new Dataset(execCtx.executionPlan, ExpressionEncoder(execCtx.executionPlan.analyzed.schema))
+    // Dataset.queryExecution returns the newest cached executedPlan
+    execCtx.executionPlan = nextBatch.queryExecution.asInstanceOf[IncrementalExecution]
 
     val batchSinkProgress: Option[StreamWriterCommitProgress] =
       execCtx.reportTimeTaken("addBatch") {

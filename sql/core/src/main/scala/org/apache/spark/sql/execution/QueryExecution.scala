@@ -61,8 +61,8 @@ class QueryExecution(
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
 
-  def this(qe: QueryExecution) = {
-    this(qe.sparkSession, qe.logical, qe.tracker, qe.mode)
+  def copy(): QueryExecution = {
+    new QueryExecution(sparkSession, logical, tracker, mode)
   }
 
   val id: Long = QueryExecution.nextExecutionId

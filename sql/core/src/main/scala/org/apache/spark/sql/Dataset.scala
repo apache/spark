@@ -212,7 +212,7 @@ class Dataset[T] private[sql](
       queryPersisted match {
         // If we haven't cached queryPersisted, we create new one
         case None =>
-          val qe = new QueryExecution(queryUnpersisted)
+          val qe = queryUnpersisted.copy()
           queryPersisted = Some((qe.computeCacheStateSignature(), qe))
           qe
         // If there exists cached queryPersisted, and cache signature doesn't change, we reuse it.
@@ -222,7 +222,7 @@ class Dataset[T] private[sql](
           if (currentCacheStateSign.sameElements(lastCacheStateSign)) {
             qe
           } else {
-            val qe = new QueryExecution(queryUnpersisted)
+            val qe = queryUnpersisted.copy()
             queryPersisted = Some((currentCacheStateSign, qe))
             qe
           }

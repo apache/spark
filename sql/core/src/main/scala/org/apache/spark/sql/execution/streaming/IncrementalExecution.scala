@@ -59,6 +59,21 @@ class IncrementalExecution(
     val isFirstBatch: Boolean)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
+  override def copy(): IncrementalExecution = {
+    new IncrementalExecution(
+      sparkSession,
+      logical,
+      outputMode,
+      checkpointLocation,
+      queryId,
+      runId,
+      currentBatchId,
+      prevOffsetSeqMetadata,
+      offsetSeqMetadata,
+      watermarkPropagator,
+      isFirstBatch)
+  }
+
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
       sparkSession,
