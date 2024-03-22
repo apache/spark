@@ -2413,9 +2413,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
           u.filter match {
             case Some(filter) if !filter.deterministic =>
-              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(filterExpr = filter)
+              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError(
+                filterExpr = filter)
             case Some(filter) if filter.dataType != BooleanType =>
-              throw QueryCompilationErrors.nonBooleanFilterInAggregateError(filterExpr = filter)
+              throw QueryCompilationErrors.nonBooleanFilterInAggregateError(
+                filterExpr = filter)
             case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
               throw QueryCompilationErrors.aggregateInAggregateFilterError(
                 filterExpr = filter,
