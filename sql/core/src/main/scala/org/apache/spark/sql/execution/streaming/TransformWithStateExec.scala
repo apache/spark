@@ -309,6 +309,7 @@ case class TransformWithStateExec(
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
+    // TODO(sahnib) add validation for ttlMode
     timeoutMode match {
       case ProcessingTime =>
         if (batchTimestampMs.isEmpty) {

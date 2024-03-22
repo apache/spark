@@ -53,12 +53,12 @@ class ValueStateImpl[S](
   initialize()
 
   private def initialize(): Unit = {
-    store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, numColsPrefixKey = 0,
-      VALUE_ROW_SCHEMA)
+    store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA,
+      numColsPrefixKey = 0, VALUE_ROW_SCHEMA)
 
     if (ttlMode != TTLMode.NoTTL()) {
       val _ttlState = new SingleKeyTTLState(ttlMode, stateName, store,
-        batchTimestampMs, eventTimeWatermarkMs, this)
+        batchTimestampMs, eventTimeWatermarkMs)
       ttlState = Some(_ttlState)
     }
   }

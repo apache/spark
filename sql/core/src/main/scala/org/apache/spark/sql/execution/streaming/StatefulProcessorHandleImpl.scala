@@ -89,6 +89,7 @@ class StatefulProcessorHandleImpl(
   private val ttlStates: util.List[TTLState] = new util.ArrayList[TTLState]()
 
   private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
+  logInfo(s"Created StatefulProcessorHandle")
 
   private def buildQueryInfo(): QueryInfo = {
     val taskCtxOpt = Option(TaskContext.get())
@@ -124,12 +125,16 @@ class StatefulProcessorHandleImpl(
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
-    verify(currState == CREATED, s"Cannot create state variable with name=$stateName after " +
-      "initialization is complete")
+    verifyStateVarOperations("get_value_state")
 
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder,
       ttlMode, batchTimestampMs, eventTimeWatermarkMs)
-    resultState.ttlState.foreach(ttlStates.add(_))
+    val ttlState = resultState.ttlState
+
+    ttlState.foreach { s =>
+      ttlStates.add(s)
+      s.setStateVariable(resultState)
+    }
 
     resultState
   }
