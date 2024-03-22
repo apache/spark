@@ -40,7 +40,7 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
     // we first must normalize the ids in the common expressions. We must do this before
     // other canonicalization steps, since canonicalization might reorder commutative expressions
     // that include common expressions as operands.
-    val ceIdMap = defs.map(_.id).zipWithIndex.map(x => (x._1, x._2.toLong)).toMap
+    val ceIdMap = defs.map(_.id).zip(0L until defs.size).toMap
     val newChild = child.transform {
       case r: CommonExpressionRef => r.copy(id = ceIdMap.getOrElse(r.id, r.id))
     }.canonicalized
