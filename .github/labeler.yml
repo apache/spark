@@ -131,7 +131,9 @@ DSTREAM:
      'data/streaming/**/*',
      'connector/kinesis-asl/**/*',
      'connector/kinesis-asl-assembly/**/*',
-     'connector/kafka*/**/*',
+     'connector/kafka-0-10/**/*',
+     'connector/kafka-0-10-assembly/**/*',
+     'connector/kafka-0-10-token-provider/**/*',
      'python/pyspark/streaming/**/*'
     ]
 
