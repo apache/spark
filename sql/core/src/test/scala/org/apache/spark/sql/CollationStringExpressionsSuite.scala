@@ -22,7 +22,7 @@ import scala.collection.immutable.Seq
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Collate, ExpressionEvalHelper, Literal, StringInstr}
+import org.apache.spark.sql.catalyst.expressions.{Collate, ExpressionEvalHelper, FindInSet, Literal, StringInstr}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -135,95 +135,85 @@ class CollationStringExpressionsSuite extends QueryTest
     )
   }
 
-  case class SubstringIndexTestFail[R](s1: String, s2: String, c1: String, c2: String)
-
-  test("Support SubstringIndex with Collation") {
-    // Supported collations
-    val checks = Seq(
-      CollationTestCase("The quick brown fox jumps over the dog.", "fox", "UTF8_BINARY", 17),
-      CollationTestCase("The quick brown fox jumps over the dog.", "FOX", "UTF8_BINARY", 0),
-      CollationTestCase("The quick brown fox jumps over the dog.", "FOX", "UTF8_BINARY_LCASE", 17),
-      CollationTestCase("The quick brown fox jumps over the dog.", "fox", "UNICODE", 17),
-      CollationTestCase("The quick brown fox jumps over the dog.", "FOX", "UNICODE", 0),
-      CollationTestCase("The quick brown fox jumps over the dog.", "FOX", "UNICODE_CI", 17)
-    )
-    checks.foreach(ct => {
-      checkAnswer(sql(s"SELECT instr(collate('${ct.s1}', '${ct.collation}'), " +
-        s"collate('${ct.s2}', '${ct.collation}'))"),
-        Row(ct.expectedResult))
-    })
-    // Unsupported collation pairs
-    val fails = Seq(
-      SubstringIndexTestFail("The quick brown fox jumps over the dog.",
-        "Fox", "UTF8_BINARY_LCASE", "UTF8_BINARY"),
-      SubstringIndexTestFail("The quick brown fox jumps over the dog.",
-        "FOX", "UNICODE_CI", "UNICODE")
-    )
-    fails.foreach(ct => {
-      val expr = s"instr(collate('${ct.s1}', '${ct.c1}'), collate('${ct.s2}', '${ct.c2}'))"
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          sql(s"SELECT $expr")
-        },
-        errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
-        sqlState = "42K09",
-        parameters = Map(
-          "sqlExpr" -> s"\"instr(collate(${ct.s1}), collate(${ct.s2}))\"",
-          "collationNameLeft" -> s"${ct.c1}",
-          "collationNameRight" -> s"${ct.c2}"
-        ),
-        context = ExpectedContext(
-          fragment = s"$expr",
-          start = 7,
-          stop = 45 + ct.s1.length + ct.c1.length + ct.s2.length + ct.c2.length
-        )
-      )
-    })
+  test("FIND_IN_SET check result on non-explicit default collation") {
+    checkEvaluation(FindInSet(Literal("def"), Literal("abc,b,ab,c,def")), 5)
+    checkEvaluation(FindInSet(Literal("defg"), Literal("abc,b,ab,c,def")), 0)
   }
 
-  test("Support FindInSet with Collation") {
-    // Supported collations
-    val checks = Seq(
-      CollationTestCase("a", "abc,b,ab,c,def", "UTF8_BINARY", 0),
-      CollationTestCase("c", "abc,b,ab,c,def", "UTF8_BINARY", 4),
-      CollationTestCase("abc", "abc,b,ab,c,def", "UTF8_BINARY", 1),
-      CollationTestCase("ab", "abc,b,ab,c,def", "UTF8_BINARY", 3),
-      CollationTestCase("AB", "abc,b,ab,c,def", "UTF8_BINARY", 0),
-      CollationTestCase("Ab", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", 3),
-      CollationTestCase("ab", "abc,b,ab,c,def", "UNICODE", 3),
-      CollationTestCase("aB", "abc,b,ab,c,def", "UNICODE", 0),
-      CollationTestCase("AB", "abc,b,ab,c,def", "UNICODE_CI", 3)
-    )
-    checks.foreach(ct => {
-      checkAnswer(sql(s"SELECT find_in_set(collate('${ct.s1}', '${ct.collation}'), " +
-        s"collate('${ct.s2}', '${ct.collation}'))"),
-        Row(ct.expectedResult))
-    })
-    // Unsupported collation pairs
-    val fails = Seq(
-      SubstringIndexTestFail("a", "abc,b,ab,c,def", "UTF8_BINARY_LCASE", "UTF8_BINARY"),
-      SubstringIndexTestFail("a", "abc,b,ab,c,def", "UNICODE_CI", "UNICODE")
-    )
-    fails.foreach(ct => {
-      val expr = s"find_in_set(collate('${ct.s1}', '${ct.c1}'), collate('${ct.s2}', '${ct.c2}'))"
-      checkError(
-        exception = intercept[ExtendedAnalysisException] {
-          sql(s"SELECT $expr")
-        },
-        errorClass = "DATATYPE_MISMATCH.COLLATION_MISMATCH",
-        sqlState = "42K09",
-        parameters = Map(
-          "sqlExpr" -> s"\"find_in_set(collate(${ct.s1}), collate(${ct.s2}))\"",
-          "collationNameLeft" -> s"${ct.c1}",
-          "collationNameRight" -> s"${ct.c2}"
-        ),
-        context = ExpectedContext(
-          fragment = s"$expr",
-          start = 7,
-          stop = 51 + ct.s1.length + ct.c1.length + ct.s2.length + ct.c2.length
+  test("FIND_IN_SET check result on explicitly collated strings") {
+    // UTF8_BINARY
+    checkEvaluation(FindInSet(Collate(Literal("a"), "UTF8_BINARY"),
+      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY")), 0)
+    checkEvaluation(FindInSet(Collate(Literal("c"), "UTF8_BINARY"),
+      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY")), 4)
+    checkEvaluation(FindInSet(Collate(Literal("AB"), "UTF8_BINARY"),
+      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY")), 0)
+    checkEvaluation(FindInSet(Collate(Literal("abcd"), "UTF8_BINARY"),
+      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY")), 0)
+    // UTF8_BINARY_LCASE
+    checkEvaluation(FindInSet(Collate(Literal("aB"), "UTF8_BINARY_LCASE"),
+      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY_LCASE")), 3)
+    checkEvaluation(FindInSet(Collate(Literal("a"), "UTF8_BINARY_LCASE"),
+      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY_LCASE")), 0)
+    checkEvaluation(FindInSet(Collate(Literal("abc"), "UTF8_BINARY_LCASE"),
+      Collate(Literal("aBc,b,ab,c,def"), "UTF8_BINARY_LCASE")), 1)
+    checkEvaluation(FindInSet(Collate(Literal("abcd"), "UTF8_BINARY_LCASE"),
+      Collate(Literal("aBc,b,ab,c,def"), "UTF8_BINARY_LCASE")), 0)
+    // UNICODE
+    checkEvaluation(FindInSet(Collate(Literal("a"), "UNICODE"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE")), 0)
+    checkEvaluation(FindInSet(Collate(Literal("ab"), "UNICODE"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE")), 3)
+    checkEvaluation(FindInSet(Collate(Literal("Ab"), "UNICODE"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE")), 0)
+    // UNICODE_CI
+    checkEvaluation(FindInSet(Collate(Literal("a"), "UNICODE_CI"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 0)
+    checkEvaluation(FindInSet(Collate(Literal("C"), "UNICODE_CI"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 4)
+    checkEvaluation(FindInSet(Collate(Literal("DeF"), "UNICODE_CI"),
+      Collate(Literal("abc,b,ab,c,dEf"), "UNICODE_CI")), 5)
+    checkEvaluation(FindInSet(Collate(Literal("DEFG"), "UNICODE_CI"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 0)
+  }
+
+  test("FIND_IN_SET fail mismatched collation types") {
+    // UNICODE and UNICODE_CI
+    val expr1 = FindInSet(Collate(Literal("a"), "UNICODE"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI"))
+    assert(expr1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "COLLATION_MISMATCH",
+        messageParameters = Map(
+          "collationNameLeft" -> "UNICODE",
+          "collationNameRight" -> "UNICODE_CI"
         )
       )
-    })
+    )
+    // DEFAULT(UTF8_BINARY) and UTF8_BINARY_LCASE
+    val expr2 = FindInSet(Collate(Literal("a"), "UTF8_BINARY"),
+      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY_LCASE"))
+    assert(expr2.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "COLLATION_MISMATCH",
+        messageParameters = Map(
+          "collationNameLeft" -> "UTF8_BINARY",
+          "collationNameRight" -> "UTF8_BINARY_LCASE"
+        )
+      )
+    )
+    // UTF8_BINARY_LCASE and UNICODE_CI
+    val expr3 = FindInSet(Collate(Literal("a"), "UTF8_BINARY_LCASE"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI"))
+    assert(expr3.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "COLLATION_MISMATCH",
+        messageParameters = Map(
+          "collationNameLeft" -> "UTF8_BINARY_LCASE",
+          "collationNameRight" -> "UNICODE_CI"
+        )
+      )
+    )
   }
 
   // TODO: Add more tests for other string expressions
