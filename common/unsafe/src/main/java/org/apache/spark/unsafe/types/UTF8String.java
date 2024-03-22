@@ -900,7 +900,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
 
-    return 0;
+    return -1;
   }
 
   /**

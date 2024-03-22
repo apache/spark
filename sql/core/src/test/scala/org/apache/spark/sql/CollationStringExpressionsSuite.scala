@@ -84,16 +84,18 @@ class CollationStringExpressionsSuite extends QueryTest
       Literal.create("Aa", StringType(1))), 1)
     checkEvaluation(StringInstr(Collate(Literal("aaads"), "UTF8_BINARY_LCASE"),
       Collate(Literal("Aa"), "UTF8_BINARY_LCASE")), 1)
+    checkEvaluation(StringInstr(Collate(Literal("aaads"), "UTF8_BINARY_LCASE"),
+      Collate(Literal("de"), "UTF8_BINARY_LCASE")), 0)
     // UNICODE
     checkEvaluation(StringInstr(Literal.create("aaads", StringType(2)),
       Literal.create("Aa", StringType(2))), 0)
     checkEvaluation(StringInstr(Collate(Literal("aaads"), "UNICODE"),
-      Collate(Literal("Aa"), "UNICODE")), 0)
+      Collate(Literal("de"), "UNICODE")), 0)
     // UNICODE_CI
     checkEvaluation(StringInstr(Literal.create("aaads", StringType(3)),
       Literal.create("de", StringType(3))), 0)
     checkEvaluation(StringInstr(Collate(Literal("aaads"), "UNICODE_CI"),
-      Collate(Literal("Aa"), "UNICODE_CI")), 0)
+      Collate(Literal("AD"), "UNICODE_CI")), 3)
   }
 
   test("INSTR fail mismatched collation types") {
@@ -174,6 +176,8 @@ class CollationStringExpressionsSuite extends QueryTest
     checkEvaluation(FindInSet(Collate(Literal("DeF"), "UNICODE_CI"),
       Collate(Literal("abc,b,ab,c,dEf"), "UNICODE_CI")), 5)
     checkEvaluation(FindInSet(Collate(Literal("DEFG"), "UNICODE_CI"),
+      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 0)
+    checkEvaluation(FindInSet(Collate(Literal("dsf"), "UNICODE_CI"),
       Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 0)
   }
 
