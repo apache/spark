@@ -30,11 +30,11 @@ object SparkPi {
     }
 
     val partitions = if (args.length > 0) args(0).toInt else 2
-    val samplesPerPartition = if (args.length > 1) args(1).toLong else 100000L
+    val rowsPerPartition = if (args.length > 1) args(1).toLong else 100000L
 
-    System.out.println("Computing PI with " +
+    System.out.println("Computing Pi with " +
       partitions + " partitions" + (if (args.length < 1) " (default)" else "") + " and " +
-      samplesPerPartition + " samples per partition" + (if (args.length < 2) " (default)" else "")
+      rowsPerPartition + " rows per partition" + (if (args.length < 2) " (default)" else "")
     )
 
     val spark = SparkSession
@@ -43,7 +43,7 @@ object SparkPi {
       .getOrCreate()
     import spark.implicits._
 
-    val N = samplesPerPartition * partitions
+    val N = rowsPerPartition * partitions
     val rand = random() * 2 - 1
     val count = spark.range(0, N, 1, partitions)
       .select(rand.as("x"), rand.as("y"))
