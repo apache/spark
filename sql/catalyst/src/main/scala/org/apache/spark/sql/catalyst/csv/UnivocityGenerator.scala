@@ -99,11 +99,7 @@ class UnivocityGenerator(
         builder.append("[")
         if (array.numElements() > 0) {
           if (array.isNullAt(0)) {
-            if (nullAsQuotedEmptyString) {
-              builder.append(options.nullValue)
-            } else {
-              builder.append(null.asInstanceOf[String])
-            }
+            appendNull(builder)
           } else {
             builder.append(elementConverter(array, 0))
           }
@@ -111,11 +107,7 @@ class UnivocityGenerator(
           while (i < array.numElements()) {
             builder.append(", ")
             if (array.isNullAt(i)) {
-              if (nullAsQuotedEmptyString) {
-                builder.append(options.nullValue)
-              } else {
-                builder.append(null.asInstanceOf[String])
-              }
+              appendNull(builder)
             } else {
               builder.append(elementConverter(array, i))
             }
@@ -138,11 +130,7 @@ class UnivocityGenerator(
           builder.append(keyConverter(keyArray, 0))
           builder.append(" -> ")
           if (valueArray.isNullAt(0)) {
-            if (nullAsQuotedEmptyString) {
-              builder.append(options.nullValue)
-            } else {
-              builder.append(null.asInstanceOf[String])
-            }
+            appendNull(builder)
           } else {
             builder.append(valueConverter(valueArray, 0))
           }
@@ -152,11 +140,7 @@ class UnivocityGenerator(
             builder.append(keyConverter(keyArray, i))
             builder.append(" -> ")
             if (valueArray.isNullAt(i)) {
-              if (nullAsQuotedEmptyString) {
-                builder.append(options.nullValue)
-              } else {
-                builder.append(null.asInstanceOf[String])
-              }
+              appendNull(builder)
             } else {
               builder.append(valueConverter(valueArray, i))
             }
@@ -174,11 +158,7 @@ class UnivocityGenerator(
         builder.append("{")
         if (row.numFields > 0) {
           if (row.isNullAt(0)) {
-            if (nullAsQuotedEmptyString) {
-              builder.append(options.nullValue)
-            } else {
-              builder.append(null.asInstanceOf[String])
-            }
+            appendNull(builder)
           } else {
             builder.append(converters(0)(row, 0))
           }
@@ -186,11 +166,7 @@ class UnivocityGenerator(
           while (i < row.numFields) {
             builder.append(", ")
             if (row.isNullAt(i)) {
-              if (nullAsQuotedEmptyString) {
-                builder.append(options.nullValue)
-              } else {
-                builder.append(null.asInstanceOf[String])
-              }
+              appendNull(builder)
             } else {
               builder.append(converters(i)(row, i))
             }
@@ -202,6 +178,14 @@ class UnivocityGenerator(
 
     case dt: DataType =>
       (getter, ordinal) => getter.get(ordinal, dt).toString
+  }
+
+  private def appendNull(builder: StringBuilder): Unit = {
+    if (nullAsQuotedEmptyString) {
+      builder.append(options.nullValue)
+    } else {
+      builder.append(null.asInstanceOf[String])
+    }
   }
 
   private def convertRow(row: InternalRow): Seq[String] = {
