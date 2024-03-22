@@ -319,11 +319,38 @@ class SparkSession:
 
     readStream.__doc__ = PySparkSession.readStream.__doc__
 
-    def register_progress_handler(self, handler: Callable) -> None:
+    def registerProgressHandler(self, handler: Callable) -> None:
         """
         Register a progress handler to be called when a progress update is received from the server.
+        .. versionadded:: 4.0
+
+        Examples
+        --------
+        >>> handler = lambda **kwargs: print(kwargs)
+        >>> spark.register_progress_handler(handler)
         """
         self._client.register_progress_handler(handler)
+
+    def removeProgressHandler(self, handler: Callable) -> None:
+        """
+        Remove a progress handler that was previously registered.
+        .. versionadded:: 4.0
+
+        Examples
+        --------
+        >>> handler = lambda **kwargs: print(kwargs)
+        >>> spark.register_progress_handler(handler)
+        >>> spark.remove_progress_handler(handler)
+        """
+        self._client.remove_progress_handler(handler)
+
+    def clearProgressHandlers(self) -> None:
+        """
+        Clear all registered progress handlers.
+        .. versionadded:: 4.0
+
+        """
+        self._client.clear_progress_handlers()
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None

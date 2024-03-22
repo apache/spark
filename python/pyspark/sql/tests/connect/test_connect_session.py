@@ -58,6 +58,27 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
     def tearDown(self):
         self.spark.stop()
 
+    def test_progress_handler(self):
+        handler_called = []
+
+        def handler(**kwargs):
+            nonlocal handler_called
+            handler_called.append(kwargs)
+
+        self.spark.registerProgressHandler(handler)
+        self.spark.sql("select 1").collect()
+        self.assertGreaterEqual(len(handler_called), 1)
+
+        handler_called = []
+        self.spark.removeProgressHandler(handler)
+        self.spark.sql("select 1").collect()
+        self.assertEqual(len(handler_called), 0)
+
+        self.spark.registerProgressHandler(handler)
+        self.spark.clearProgressHandlers()
+        self.spark.sql("select 1").collect()
+        self.assertGreaterEqual(len(handler_called), 0)
+
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
 
