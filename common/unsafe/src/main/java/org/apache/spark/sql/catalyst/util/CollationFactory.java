@@ -65,13 +65,16 @@ public final class CollationFactory {
     public final BiFunction<UTF8String, UTF8String, Boolean> equalsFunction;
 
     /**
-     * Binary collation implies that UTF8Strings are considered equal only if they are
-     * byte for byte equal. All accent or case-insensitive collations are considered non-binary.
+     * Support for Binary Equality implies that it is possible to check equality on
+     * byte by byte level. This allows for the usage of binaryEquals call on UTF8Strings
+     * which is more performant than calls to external ICU library.
      */
     public final boolean supportsBinaryEquality;
     /**
-     * Binary collation implies that UTF8Strings are compared on byte level.
-     * All accent or case-insensitive collations are considered non-binary.
+     * Support for Binary Ordering implies that it is possible to check equality and compare on
+     * byte by byte level. This allows for the usage of binaryEquals and binaryCompare calls on UTF8Strings
+     * which is more performant than calls to external ICU library. Support for Binary Ordering implies
+     * support for Binary Equality.
      */
     public final boolean supportsBinaryOrdering;
 
@@ -90,6 +93,9 @@ public final class CollationFactory {
       this.hashFunction = hashFunction;
       this.supportsBinaryEquality = supportsBinaryEquality;
       this.supportsBinaryOrdering = supportsBinaryOrdering;
+
+      // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
+      assert(!supportsBinaryOrdering || supportsBinaryEquality);
 
       if (supportsBinaryEquality) {
         this.equalsFunction = UTF8String::equals;

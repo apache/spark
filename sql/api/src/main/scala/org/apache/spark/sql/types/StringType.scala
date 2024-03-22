@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 @Stable
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
   /**
-   * Binary collation that supports equality implies that strings are considered equal only if
+   * Support for Binary Equality implies that strings are considered equal only if
    * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
    * non-binary. If this field is true, byte level operations can be used against this datatype
    * (e.g. for equality and hashing).
@@ -40,7 +40,7 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
     collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID
 
   /**
-   * Binary collation that supports ordering implies that strings are considered equal only
+   * Support for Binary Ordering implies that strings are considered equal only
    * if they are byte for byte equal. E.g. all accent or case-insensitive collations are
    * considered non-binary. Also their comparison does not require ICU library calls, as
    * ordering follows spark internal implementation. If this field is true, byte level operations

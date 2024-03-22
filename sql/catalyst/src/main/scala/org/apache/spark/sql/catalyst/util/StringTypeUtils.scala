@@ -26,7 +26,7 @@ object StringTypeUtils extends Logging {
    * Check if default collation is up-to-date with a config.
    */
   private def refreshDefaultCollation(): Unit = {
-    if (SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER
+    if (SparkEnv.get != null && SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER
       && SqlApiConf.get.defaultCollation != DEFAULT_COLLATION) {
       DEFAULT_COLLATION = SqlApiConf.get.defaultCollation
       DEFAULT_COLLATION_ID = CollationFactory.collationNameToId(DEFAULT_COLLATION)
