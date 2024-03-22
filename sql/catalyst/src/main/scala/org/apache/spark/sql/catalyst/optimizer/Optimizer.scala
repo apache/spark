@@ -2480,13 +2480,12 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
 object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
-    case a @ Aggregate(groupingExpr, x, b) =>
+    case a @ Aggregate(groupingExpr, _, _) =>
       val newGrouping = groupingExpr.map { expr =>
-        (expr, expr.dataType) match {
-          case (_: MapSort, _) => expr
-          case (_, _: MapType) =>
-            MapSort(expr)
-          case _ => expr
+        if (!expr.isInstanceOf[MapSort] && expr.dataType.isInstanceOf[MapType]) {
+          MapSort(expr)
+        } else {
+          expr
         }
       }
       a.copy(groupingExpressions = newGrouping)
