@@ -33,6 +33,14 @@ select * from x join lateral (select xm[1] - ym[1] from y);
 select * from x join lateral (select xm[1], xm[1] as s1, xm[1] - ym[1] as s2 from y);
 select * from x join lateral (select xm[1], sum(ym[1]), xm[1] - sum(ym[1]) from y group by xm[1]);
 
+-- Complex key expressions
+select * from x where (select sum(y2) from y where xm[x2] = ym[1]) > 2;
+select * from x where (select sum(y2) from y where xm[x2+1] = ym[1]) > 2;
+select * from x where (select sum(y2) from y where xm[x2+1] = ym[1] and xm[1+x2] = ym[2]) > 2; -- Two key expressions that are semantically equal
+
+-- Cannot pull out expression because it references both outer and inner
+select * from x where (select sum(y2) from y where xm[y2] = ym[1]) > 2;
+
 -- Unsupported when disabled due to DomainJoin over map
 set spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled = false;
 select * from x where (select sum(y2) from y where xm[1] = ym[1]) > 2;

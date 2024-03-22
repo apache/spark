@@ -28,6 +28,9 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 
 /**
+ * This rule replaces outer references of type Map with the Map's members for subqueries that have
+ * correlated conditions on Map's members.
+ *
  * Without this rule, when a subquery is correlated on a condition like
  * `outer_map[1] = inner_map[1]`, DecorrelateInnerQuery generates a join on the map itself,
  * which is unsupported for some types like map and inefficient for other types like structs.
@@ -89,7 +92,10 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
           val newInnerPlan = innerPlan.transformAllExpressionsWithPruning(
             _.containsAllPatterns(OUTER_REFERENCE, EXTRACT_VALUE)) {
             // We plan to extend to other ExtractValue and similar exprs in future PRs
-            case e @ GetMapValue(outerRef: OuterReference, key) =>
+            case e @ GetMapValue(outerRef: OuterReference, key) if e.references.isEmpty =>
+              // e.references.isEmpty checks whether there are any inner references (since it
+              // doesn't include outer references). The expression must reference the outer plan
+              // only, not the inner plan.
               val hash = e.semanticHash()
               if (!newExprMap.contains(hash)) {
                 val projExpr = stripOuterReference(e)
