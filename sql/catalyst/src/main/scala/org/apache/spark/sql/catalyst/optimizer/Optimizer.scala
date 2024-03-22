@@ -2485,7 +2485,7 @@ object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
         (expr, expr.dataType) match {
           case (_: MapSort, _) => expr
           case (_, _: MapType) =>
-            MapSort(expr, Literal.TrueLiteral)
+            MapSort(expr)
           case _ => expr
         }
       }
