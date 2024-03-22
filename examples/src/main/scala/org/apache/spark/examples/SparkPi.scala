@@ -31,7 +31,8 @@ object SparkPi {
       .appName("Spark Pi")
       .getOrCreate()
     val partitions = if (args.length > 0) args(0).toInt else 2
-    val N = 100000L * partitions
+    val samplesPerPartition = if (args.length > 1) args(1).toLong else 100000L
+    val N = samplesPerPartition * partitions
     val rand = random() * 2 - 1
     val count = spark.range(0, N, 1, partitions)
       .select(rand.as("x"), rand.as("y"))
