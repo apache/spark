@@ -109,15 +109,14 @@ class UnivocityGenerator(
           }
           var i = 1
           while (i < array.numElements()) {
-            builder.append(",")
+            builder.append(", ")
             if (array.isNullAt(i)) {
               if (nullAsQuotedEmptyString) {
-                builder.append(" " + options.nullValue)
+                builder.append(options.nullValue)
               } else {
-                builder.append(" " + null.asInstanceOf[String])
+                builder.append(null.asInstanceOf[String])
               }
             } else {
-              builder.append(" ")
               builder.append(elementConverter(array, i))
             }
             i += 1
@@ -137,30 +136,28 @@ class UnivocityGenerator(
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
           builder.append(keyConverter(keyArray, 0))
-          builder.append(" ->")
+          builder.append(" -> ")
           if (valueArray.isNullAt(0)) {
             if (nullAsQuotedEmptyString) {
-              builder.append(" " + options.nullValue)
+              builder.append(options.nullValue)
             } else {
-              builder.append(" " + null.asInstanceOf[String])
+              builder.append(null.asInstanceOf[String])
             }
           } else {
-            builder.append(" ")
             builder.append(valueConverter(valueArray, 0))
           }
           var i = 1
           while (i < map.numElements()) {
             builder.append(", ")
             builder.append(keyConverter(keyArray, i))
-            builder.append(" ->")
+            builder.append(" -> ")
             if (valueArray.isNullAt(i)) {
               if (nullAsQuotedEmptyString) {
-                builder.append(" " + options.nullValue)
+                builder.append(options.nullValue)
               } else {
-                builder.append(" " + null.asInstanceOf[String])
+                builder.append(null.asInstanceOf[String])
               }
             } else {
-              builder.append(" ")
               builder.append(valueConverter(valueArray, i))
             }
             i += 1
@@ -170,14 +167,12 @@ class UnivocityGenerator(
         builder.toString()
 
     case StructType(fields) =>
+      val converters = fields.map(_.dataType).map(makeConverter)
       (getter, ordinal) =>
-        val numFields = fields.length
-        val row = getter.getStruct(ordinal, numFields)
+        val row = getter.getStruct(ordinal, fields.length)
         val builder = new StringBuilder
         builder.append("{")
         if (row.numFields > 0) {
-          val st = fields.map(_.dataType)
-          val converters = st.map(makeConverter)
           if (row.isNullAt(0)) {
             if (nullAsQuotedEmptyString) {
               builder.append(options.nullValue)
@@ -189,15 +184,14 @@ class UnivocityGenerator(
           }
           var i = 1
           while (i < row.numFields) {
-            builder.append(",")
+            builder.append(", ")
             if (row.isNullAt(i)) {
               if (nullAsQuotedEmptyString) {
-                builder.append(" " + options.nullValue)
+                builder.append(options.nullValue)
               } else {
-                builder.append(" " + null.asInstanceOf[String])
+                builder.append(null.asInstanceOf[String])
               }
             } else {
-              builder.append(" ")
               builder.append(converters(i)(row, i))
             }
             i += 1
