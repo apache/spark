@@ -143,8 +143,8 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
   }
 
   /**
-   * SPARK-47509: There is a correctness bug when lambdas or higher-order functions appear within
-   * subquery expression plans. Here we check for that case and return an error if the corresponding
+   * SPARK-47509: There is a correctness bug when subquery expressions appear within lambdas or
+   * higher-order functions. Here we check for that case and return an error if the corresponding
    * configuration indicates to do so.
    */
   private def checkForSubqueryExpressions(expression: Expression): Unit = {
