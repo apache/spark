@@ -38,6 +38,8 @@ import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 
+import org.apache.spark.sql.internal.SQLConf;
+
 /**
  * GetTablesOperation.
  *
@@ -93,7 +95,14 @@ public class GetTablesOperation extends MetadataOperation {
     setState(OperationState.RUNNING);
     try {
       IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
-      String schemaPattern = convertSchemaPattern(schemaName);
+      String schemaPattern, tablePattern;
+      if (SQLConf.get().legacyUseStarAndVerticalBarAsWildcardsInLikePattern()) {
+        schemaPattern = MetadataOperationUtils.legacyConvertSchemaPattern(schemaName);
+        tablePattern = MetadataOperationUtils.legacyConvertIdentifierPattern(tableName, true);
+      } else {
+        schemaPattern = MetadataOperationUtils.convertSchemaPattern(schemaName, true);
+        tablePattern = MetadataOperationUtils.convertIdentifierPattern(tableName, true);
+      }
       List<String> matchingDbs = metastoreClient.getDatabases(schemaPattern);
       if(isAuthV2Enabled()){
         List<HivePrivilegeObject> privObjs = HivePrivilegeObjectUtils.getHivePrivDbObjects(matchingDbs);
@@ -101,7 +110,6 @@ public class GetTablesOperation extends MetadataOperation {
         authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr);
       }
 
-      String tablePattern = convertIdentifierPattern(tableName, true);
       for (TableMeta tableMeta :
           metastoreClient.getTableMeta(schemaPattern, tablePattern, tableTypeList)) {
         rowSet.addRow(new Object[] {

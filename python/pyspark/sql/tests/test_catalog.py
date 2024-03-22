@@ -42,9 +42,9 @@ class CatalogTestsMixin:
             spark.sql("CREATE DATABASE some_db")
             databases = [db.name for db in spark.catalog.listDatabases()]
             self.assertEqual(sorted(databases), ["default", "some_db"])
-            databases = [db.name for db in spark.catalog.listDatabases("def*")]
+            databases = [db.name for db in spark.catalog.listDatabases("def%")]
             self.assertEqual(sorted(databases), ["default"])
-            databases = [db.name for db in spark.catalog.listDatabases("def2*")]
+            databases = [db.name for db in spark.catalog.listDatabases("def2%")]
             self.assertEqual(sorted(databases), [])
 
     def test_database_exists(self):
@@ -94,17 +94,17 @@ class CatalogTestsMixin:
 
                     tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
                     tablesWithPattern = sorted(
-                        spark.catalog.listTables(pattern="tab*"), key=lambda t: t.name
+                        spark.catalog.listTables(pattern="tab%"), key=lambda t: t.name
                     )
                     tablesDefault = sorted(
                         spark.catalog.listTables("default"), key=lambda t: t.name
                     )
                     tablesDefaultWithPattern = sorted(
-                        spark.catalog.listTables("default", "tab*"), key=lambda t: t.name
+                        spark.catalog.listTables("default", "tab%"), key=lambda t: t.name
                     )
                     tablesSomeDb = sorted(spark.catalog.listTables("some_db"), key=lambda t: t.name)
                     tablesSomeDbWithPattern = sorted(
-                        spark.catalog.listTables("some_db", "tab*"), key=lambda t: t.name
+                        spark.catalog.listTables("some_db", "tab%"), key=lambda t: t.name
                     )
                     self.assertEqual(tables, tablesDefault)
                     self.assertEqual(tablesWithPattern, tablesDefaultWithPattern)
@@ -265,10 +265,10 @@ class CatalogTestsMixin:
             self.assertEqual(functions, functionsDefault)
 
             functionsWithPattern = dict(
-                (f.name, f) for f in spark.catalog.listFunctions(pattern="to*")
+                (f.name, f) for f in spark.catalog.listFunctions(pattern="to%")
             )
             functionsDefaultWithPattern = dict(
-                (f.name, f) for f in spark.catalog.listFunctions("default", "to*")
+                (f.name, f) for f in spark.catalog.listFunctions("default", "to%")
             )
             self.assertTrue(len(functionsWithPattern) > 10)
             self.assertFalse("+" in functionsWithPattern)
@@ -279,7 +279,7 @@ class CatalogTestsMixin:
             self.assertTrue("to_unix_timestamp" in functionsWithPattern)
             self.assertEqual(functionsWithPattern, functionsDefaultWithPattern)
             functionsWithPattern = dict(
-                (f.name, f) for f in spark.catalog.listFunctions(pattern="*not_existing_func*")
+                (f.name, f) for f in spark.catalog.listFunctions(pattern="%not_existing_func%")
             )
             self.assertTrue(len(functionsWithPattern) == 0)
 

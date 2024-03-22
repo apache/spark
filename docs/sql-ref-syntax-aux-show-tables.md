@@ -40,12 +40,21 @@ SHOW TABLES [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
 
 * **regex_pattern**
 
-     Specifies the regular expression pattern that is used to filter out unwanted tables. 
+     Specifies the regular expression pattern that is used to filter out unwanted tables.
 
+     1. After Version 4.0
+     * Same as SQL type `like` expressions, `%` for any character(s), and `_` for a single character.
+     * Examples are `'employees'`, `'emp%'`, `'emplo_ees'`, all of which will match the database named `'employees'`.
+     * **Note**
+       * The `OR` syntax represented by `|` is no longer supported by default.
+       * You can restore the semantics supported before version 4 by setting `spark.sql.legacy.useVerticalBarAndStarAsWildcardsInLikePattern` to true.
+
+     1. Before Version 4.0
      * Except for `*` and `|` character, the pattern works like a regular expression.
      * `*` alone matches 0 or more characters and `|` is used to separate multiple different regular expressions,
        any of which can match.
      * The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.
+     * Examples are `'employees'`, `'emp*'`, `'emp*|*ees'`, all of which will match the database named `'employees'`.
 
 ### Examples
 
@@ -79,7 +88,7 @@ SHOW TABLES IN userdb;
 +--------+---------+-----------+
 
 -- List all tables from default database matching the pattern `sam*`
-SHOW TABLES FROM default LIKE 'sam*';
+SHOW TABLES FROM default LIKE 'sam%';
 +--------+---------+-----------+
 |database|tableName|isTemporary|
 +--------+---------+-----------+
@@ -88,6 +97,7 @@ SHOW TABLES FROM default LIKE 'sam*';
 +--------+---------+-----------+
   
 -- List all tables matching the pattern `sam*|suj`
+Note: After Version 4.0, the `OR` syntax represented by `|` is no longer supported by default.
 SHOW TABLES LIKE 'sam*|suj';
 +--------+---------+-----------+
 |database|tableName|isTemporary|

@@ -92,8 +92,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
   test("list databases with pattern") {
     val catalog = newBasicCatalog()
     assert(catalog.listDatabases("db").toSet == Set.empty)
-    assert(catalog.listDatabases("db*").toSet == Set("db1", "db2", "db3"))
-    assert(catalog.listDatabases("*1").toSet == Set("db1"))
+    assert(catalog.listDatabases("db%").toSet == Set("db1", "db2", "db3"))
+    assert(catalog.listDatabases("%1").toSet == Set("db1"))
     assert(catalog.listDatabases("db2").toSet == Set("db2"))
   }
 
@@ -313,11 +313,11 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
 
   test("list tables with pattern") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] { catalog.listTables("unknown_db", "*") }
-    assert(catalog.listTables("db1", "*").toSet == Set.empty)
-    assert(catalog.listTables("db2", "*").toSet == Set("tbl1", "tbl2"))
-    assert(catalog.listTables("db2", "tbl*").toSet == Set("tbl1", "tbl2"))
-    assert(catalog.listTables("db2", "*1").toSet == Set("tbl1"))
+    intercept[AnalysisException] { catalog.listTables("unknown_db", "%") }
+    assert(catalog.listTables("db1", "%").toSet == Set.empty)
+    assert(catalog.listTables("db2", "%").toSet == Set("tbl1", "tbl2"))
+    assert(catalog.listTables("db2", "tbl%").toSet == Set("tbl1", "tbl2"))
+    assert(catalog.listTables("db2", "%1").toSet == Set("tbl1"))
   }
 
   test("column names should be case-preserving and column nullability should be retained") {
@@ -763,7 +763,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     val catalog = newEmptyCatalog()
     catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
     catalog.createFunction("mydb", newFunc("myfunc"))
-    assert(catalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
+    assert(catalog.listFunctions("mydb", "%").toSet == Set("myfunc"))
   }
 
   test("create function when database does not exist") {
@@ -782,9 +782,9 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
 
   test("drop function") {
     val catalog = newBasicCatalog()
-    assert(catalog.listFunctions("db2", "*").toSet == Set("func1"))
+    assert(catalog.listFunctions("db2", "%").toSet == Set("func1"))
     catalog.dropFunction("db2", "func1")
-    assert(catalog.listFunctions("db2", "*").isEmpty)
+    assert(catalog.listFunctions("db2", "%").isEmpty)
   }
 
   test("drop function when database does not exist") {
@@ -856,8 +856,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
     val catalog = newBasicCatalog()
     catalog.createFunction("db2", newFunc("func2"))
     catalog.createFunction("db2", newFunc("not_me"))
-    assert(catalog.listFunctions("db2", "*").toSet == Set("func1", "func2", "not_me"))
-    assert(catalog.listFunctions("db2", "func*").toSet == Set("func1", "func2"))
+    assert(catalog.listFunctions("db2", "%").toSet == Set("func1", "func2", "not_me"))
+    assert(catalog.listFunctions("db2", "func%").toSet == Set("func1", "func2"))
   }
 
   // --------------------------------------------------------------------------

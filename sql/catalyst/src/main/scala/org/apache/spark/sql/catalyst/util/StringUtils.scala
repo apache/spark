@@ -108,24 +108,82 @@ object StringUtils extends Logging {
   // scalastyle:on caselocale
 
   /**
-   * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
+   * get Wildcard that represent matching "all"
+   */
+  def getMatchAllWildcard: String = {
+    if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+      "*"
+    } else {
+      "%"
+    }
+  }
+
+  def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
+    if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+      legacyFilterPattern(names, pattern)
+    } else {
+      filterBySQLLikePattern(names, pattern)
+    }
+  }
+
+  /**
+   * This legacy utility can be used for filtering pattern in the "Like" of
+   * "Show Tables / Functions" DDL.
    * @param names the names list to be filtered
    * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
    *                follow regular expression convention, case insensitive match and white spaces
    *                on both ends will be ignored
    * @return the filtered names list in order
    */
-  def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
+  def legacyFilterPattern(names: Seq[String], pattern: String): Seq[String] = {
     val funcNames = scala.collection.mutable.SortedSet.empty[String]
     pattern.trim().split("\\|").foreach { subPattern =>
       try {
         val regex = ("(?i)" + subPattern.replaceAll("\\*", ".*")).r
-        funcNames ++= names.filter{ name => regex.pattern.matcher(name).matches() }
+        funcNames ++= names.filter { name => regex.pattern.matcher(name).matches() }
       } catch {
         case _: PatternSyntaxException =>
       }
     }
     funcNames.toSeq
+  }
+
+  /**
+   * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL.
+   * @param names the names list to be filtered
+   * @param pattern the filter pattern, same as SQL type `like` expressions:
+   *                '%' for any character(s), and '_' for a single character
+   * @return the filtered names list
+   */
+  def filterBySQLLikePattern(names: Seq[String], pattern: String): Seq[String] = {
+    try {
+      val p = Pattern.compile(likePatternToRegExp(pattern), Pattern.CASE_INSENSITIVE)
+      names.filter { name => p.matcher(name).matches() }
+    } catch {
+      case _: PatternSyntaxException => Seq.empty[String]
+    }
+  }
+
+  private[util] def likePatternToRegExp(pattern: String): String = {
+    val regExp = new StringBuilder()
+
+    var index = 0
+    while (index < pattern.length) {
+      val cur = pattern.charAt(index)
+      cur match {
+        // Make a special case for "\\_" and "\\%"
+        case '\\' if (index + 1 < pattern.length()
+          && (pattern.charAt(index + 1) == '_' || pattern.charAt(index + 1) == '%')) =>
+          regExp += pattern.charAt(index + 1)
+          index = index + 1
+        case '_' => regExp ++= "."
+        case '%' => regExp ++= ".*?"
+        case _ => regExp ++= Pattern.quote(Character.toString(cur))
+      }
+      index = index + 1
+    }
+
+    regExp.result()
   }
 
   /**

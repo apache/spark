@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, StringUtils, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -626,7 +626,12 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
   override def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
     recordHiveCall()
-    hive.getFunctions(db, pattern).asScala.toSeq
+    if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+      hive.getFunctions(db, pattern).asScala.toSeq
+    } else {
+      val functions = hive.getFunctions(db, "*").asScala.toSeq
+      StringUtils.filterBySQLLikePattern(functions, pattern)
+    }
   }
 
   /**
@@ -904,7 +909,12 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
   override def getDatabasesByPattern(hive: Hive, pattern: String): Seq[String] = {
     recordHiveCall()
-    hive.getDatabasesByPattern(pattern).asScala.toSeq
+    if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+      hive.getDatabasesByPattern(pattern).asScala.toSeq
+    } else {
+      val databases = hive.getDatabasesByPattern("*").asScala.toSeq
+      StringUtils.filterBySQLLikePattern(databases, pattern)
+    }
   }
 
   override def databaseExists(hive: Hive, dbName: String): Boolean = {
@@ -933,7 +943,12 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
   override def getTablesByPattern(hive: Hive, dbName: String, pattern: String): Seq[String] = {
     recordHiveCall()
-    hive.getTablesByPattern(dbName, pattern).asScala.toSeq
+    if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+      hive.getTablesByPattern(dbName, pattern).asScala.toSeq
+    } else {
+      val tables = hive.getTablesByPattern(dbName, "*").asScala.toSeq
+      StringUtils.filterBySQLLikePattern(tables, pattern)
+    }
   }
 
   override def getAllTables(hive: Hive, dbName: String): Seq[String] = {
@@ -1131,8 +1146,14 @@ private[client] class Shim_v2_3 extends Shim_v2_1 {
       tableType: TableType): Seq[String] = {
     recordHiveCall()
     try {
-      getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
-        .asInstanceOf[JList[String]].asScala.toSeq
+      if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+        getTablesByTypeMethod.invoke(hive, dbName, pattern, tableType)
+          .asInstanceOf[JList[String]].asScala.toSeq
+      } else {
+        val tables = getTablesByTypeMethod.invoke(hive, dbName, "*", tableType)
+          .asInstanceOf[JList[String]].asScala.toSeq
+        StringUtils.filterBySQLLikePattern(tables, pattern)
+      }
     } catch {
       case ex: InvocationTargetException if ex.getCause.isInstanceOf[HiveException] =>
         val cause = ex.getCause.getCause

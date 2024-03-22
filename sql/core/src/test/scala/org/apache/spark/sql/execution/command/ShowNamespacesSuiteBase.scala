@@ -85,7 +85,7 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"CREATE NAMESPACE ns2")
 
         runShowNamespacesSql("SHOW NAMESPACES", Seq("ns1", "ns2") ++ builtinTopNamespaces)
-        runShowNamespacesSql("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
+        runShowNamespacesSql("SHOW NAMESPACES LIKE '%1%'", Seq("ns1"))
       }
     }
   }
@@ -96,9 +96,9 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE NAMESPACE $catalog.showdb1a")
 
       Seq(
-        "'*db1A'" -> Seq("showdb1a"),
-        "'*2*'" -> Seq("showdb2b"),
-        "'*db1A|*db2B'" -> Seq("showdb1a", "showdb2b")
+        "'%db1A'" -> Seq("showdb1a"),
+        "'%2%'" -> Seq("showdb2b"),
+        "'%db__'" -> Seq("showdb1a", "showdb2b")
       ).foreach { case (pattern, expected) =>
         runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE $pattern", expected)
       }

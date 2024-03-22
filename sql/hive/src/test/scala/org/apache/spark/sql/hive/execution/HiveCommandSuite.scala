@@ -106,21 +106,21 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row("global_temp", "temp1", true) ::
           Row("", "temp2", true) :: Nil)
       checkAnswer(
-        sql("SHOW VIEWS 'show1*|show2*'"),
+        sql("SHOW VIEWS 'show%'"),
         Row("default", "show1a", false) ::
           Row("default", "show2b", false) :: Nil)
       checkAnswer(
-        sql("SHOW VIEWS LIKE 'show1*|show2*'"),
+        sql("SHOW VIEWS LIKE 'show%'"),
         Row("default", "show1a", false) ::
           Row("default", "show2b", false) :: Nil)
       checkAnswer(
-        sql("SHOW VIEWS IN default 'show1*'"),
+        sql("SHOW VIEWS IN default 'show1%'"),
         Row("default", "show1a", false) :: Nil)
       checkAnswer(
-        sql("SHOW VIEWS IN default LIKE 'show1*|show2*'"),
+        sql("SHOW VIEWS IN default LIKE 'show%'"),
         Row("default", "show1a", false) ::
           Row("default", "show2b", false) :: Nil)
-    }
+      }
   }
 
   Seq(true, false).foreach { local =>

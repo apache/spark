@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -138,10 +139,10 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
       funs.foreach(createFunction)
       QueryTest.checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*'"),
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '%'"),
         testFuns.map(testFun => Row(qualifiedFunName("ns", testFun))))
       QueryTest.checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '*rc*'"),
+        sql(s"SHOW USER FUNCTIONS IN $ns LIKE '%rc%'"),
         Seq("crc32i", "crc16j").map(testFun => Row(qualifiedFunName("ns", testFun))))
     }
   }
@@ -159,15 +160,18 @@ trait ShowFunctionsSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("show functions matched to the '|' pattern") {
     val testFuns = Seq("crc32i", "crc16j", "date1900", "Date1")
-    withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
-      assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
-      funs.foreach(createFunction)
-      QueryTest.checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date1900'"),
-        Seq("crc32i", "date1900").map(testFun => Row(qualifiedFunName("ns", testFun))))
-      QueryTest.checkAnswer(
-        sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date*'"),
-        Seq("crc32i", "date1900", "Date1").map(testFun => Row(qualifiedFunName("ns", testFun))))
+    withSQLConf(
+        SQLConf.LEGACY_USE_STAR_AND_VERTICAL_BAR_AS_WILDCARDS_IN_LIKE_PATTERN.key -> "true") {
+      withNamespaceAndFuns("ns", testFuns) { (ns, funs) =>
+        assert(sql(s"SHOW USER FUNCTIONS IN $ns").isEmpty)
+        funs.foreach(createFunction)
+        QueryTest.checkAnswer(
+          sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date1900'"),
+          Seq("crc32i", "date1900").map(testFun => Row(qualifiedFunName("ns", testFun))))
+        QueryTest.checkAnswer(
+          sql(s"SHOW USER FUNCTIONS IN $ns LIKE 'crc32i|date*'"),
+          Seq("crc32i", "date1900", "Date1").map(testFun => Row(qualifiedFunName("ns", testFun))))
+      }
     }
   }
 }

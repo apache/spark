@@ -25,12 +25,14 @@ import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationTyp
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetColumnsOperation
+import org.apache.hive.service.cli.operation.MetadataOperationUtils._
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -74,12 +76,20 @@ private[hive] class SparkGetColumnsOperation(
       statementId,
       parentSession.getUsername)
 
-    val schemaPattern = convertSchemaPattern(schemaName)
-    val tablePattern = convertIdentifierPattern(tableName, true)
+    val (schemaPattern, tablePattern) =
+      if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+        (legacyConvertSchemaPattern(schemaName), legacyConvertIdentifierPattern(tableName, true))
+      } else {
+        (convertSchemaPattern(schemaName, true), convertIdentifierPattern(tableName, true))
+      }
 
     var columnPattern: Pattern = null
     if (columnName != null) {
-      columnPattern = Pattern.compile(convertIdentifierPattern(columnName, false))
+      if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+        columnPattern = Pattern.compile(legacyConvertIdentifierPattern(columnName, false))
+      } else {
+        columnPattern = Pattern.compile(convertIdentifierPattern(columnName, false))
+      }
     }
 
     val db2Tabs = catalog.listDatabases(schemaPattern).map { dbName =>

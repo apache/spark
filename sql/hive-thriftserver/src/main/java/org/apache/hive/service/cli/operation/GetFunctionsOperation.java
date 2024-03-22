@@ -41,6 +41,8 @@ import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 import org.apache.thrift.TException;
 
+import org.apache.spark.sql.internal.SQLConf;
+
 /**
  * GetFunctionsOperation.
  *
@@ -81,7 +83,12 @@ public class GetFunctionsOperation extends MetadataOperation {
     if (isAuthV2Enabled()) {
       // get databases for schema pattern
       IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
-      String schemaPattern = convertSchemaPattern(schemaName);
+      String schemaPattern;
+      if (SQLConf.get().legacyUseStarAndVerticalBarAsWildcardsInLikePattern()) {
+        schemaPattern = MetadataOperationUtils.legacyConvertSchemaPattern(schemaName);
+      } else {
+        schemaPattern = MetadataOperationUtils.convertSchemaPattern(schemaName, true);
+      }
       List<String> matchingDbs;
       try {
         matchingDbs = metastoreClient.getDatabases(schemaPattern);

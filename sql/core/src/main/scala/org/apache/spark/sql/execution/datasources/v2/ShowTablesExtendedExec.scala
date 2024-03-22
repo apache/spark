@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, ToPrettyString}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, StringUtils}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsPartitionManagement, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -45,16 +45,13 @@ case class ShowTablesExtendedExec(
     val rows = new ArrayBuffer[InternalRow]()
 
     // fetch tables
-    // TODO We need a new listTable overload that takes a pattern string.
-    val tables = catalog.listTables(namespace.toArray)
+    val tables = catalog.listTables(namespace.toArray, pattern)
     tables.map { tableIdent =>
-      if (StringUtils.filterPattern(Seq(tableIdent.name()), pattern).nonEmpty) {
-        val table = catalog.loadTable(tableIdent)
-        val information = getTableDetails(catalog.name, tableIdent, table)
-        rows += toCatalystRow(tableIdent.namespace().quoted, tableIdent.name(), false,
-          s"$information\n")
-        }
-      }
+      val table = catalog.loadTable(tableIdent)
+      val information = getTableDetails(catalog.name, tableIdent, table)
+      rows += toCatalystRow(tableIdent.namespace().quoted, tableIdent.name(), false,
+        s"$information\n")
+    }
 
     // fetch temp views, includes: global temp view, local temp view
     val sessionCatalog = session.sessionState.catalog

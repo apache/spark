@@ -76,7 +76,7 @@ show_t3
 
 
 -- !query
-SHOW TABLES 'show_t*'
+SHOW TABLES 'show_t%'
 -- !query schema
 struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
@@ -86,16 +86,7 @@ show_t3
 
 
 -- !query
-SHOW TABLES LIKE 'show_t1*|show_t2*'
--- !query schema
-struct<namespace:string,tableName:string,isTemporary:boolean>
--- !query output
-show_t1
-show_t2
-
-
--- !query
-SHOW TABLES IN showdb 'show_t*'
+SHOW TABLES LIKE 'show_t%'
 -- !query schema
 struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
@@ -105,7 +96,7 @@ show_t3
 
 
 -- !query
-SHOW TABLES IN showdb LIKE 'show_t*'
+SHOW TABLES IN showdb 'show_t%'
 -- !query schema
 struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
@@ -115,7 +106,17 @@ show_t3
 
 
 -- !query
-SHOW TABLE EXTENDED LIKE 'show_t*'
+SHOW TABLES IN showdb LIKE 'show_t%'
+-- !query schema
+struct<namespace:string,tableName:string,isTemporary:boolean>
+-- !query output
+show_t1
+show_t2
+show_t3
+
+
+-- !query
+SHOW TABLE EXTENDED LIKE 'show_t%'
 -- !query schema
 struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
 -- !query output
@@ -204,7 +205,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1)
+SHOW TABLE EXTENDED LIKE 'show_t%' PARTITION(c='Us', d=1)
 -- !query schema
 struct<>
 -- !query output
@@ -213,14 +214,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`show_t*`"
+    "relationName" : "`show_t%`"
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 26,
     "stopIndex" : 34,
-    "fragment" : "'show_t*'"
+    "fragment" : "'show_t%'"
   } ]
 }
 

@@ -23,10 +23,12 @@ import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
+import org.apache.hive.service.cli.operation.MetadataOperationUtils._
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Spark's own GetSchemasOperation
@@ -67,7 +69,12 @@ private[hive] class SparkGetSchemasOperation(
       parentSession.getUsername)
 
     try {
-      val schemaPattern = convertSchemaPattern(schemaName)
+      val schemaPattern =
+        if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+          legacyConvertSchemaPattern(schemaName)
+        } else {
+          convertSchemaPattern(schemaName, true)
+        }
       sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
         rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
       }

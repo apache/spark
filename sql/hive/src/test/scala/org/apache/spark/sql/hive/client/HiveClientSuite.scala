@@ -152,7 +152,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   test("listDatabases") {
-    assert(client.listDatabases("defau.*") == Seq("default"))
+    assert(client.listDatabases("defau%") == Seq("default"))
   }
 
   test("alterDatabase") {
@@ -539,7 +539,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   test("listFunctions") {
-    assert(client.listFunctions("default", "fun.*").size == 1)
+    assert(client.listFunctions("default", "fun%").size == 1)
   }
 
   test("dropFunction") {

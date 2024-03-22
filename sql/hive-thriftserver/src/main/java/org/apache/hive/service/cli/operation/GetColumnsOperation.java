@@ -51,6 +51,8 @@ import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 
+import org.apache.spark.sql.internal.SQLConf;
+
 /**
  * GetColumnsOperation.
  *
@@ -134,12 +136,22 @@ public class GetColumnsOperation extends MetadataOperation {
     setState(OperationState.RUNNING);
     try {
       IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
-      String schemaPattern = convertSchemaPattern(schemaName);
-      String tablePattern = convertIdentifierPattern(tableName, true);
-
+      String schemaPattern, tablePattern;
       Pattern columnPattern = null;
-      if (columnName != null) {
-        columnPattern = Pattern.compile(convertIdentifierPattern(columnName, false));
+      if (SQLConf.get().legacyUseStarAndVerticalBarAsWildcardsInLikePattern()) {
+        schemaPattern = MetadataOperationUtils.legacyConvertSchemaPattern(schemaName);
+        tablePattern = MetadataOperationUtils.legacyConvertIdentifierPattern(tableName, true);
+        if (columnName != null) {
+          columnPattern = Pattern.compile(
+              MetadataOperationUtils.legacyConvertIdentifierPattern(columnName, false));
+        }
+      } else {
+        schemaPattern = MetadataOperationUtils.convertSchemaPattern(schemaName, true);
+        tablePattern = MetadataOperationUtils.convertIdentifierPattern(tableName, true);
+        if (columnName != null) {
+          columnPattern = Pattern.compile(
+            MetadataOperationUtils.convertIdentifierPattern(columnName, false));
+        }
       }
 
       List<String> dbNames = metastoreClient.getDatabases(schemaPattern);

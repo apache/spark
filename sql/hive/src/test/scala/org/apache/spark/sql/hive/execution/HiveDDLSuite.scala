@@ -1766,7 +1766,7 @@ class HiveDDLSuite
         client.runSqlHive(
           s"CREATE INDEX $indexName ON TABLE $tabName (a) AS 'COMPACT' WITH DEFERRED REBUILD")
         val indexTabName =
-          spark.sessionState.catalog.listTables("default", s"*$indexName*").head.table
+          spark.sessionState.catalog.listTables("default", s"%$indexName%").head.table
 
         // Even if index tables exist, listTables APIs should still work
         checkAnswer(

@@ -25,11 +25,13 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTablesOperation
+import org.apache.hive.service.cli.operation.MetadataOperationUtils._
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Spark's own GetTablesOperation
@@ -64,8 +66,12 @@ private[hive] class SparkGetTablesOperation(
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     val catalog = sqlContext.sessionState.catalog
-    val schemaPattern = convertSchemaPattern(schemaName)
-    val tablePattern = convertIdentifierPattern(tableName, true)
+    val (schemaPattern, tablePattern) =
+      if (SQLConf.get.legacyUseStarAndVerticalBarAsWildcardsInLikePattern) {
+        (legacyConvertSchemaPattern(schemaName), legacyConvertIdentifierPattern(tableName, true))
+      } else {
+        (convertSchemaPattern(schemaName, true), convertIdentifierPattern(tableName, true))
+      }
     val matchingDbs = catalog.listDatabases(schemaPattern)
 
     if (isAuthV2Enabled) {

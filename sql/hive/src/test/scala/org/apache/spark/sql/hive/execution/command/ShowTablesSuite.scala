@@ -77,7 +77,7 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
       val viewName = table + "_view"
       withView(viewName) {
         sql(s"CREATE VIEW $catalog.$namespace.$viewName AS SELECT id FROM $t")
-        val result = sql(s"SHOW TABLE EXTENDED in $namespace LIKE '$viewName*'").sort("tableName")
+        val result = sql(s"SHOW TABLE EXTENDED in $namespace LIKE '$viewName%'").sort("tableName")
         assert(result.schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
         val resultCollect = result.collect()
