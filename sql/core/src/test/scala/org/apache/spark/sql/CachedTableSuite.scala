@@ -1781,7 +1781,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           |from data
           |where id between 2 and 4""".stripMargin)
       sql("cache table the_query")
-      val df1 = sql("SELECT * FROM the_query")
+      val df1 = sql("SELECT * FROM the_query order by id")
       checkAnswer(df1,
         Row(2, 20) :: Row(3, 30) :: Row(4, 40) :: Nil)
       df1.explain()
@@ -1792,7 +1792,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           |from data
           |group by id""".stripMargin)
       sql("cache table the_query2")
-      val df2 = sql("SELECT * FROM the_query2")
+      val df2 = sql("SELECT * FROM the_query2 order by id")
       checkAnswer(df2,
         Row(0, 0) :: Row(1, 1) :: Row(2, 1) :: Row(3, 1) :: Row(4, 1) :: Row(5, 1) ::
           Row(6, 1) :: Row(7, 1) :: Row(8, 1) :: Row(9, 1) :: Nil)
