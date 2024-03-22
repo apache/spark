@@ -1337,6 +1337,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
           parameters = Map(
             "loggingId" -> "\\[Thread-\\d+\\]",
+            "operationType" -> "load_store",
             "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
             "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
             "timeWaitedMs" -> "\\d+",
@@ -1364,6 +1365,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
           parameters = Map(
             "loggingId" -> "\\[Thread-\\d+\\]",
+            "operationType" -> "load_store",
             "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
             "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
             "timeWaitedMs" -> "\\d+",
