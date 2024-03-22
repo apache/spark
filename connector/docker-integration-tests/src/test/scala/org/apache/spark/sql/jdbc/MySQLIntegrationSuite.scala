@@ -81,7 +81,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
 
     conn.prepareStatement("CREATE TABLE floats (f1 FLOAT, f2 FLOAT UNSIGNED)").executeUpdate()
     conn.prepareStatement("INSERT INTO floats VALUES (1.23, 4.56)").executeUpdate()
-
   }
 
   test("Basic test") {
