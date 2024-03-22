@@ -123,6 +123,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
         // Signed values in [-8388608, 8388607] and unsigned values in [0, 16777215],
         // both of them fit IntegerType
         Some(IntegerType)
+      case Types.REAL | Types.FLOAT =>
+        if (md.build().getBoolean("isSigned")) Some(FloatType) else Some(DoubleType)
       case Types.TIMESTAMP if "DATETIME".equalsIgnoreCase(typeName) =>
         // scalastyle:off line.size.limit
         // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
