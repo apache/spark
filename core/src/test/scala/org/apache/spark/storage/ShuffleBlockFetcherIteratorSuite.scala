@@ -496,7 +496,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val mergedLocalBlocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockBatchId(0, 0, 0, 3) -> createMockManagedBuffer())
     mergedLocalBlocks.foreach { case (blockId, buf) =>
-      doReturn(buf).when(blockManager).getLocalBlockData(meq(blockId))
+      doReturn(buf).when(blockManager).getLocalBlockData(blockId)
     }
 
     // Make sure remote blocks would return the merged block
@@ -549,9 +549,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       doBatchFetch = true
     )
 
-    // 3 local blocks fetched in initialization and one external
-    // storage batch fetched by thread pool
-    verify(blockManager, times(2)).getLocalBlockData(any())
+    // 3 local blocks batch fetched in initialization
+    verify(blockManager, times(1)).getLocalBlockData(any())
 
     val allBlocks = mergedLocalBlocks ++ mergedRemoteBlocks ++
       mergedHostLocalBlocks ++ mergedExternalBlocks

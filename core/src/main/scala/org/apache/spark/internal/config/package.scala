@@ -552,16 +552,16 @@ package object config {
       .createOptional
 
   private[spark] val STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ =
-    ConfigBuilder("spark.storage.fallbackStorage.num.threads.for.shuffle.read")
+    ConfigBuilder("spark.storage.fallbackStorage.numThreadsForShuffleRead")
       .doc("Number of threads to be used for reading shuffle data from external storage. If it" +
         " is not set, then number of cores set for executor will be used.")
       .version("4.0.0")
       .intConf
       .createOptional
 
-  private[spark] val STORAGE_DECOMMISSION_MIGRATE_TO_STORAGE =
-    ConfigBuilder("spark.storage.decommission.migrate.to.storage")
-      .doc("If true, Migrate the shuffle data directly to fallback storage during" +
+  private[spark] val STORAGE_DECOMMISSION_MIGRATE_TO_EXTERNAL_STORAGE =
+    ConfigBuilder("spark.storage.decommission.migrateToExternalStorage")
+      .doc("If true, Migrate the shuffle data directly to external storage during" +
         " node decommissioning.")
       .version("4.0.0")
       .booleanConf

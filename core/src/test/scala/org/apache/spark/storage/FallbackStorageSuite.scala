@@ -176,7 +176,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       val conf = new SparkConf(false)
         .set("spark.app.id", "testId")
         .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
-        .set(STORAGE_DECOMMISSION_MIGRATE_TO_STORAGE, migrateToStorage)
+        .set(STORAGE_DECOMMISSION_MIGRATE_TO_EXTERNAL_STORAGE, migrateToStorage)
         .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
           Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
 

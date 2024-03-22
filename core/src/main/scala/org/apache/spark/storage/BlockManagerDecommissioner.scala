@@ -309,7 +309,7 @@ private[storage] class BlockManagerDecommissioner(
     }
 
     // Update the threads doing migrations
-    if (conf.get(config.STORAGE_DECOMMISSION_MIGRATE_TO_STORAGE) &&
+    if (conf.get(config.STORAGE_DECOMMISSION_MIGRATE_TO_EXTERNAL_STORAGE) &&
       conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
       val numThread = conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS)
       logInfo(s"Migrating to external storage location " +

@@ -129,18 +129,12 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
   }
 
   private def fetchShuffleBlocks(
-              block: FetchBlockInfo,
-              blockManager: BlockManager,
-              listener: BlockFetchingListener): Unit = {
+      block: FetchBlockInfo,
+      blockManager: BlockManager,
+      listener: BlockFetchingListener): Unit = {
     try {
-      // First try in local to check if its already cached in local disk,
-      // if not then fallback to external storage done internally by getLocalBlockData.
-      var buffer = blockManager.getLocalBlockData(block.blockId)
-      if (buffer == null) {
-        // For test
-        buffer = FallbackStorage.read(blockManager.conf, block.blockId)
-      }
-      listener.onBlockFetchSuccess(block.blockId.name, buffer)
+      listener.onBlockFetchSuccess(block.blockId.name,
+        FallbackStorage.read(conf, block.blockId))
     } catch {
       case e: Exception =>
         listener.onBlockFetchFailure(block.blockId.name, e)
@@ -225,7 +219,7 @@ private[spark] object FallbackStorage extends Logging {
   def stopThreadPool(conf: SparkConf): Unit = {
     logInfo(s" Stopping thread pool")
     if (getFallbackStorage(conf).isDefined &&
-      getFallbackStorage(conf).get.fetchThreadPool.isDefined) {
+        getFallbackStorage(conf).get.fetchThreadPool.isDefined) {
       getFallbackStorage(conf).get.fetchThreadPool.foreach(ThreadUtils.shutdown(_))
     }
   }
