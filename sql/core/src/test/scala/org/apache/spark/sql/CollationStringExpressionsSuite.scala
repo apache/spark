@@ -21,10 +21,14 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{Collate, ExpressionEvalHelper, Literal, StringInstr}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StringType
 
-class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession {
+class CollationStringExpressionsSuite extends QueryTest
+  with SharedSparkSession with ExpressionEvalHelper {
 
   case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
   case class CollationTestFail[R](s1: String, s2: String, collation: String)
@@ -68,6 +72,67 @@ class CollationStringExpressionsSuite extends QueryTest with SharedSparkSession 
         )
       )
     })
+  }
+
+  test("INSTR check result on non-explicit default collation") {
+    checkEvaluation(StringInstr(Literal("aAads"), Literal("Aa")), 2)
+  }
+
+  test("INSTR check result on explicitly collated strings") {
+    // UTF8_BINARY_LCASE
+    checkEvaluation(StringInstr(Literal.create("aaads", StringType(1)),
+      Literal.create("Aa", StringType(1))), 1)
+    checkEvaluation(StringInstr(Collate(Literal("aaads"), "UTF8_BINARY_LCASE"),
+      Collate(Literal("Aa"), "UTF8_BINARY_LCASE")), 1)
+    // UNICODE
+    checkEvaluation(StringInstr(Literal.create("aaads", StringType(2)),
+      Literal.create("Aa", StringType(2))), 0)
+    checkEvaluation(StringInstr(Collate(Literal("aaads"), "UNICODE"),
+      Collate(Literal("Aa"), "UNICODE")), 0)
+    // UNICODE_CI
+    checkEvaluation(StringInstr(Literal.create("aaads", StringType(3)),
+      Literal.create("de", StringType(3))), 0)
+    checkEvaluation(StringInstr(Collate(Literal("aaads"), "UNICODE_CI"),
+      Collate(Literal("Aa"), "UNICODE_CI")), 0)
+  }
+
+  test("INSTR fail mismatched collation types") {
+    // UNICODE and UNICODE_CI
+    val expr1 = StringInstr(Collate(Literal("aaads"), "UNICODE"),
+      Collate(Literal("Aa"), "UNICODE_CI"))
+    assert(expr1.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "COLLATION_MISMATCH",
+        messageParameters = Map(
+          "collationNameLeft" -> "UNICODE",
+          "collationNameRight" -> "UNICODE_CI"
+        )
+      )
+    )
+    // DEFAULT(UTF8_BINARY) and UTF8_BINARY_LCASE
+    val expr2 = StringInstr(Literal("aaads"),
+      Collate(Literal("Aa"), "UTF8_BINARY_LCASE"))
+    assert(expr2.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "COLLATION_MISMATCH",
+        messageParameters = Map(
+          "collationNameLeft" -> "UTF8_BINARY",
+          "collationNameRight" -> "UTF8_BINARY_LCASE"
+        )
+      )
+    )
+    // UTF8_BINARY_LCASE and UNICODE_CI
+    val expr3 = StringInstr(Collate(Literal("aaads"), "UTF8_BINARY_LCASE"),
+      Collate(Literal("Aa"), "UNICODE_CI"))
+    assert(expr3.checkInputDataTypes() ==
+      DataTypeMismatch(
+        errorSubClass = "COLLATION_MISMATCH",
+        messageParameters = Map(
+          "collationNameLeft" -> "UTF8_BINARY_LCASE",
+          "collationNameRight" -> "UNICODE_CI"
+        )
+      )
+    )
   }
 
   case class SubstringIndexTestFail[R](s1: String, s2: String, c1: String, c2: String)
