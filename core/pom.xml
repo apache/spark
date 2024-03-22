@@ -501,6 +501,10 @@
           <groupId>com.amazonaws</groupId>
           <artifactId>aws-java-sdk</artifactId>
         </exclusion>
+        <exclusion>
+          <artifactId>wildfly-openssl</artifactId>
+          <groupId>org.wildfly.openssl</groupId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
