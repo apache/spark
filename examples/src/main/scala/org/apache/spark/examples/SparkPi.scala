@@ -26,12 +26,23 @@ import org.apache.spark.sql.functions.{lit, random, sum, when}
 /** Computes an approximation to pi */
 object SparkPi {
   def main(args: Array[String]): Unit = {
+    if (args.length == 0) {
+      System.out.println("Consider providing number of partitions and size of each partition " +
+        "as first and second argument.")
+    }
+
+    val partitions = if (args.length > 0) args(0).toInt else 2
+    val samplesPerPartition = if (args.length > 1) args(1).toLong else 100000L
+
+    System.out.println("Computing PI with " +
+      partitions + " partitions" + (if (args.length < 1) " (default)" else "") + " and " +
+      samplesPerPartition + " samples per partition" + (if (args.length < 2) " (default)" else "")
+    )
+
     val spark = SparkSession
       .builder()
       .appName("Spark Pi")
       .getOrCreate()
-    val partitions = if (args.length > 0) args(0).toInt else 2
-    val samplesPerPartition = if (args.length > 1) args(1).toLong else 100000L
     val N = samplesPerPartition * partitions
     val rand = random() * 2 - 1
     val count = spark.range(0, N, 1, partitions)
