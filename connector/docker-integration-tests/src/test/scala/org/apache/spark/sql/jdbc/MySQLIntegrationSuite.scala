@@ -106,7 +106,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(4).equals("class java.lang.Integer"))
     assert(types(5).equals("class java.lang.Long"))
     assert(types(6).equals("class java.math.BigDecimal"))
-    assert(types(7).equals("class java.lang.Double"))
+    assert(types(7).equals("class java.lang.Float"))
     assert(types(8).equals("class java.lang.Double"))
     assert(types(9).equals("class java.lang.Byte"))
     assert(rows(0).getBoolean(0) == false)
@@ -117,7 +117,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getLong(5) == 123456789012345L)
     val bd = new BigDecimal("123456789012345.12345678901234500000")
     assert(rows(0).getAs[BigDecimal](6).equals(bd))
-    assert(rows(0).getDouble(7) == 42.75)
+    assert(rows(0).getFloat(7) == 42.75)
     assert(rows(0).getDouble(8) == 1.0000000000000002)
     assert(rows(0).getByte(9) == 0x80.toByte)
   }
