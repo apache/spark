@@ -606,7 +606,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(c1, 0, 1)",
         "reason" ->
-          "generation expression cannot contain collated string type other than UTF8_BINARY"))
+          "generation expression cannot contain non-binary orderable collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -624,7 +624,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "fieldName" -> "c2",
         "expressionStr" -> "LOWER(c1)",
         "reason" ->
-          "generation expression cannot contain collated string type other than UTF8_BINARY"))
+          "generation expression cannot contain non-binary orderable collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -642,7 +642,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "fieldName" -> "c2",
         "expressionStr" -> "UCASE(struct1.a)",
         "reason" ->
-          "generation expression cannot contain collated string type other than UTF8_BINARY"))
+          "generation expression cannot contain non-binary orderable collated string type"))
   }
 
   test("SPARK-47431: Default collation set to UNICODE, literal test") {

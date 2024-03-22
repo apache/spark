@@ -297,7 +297,7 @@ private[spark] object SchemaUtils {
   /**
    * Checks if a given data type has a non-default collation string type.
    */
-  def hasNonUTF8BinaryCollatedString(dt: DataType): Boolean = {
+  def hasNonBinarySortableCollatedString(dt: DataType): Boolean = {
     dt.existsRecursively {
       case st: StringType => !st.supportsBinaryOrdering
       case _ => false
