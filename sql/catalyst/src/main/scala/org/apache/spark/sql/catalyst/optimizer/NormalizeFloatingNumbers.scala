@@ -151,9 +151,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       KnownFloatingPointNormalized(
         ArrayTransform(
           ArrayTransform(expr, LambdaFunction(functionL1, Seq(lv1))),
-          LambdaFunction(functionL2, Seq(lv2)),
-        )
-      )
+          LambdaFunction(functionL2, Seq(lv2))))
 
     case _ => throw SparkException.internalError(s"fail to normalize $expr")
   }
