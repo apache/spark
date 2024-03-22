@@ -2182,15 +2182,19 @@ class DataFrameAggregateSuite extends QueryTest
   test("SPARK-47430 Support GROUP BY MapType") {
     val numRows = 50
 
-    val dfSame = (0 until numRows)
+    val dfSameInt = (0 until numRows)
       .map(_ => Tuple1(Map(1 -> 1)))
+      .toDF("m0")
+
+    val dfSameFloat = (0 until numRows)
+      .map(i => Tuple1(Map(if (i % 2 == 0) 1 -> 0.0 else 1 -> -0.0 )))
       .toDF("m0")
 
     val dfDifferent = (0 until numRows)
       .map(i => Tuple1(Map(i -> i)))
       .toDF("m0")
 
-    assertAggregateOnDataframe(Seq(dfSame, dfDifferent), Seq(1, numRows), "m0")
+    assertAggregateOnDataframe(Seq(dfSameInt, dfSameFloat, dfDifferent), Seq(1, 1, numRows), "m0")
   }
 
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
