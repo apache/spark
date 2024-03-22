@@ -137,12 +137,9 @@ RUN python3.12 -m pip install $BASIC_PIP_PKGS $CONNECT_PIP_PKGS lxml && \
     python3.12 -m pip cache purge
 
 # Remove unused installation packages to free up disk space
-RUN apt-get remove --purge -y '^aspnet.*' || true
-RUN apt-get remove --purge -y '^dotnet-.*' || true
-RUN apt-get remove --purge -y '^llvm-.*' || true
-RUN apt-get remove --purge -y 'php.*' || true
-RUN apt-get remove --purge -y '^mongodb-.*' || true
-RUN apt-get remove --purge -y snapd google-chrome-stable microsoft-edge-stable firefox || true
-RUN apt-get remove --purge -y azure-cli google-cloud-sdk mono-devel powershell libgl1-mesa-dri || true
+RUN apt-get remove --purge -y \
+    '^aspnet.*' '^dotnet-.*' '^llvm-.*' 'php.*' '^mongodb-.*' \
+    snapd google-chrome-stable microsoft-edge-stable firefox \
+    azure-cli google-cloud-sdk mono-devel powershell libgl1-mesa-dri || true
 RUN apt-get autoremove --purge -y
 RUN apt-get clean
