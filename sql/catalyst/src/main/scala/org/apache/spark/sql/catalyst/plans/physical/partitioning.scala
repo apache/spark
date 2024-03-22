@@ -880,7 +880,8 @@ case class KeyGroupedShuffleSpec(
 }
 
 object KeyGroupedShuffleSpec {
-  def reducePartitionValue(row: InternalRow,
+  def reducePartitionValue(
+    row: InternalRow,
     expressions: Seq[Expression],
     reducers: Seq[Option[Reducer[_, _]]]):
     InternalRowComparableWrapper = {

@@ -1543,7 +1543,7 @@ object SQLConf {
 
   val V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS =
     buildConf("spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled")
-      .doc("Whether to allow storage-partition join in the case where the partition transforms" +
+      .doc("Whether to allow storage-partition join in the case where the partition transforms " +
         "are compatible but not identical.  This config requires both " +
         s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
         s"enabled and ${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} " +
