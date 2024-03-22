@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import pydoc
 import unittest
 
 from pyspark.sql.tests.test_dataframe import DataFrameTestsMixin
@@ -25,9 +24,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_help_command(self):
         df = self.spark.createDataFrame(data=[{"foo": "bar"}, {"foo": "baz"}])
-        # render_doc() reproduces the help() exception without printing output
-        pydoc.render_doc(df)
-        pydoc.render_doc(df.foo)
+        super().check_help_command(df)
 
     # Spark Connect throws `IllegalArgumentException` when calling `collect` instead of `sample`.
     def test_sample(self):
