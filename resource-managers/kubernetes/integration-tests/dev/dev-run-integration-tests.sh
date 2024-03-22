@@ -41,7 +41,7 @@ DEFAULT_EXCLUDE_TAGS="N/A"
 JAVA_VERSION="17"
 BUILD_DEPENDENCIES_MVN_FLAG="-am"
 HADOOP_PROFILE="hadoop-3"
-MVN="/Applications/apache-maven-3.9.6/bin/mvn"
+MVN="$TEST_ROOT_DIR/build/mvn"
 
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\
     | grep -v "INFO"\
@@ -203,7 +203,7 @@ properties+=(
 
 (
   cd $TEST_ROOT_DIR;
-  /Applications/apache-maven-3.9.6/bin/mvn install \
+  ./build/mvn install \
     -pl resource-managers/kubernetes/integration-tests \
     $BUILD_DEPENDENCIES_MVN_FLAG \
     -Pscala-$SCALA_VERSION \
