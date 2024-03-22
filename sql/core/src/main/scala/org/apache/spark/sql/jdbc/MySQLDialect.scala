@@ -210,6 +210,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
+    case TimestampNTZType => Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 

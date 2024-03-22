@@ -249,4 +249,17 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       .add("b2", BooleanType, nullable = true, mb.putBoolean("isSigned", false).build())
       .add("b3", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build()))
   }
+
+
+  test("DATETIME") {
+    val expected = sql("select timestamp_ntz'2018-11-17 13:33:33' as col0")
+    expected.write.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "TBL_DATETIME_NTZ")
+      .save()
+
+    val answer = spark.read
+      .option("preferTimestampNTZ", true).jdbc(jdbcUrl, "TBL_DATETIME_NTZ", new Properties)
+    checkAnswer(answer, expected)
+  }
 }
