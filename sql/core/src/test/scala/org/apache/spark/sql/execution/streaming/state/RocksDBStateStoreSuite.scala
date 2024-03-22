@@ -387,6 +387,117 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  testWithColumnFamilies("rocksdb range scan multiple ordering columns - variable size " +
+    s"non-ordering columns with null values in first ordering column",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    val testSchema: StructType = StructType(
+      Seq(StructField("key1", LongType, true),
+        StructField("key2", IntegerType, true),
+        StructField("key3", StringType, false)))
+
+    val schemaProj = UnsafeProjection.create(Array[DataType](LongType, IntegerType, StringType))
+
+    tryWithProviderResource(newStoreProvider(testSchema,
+      RangeKeyScanStateEncoderSpec(testSchema, 2), colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(cfName,
+          testSchema, valueSchema,
+          RangeKeyScanStateEncoderSpec(testSchema, 2))
+      }
+
+      val timerTimestamps = Seq((931L, 10), (null, 40), (452300L, 1),
+        (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
+        (6L, 90118), (9L, 95118), (6L, 87210), (null, 113))
+      timerTimestamps.foreach { ts =>
+        // order by long col first and then by int col
+        val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
+          UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+      }
+
+      // verify that the expected null cols are seen
+      val nullRows = store.iterator(cfName).filter { kv =>
+        val keyRow = kv.key
+        keyRow.isNullAt(0)
+      }
+      assert(nullRows.size === 2)
+
+      // filter out the null rows and verify the rest
+      val result: Seq[(Long, Int)] = store.iterator(cfName).filter { kv =>
+        val keyRow = kv.key
+        !keyRow.isNullAt(0)
+      }.map { kv =>
+        val keyRow = kv.key
+        val key = (keyRow.getLong(0), keyRow.getInt(1), keyRow.getString(2))
+        (key._1, key._2)
+      }.toSeq
+
+      val timerTimestampsWithoutNulls = Seq((931L, 10), (452300L, 1),
+        (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
+        (6L, 90118), (9L, 95118), (6L, 87210))
+
+      assert(result === timerTimestampsWithoutNulls.sorted)
+    }
+  }
+
+  testWithColumnFamilies("rocksdb range scan multiple ordering columns - variable size " +
+    s"non-ordering columns with null values in second ordering column",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+
+    val testSchema: StructType = StructType(
+      Seq(StructField("key1", LongType, true),
+        StructField("key2", IntegerType, true),
+        StructField("key3", StringType, false)))
+
+    val schemaProj = UnsafeProjection.create(Array[DataType](LongType, IntegerType, StringType))
+
+    tryWithProviderResource(newStoreProvider(testSchema,
+      RangeKeyScanStateEncoderSpec(testSchema, 2), colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(cfName,
+          testSchema, valueSchema,
+          RangeKeyScanStateEncoderSpec(testSchema, 2))
+      }
+
+      val timerTimestamps = Seq((931L, 10), (40L, null), (452300L, 1),
+        (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
+        (6L, 90118), (9L, 95118), (6L, 87210), (113L, null), (100L, null))
+      timerTimestamps.foreach { ts =>
+        // order by long col first and then by int col
+        val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
+          UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+      }
+
+      // verify that the expected null cols are seen
+      val nullRows = store.iterator(cfName).filter { kv =>
+        val keyRow = kv.key
+        keyRow.isNullAt(1)
+      }
+      assert(nullRows.size === 3)
+
+      // the ordering based on first col which has non-null values should be preserved
+      val result: Seq[(Long, Int)] = store.iterator(cfName)
+        .map { kv =>
+          val keyRow = kv.key
+          val key = (keyRow.getLong(0), keyRow.getInt(1), keyRow.getString(2))
+          (key._1, key._2)
+        }.toSeq
+      assert(result.map(_._1) === timerTimestamps.map(_._1).sorted)
+    }
+  }
+
   testWithColumnFamilies("rocksdb range scan byte ordering column - variable size " +
     s"non-ordering columns",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>

@@ -212,6 +212,12 @@ class PrefixKeyScanStateEncoder(
  * We cannot support variable sized fields given the UnsafeRow format which stores variable
  * sized fields as offset and length pointers to the actual values, thereby changing the required
  * ordering.
+ * Note that we also support "null" values being passed for these fixed size fields. We prepend
+ * a single byte to indicate whether the column value is null or not. We cannot change the
+ * nullability on the UnsafeRow itself as the expected ordering would change if non-first
+ * columns are marked as null. If the first col is null, those entries will appear last in
+ * the iterator. If non-first columns are null, ordering based on the previous columns will
+ * still be honored.
  *
  * @param keySchema - schema of the key to be encoded
  * @param numOrderingCols - number of columns to be used for range scan
@@ -271,97 +277,97 @@ class RangeKeyScanStateEncoder(
 
   // Rewrite the unsafe row by replacing fixed size fields with BIG_ENDIAN encoding
   // using byte arrays.
+  // To handle "null" values, we prepend a byte to the byte array indicating whether the value
+  // is null or not. If the value is null, we write the null byte followed by a zero byte.
+  // If the value is not null, we write the null byte followed by the value.
+  // Note that setting null for the index on the unsafeRow is not feasible as it would change
+  // the sorting order on iteration.
   private def encodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
     writer.resetRowWriter()
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = row.get(idx, field.dataType)
-      field.dataType match {
-        // endian-ness doesn't matter for single byte objects. so just write these
-        // types directly.
-        case BooleanType => writer.write(idx, value.asInstanceOf[Boolean])
-        case ByteType => writer.write(idx, value.asInstanceOf[Byte])
+      val isNullCol: Byte = if (value == null) 0x01.toByte else 0x00.toByte
+      val bbuf = ByteBuffer.allocate(field.dataType.defaultSize + 1)
+      bbuf.order(ByteOrder.BIG_ENDIAN)
+      bbuf.put(isNullCol)
+      if (isNullCol == 0x01.toByte) {
+        bbuf.put(0x00.toByte)
+        writer.write(idx, bbuf.array())
+      } else {
+        field.dataType match {
+          case BooleanType =>
+          case ByteType =>
+            bbuf.put(value.asInstanceOf[Byte])
+            writer.write(idx, bbuf.array())
 
-        // for other multi-byte types, we need to convert to big-endian
-        case ShortType =>
-          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          bbuf.putShort(value.asInstanceOf[Short])
-          writer.write(idx, bbuf.array())
+          // for other multi-byte types, we need to convert to big-endian
+          case ShortType =>
+            bbuf.putShort(value.asInstanceOf[Short])
+            writer.write(idx, bbuf.array())
 
-        case IntegerType =>
-          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          bbuf.putInt(value.asInstanceOf[Int])
-          writer.write(idx, bbuf.array())
+          case IntegerType =>
+            bbuf.putInt(value.asInstanceOf[Int])
+            writer.write(idx, bbuf.array())
 
-        case LongType =>
-          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          bbuf.putLong(value.asInstanceOf[Long])
-          writer.write(idx, bbuf.array())
+          case LongType =>
+            bbuf.putLong(value.asInstanceOf[Long])
+            writer.write(idx, bbuf.array())
 
-        case FloatType =>
-          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          bbuf.putFloat(value.asInstanceOf[Float])
-          writer.write(idx, bbuf.array())
+          case FloatType =>
+            bbuf.putFloat(value.asInstanceOf[Float])
+            writer.write(idx, bbuf.array())
 
-        case DoubleType =>
-          val bbuf = ByteBuffer.allocate(field.dataType.defaultSize)
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          bbuf.putDouble(value.asInstanceOf[Double])
-          writer.write(idx, bbuf.array())
+          case DoubleType =>
+            bbuf.putDouble(value.asInstanceOf[Double])
+            writer.write(idx, bbuf.array())
+        }
       }
     }
-    writer.getRow().copy()
+    writer.getRow()
   }
 
   // Rewrite the unsafe row by converting back from BIG_ENDIAN byte arrays to the
   // original data types.
+  // For decode, we extract the byte array from the UnsafeRow, and then read the first byte
+  // to determine if the value is null or not. If the value is null, we set the ordinal on
+  // the UnsafeRow to null. If the value is not null, we read the rest of the bytes to get the
+  // actual value.
   private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
     writer.resetRowWriter()
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
-      val value = if (field.dataType == BooleanType || field.dataType == ByteType) {
-        row.get(idx, field.dataType)
+      val value = row.getBinary(idx)
+      val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
+      bbuf.order(ByteOrder.BIG_ENDIAN)
+      val isNullCol = bbuf.get()
+      if (isNullCol == 0x01.toByte) {
+        // set the column to null and skip reading the next byte
+        writer.setNullAt(idx)
       } else {
-        row.getBinary(idx)
-      }
+        field.dataType match {
+          case BooleanType =>
+          case ByteType =>
+            writer.write(idx, bbuf.get)
 
-      field.dataType match {
-        // for single byte types, read them directly
-        case BooleanType => writer.write(idx, value.asInstanceOf[Boolean])
-        case ByteType => writer.write(idx, value.asInstanceOf[Byte])
+          case ShortType =>
+            writer.write(idx, bbuf.getShort)
 
-        // for multi-byte types, convert from big-endian
-        case ShortType =>
-          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          writer.write(idx, bbuf.getShort)
+          case IntegerType =>
+            writer.write(idx, bbuf.getInt)
 
-        case IntegerType =>
-          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          writer.write(idx, bbuf.getInt)
+          case LongType =>
+            writer.write(idx, bbuf.getLong)
 
-        case LongType =>
-          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          writer.write(idx, bbuf.getLong)
+          case FloatType =>
+            writer.write(idx, bbuf.getFloat)
 
-        case FloatType =>
-          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          writer.write(idx, bbuf.getFloat)
-
-        case DoubleType =>
-          val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
-          bbuf.order(ByteOrder.BIG_ENDIAN)
-          writer.write(idx, bbuf.getDouble)
+          case DoubleType =>
+            writer.write(idx, bbuf.getDouble)
+        }
       }
     }
-    writer.getRow().copy()
+    writer.getRow()
   }
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
