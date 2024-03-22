@@ -44,13 +44,12 @@ object SparkPi {
     import spark.implicits._
 
     val N = rowsPerPartition * partitions
-    val rand = random() * 2 - 1
     val count = spark.range(0, N, 1, partitions)
-      .select(rand.as("x"), rand.as("y"))
+      .select((random() * 2 - 1).as("x"), (random() * 2 - 1).as("y"))
       .select(sum(when($"x" * $"x" + $"y" * $"y" <= 1, lit(1))))
       .as[Long]
       .head()
-    println(s"Pi is roughly ${4.0 * count / (N - 1)}")
+    println(s"Pi is roughly ${4.0 * count / N}")
     spark.stop()
   }
 }
