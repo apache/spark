@@ -1011,9 +1011,13 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (word, set) =>
-      s"${ev.value} = $set.findInSet($word);"
-    )
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      nullSafeCodeGen(ctx, ev, (word, set) => s"${ev.value} = $set.findInSet($word);")
+    } else {
+      nullSafeCodeGen(ctx, ev, (word, set) => s"${ev.value} = $set.findInSet($word, $collationId);")
+    }
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
