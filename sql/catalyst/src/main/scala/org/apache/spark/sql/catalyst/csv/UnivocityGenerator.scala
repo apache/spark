@@ -98,7 +98,6 @@ class UnivocityGenerator(
         val builder = new StringBuilder
         builder.append("[")
         if (array.numElements() > 0) {
-          val converter = makeConverter(et)
           if (array.isNullAt(0)) {
             if (nullAsQuotedEmptyString) {
               builder.append(options.nullValue)
