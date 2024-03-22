@@ -512,6 +512,7 @@ object SparkParallelTestGrouping {
 
   private val testsWhichShouldRunInTheirOwnDedicatedJvm = Set(
     "org.apache.spark.DistributedSuite",
+    "org.apache.spark.deploy.yarn.YarnClusterSuite",
     "org.apache.spark.scheduler.HealthTrackerIntegrationSuite",
     "org.apache.spark.sql.catalyst.expressions.DateExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.HashExpressionsSuite",
