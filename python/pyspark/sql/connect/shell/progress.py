@@ -70,6 +70,8 @@ class Progress:
         char str the Default character to be used for printing the bar.
         min_width numeric The minimum width of the progress bar
         output file The output device to write the progress bar to.
+        enabled bool Whether the progress bar printing should be enabled or not.
+        handlers list A list of handlers that will be called when the progress bar is updated.
         """
         self._ticks = 0
         self._tick = 0
@@ -98,7 +100,16 @@ class Progress:
     def update_ticks(self, ticks: int, current: int, bytes_read: int, inflight_tasks: int) -> None:
         """This method is called from the execution to update the progress bar with a new total
         tick counter and the current position. This is necessary in case new stages get added with
-        new tasks and so the total task number will be updated as well."""
+        new tasks and so the total task number will be updated as well.
+
+        Parameters
+        ==========
+        ticks int The total number of ticks to be processed
+        current int The current tick position
+        bytes_read int The number of bytes read
+        inflight_tasks int The number of tasks that are currently running
+
+        """
         if ticks > 0 and current != self._tick:
             self._ticks = ticks
             self._tick = current
@@ -109,7 +120,7 @@ class Progress:
             self._notify(False)
 
     def finish(self):
-        """Clear the last line"""
+        """Clear the last line. Called when the processing is done."""
         self._notify(True)
         if self._enabled:
             print("\r" + " " * self._max_printed, end="", flush=True, file=self._out)
