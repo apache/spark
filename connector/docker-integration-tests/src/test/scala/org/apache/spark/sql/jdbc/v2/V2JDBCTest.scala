@@ -49,7 +49,10 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   def notSupportsTableComment: Boolean = false
 
-  def defaultMetadata: Metadata = new MetadataBuilder().putLong("scale", 0).build()
+  def defaultMetadata: Metadata = new MetadataBuilder()
+    .putLong("scale", 0)
+    .putBoolean("isTimestampNTZ", false)
+    .build()
 
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")
@@ -248,7 +251,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         assert(jdbcTable.indexExists("i2") == false)
 
         val indexType = "DUMMY"
-        var m = intercept[UnsupportedOperationException] {
+        val m = intercept[UnsupportedOperationException] {
           sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
         }.getMessage
         assert(m.contains(s"Index Type $indexType is not supported." +

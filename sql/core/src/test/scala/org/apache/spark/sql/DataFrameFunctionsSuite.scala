@@ -780,31 +780,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("map_sort function") {
-    val df1 = Seq(
-      Map[Int, Int](2 -> 2, 1 -> 1, 3 -> 3)
-    ).toDF("a")
-
-    checkAnswer(
-      df1.selectExpr("map_sort(a)"),
-      Seq(
-        Row(Map(1 -> 1, 2 -> 2, 3 -> 3))
-      )
-    )
-    checkAnswer(
-      df1.selectExpr("map_sort(a, true)"),
-      Seq(
-        Row(Map(1 -> 1, 2 -> 2, 3 -> 3))
-      )
-    )
-    checkAnswer(
-      df1.select(map_sort($"a", asc = false)),
-      Seq(
-        Row(Map(3 -> 3, 2 -> 2, 1 -> 1))
-      )
-    )
-  }
-
   test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),

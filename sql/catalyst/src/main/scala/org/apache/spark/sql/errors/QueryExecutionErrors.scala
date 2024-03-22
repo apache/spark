@@ -442,10 +442,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         s"${argClasses.mkString("(", ", ", ")")} on $cls.")
   }
 
-  def constructorNotFoundError(cls: String): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2020",
-      messageParameters = Map("cls" -> cls))
+  def constructorNotFoundError(cls: String): SparkException = {
+    SparkException.internalError(
+      s"Couldn't find a valid constructor on <$cls>.")
   }
 
   def unsupportedNaturalJoinTypeError(joinType: JoinType): SparkException = {
@@ -455,7 +454,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def notExpectedUnresolvedEncoderError(attr: AttributeReference): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2023",
+      errorClass = "NOT_UNRESOLVED_ENCODER",
       messageParameters = Map("attr" -> attr.toString()))
   }
 
@@ -472,8 +471,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def notOverrideExpectedMethodsError(
       className: String, m1: String, m2: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2025",
-      messageParameters = Map("className" -> className, "m1" -> m1, "m2" -> m2))
+      errorClass = "CLASS_NOT_OVERRIDE_EXPECTED_METHOD",
+      messageParameters = Map("className" -> className, "method1" -> m1, "method2" -> m2))
   }
 
   def failToConvertValueToJsonError(

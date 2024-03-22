@@ -22,8 +22,10 @@ import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+// scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(expr, collationName) - Marks a given expression with the specified collation.",
   arguments = """
@@ -33,13 +35,24 @@ import org.apache.spark.sql.types._
   """,
   examples = """
     Examples:
+      > SET spark.sql.collation.enabled=true;
+      spark.sql.collation.enabled	true
       > SELECT COLLATION('Spark SQL' _FUNC_ 'UCS_BASIC_LCASE');
-       UCS_BASIC_LCASE
+      UCS_BASIC_LCASE
+      > SET spark.sql.collation.enabled=false;
+      spark.sql.collation.enabled	false
   """,
   since = "4.0.0",
   group = "string_funcs")
+// scalastyle:on line.contains.tab
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // We need to throw collationNotEnabledError before unexpectedNullError
+    // and nonFoldableArgumentError, as we do not want user to see misleading
+    // messages that collation is enabled
+    if (!SQLConf.get.collationEnabled) {
+      throw QueryCompilationErrors.collationNotEnabledError()
+    }
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
@@ -80,15 +93,25 @@ case class Collate(child: Expression, collationName: String)
     defineCodeGen(ctx, ev, (in) => in)
 }
 
+// scalastyle:off line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the collation name of a given expression.",
+  arguments = """
+    Arguments:
+      * expr - String expression to perform collation on.
+  """,
   examples = """
     Examples:
+      > SET spark.sql.collation.enabled=true;
+      spark.sql.collation.enabled	true
       > SELECT _FUNC_('Spark SQL');
-       UCS_BASIC
+      UCS_BASIC
+      > SET spark.sql.collation.enabled=false;
+      spark.sql.collation.enabled	false
   """,
   since = "4.0.0",
   group = "string_funcs")
+// scalastyle:on line.contains.tab
 case class Collation(child: Expression) extends UnaryExpression with RuntimeReplaceable {
   override def dataType: DataType = StringType
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)

@@ -1408,6 +1408,18 @@ class TypesTestsMixin:
             StructType([StructField("a", IntegerType()), StructField("v", VariantType())]),
         )
 
+    def test_collated_string(self):
+        dfs = [
+            self.spark.sql("SELECT 'abc' collate 'UCS_BASIC_LCASE'"),
+            self.spark.createDataFrame([], StructType([StructField("id", StringType(1))])),
+        ]
+        for df in dfs:
+            # performs both datatype -> proto & proto -> datatype conversions
+            self.assertEqual(
+                df.to(StructType([StructField("new", StringType(1))])).schema[0].dataType,
+                StringType(1),
+            )
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055

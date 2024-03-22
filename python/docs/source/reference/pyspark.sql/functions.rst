@@ -394,7 +394,6 @@ Map Functions
     map_from_entries
     map_keys
     map_values
-    map_sort
     str_to_map
 
 
