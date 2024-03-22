@@ -455,7 +455,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     allFileBasedDataSources.foreach { format =>
       withTempPath { path =>
-        val df = sql(s"SELECT c COLLATE UNICODE_CI AS c FROM VALUES ('aaa') AS data(c)")
+        val df = sql(s"SELECT c COLLATE $collationName AS c FROM VALUES ('aaa') AS data(c)")
         df.write.format(format).save(path.getAbsolutePath)
 
         val readback = spark.read.format(format).load(path.getAbsolutePath)
