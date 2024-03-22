@@ -1351,7 +1351,8 @@ case class Reverse(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   // Input types are utilized by type coercion in ImplicitTypeCasts.
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, ArrayType))
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(StringTypeAnyCollation, ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -1365,7 +1366,7 @@ case class Reverse(child: Expression)
         val arrayData = input.asInstanceOf[ArrayData]
         new GenericArrayData(arrayData.toObjectArray(elementType).reverse)
       }
-    case StringType => _.asInstanceOf[UTF8String].reverse()
+    case _: StringType => _.asInstanceOf[UTF8String].reverse()
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1994,17 +1995,26 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 case class ArrayJoin(
     array: Expression,
     delimiter: Expression,
-    nullReplacement: Option[Expression]) extends Expression with ExpectsInputTypes {
+    nullReplacement: Option[Expression]) extends ImplicitCastInputTypes with ExpectsInputTypes {
 
   def this(array: Expression, delimiter: Expression) = this(array, delimiter, None)
 
   def this(array: Expression, delimiter: Expression, nullReplacement: Expression) =
     this(array, delimiter, Some(nullReplacement))
 
+  private val commonType: DataType = {
+    val elementType = array.dataType.asInstanceOf[ArrayType].elementType
+    val s = nullReplacement match {
+      case Some(replacement) => Seq(elementType, delimiter.dataType, replacement.dataType)
+      case _ => Seq(elementType, delimiter.dataType)
+    }
+    TypeCoercion.findWiderCommonType(s).getOrElse(StringType)
+  }
+
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(ArrayType(StringType), StringType, StringType)
+    Seq(ArrayType(commonType), commonType, commonType)
   } else {
-    Seq(ArrayType(StringType), StringType)
+    Seq(ArrayType(commonType), commonType)
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
@@ -2047,7 +2057,7 @@ case class ArrayJoin(
       }
       case None => (_: Boolean) => false
     }
-    arrayEval.asInstanceOf[ArrayData].foreach(StringType, (_, item) => {
+    arrayEval.asInstanceOf[ArrayData].foreach(commonType, (_, item) => {
       if (item == null) {
         if (nullHandling(firstItem)) {
           firstItem = false
@@ -2127,7 +2137,7 @@ case class ArrayJoin(
          |    if (!$firstItem) {
          |      $buffer.append(${delimiterGen.value});
          |    }
-         |    $buffer.append(${CodeGenerator.getValue(arrayGen.value, StringType, i)});
+         |    $buffer.append(${CodeGenerator.getValue(arrayGen.value, commonType, i)});
          |    $firstItem = false;
          |  }
          |}
@@ -2149,7 +2159,7 @@ case class ArrayJoin(
     }
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = commonType
 
   override def prettyName: String = "array_join"
 }
@@ -2724,7 +2734,8 @@ case class TryElementAt(left: Expression, right: Expression, replacement: Expres
 case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpression
   with QueryErrorsBase {
 
-  private def allowedTypes: Seq[AbstractDataType] = Seq(StringType, BinaryType, ArrayType)
+  private def allowedTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, BinaryType, ArrayType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 
@@ -2774,7 +2785,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
         val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
         ByteArray.concat(inputs: _*)
       }
-    case StringType =>
+    case _: StringType =>
       input => {
         val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
         UTF8String.concat(inputs: _*)
@@ -2845,7 +2856,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
     val (concat, initCode) = dataType match {
       case BinaryType =>
         (s"${classOf[ByteArray].getName}.concat", s"byte[][] $args = new byte[${evals.length}][];")
-      case StringType =>
+      case _: StringType =>
         ("UTF8String.concat", s"UTF8String[] $args = new UTF8String[${evals.length}];")
       case ArrayType(elementType, containsNull) =>
         val concat = genCodeForArrays(ctx, elementType, containsNull)
