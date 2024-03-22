@@ -24,7 +24,6 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-
   <!-- Kinesis integration is not included by default due to ASL-licensed code. -->
   <artifactId>spark-streaming-kinesis-asl_2.13</artifactId>
   <packaging>jar</packaging>
