@@ -404,7 +404,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
         val dateVal = rs.getDate(pos + 1)
         if (dateVal != null) {
-          row.setInt(pos, fromJavaDate(dialect.convertDateToDate(dateVal)))
+          row.setInt(pos, fromJavaDate(dialect.convertJavaDateToDate(dateVal)))
         } else {
           row.update(pos, null)
         }
@@ -527,7 +527,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
           arrayConverter[Object]((obj: Object) => UTF8String.fromString(obj.toString))
 
         case DateType => arrayConverter[Date] {
-          (d: Date) => fromJavaDate(dialect.convertDateToDate(d))
+          (d: Date) => fromJavaDate(dialect.convertJavaDateToDate(d))
         }
 
         case dt: DecimalType =>
