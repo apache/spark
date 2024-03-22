@@ -25,7 +25,7 @@ IMAGE_REPO="docker.io/kubespark"
 IMAGE_TAG="N/A"
 JAVA_IMAGE_TAG="N/A"
 SPARK_TGZ="N/A"
-MVN="$TEST_ROOT_DIR/build/mvn"
+MVN="/Applications/apache-maven-3.9.6/bin/mvn"
 DOCKER_FILE="N/A"
 EXCLUDE_TAGS=""
 
