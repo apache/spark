@@ -42,7 +42,7 @@ license: |
 - Since Spark 4.0, the function `to_csv` no longer supports input with the data type `STRUCT`, `ARRAY`, `MAP`, `VARIANT` and `BINARY` (because the `CSV specification` does not have standards for these data types and cannot be read back using `from_csv`), Spark will throw `DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE` exception.
 - Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert Postgres TIMESTAMP WITH TIME ZONE and TIME WITH TIME ZONE data types to TimestampNTZType, which is available in Spark 3.5. 
 - Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert MySQL TIMESTAMP to TimestampNTZType, which is available in Spark 3.5. MySQL DATETIME is not affected.
-- Since Spark 4.0, MySQL JDBC datasource will read SMALLINT as ShortType, while in Spark 3.5, it was read as IntegerType. MEDIUMINT UNSIGNED is read as IntegerType, while in Spark 3.5, it was read as LongType. To restore the previous behavior, you can cast the column to the old type.
+- Since Spark 4.0, MySQL JDBC datasource will read SMALLINT as ShortType, while in Spark 3.5 and previous, it was read as IntegerType. MEDIUMINT UNSIGNED is read as IntegerType, while in Spark 3.5 and previous, it was read as LongType. To restore the previous behavior, you can cast the column to the old type.
 
 ## Upgrading from Spark SQL 3.4 to 3.5
 
