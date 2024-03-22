@@ -22,6 +22,14 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.5.1 to 3.5.2
+
+- Since 3.5.2, MySQL JDBC datasource will read TINYINT UNSIGNED as ShortType, while in 3.5.1, it was wrongly read as ByteType.
+
+## Upgrading from Spark SQL 3.5.0 to 3.5.1
+
+- Since Spark 3.5.1, MySQL JDBC datasource will read TINYINT(n > 1) and TINYINT UNSIGNED as ByteType, while in Spark 3.5.0 and below, they were read as IntegerType. To restore the previous behavior, you can cast the column to the old type.
+
 ## Upgrading from Spark SQL 3.4 to 3.5
 
 - Since Spark 3.5, the JDBC options related to DS V2 pushdown are `true` by default. These options include: `pushDownAggregate`, `pushDownLimit`, `pushDownOffset` and `pushDownTableSample`. To restore the legacy behavior, please set them to `false`. e.g. set `spark.sql.catalog.your_catalog_name.pushDownAggregate` to `false`.
