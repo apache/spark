@@ -2,76 +2,76 @@
 Benchmark for MurMurHash 3 and xxHash64
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 8:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                       10             10           0        206.9           4.8       1.0X
-xxHash 64-bit                                        14             14           0        153.9           6.5       0.7X
-HiveHasher                                           14             14           0        152.4           6.6       0.7X
+Murmur3_x86_32                                       10             10           0        206.7           4.8       1.0X
+xxHash 64-bit                                        10             10           0        201.7           5.0       1.0X
+HiveHasher                                           14             14           0        152.3           6.6       0.7X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 16:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                       14             14           0        145.9           6.9       1.0X
-xxHash 64-bit                                        17             17           0        123.8           8.1       0.8X
-HiveHasher                                           23             23           0         91.7          10.9       0.6X
+Murmur3_x86_32                                       14             14           0        145.8           6.9       1.0X
+xxHash 64-bit                                        12             12           0        168.8           5.9       1.2X
+HiveHasher                                           23             23           0         91.6          10.9       0.6X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 24:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                       20             20           0        104.9           9.5       1.0X
-xxHash 64-bit                                        19             19           0        108.6           9.2       1.0X
+Murmur3_x86_32                                       20             20           0        104.8           9.5       1.0X
+xxHash 64-bit                                        14             14           0        145.6           6.9       1.4X
 HiveHasher                                           33             33           0         63.0          15.9       0.6X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 31:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                       31             31           0         67.1          14.9       1.0X
-xxHash 64-bit                                        31             31           0         68.1          14.7       1.0X
-HiveHasher                                           43             43           0         48.4          20.7       0.7X
+Murmur3_x86_32                                       34             34           0         61.9          16.1       1.0X
+xxHash 64-bit                                        27             27           0         78.2          12.8       1.3X
+HiveHasher                                           43             43           0         48.4          20.6       0.8X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 95:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                       68             68           0         31.1          32.2       1.0X
-xxHash 64-bit                                        81             81           0         25.8          38.8       0.8X
-HiveHasher                                          156            156           0         13.4          74.4       0.4X
+Murmur3_x86_32                                       71             72           0         29.4          34.1       1.0X
+xxHash 64-bit                                        60             61           1         34.9          28.7       1.2X
+HiveHasher                                          156            156           0         13.4          74.4       0.5X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 287:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                      207            210           4         10.1          98.9       1.0X
-xxHash 64-bit                                       123            124           0         17.0          58.8       1.7X
-HiveHasher                                          529            530           1          4.0         252.3       0.4X
+Murmur3_x86_32                                      207            207           0         10.1          98.6       1.0X
+xxHash 64-bit                                       105            106           0         19.9          50.3       2.0X
+HiveHasher                                          530            530           0          4.0         252.7       0.4X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 1055:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                      719            720           0          2.9         342.9       1.0X
-xxHash 64-bit                                       298            299           0          7.0         142.3       2.4X
-HiveHasher                                         2037           2040           4          1.0         971.2       0.4X
+Murmur3_x86_32                                      743            743           0          2.8         354.3       1.0X
+xxHash 64-bit                                       294            295           0          7.1         140.4       2.5X
+HiveHasher                                         2029           2030           1          1.0         967.6       0.4X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 2079:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                     1411           1411           1          1.5         672.8       1.0X
-xxHash 64-bit                                       528            528           0          4.0         251.6       2.7X
-HiveHasher                                         4019           4019           0          0.5        1916.6       0.4X
+Murmur3_x86_32                                     1451           1452           0          1.4         692.1       1.0X
+xxHash 64-bit                                       548            548           1          3.8         261.1       2.7X
+HiveHasher                                         4022           4034          17          0.5        1917.9       0.4X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 Hash byte arrays with length 8223:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Murmur3_x86_32                                     5742           5742           0          0.4        2738.0       1.0X
-xxHash 64-bit                                      1934           1934           1          1.1         922.1       3.0X
-HiveHasher                                        15978          15979           1          0.1        7618.9       0.4X
+Murmur3_x86_32                                     5784           5785           0          0.4        2758.2       1.0X
+xxHash 64-bit                                      2057           2057           0          1.0         980.6       2.8X
+HiveHasher                                        15983          15984           1          0.1        7621.4       0.4X
 
 

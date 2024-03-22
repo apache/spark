@@ -2561,6 +2561,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def unreleasedThreadError(
       loggingId: String,
+      opType: String,
       newAcquiredThreadInfo: String,
       acquiredThreadInfo: String,
       timeWaitedMs: Long,
@@ -2569,6 +2570,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
       messageParameters = Map(
         "loggingId" -> loggingId,
+        "operationType" -> opType,
         "newAcquiredThreadInfo" -> newAcquiredThreadInfo,
         "acquiredThreadInfo" -> acquiredThreadInfo,
         "timeWaitedMs" -> timeWaitedMs.toString,

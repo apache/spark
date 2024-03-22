@@ -21,13 +21,24 @@ echo "=================================="
 echo "Free up disk space on CI system"
 echo "=================================="
 
-echo "Listing 100 largest packages"
-dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
+echo "Listing top 100 largest packages (from large to small)"
+printf "Installed-Size\tPackage\n"
+dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n -r | head -n 100
 df -h
 
 echo "Removing large packages"
 rm -rf /__t/CodeQL
 rm -rf /__t/go
 rm -rf /__t/node
+
+apt-get remove --purge -y '^aspnet.*'
+apt-get remove --purge -y '^dotnet-.*'
+apt-get remove --purge -y '^llvm-.*'
+apt-get remove --purge -y 'php.*'
+apt-get remove --purge -y '^mongodb-.*'
+apt-get remove --purge -y snapd google-chrome-stable microsoft-edge-stable firefox
+apt-get remove --purge -y azure-cli google-cloud-sdk mono-devel powershell libgl1-mesa-dri
+apt-get autoremove --purge -y
+apt-get clean
 
 df -h

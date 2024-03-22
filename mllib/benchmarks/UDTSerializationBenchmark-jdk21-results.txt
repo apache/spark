@@ -2,11 +2,11 @@
 VectorUDT de/serialization
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 VectorUDT de/serialization:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-serialize                                            92             93           1          0.0       91961.3       1.0X
-deserialize                                          69             70           1          0.0       68950.1       1.3X
+serialize                                           102            106           3          0.0      101512.2       1.0X
+deserialize                                          75             78           1          0.0       75331.6       1.3X
 
 

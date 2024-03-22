@@ -2,157 +2,157 @@
 parsing large select expressions
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 parsing large select:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 select expressions                                  1              3           1          0.0     1379659.0       1.0X
-100 select expressions                                2              3           1          0.0     2303548.0       0.6X
-2500 select expressions                              43             47           4          0.0    43168089.0       0.0X
+1 select expressions                                  1              2           1          0.0     1037637.0       1.0X
+100 select expressions                                2              3           1          0.0     2276460.0       0.5X
+2500 select expressions                              44             48           4          0.0    44445446.0       0.0X
 
 
 ================================================================================================
 optimize large select expressions
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 optimize large select:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-100 columns                                           5              6           1          0.0     4915143.0       1.0X
-1000 columns                                         34             35           2          0.0    33898968.0       0.1X
-10000 columns                                       358            376          11          0.0   358055742.0       0.0X
+100 columns                                           5              6           1          0.0     4963948.0       1.0X
+1000 columns                                         35             36           1          0.0    35350989.0       0.1X
+10000 columns                                       348            367          21          0.0   348345246.0       0.0X
 
 
 ================================================================================================
 many column field read and write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 many column field r/w:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 cols x 100000 rows (read in-mem)                   16             23           4          6.3         159.5       1.0X
-1 cols x 100000 rows (exec in-mem)                   16             21           3          6.4         156.5       1.0X
-1 cols x 100000 rows (read parquet)                  28             36           5          3.6         279.4       0.6X
-1 cols x 100000 rows (write parquet)                 76             84           9          1.3         759.0       0.2X
-100 cols x 1000 rows (read in-mem)                   13             17           3          7.6         131.7       1.2X
-100 cols x 1000 rows (exec in-mem)                   18             24           5          5.6         179.4       0.9X
-100 cols x 1000 rows (read parquet)                  24             29           5          4.1         243.1       0.7X
-100 cols x 1000 rows (write parquet)                 73             80           6          1.4         734.1       0.2X
-2500 cols x 40 rows (read in-mem)                    78             83           6          1.3         784.3       0.2X
-2500 cols x 40 rows (exec in-mem)                   141            145           5          0.7        1407.3       0.1X
-2500 cols x 40 rows (read parquet)                  296            301           5          0.3        2964.7       0.1X
-2500 cols x 40 rows (write parquet)                 136            146           8          0.7        1360.1       0.1X
+1 cols x 100000 rows (read in-mem)                   17             23           3          5.7         174.0       1.0X
+1 cols x 100000 rows (exec in-mem)                   14             18           3          7.1         140.4       1.2X
+1 cols x 100000 rows (read parquet)                  27             34           5          3.7         270.5       0.6X
+1 cols x 100000 rows (write parquet)                 90             97           5          1.1         896.4       0.2X
+100 cols x 1000 rows (read in-mem)                   11             15           3          8.7         114.9       1.5X
+100 cols x 1000 rows (exec in-mem)                   16             20           4          6.4         155.7       1.1X
+100 cols x 1000 rows (read parquet)                  21             26           4          4.7         212.8       0.8X
+100 cols x 1000 rows (write parquet)                 85             92           6          1.2         854.2       0.2X
+2500 cols x 40 rows (read in-mem)                    72             76           6          1.4         716.3       0.2X
+2500 cols x 40 rows (exec in-mem)                   132            138           6          0.8        1319.7       0.1X
+2500 cols x 40 rows (read parquet)                  273            282           8          0.4        2734.5       0.1X
+2500 cols x 40 rows (write parquet)                 142            155           9          0.7        1418.2       0.1X
 
 
 ================================================================================================
 wide shallowly nested struct field read and write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 wide shallowly nested struct field r/w:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)                   20             26           4          4.9         202.8       1.0X
-1 wide x 100000 rows (exec in-mem)                   22             26           4          4.5         220.9       0.9X
-1 wide x 100000 rows (read parquet)                  22             27           5          4.6         215.6       0.9X
-1 wide x 100000 rows (write parquet)                 78             85           6          1.3         782.4       0.3X
-100 wide x 1000 rows (read in-mem)                   15             18           3          6.6         151.8       1.3X
-100 wide x 1000 rows (exec in-mem)                   23             26           3          4.3         231.1       0.9X
-100 wide x 1000 rows (read parquet)                  22             25           3          4.5         220.1       0.9X
-100 wide x 1000 rows (write parquet)                 74             77           4          1.3         743.9       0.3X
-2500 wide x 40 rows (read in-mem)                    22             25           4          4.6         219.0       0.9X
-2500 wide x 40 rows (exec in-mem)                   213            223           6          0.5        2134.7       0.1X
-2500 wide x 40 rows (read parquet)                   77             79           5          1.3         765.7       0.3X
-2500 wide x 40 rows (write parquet)                  80             85           8          1.3         799.4       0.3X
+1 wide x 100000 rows (read in-mem)                   18             21           3          5.5         180.4       1.0X
+1 wide x 100000 rows (exec in-mem)                   19             23           3          5.2         192.4       0.9X
+1 wide x 100000 rows (read parquet)                  19             23           3          5.2         194.0       0.9X
+1 wide x 100000 rows (write parquet)                 91             97           5          1.1         905.2       0.2X
+100 wide x 1000 rows (read in-mem)                   14             17           3          7.3         136.6       1.3X
+100 wide x 1000 rows (exec in-mem)                   21             23           3          4.8         208.6       0.9X
+100 wide x 1000 rows (read parquet)                  19             21           3          5.2         194.1       0.9X
+100 wide x 1000 rows (write parquet)                 87             91           6          1.2         867.4       0.2X
+2500 wide x 40 rows (read in-mem)                    19             22           3          5.2         194.1       0.9X
+2500 wide x 40 rows (exec in-mem)                   199            207           7          0.5        1994.6       0.1X
+2500 wide x 40 rows (read parquet)                   60             63           3          1.7         604.7       0.3X
+2500 wide x 40 rows (write parquet)                  91             97           4          1.1         914.6       0.2X
 
 
 ================================================================================================
 deeply nested struct field read and write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 deeply nested struct field r/w:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 deep x 100000 rows (read in-mem)                   16             19           3          6.4         157.4       1.0X
-1 deep x 100000 rows (exec in-mem)                   18             20           2          5.6         179.0       0.9X
-1 deep x 100000 rows (read parquet)                  18             22           4          5.6         179.8       0.9X
-1 deep x 100000 rows (write parquet)                 74             80           7          1.4         737.3       0.2X
-100 deep x 1000 rows (read in-mem)                   50             52           3          2.0         497.7       0.3X
-100 deep x 1000 rows (exec in-mem)                  525            533          11          0.2        5252.1       0.0X
-100 deep x 1000 rows (read parquet)                 502            505           3          0.2        5023.0       0.0X
-100 deep x 1000 rows (write parquet)                108            111           3          0.9        1078.8       0.1X
-250 deep x 400 rows (read in-mem)                   225            229           2          0.4        2253.3       0.1X
-250 deep x 400 rows (exec in-mem)                  3326           3327           2          0.0       33256.1       0.0X
-250 deep x 400 rows (read parquet)                 3017           3023           8          0.0       30174.1       0.0X
-250 deep x 400 rows (write parquet)                 284            288           3          0.4        2836.1       0.1X
+1 deep x 100000 rows (read in-mem)                   14             16           2          7.2         139.0       1.0X
+1 deep x 100000 rows (exec in-mem)                   16             18           3          6.3         158.7       0.9X
+1 deep x 100000 rows (read parquet)                  16             18           3          6.2         162.4       0.9X
+1 deep x 100000 rows (write parquet)                 86             90           4          1.2         859.6       0.2X
+100 deep x 1000 rows (read in-mem)                   43             45           2          2.3         429.0       0.3X
+100 deep x 1000 rows (exec in-mem)                  519            528           6          0.2        5188.6       0.0X
+100 deep x 1000 rows (read parquet)                 507            517          12          0.2        5068.3       0.0X
+100 deep x 1000 rows (write parquet)                116            121           5          0.9        1163.8       0.1X
+250 deep x 400 rows (read in-mem)                   196            203           6          0.5        1963.7       0.1X
+250 deep x 400 rows (exec in-mem)                  3290           3294           6          0.0       32897.5       0.0X
+250 deep x 400 rows (read parquet)                 3044           3044           1          0.0       30435.7       0.0X
+250 deep x 400 rows (write parquet)                 269            277           7          0.4        2688.8       0.1X
 
 
 ================================================================================================
 bushy struct field read and write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 bushy struct field r/w:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-1 x 1 deep x 100000 rows (read in-mem)                13             15           3          7.7         129.4       1.0X
-1 x 1 deep x 100000 rows (exec in-mem)                15             17           3          6.7         149.0       0.9X
-1 x 1 deep x 100000 rows (read parquet)               17             19           3          6.0         165.4       0.8X
-1 x 1 deep x 100000 rows (write parquet)              71             79           9          1.4         711.7       0.2X
-128 x 8 deep x 1000 rows (read in-mem)                14             16           3          7.4         135.5       1.0X
-128 x 8 deep x 1000 rows (exec in-mem)                25             28           3          4.0         247.4       0.5X
-128 x 8 deep x 1000 rows (read parquet)               21             24           4          4.8         206.7       0.6X
-128 x 8 deep x 1000 rows (write parquet)              71             74           3          1.4         707.5       0.2X
-1024 x 11 deep x 100 rows (read in-mem)               18             20           3          5.4         184.4       0.7X
-1024 x 11 deep x 100 rows (exec in-mem)              141            148           6          0.7        1411.6       0.1X
-1024 x 11 deep x 100 rows (read parquet)              40             42           4          2.5         396.2       0.3X
-1024 x 11 deep x 100 rows (write parquet)             75             83           8          1.3         754.6       0.2X
+1 x 1 deep x 100000 rows (read in-mem)                12             14           3          8.5         117.6       1.0X
+1 x 1 deep x 100000 rows (exec in-mem)                13             16           4          7.5         133.5       0.9X
+1 x 1 deep x 100000 rows (read parquet)               15             17           3          6.6         151.2       0.8X
+1 x 1 deep x 100000 rows (write parquet)              85             88           3          1.2         848.9       0.1X
+128 x 8 deep x 1000 rows (read in-mem)                12             14           2          8.2         121.3       1.0X
+128 x 8 deep x 1000 rows (exec in-mem)                23             26           2          4.3         231.4       0.5X
+128 x 8 deep x 1000 rows (read parquet)               19             21           3          5.3         189.3       0.6X
+128 x 8 deep x 1000 rows (write parquet)              84             87           5          1.2         838.3       0.1X
+1024 x 11 deep x 100 rows (read in-mem)               17             18           2          5.9         168.3       0.7X
+1024 x 11 deep x 100 rows (exec in-mem)              131            139           5          0.8        1308.0       0.1X
+1024 x 11 deep x 100 rows (read parquet)              33             37           4          3.0         329.1       0.4X
+1024 x 11 deep x 100 rows (write parquet)             89             93           3          1.1         888.8       0.1X
 
 
 ================================================================================================
 wide array field read and write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 wide array field r/w:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)                   15             17           2          6.6         151.1       1.0X
-1 wide x 100000 rows (exec in-mem)                   17             19           3          5.8         173.2       0.9X
-1 wide x 100000 rows (read parquet)                  17             19           3          6.0         167.6       0.9X
-1 wide x 100000 rows (write parquet)                 72             75           4          1.4         722.1       0.2X
-100 wide x 1000 rows (read in-mem)                   12             14           3          8.7         115.4       1.3X
-100 wide x 1000 rows (exec in-mem)                   13             15           3          7.7         129.7       1.2X
-100 wide x 1000 rows (read parquet)                  17             19           4          6.0         166.3       0.9X
-100 wide x 1000 rows (write parquet)                 69             76           9          1.4         690.5       0.2X
-2500 wide x 40 rows (read in-mem)                    11             13           2          8.9         112.1       1.3X
-2500 wide x 40 rows (exec in-mem)                    13             15           3          7.8         128.8       1.2X
-2500 wide x 40 rows (read parquet)                   17             19           3          6.0         166.5       0.9X
-2500 wide x 40 rows (write parquet)                  69             71           3          1.5         687.9       0.2X
+1 wide x 100000 rows (read in-mem)                   14             15           3          7.3         136.2       1.0X
+1 wide x 100000 rows (exec in-mem)                   16             17           2          6.4         155.5       0.9X
+1 wide x 100000 rows (read parquet)                  15             17           3          6.5         153.4       0.9X
+1 wide x 100000 rows (write parquet)                 86             93           6          1.2         860.3       0.2X
+100 wide x 1000 rows (read in-mem)                   10             12           2         10.0          99.7       1.4X
+100 wide x 1000 rows (exec in-mem)                   11             13           2          8.8         113.8       1.2X
+100 wide x 1000 rows (read parquet)                  15             17           3          6.6         151.1       0.9X
+100 wide x 1000 rows (write parquet)                 83             88           7          1.2         828.2       0.2X
+2500 wide x 40 rows (read in-mem)                    10             11           2         10.1          98.6       1.4X
+2500 wide x 40 rows (exec in-mem)                    11             12           2          8.8         113.6       1.2X
+2500 wide x 40 rows (read parquet)                   15             16           3          6.8         147.9       0.9X
+2500 wide x 40 rows (write parquet)                  82             84           2          1.2         816.2       0.2X
 
 
 ================================================================================================
 wide map field read and write
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 wide map field r/w:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 wide x 100000 rows (read in-mem)                   13             15           2          8.0         125.6       1.0X
-1 wide x 100000 rows (exec in-mem)                   15             17           2          6.5         152.9       0.8X
-1 wide x 100000 rows (read parquet)                  21             24           2          4.7         214.1       0.6X
-1 wide x 100000 rows (write parquet)                 70             78           8          1.4         700.6       0.2X
-100 wide x 1000 rows (read in-mem)                    8              9           2         13.2          76.0       1.7X
-100 wide x 1000 rows (exec in-mem)                   10             11           2         10.1          99.1       1.3X
-100 wide x 1000 rows (read parquet)                  18             21           3          5.5         182.4       0.7X
-100 wide x 1000 rows (write parquet)                 64             69           6          1.6         640.1       0.2X
-2500 wide x 40 rows (read in-mem)                     9             10           1         10.8          92.7       1.4X
-2500 wide x 40 rows (exec in-mem)                    11             13           2          8.9         113.0       1.1X
-2500 wide x 40 rows (read parquet)                   18             20           3          5.4         184.1       0.7X
-2500 wide x 40 rows (write parquet)                  66             70           4          1.5         661.1       0.2X
+1 wide x 100000 rows (read in-mem)                   11             12           2          9.1         109.6       1.0X
+1 wide x 100000 rows (exec in-mem)                   14             15           1          7.4         135.2       0.8X
+1 wide x 100000 rows (read parquet)                  19             22           4          5.4         185.9       0.6X
+1 wide x 100000 rows (write parquet)                 82             86           5          1.2         815.2       0.1X
+100 wide x 1000 rows (read in-mem)                    7              7           1         15.1          66.2       1.7X
+100 wide x 1000 rows (exec in-mem)                    9             10           2         11.7          85.6       1.3X
+100 wide x 1000 rows (read parquet)                  16             18           3          6.1         164.4       0.7X
+100 wide x 1000 rows (write parquet)                 78             82           4          1.3         776.2       0.1X
+2500 wide x 40 rows (read in-mem)                     8              9           1         12.2          82.2       1.3X
+2500 wide x 40 rows (exec in-mem)                    10             11           2         10.0         100.4       1.1X
+2500 wide x 40 rows (read parquet)                   16             18           3          6.1         164.9       0.7X
+2500 wide x 40 rows (write parquet)                  79             84           4          1.3         790.9       0.1X
 
 
