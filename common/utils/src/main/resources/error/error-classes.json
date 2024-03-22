@@ -4345,6 +4345,11 @@
       "Can't insert into the target."
     ],
     "subClass" : {
+      "MULTI_PATH" : {
+        "message" : [
+          "Can only write data to relations with a single path but given paths are <paths>."
+        ]
+      },
       "NOT_ALLOWED" : {
         "message" : [
           "The target relation <relationId> does not allow insertion."
@@ -4363,11 +4368,6 @@
       "READ_FROM" : {
         "message" : [
           "The target relation <relationId> is also being read from."
-        ]
-      },
-      "MULTI_PATH" : {
-        "message" : [
-          "Can only write data to relations with a single path but given paths are <paths>."
         ]
       }
     },
