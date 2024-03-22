@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 package org.apache.spark.streaming.kinesis
 
 import java.util.concurrent.TimeUnit
