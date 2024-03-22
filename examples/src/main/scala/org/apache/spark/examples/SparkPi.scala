@@ -18,8 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples
 
-import scala.math.random
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{lit, random, sum, when}
 
@@ -43,6 +41,8 @@ object SparkPi {
       .builder()
       .appName("Spark Pi")
       .getOrCreate()
+    import spark.implicits._
+
     val N = samplesPerPartition * partitions
     val rand = random() * 2 - 1
     val count = spark.range(0, N, 1, partitions)
