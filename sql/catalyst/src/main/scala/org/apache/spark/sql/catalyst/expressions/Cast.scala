@@ -341,7 +341,7 @@ object Cast extends QueryErrorsBase {
     case (NullType, _) => false // empty array or map case
     case (_, _) if from == to => false
 
-    case (_: StringType, BinaryType) => false
+    case (_: StringType, BinaryType | _: StringType) => false
     case (_: StringType, _) => true
     case (_, _: StringType) => false
 
