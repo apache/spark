@@ -78,6 +78,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
       "'jumps', 'over', 'the', 'lazy', 'dog', '{\"status\": \"merrily\"}')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE floats (f1 FLOAT, f2 FLOAT UNSIGNED)").executeUpdate()
+    conn.prepareStatement("INSERT INTO floats VALUES (1.23, 4.56)").executeUpdate()
+
   }
 
   test("Basic test") {
@@ -260,5 +264,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val answer = spark.read
       .option("preferTimestampNTZ", true).jdbc(jdbcUrl, "TBL_DATETIME_NTZ", new Properties)
     checkAnswer(answer, expected)
+  }
+
+  test("SPARK-47522: Read MySQL FLOAT as FloatType to keep consistent with the write side") {
+    val df = spark.read.jdbc(jdbcUrl, "floats", new Properties)
+    checkAnswer(df, Row(1.23f, 4.56d))
   }
 }
