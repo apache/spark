@@ -68,7 +68,12 @@ public final class CollationFactory {
      * Binary collation implies that UTF8Strings are considered equal only if they are
      * byte for byte equal. All accent or case-insensitive collations are considered non-binary.
      */
-    public final boolean isBinaryCollation;
+    public final boolean supportsBinaryEquality;
+    /**
+     * Binary collation implies that UTF8Strings are compared on byte level.
+     * All accent or case-insensitive collations are considered non-binary.
+     */
+    public final boolean supportsBinaryOrdering;
 
     public Collation(
         String collationName,
@@ -76,15 +81,17 @@ public final class CollationFactory {
         Comparator<UTF8String> comparator,
         String version,
         ToLongFunction<UTF8String> hashFunction,
-        boolean isBinaryCollation) {
+        boolean supportsBinaryEquality,
+        boolean supportsBinaryOrdering) {
       this.collationName = collationName;
       this.collator = collator;
       this.comparator = comparator;
       this.version = version;
       this.hashFunction = hashFunction;
-      this.isBinaryCollation = isBinaryCollation;
+      this.supportsBinaryEquality = supportsBinaryEquality;
+      this.supportsBinaryOrdering = supportsBinaryOrdering;
 
-      if (isBinaryCollation) {
+      if (supportsBinaryEquality) {
         this.equalsFunction = UTF8String::equals;
       } else {
         this.equalsFunction = (s1, s2) -> this.comparator.compare(s1, s2) == 0;
@@ -95,14 +102,15 @@ public final class CollationFactory {
      * Constructor with comparators that are inherited from the given collator.
      */
     public Collation(
-        String collationName, Collator collator, String version, boolean isBinaryCollation) {
+        String collationName, Collator collator, String version, boolean supportsBinaryEquality, boolean supportsBinaryOrdering) {
       this(
         collationName,
         collator,
         (s1, s2) -> collator.compare(s1.toString(), s2.toString()),
         version,
         s -> (long)collator.getCollationKey(s.toString()).hashCode(),
-        isBinaryCollation);
+        supportsBinaryEquality,
+        supportsBinaryOrdering);
     }
   }
 
@@ -122,6 +130,7 @@ public final class CollationFactory {
       UTF8String::binaryCompare,
       "1.0",
       s -> (long)s.hashCode(),
+      true,
       true);
 
     // Case-insensitive UTF8 binary collation.
@@ -132,17 +141,18 @@ public final class CollationFactory {
       (s1, s2) -> s1.toLowerCase().binaryCompare(s2.toLowerCase()),
       "1.0",
       (s) -> (long)s.toLowerCase().hashCode(),
+      false,
       false);
 
     // UNICODE case sensitive comparison (ROOT locale, in ICU).
     collationTable[2] = new Collation(
-      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true);
+      "UNICODE", Collator.getInstance(ULocale.ROOT), "153.120.0.0", true, false);
     collationTable[2].collator.setStrength(Collator.TERTIARY);
     collationTable[2].collator.freeze();
 
     // UNICODE case-insensitive comparison (ROOT locale, in ICU + Secondary strength).
     collationTable[3] = new Collation(
-      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false);
+      "UNICODE_CI", Collator.getInstance(ULocale.ROOT), "153.120.0.0", false, false);
     collationTable[3].collator.setStrength(Collator.SECONDARY);
     collationTable[3].collator.freeze();
 

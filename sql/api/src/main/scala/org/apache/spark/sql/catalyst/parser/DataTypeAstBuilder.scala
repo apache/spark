@@ -24,7 +24,7 @@ import org.antlr.v4.runtime.Token
 import org.antlr.v4.runtime.tree.ParseTree
 
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.util.{CollationFactory, SparkStringTypeUtils}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
@@ -75,7 +75,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {
           case Seq(_) =>
-            StringType(SparkStringTypeUtils.getDefaultCollationId)
+            StringType(CollationFactory.collationNameToId(SqlApiConf.get.defaultCollation))
           case Seq(_, ctx: CollateClauseContext) =>
             val collationName = visitCollateClause(ctx)
             val collationId = CollationFactory.collationNameToId(collationName)

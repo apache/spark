@@ -299,7 +299,7 @@ private[spark] object SchemaUtils {
    */
   def hasNonUTF8BinaryCollatedString(dt: DataType): Boolean = {
     dt.existsRecursively {
-      case st: StringType => !st.isUTF8BinaryCollation
+      case st: StringType => !st.supportsBinaryOrdering
       case _ => false
     }
   }

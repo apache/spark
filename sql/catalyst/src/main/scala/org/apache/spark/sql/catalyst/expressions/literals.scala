@@ -70,15 +70,15 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String =>
-        Literal(UTF8String.fromString(s), StringType(SparkStringTypeUtils.getDefaultCollationId))
+        Literal(UTF8String.fromString(s), StringType(StringTypeUtils.getDefaultCollationId))
     case s: UTF8String =>
-      Literal(s, StringType(SparkStringTypeUtils.getDefaultCollationId))
+      Literal(s, StringType(StringTypeUtils.getDefaultCollationId))
     case c: Char =>
       Literal(UTF8String.fromString(c.toString),
-        StringType(SparkStringTypeUtils.getDefaultCollationId))
+        StringType(StringTypeUtils.getDefaultCollationId))
     case ac: Array[Char] =>
         Literal(UTF8String.fromString(String.valueOf(ac)),
-          StringType(SparkStringTypeUtils.getDefaultCollationId))
+          StringType(StringTypeUtils.getDefaultCollationId))
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal =>
       val decimal = Decimal(d)
@@ -136,7 +136,7 @@ object Literal {
     case _ if clz == classOf[Period] => YearMonthIntervalType()
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
-    case _ if clz == classOf[Array[Char]] => StringType(SparkStringTypeUtils.getDefaultCollationId)
+    case _ if clz == classOf[Array[Char]] => StringType(StringTypeUtils.getDefaultCollationId)
     case _ if clz == classOf[JavaShort] => ShortType
     case _ if clz == classOf[JavaInteger] => IntegerType
     case _ if clz == classOf[JavaLong] => LongType
@@ -146,7 +146,7 @@ object Literal {
     case _ if clz == classOf[JavaBoolean] => BooleanType
 
     // other scala classes
-    case _ if clz == classOf[String] => StringType(SparkStringTypeUtils.getDefaultCollationId)
+    case _ if clz == classOf[String] => StringType(StringTypeUtils.getDefaultCollationId)
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType

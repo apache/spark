@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SqlApiConf
 
-trait SparkStringTypeUtils {
+object StringTypeUtils extends Logging {
   /**
    * Check if default collation is up-to-date with a config.
    */
   private def refreshDefaultCollation(): Unit = {
-    if (SqlApiConf.get.defaultCollation != DEFAULT_COLLATION) {
+    if (SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER
+      && SqlApiConf.get.defaultCollation != DEFAULT_COLLATION) {
       DEFAULT_COLLATION = SqlApiConf.get.defaultCollation
       DEFAULT_COLLATION_ID = CollationFactory.collationNameToId(DEFAULT_COLLATION)
     }
@@ -49,5 +52,3 @@ trait SparkStringTypeUtils {
   private var DEFAULT_COLLATION: String = SqlApiConf.get.defaultCollation
   private var DEFAULT_COLLATION_ID: Int = CollationFactory.collationNameToId(DEFAULT_COLLATION)
 }
-
-object SparkStringTypeUtils extends SparkStringTypeUtils
