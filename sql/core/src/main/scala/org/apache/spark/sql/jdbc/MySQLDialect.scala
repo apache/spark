@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
 
-private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
+private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
@@ -123,6 +123,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         // Signed values in [-8388608, 8388607] and unsigned values in [0, 16777215],
         // both of them fit IntegerType
         Some(IntegerType)
+      case Types.REAL | Types.FLOAT =>
+        if (md.build().getBoolean("isSigned")) Some(FloatType) else Some(DoubleType)
       case Types.TIMESTAMP if "DATETIME".equalsIgnoreCase(typeName) =>
         // scalastyle:off line.size.limit
         // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
@@ -210,6 +212,11 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
+    // scalastyle:off line.size.limit
+    // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
+    // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
+    // scalastyle:on line.size.limit
+    case TimestampNTZType => Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
