@@ -250,7 +250,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       .add("b3", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build()))
   }
 
-
   test("SPARK-47515: Save TimestampNTZType as DATETIME in MySQL") {
     val expected = sql("select timestamp_ntz'2018-11-17 13:33:33' as col0")
     expected.write.format("jdbc")
