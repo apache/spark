@@ -94,8 +94,8 @@ private object MsSqlServerDialect extends JdbcDialect {
       expr match {
         case e: Predicate => e.name() match {
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
-            if e.children().exists(_.isInstanceOf[Predicate]) =>
-              super.visitUnexpectedExpr(expr)
+              if e.children().exists(_.isInstanceOf[Predicate]) =>
+            super.visitUnexpectedExpr(expr)
           case _ => super.build(expr)
         }
         case _ => super.build(expr)

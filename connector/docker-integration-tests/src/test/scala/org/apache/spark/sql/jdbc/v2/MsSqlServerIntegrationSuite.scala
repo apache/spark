@@ -127,16 +127,16 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   }
 
   test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {
-    val df1 = sql(s"SELECT name FROM " +
+    val df1 = sql("SELECT name FROM " +
       s"$catalogName.employee WHERE ((name LIKE 'am%') = (name LIKE '%y'))")
     assert(df1.collect().length == 4)
 
-    val df2 = sql(s"SELECT name FROM " +
+    val df2 = sql("SELECT name FROM " +
       s"$catalogName.employee " +
-      s"WHERE ((name NOT LIKE 'am%') = (name NOT LIKE '%y'))")
+      "WHERE ((name NOT LIKE 'am%') = (name NOT LIKE '%y'))")
     assert(df2.collect().length == 4)
 
-    val df3 = sql(s"SELECT name FROM " +
+    val df3 = sql("SELECT name FROM " +
       s"$catalogName.employee " +
       "WHERE (dept > 1 AND ((name LIKE 'am%') = (name LIKE '%y')))")
     assert(df3.collect().length == 3)
