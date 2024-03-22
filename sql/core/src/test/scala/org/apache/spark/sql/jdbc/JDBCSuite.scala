@@ -938,9 +938,17 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(BooleanType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ==
       Some(ByteType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.REAL, "FLOAT", 1, metadata) ===
+      Some(FloatType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.FLOAT, "FLOAT", 1, metadata) ===
+      Some(FloatType))
     metadata.putBoolean("isSigned", value = false)
     assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ===
       Some(ShortType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.REAL, "FLOAT", 1, metadata) ===
+      Some(DoubleType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.FLOAT, "FLOAT", 1, metadata) ===
+      Some(DoubleType))
   }
 
   test("SPARK-35446: MySQLDialect type mapping of float") {

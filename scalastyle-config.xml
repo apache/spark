@@ -482,6 +482,11 @@ This file is divided into 3 sections:
     <customMessage>Avoid using CompoundOrdering due to CVE-2018-10237.</customMessage>
   </check>
 
+  <check customId="byteCountToDisplaySize" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">byteCountToDisplaySize</parameter></parameters>
+    <customMessage>Use Utils.bytesToString instead of byteCountToDisplaySize for consistency.</customMessage>
+  </check>
+
   <check customId="pathfromuri" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">new Path\(new URI\(</parameter></parameters>
     <customMessage><![CDATA[

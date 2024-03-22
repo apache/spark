@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, 
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
+import org.apache.spark.sql.connector.expressions.{Expressions, LogicalExpressions, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -96,7 +96,7 @@ class CatalogSuite extends SparkFunSuite {
     assert(catalog.listTables(Array("ns2")).toSet == Set(ident3))
   }
 
-  test("createTable") {
+  test("createTable: non-partitioned table") {
     val catalog = newCatalog()
 
     assert(!catalog.tableExists(testIdent))
@@ -109,6 +109,29 @@ class CatalogSuite extends SparkFunSuite {
     assert(table.properties.asScala == Map())
 
     assert(catalog.tableExists(testIdent))
+  }
+
+  test("createTable: partitioned table") {
+    val partCatalog = new InMemoryPartitionTableCatalog
+    partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
+
+    assert(!partCatalog.tableExists(testIdent))
+
+    val columns = Array(
+        Column.create("col0", IntegerType),
+        Column.create("part0", IntegerType))
+    val table = partCatalog.createTable(
+      testIdent,
+      columns,
+      Array[Transform](Expressions.identity("part0")),
+      util.Collections.emptyMap[String, String])
+
+    val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
+    assert(parsed == Seq("test", "`", ".", "test_table"))
+    assert(table.columns === columns)
+    assert(table.properties.asScala == Map())
+
+    assert(partCatalog.tableExists(testIdent))
   }
 
   test("createTable: with properties") {
