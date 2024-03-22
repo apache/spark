@@ -244,7 +244,7 @@
       },
       "UNRELEASED_THREAD_ERROR" : {
         "message" : [
-          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
+          "<loggingId>: RocksDB instance could not be acquired by <newAcquiredThreadInfo> for operationType=<operationType> as it was not released by <acquiredThreadInfo> after <timeWaitedMs> ms.",
           "Thread holding the lock has trace: <stackTraceOutput>"
         ]
       }
@@ -4345,6 +4345,11 @@
       "Can't insert into the target."
     ],
     "subClass" : {
+      "MULTI_PATH" : {
+        "message" : [
+          "Can only write data to relations with a single path but given paths are <paths>."
+        ]
+      },
       "NOT_ALLOWED" : {
         "message" : [
           "The target relation <relationId> does not allow insertion."
@@ -5267,11 +5272,6 @@
   "_LEGACY_ERROR_TEMP_1147" : {
     "message" : [
       "The ordering of partition columns is <partColumns>. All partition columns having constant values need to appear before other partition columns that do not have an assigned constant value."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1148" : {
-    "message" : [
-      "Can only write data to relations with a single path."
     ]
   },
   "_LEGACY_ERROR_TEMP_1149" : {

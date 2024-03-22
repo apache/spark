@@ -180,53 +180,27 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // cast the input to decimal.
       case (n: NumericType, DecimalType) => Some(DecimalType.forType(n))
 
-      // Cast null type (usually from null literals) into target types
-      // By default, the result type is `target.defaultConcreteType`. When the target type is
-      // `TypeCollection`, there is another branch to find the "closet convertible data type" below.
-      case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
-        Some(target.defaultConcreteType)
-
       // If a function expects a StringType, no StringType instance should be implicitly cast to
       // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
       case (_: StringType, StringType) => None
       case (_: StringType, _: StringTypeCollated) => None
 
-      // This type coercion system will allow implicit converting String type as other
-      // primitive types, in case of breaking too many existing Spark SQL queries.
-      case (StringType, a: AtomicType) =>
-        Some(a)
+      // If a function expects integral type, fractional input is not allowed.
+      case (_: FractionalType, IntegralType) => None
 
-      // If the target type is any Numeric type, convert the String type as Double type.
-      case (StringType, NumericType) =>
-        Some(DoubleType)
+      // Ideally the implicit cast rule should be the same as `Cast.canANSIStoreAssign` so that it's
+      // consistent with table insertion. To avoid breaking too many existing Spark SQL queries,
+      // we make the system to allow implicitly converting String type as other primitive types.
+      case (StringType, a @ (_: AtomicType | NumericType | DecimalType | AnyTimestampType)) =>
+        Some(a.defaultConcreteType)
 
-      // If the target type is any Decimal type, convert the String type as the default
-      // Decimal type.
-      case (StringType, DecimalType) =>
-        Some(DecimalType.SYSTEM_DEFAULT)
-
-      // If the target type is any timestamp type, convert the String type as the default
-      // Timestamp type.
-      case (StringType, AnyTimestampType) =>
-        Some(AnyTimestampType.defaultConcreteType)
-
-      case (DateType, AnyTimestampType) =>
-        Some(AnyTimestampType.defaultConcreteType)
-
-      case (_, target: DataType) =>
-        if (Cast.canANSIStoreAssign(inType, target)) {
-          Some(target)
+      // When the target type is `TypeCollection`, there is another branch to find the
+      // "closet convertible data type" below.
+      case (_, target) if !target.isInstanceOf[TypeCollection] =>
+        val concreteType = target.defaultConcreteType
+        if (Cast.canANSIStoreAssign(inType, concreteType)) {
+          Some(concreteType)
         } else {
-          None
-        }
-
-      // "canANSIStoreAssign" doesn't account for targets extending StringTypeCollated, but
-      // ANSIStoreAssign is generally expected to work with StringTypes
-      case (_, st: StringTypeCollated) =>
-        if (Cast.canANSIStoreAssign(inType, st.defaultConcreteType)) {
-          Some(st.defaultConcreteType)
-        }
-        else {
           None
         }
 

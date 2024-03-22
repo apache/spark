@@ -37,7 +37,6 @@ from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     Expression,
     SortOrder,
-    ColumnReference,
     LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
@@ -49,7 +48,6 @@ from pyspark.errors import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import ColumnOrName
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.udf import UserDefinedFunction
     from pyspark.sql.connect.observation import Observation
@@ -76,22 +74,6 @@ class LogicalPlan:
         plan = proto.Relation()
         plan.common.plan_id = self._plan_id
         return plan
-
-    def unresolved_attr(self, colName: str) -> proto.Expression:
-        """Creates an unresolved attribute from a column name."""
-        exp = proto.Expression()
-        exp.unresolved_attribute.unparsed_identifier = colName
-        return exp
-
-    def to_attr_or_expression(
-        self, col: "ColumnOrName", session: "SparkConnectClient"
-    ) -> proto.Expression:
-        """Returns either an instance of an unresolved attribute or the serialized
-        expression value of the column."""
-        if type(col) is str:
-            return self.unresolved_attr(col)
-        else:
-            return cast(Column, col).to_plan(session)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:  # type: ignore[empty-body]
         ...
@@ -465,35 +447,20 @@ class Project(LogicalPlan):
 
     """
 
-    def __init__(self, child: Optional["LogicalPlan"], *columns: "ColumnOrName") -> None:
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        columns: List[Column],
+    ) -> None:
         super().__init__(child)
-        self._columns = list(columns)
-        self._verify_expressions()
-
-    def _verify_expressions(self) -> None:
-        """Ensures that all input arguments are instances of Expression or String."""
-        for c in self._columns:
-            if not isinstance(c, (Column, str)):
-                raise PySparkTypeError(
-                    error_class="NOT_LIST_OF_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "columns"},
-                )
+        assert all(isinstance(c, Column) for c in columns)
+        self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        from pyspark.sql.connect.functions import col
-
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.project.input.CopyFrom(self._child.plan(session))
-
-        proj_exprs = []
-        for c in self._columns:
-            if isinstance(c, Column):
-                proj_exprs.append(c.to_plan(session))
-            else:
-                proj_exprs.append(col(c).to_plan(session))
-
-        plan.project.expressions.extend(proj_exprs)
+        plan.project.expressions.extend([c.to_plan(session) for c in self._columns])
         return plan
 
 
@@ -896,7 +863,7 @@ class Join(LogicalPlan):
                 if isinstance(self.on, str):
                     plan.join.using_columns.append(self.on)
                 else:
-                    plan.join.join_condition.CopyFrom(self.to_attr_or_expression(self.on, session))
+                    plan.join.join_condition.CopyFrom(self.on.to_plan(session))
             elif len(self.on) > 0:
                 if isinstance(self.on[0], str):
                     plan.join.using_columns.extend(cast(str, self.on))
@@ -936,8 +903,8 @@ class AsOfJoin(LogicalPlan):
         self,
         left: LogicalPlan,
         right: LogicalPlan,
-        left_as_of: "ColumnOrName",
-        right_as_of: "ColumnOrName",
+        left_as_of: Column,
+        right_as_of: Column,
         on: Optional[Union[str, List[str], Column, List[Column]]],
         how: str,
         tolerance: Optional[Column],
@@ -960,19 +927,8 @@ class AsOfJoin(LogicalPlan):
         plan.as_of_join.left.CopyFrom(self.left.plan(session))
         plan.as_of_join.right.CopyFrom(self.right.plan(session))
 
-        if isinstance(self.left_as_of, Column):
-            plan.as_of_join.left_as_of.CopyFrom(self.left_as_of.to_plan(session))
-        else:
-            plan.as_of_join.left_as_of.CopyFrom(
-                ColumnReference(self.left_as_of, self.left._plan_id).to_plan(session)
-            )
-
-        if isinstance(self.right_as_of, Column):
-            plan.as_of_join.right_as_of.CopyFrom(self.right_as_of.to_plan(session))
-        else:
-            plan.as_of_join.right_as_of.CopyFrom(
-                ColumnReference(self.right_as_of, self.right._plan_id).to_plan(session)
-            )
+        plan.as_of_join.left_as_of.CopyFrom(self.left_as_of.to_plan(session))
+        plan.as_of_join.right_as_of.CopyFrom(self.right_as_of.to_plan(session))
 
         if self.on is not None:
             if not isinstance(self.on, list):
@@ -1128,26 +1084,18 @@ class RepartitionByExpression(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         num_partitions: Optional[int],
-        columns: List["ColumnOrName"],
+        columns: List[Column],
     ) -> None:
         super().__init__(child)
         self.num_partitions = num_partitions
+        assert all(isinstance(c, Column) for c in columns)
         self.columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
-
-        part_exprs = []
-        for c in self.columns:
-            if isinstance(c, Column):
-                part_exprs.append(c.to_plan(session))
-            elif c == "*":
-                exp = proto.Expression()
-                exp.unresolved_star.SetInParent()
-                part_exprs.append(exp)
-            else:
-                part_exprs.append(self.unresolved_attr(c))
-        plan.repartition_by_expression.partition_exprs.extend(part_exprs)
+        plan.repartition_by_expression.partition_exprs.extend(
+            [c.to_plan(session) for c in self.columns]
+        )
 
         if self._child is not None:
             plan.repartition_by_expression.input.CopyFrom(self._child.plan(session))
@@ -1283,8 +1231,8 @@ class Unpivot(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        ids: List["ColumnOrName"],
-        values: Optional[List["ColumnOrName"]],
+        ids: List[Column],
+        values: Optional[List[Column]],
         variable_column_name: str,
         value_column_name: str,
     ) -> None:
@@ -1294,19 +1242,13 @@ class Unpivot(LogicalPlan):
         self.variable_column_name = variable_column_name
         self.value_column_name = value_column_name
 
-    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
-        if isinstance(col, Column):
-            return col.to_plan(session)
-        else:
-            return self.unresolved_attr(col)
-
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.unpivot.input.CopyFrom(self._child.plan(session))
-        plan.unpivot.ids.extend([self.col_to_expr(x, session) for x in self.ids])
+        plan.unpivot.ids.extend([id.to_plan(session) for id in self.ids])
         if self.values is not None:
-            plan.unpivot.values.values.extend([self.col_to_expr(x, session) for x in self.values])
+            plan.unpivot.values.values.extend([v.to_plan(session) for v in self.values])
         plan.unpivot.variable_column_name = self.variable_column_name
         plan.unpivot.value_column_name = self.value_column_name
         return plan
@@ -1319,17 +1261,12 @@ class CollectMetrics(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         observation: Union[str, "Observation"],
-        exprs: List["ColumnOrName"],
+        exprs: List[Column],
     ) -> None:
         super().__init__(child)
         self._observation = observation
+        assert all(isinstance(e, Column) for e in exprs)
         self._exprs = exprs
-
-    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
-        if isinstance(col, Column):
-            return col.to_plan(session)
-        else:
-            return self.unresolved_attr(col)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -1340,7 +1277,7 @@ class CollectMetrics(LogicalPlan):
             if isinstance(self._observation, str)
             else str(self._observation._name)
         )
-        plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
+        plan.collect_metrics.metrics.extend([e.to_plan(session) for e in self._exprs])
         return plan
 
     @property
@@ -1570,7 +1507,7 @@ class StatSampleBy(LogicalPlan):
     def __init__(
         self,
         child: Optional["LogicalPlan"],
-        col: "ColumnOrName",
+        col: Column,
         fractions: Dict[Any, float],
         seed: Optional[int],
     ) -> None:
@@ -1584,13 +1521,8 @@ class StatSampleBy(LogicalPlan):
 
         assert seed is None or isinstance(seed, int)
 
-        if isinstance(col, Column):
-            self._col = col
-        else:
-            self._col = Column(ColumnReference(col))
-
+        self._col = col
         self._fractions = fractions
-
         self._seed = seed
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -1767,17 +1699,11 @@ class WriteOperationV2(LogicalPlan):
         super(WriteOperationV2, self).__init__(child)
         self.table_name: Optional[str] = table_name
         self.provider: Optional[str] = None
-        self.partitioning_columns: List["ColumnOrName"] = []
+        self.partitioning_columns: List[Column] = []
         self.options: dict[str, Optional[str]] = {}
         self.table_properties: dict[str, Optional[str]] = {}
         self.mode: Optional[str] = None
-        self.overwrite_condition: Optional["ColumnOrName"] = None
-
-    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
-        if isinstance(col, Column):
-            return col.to_plan(session)
-        else:
-            return self.unresolved_attr(col)
+        self.overwrite_condition: Optional[Column] = None
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
@@ -1789,7 +1715,7 @@ class WriteOperationV2(LogicalPlan):
             plan.write_operation_v2.provider = self.provider
 
         plan.write_operation_v2.partitioning_columns.extend(
-            [self.col_to_expr(x, session) for x in self.partitioning_columns]
+            [c.to_plan(session) for c in self.partitioning_columns]
         )
 
         for k in self.options:
@@ -1818,7 +1744,7 @@ class WriteOperationV2(LogicalPlan):
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_REPLACE
                 if self.overwrite_condition is not None:
                     plan.write_operation_v2.overwrite_condition.CopyFrom(
-                        self.col_to_expr(self.overwrite_condition, session)
+                        self.overwrite_condition.to_plan(session)
                     )
             elif wm == "create_or_replace":
                 plan.write_operation_v2.mode = proto.WriteOperationV2.Mode.MODE_CREATE_OR_REPLACE
