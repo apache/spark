@@ -36,7 +36,7 @@ MAKE_TGZ=false
 MAKE_PIP=false
 MAKE_R=false
 NAME=none
-MVN="$SPARK_HOME/build/mvn"
+MVN="/Applications/apache-maven-3.9.6/bin/mvn"
 
 function exit_with_usage {
   set +x
