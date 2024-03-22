@@ -79,6 +79,7 @@ class StatePartitionReader(
 
     // TODO: currently we don't support RangeKeyScanStateEncoderSpec. Support for this will be
     // added in the future along with state metadata changes.
+    // Filed JIRA here: https://issues.apache.org/jira/browse/SPARK-47524
     val keyStateEncoderType = if (numColsPrefixKey > 0) {
       PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
     } else {

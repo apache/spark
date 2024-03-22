@@ -288,6 +288,9 @@ class RangeKeyScanStateEncoder(
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = row.get(idx, field.dataType)
       val isNullCol: Byte = if (value == null) 0x01.toByte else 0x00.toByte
+      // Note that we cannot allocate a smaller buffer here even if the value is null
+      // because the effective byte array is considered variable size and needs to have
+      // the same size across all rows for the ordering to work as expected.
       val bbuf = ByteBuffer.allocate(field.dataType.defaultSize + 1)
       bbuf.order(ByteOrder.BIG_ENDIAN)
       bbuf.put(isNullCol)
