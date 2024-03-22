@@ -22,7 +22,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.pandas.testing import assert_frame_equal
 
 
 class FrameResetIndexMixin:
@@ -43,9 +43,9 @@ class FrameResetIndexMixin:
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=np.random.rand(3))
         psdf = ps.from_pandas(pdf)
 
-        assertDataFrameEqual(psdf.reset_index(), pdf.reset_index())
-        assertDataFrameEqual(psdf.reset_index().index, pdf.reset_index().index)
-        assertDataFrameEqual(psdf.reset_index(drop=True), pdf.reset_index(drop=True))
+        assert_frame_equal(psdf.reset_index(), pdf.reset_index())
+        assert_frame_equal(psdf.reset_index().index, pdf.reset_index().index)
+        assert_frame_equal(psdf.reset_index(drop=True), pdf.reset_index(drop=True))
 
         pdf.index.name = "a"
         psdf.index.name = "a"
@@ -53,33 +53,33 @@ class FrameResetIndexMixin:
         with self.assertRaisesRegex(ValueError, "cannot insert a, already exists"):
             psdf.reset_index()
 
-        assertDataFrameEqual(psdf.reset_index(drop=True), pdf.reset_index(drop=True))
+        assert_frame_equal(psdf.reset_index(drop=True), pdf.reset_index(drop=True))
 
         # inplace
         pser = pdf.a
         psser = psdf.a
         pdf.reset_index(drop=True, inplace=True)
         psdf.reset_index(drop=True, inplace=True)
-        assertDataFrameEqual(psdf, pdf)
-        assertDataFrameEqual(psser, pser)
+        assert_frame_equal(psdf, pdf)
+        assert_frame_equal(psser, pser)
 
         pdf.columns = ["index", "b"]
         psdf.columns = ["index", "b"]
-        assertDataFrameEqual(psdf.reset_index(), pdf.reset_index())
+        assert_frame_equal(psdf.reset_index(), pdf.reset_index())
 
     def test_reset_index_with_default_index_types(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=np.random.rand(3))
         psdf = ps.from_pandas(pdf)
 
         with ps.option_context("compute.default_index_type", "sequence"):
-            assertDataFrameEqual(psdf.reset_index(), pdf.reset_index())
+            assert_frame_equal(psdf.reset_index(), pdf.reset_index())
 
         with ps.option_context("compute.default_index_type", "distributed-sequence"):
-            assertDataFrameEqual(psdf.reset_index(), pdf.reset_index())
+            assert_frame_equal(psdf.reset_index(), pdf.reset_index())
 
         with ps.option_context("compute.default_index_type", "distributed"):
             # the index is different.
-            assertDataFrameEqual(
+            assert_frame_equal(
                 psdf.reset_index()._to_pandas().reset_index(drop=True), pdf.reset_index()
             )
 
@@ -96,18 +96,18 @@ class FrameResetIndexMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        assertDataFrameEqual(psdf, pdf)
-        assertDataFrameEqual(psdf.reset_index(), pdf.reset_index())
-        assertDataFrameEqual(psdf.reset_index(level="class"), pdf.reset_index(level="class"))
-        assertDataFrameEqual(
+        assert_frame_equal(psdf, pdf)
+        assert_frame_equal(psdf.reset_index(), pdf.reset_index())
+        assert_frame_equal(psdf.reset_index(level="class"), pdf.reset_index(level="class"))
+        assert_frame_equal(
             psdf.reset_index(level="class", col_level=1),
             pdf.reset_index(level="class", col_level=1),
         )
-        assertDataFrameEqual(
+        assert_frame_equal(
             psdf.reset_index(level="class", col_level=1, col_fill="species"),
             pdf.reset_index(level="class", col_level=1, col_fill="species"),
         )
-        assertDataFrameEqual(
+        assert_frame_equal(
             psdf.reset_index(level="class", col_level=1, col_fill="genus"),
             pdf.reset_index(level="class", col_level=1, col_fill="genus"),
         )
@@ -118,19 +118,19 @@ class FrameResetIndexMixin:
         pdf.index.names = [("x", "class"), ("y", "name")]
         psdf.index.names = [("x", "class"), ("y", "name")]
 
-        assertDataFrameEqual(psdf.reset_index(), pdf.reset_index())
+        assert_frame_equal(psdf.reset_index(), pdf.reset_index())
 
         with self.assertRaisesRegex(ValueError, "Item must have length equal to number of levels."):
             psdf.reset_index(col_level=1)
 
     def test_index_to_frame_reset_index(self):
         def check(psdf, pdf):
-            assertDataFrameEqual(psdf.reset_index(), pdf.reset_index())
-            assertDataFrameEqual(psdf.reset_index(drop=True), pdf.reset_index(drop=True))
+            assert_frame_equal(psdf.reset_index(), pdf.reset_index())
+            assert_frame_equal(psdf.reset_index(drop=True), pdf.reset_index(drop=True))
 
             pdf.reset_index(drop=True, inplace=True)
             psdf.reset_index(drop=True, inplace=True)
-            assertDataFrameEqual(psdf, pdf)
+            assert_frame_equal(psdf, pdf)
 
         pdf, psdf = self.df_pair
         check(psdf.index.to_frame(), pdf.index.to_frame())
