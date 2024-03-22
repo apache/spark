@@ -89,27 +89,16 @@ private object MsSqlServerDialect extends JdbcDialect {
     }
 
     override def build(expr: Expression): String = {
-      def isChildBooleanExpression(child: Expression): Boolean = child match {
-        case _: Predicate => true
-        case _ => false
-      }
-
       // MsSqlServer does not support boolean comparison using standard comparison operators
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
-        case e: Predicate =>
-          e.name() match {
-            case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
-              if (isChildBooleanExpression(e.children()(0))
-                || isChildBooleanExpression(e.children()(1))) {
-                super.visitUnexpectedExpr(expr)
-              } else {
-                super.build(expr)
-              }
-            case _ => super.build(expr)
-          }
-        case _ =>
-          super.build(expr)
+        case e: Predicate => e.name() match {
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
+            if e.children().exists(_.isInstanceOf[Predicate]) =>
+              super.visitUnexpectedExpr(expr)
+          case _ => super.build(expr)
+        }
+        case _ => super.build(expr)
       }
     }
   }
