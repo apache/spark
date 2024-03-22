@@ -4631,12 +4631,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val ALLOW_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS_IN_SUBQUERY_EXPRESSIONS =
-    buildConf("spark.sql.analyzer.allowLambdasInSubqueryExpressions")
+  val ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS =
+    buildConf("spark.sql.analyzer.allowSubqueryExpressionsInLambdasOrHigherOrderFunctions")
       .internal()
-      .doc("When set to false, the analyzer will throw an error if a lambda expression is used " +
-        "in a subquery expression. When set to true, it restores the legacy behavior of " +
-        "allowing lambda expressions in subquery expressions.")
+      .doc("When set to false, the analyzer will throw an error if a subquery expression appears " +
+        "in a lambda function or higher-order function. When set to true, it restores the legacy " +
+        "behavior of allowing subquery eexpressions in lambda functions or higher-order functions.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)

@@ -4459,7 +4459,7 @@
       },
       "LAMBDA_OR_HIGHER_ORDER_FUNCTION" : {
         "message" : [
-          "Lambda and higher-order functions are not supported within subquery expressions. Please remove all lambda and higher-order functions from subquery expressions and then try the query again."
+          "Subquery expressions are not supported within lambda and higher-order functions. Please remove all subquery expressions from lambda and higher-order functions and then try the query again."
         ]
       },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
