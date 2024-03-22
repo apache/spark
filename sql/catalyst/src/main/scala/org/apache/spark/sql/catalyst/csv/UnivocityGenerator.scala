@@ -22,7 +22,8 @@ import java.io.Writer
 import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -36,9 +37,9 @@ class UnivocityGenerator(
   writerSettings.setHeaders(schema.fieldNames: _*)
   private val gen = new CsvWriter(writer, writerSettings)
 
-  // A `ValueConverter` is responsible for converting a value of an `Any` to `String`.
-  // When the value is null, this converter should not be called.
-  private type ValueConverter = Any => String
+  // A `ValueConverter` is responsible for converting a value of an `SpecializedGetters`
+  // to `String`. When the value is null, this converter should not be called.
+  private type ValueConverter = (SpecializedGetters, Int) => String
 
   // `ValueConverter`s for all values in the fields of the schema
   private val valueConverters: Array[ValueConverter] =
@@ -64,28 +65,36 @@ class UnivocityGenerator(
   private val nullAsQuotedEmptyString =
     SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)
 
-  // Makes the function accept Any type input by doing `asInstanceOf[T]`.
-  @inline private def acceptAny[T](func: T => String): ValueConverter =
-    i => func(i.asInstanceOf[T])
-
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case BinaryType =>
-      acceptAny[Array[Byte]](binary => SparkStringUtils.getHexString(binary))
+      (getter, ordinal) => SparkStringUtils.getHexString(getter.getBinary(ordinal))
+
     case DateType =>
-      acceptAny[Int](d => dateFormatter.format(d))
+      (getter, ordinal) => dateFormatter.format(getter.getInt(ordinal))
+
     case TimestampType =>
-      acceptAny[Long](t => timestampFormatter.format(t))
+      (getter, ordinal) => timestampFormatter.format(getter.getLong(ordinal))
+
     case TimestampNTZType =>
-      acceptAny[Long](t => timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(t)))
+      (getter, ordinal) =>
+        timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(getter.getLong(ordinal)))
+
     case YearMonthIntervalType(start, end) =>
-      acceptAny[Int](i => IntervalUtils.toYearMonthIntervalString(
-        i, IntervalStringStyles.ANSI_STYLE, start, end))
+      (getter, ordinal) =>
+        IntervalUtils.toYearMonthIntervalString(
+          getter.getInt(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
+
     case DayTimeIntervalType(start, end) =>
-      acceptAny[Long](i => IntervalUtils.toDayTimeIntervalString(
-        i, IntervalStringStyles.ANSI_STYLE, start, end))
+      (getter, ordinal) =>
+        IntervalUtils.toDayTimeIntervalString(
+          getter.getLong(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
+
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
+
     case ArrayType(et, _) =>
-      acceptAny[ArrayData](array => {
+      val elementConverter = makeConverter(et)
+      (getter, ordinal) =>
+        val array = getter.getArray(ordinal)
         val builder = new StringBuilder
         builder.append("[")
         if (array.numElements() > 0) {
@@ -97,7 +106,7 @@ class UnivocityGenerator(
               builder.append(null.asInstanceOf[String])
             }
           } else {
-            builder.append(converter(array.get(0, et)))
+            builder.append(elementConverter(array, 0))
           }
           var i = 1
           while (i < array.numElements()) {
@@ -110,24 +119,25 @@ class UnivocityGenerator(
               }
             } else {
               builder.append(" ")
-              builder.append(converter(array.get(i, et)))
+              builder.append(elementConverter(array, i))
             }
             i += 1
           }
         }
         builder.append("]")
         builder.toString()
-      })
+
     case MapType(kt, vt, _) =>
-      acceptAny[MapData](map => {
+      val keyConverter = makeConverter(kt)
+      val valueConverter = makeConverter(vt)
+      (getter, ordinal) =>
+        val map = getter.getMap(ordinal)
         val builder = new StringBuilder
         builder.append("{")
         if (map.numElements() > 0) {
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
-          val keyConverter = makeConverter(kt)
-          val valueConverter = makeConverter(vt)
-          builder.append(keyConverter(keyArray.get(0, kt)))
+          builder.append(keyConverter(keyArray, 0))
           builder.append(" ->")
           if (valueArray.isNullAt(0)) {
             if (nullAsQuotedEmptyString) {
@@ -137,12 +147,12 @@ class UnivocityGenerator(
             }
           } else {
             builder.append(" ")
-            builder.append(valueConverter(valueArray.get(0, vt)))
+            builder.append(valueConverter(valueArray, 0))
           }
           var i = 1
           while (i < map.numElements()) {
             builder.append(", ")
-            builder.append(keyConverter(keyArray.get(i, kt)))
+            builder.append(keyConverter(keyArray, i))
             builder.append(" ->")
             if (valueArray.isNullAt(i)) {
               if (nullAsQuotedEmptyString) {
@@ -152,16 +162,18 @@ class UnivocityGenerator(
               }
             } else {
               builder.append(" ")
-              builder.append(valueConverter(valueArray.get(i, vt)))
+              builder.append(valueConverter(valueArray, i))
             }
             i += 1
           }
         }
         builder.append("}")
         builder.toString()
-      })
+
     case StructType(fields) =>
-      acceptAny[InternalRow](row => {
+      (getter, ordinal) =>
+        val numFields = fields.length
+        val row = getter.getStruct(ordinal, numFields)
         val builder = new StringBuilder
         builder.append("{")
         if (row.numFields > 0) {
@@ -174,7 +186,7 @@ class UnivocityGenerator(
               builder.append(null.asInstanceOf[String])
             }
           } else {
-            builder.append(converters(0)(row.get(0, st(0))))
+            builder.append(converters(0)(row, 0))
           }
           var i = 1
           while (i < row.numFields) {
@@ -187,16 +199,16 @@ class UnivocityGenerator(
               }
             } else {
               builder.append(" ")
-              builder.append(converters(i)(row.get(i, st(i))))
+              builder.append(converters(i)(row, i))
             }
             i += 1
           }
         }
         builder.append("}")
         builder.toString()
-      })
-    case _: DataType =>
-      value => value.toString
+
+    case dt: DataType =>
+      (getter: SpecializedGetters, ordinal: Int) => getter.get(ordinal, dt).toString
   }
 
   private def convertRow(row: InternalRow): Seq[String] = {
@@ -204,7 +216,7 @@ class UnivocityGenerator(
     val values = new Array[String](row.numFields)
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
-        values(i) = valueConverters(i).apply(row.get(i, schema(i).dataType))
+        values(i) = valueConverters(i).apply(row, i)
       } else if (nullAsQuotedEmptyString) {
         values(i) = options.nullValue
       }

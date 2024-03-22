@@ -263,17 +263,25 @@ case class StructsToCsv(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     child.dataType match {
-      case _: StructType => TypeCheckSuccess
+      case schema: StructType if schema.map(_.dataType).forall(
+        dt => isSupportedDataType(dt)) => TypeCheckSuccess
       case _ => DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        errorSubClass = "UNSUPPORTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> ordinalNumber(0),
-          "requiredType" -> toSQLType(StructType),
-          "inputSql" -> toSQLExpr(child),
-          "inputType" -> toSQLType(child.dataType)
+          "functionName" -> toSQLId(prettyName),
+          "dataType" -> toSQLType(child.dataType)
         )
       )
     }
+  }
+
+  private def isSupportedDataType(dataType: DataType): Boolean = dataType match {
+    case _: VariantType => false
+    case array: ArrayType => isSupportedDataType(array.elementType)
+    case map: MapType => isSupportedDataType(map.keyType) && isSupportedDataType(map.valueType)
+    case st: StructType => st.map(_.dataType).forall(dt => isSupportedDataType(dt))
+    case udt: UserDefinedType[_] => isSupportedDataType(udt.sqlType)
+    case _ => true
   }
 
   @transient

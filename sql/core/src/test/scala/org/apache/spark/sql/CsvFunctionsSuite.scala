@@ -678,7 +678,15 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row("2,Alice,[61]"))
   }
 
-  test("SPARK-47497: to_csv can display VariantType data") {
+  test("SPARK-47497: to_csv can display NullType data") {
+    val df = Seq(Tuple1(Tuple1(null))).toDF("value")
+    val options = Map("nullValue" -> "-")
+
+    val actual = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual, Row("-"))
+  }
+
+  test("SPARK-47497: from_csv/to_csv does not support VariantType data") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5)))))
 
@@ -691,16 +699,26 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("value", valueSchema)))
 
     val df = spark.createDataFrame(rows, schema)
-    val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"\""))
-  }
 
-  test("SPARK-47497: to_csv can display NullType data") {
-    val df = Seq(Tuple1(Tuple1(null))).toDF("value")
-    val options = Map("nullValue" -> "-")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_csv($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      parameters = Map(
+        "functionName" -> "`to_csv`",
+        "dataType" -> "\"STRUCT<age: BIGINT, name: STRING, v: VARIANT>\"",
+        "sqlExpr" -> "\"to_csv(value)\""),
+      context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
+    )
 
-    val actual = df.select(to_csv($"value", options.asJava))
-    checkAnswer(actual, Row("-"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        df.select(from_csv(lit("data"), valueSchema, Map.empty[String, String])).collect()
+      },
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"VARIANT\"")
+    )
   }
 
   test("SPARK-47497: the input of to_csv must be StructType") {
@@ -709,13 +727,11 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(to_csv($"value")).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"to_csv(value)\"",
-        "paramIndex" -> "first",
-        "inputSql" -> "\"value\"",
-        "inputType" -> "\"INT\"",
-        "requiredType" -> "\"STRUCT\""),
+        "functionName" -> "`to_csv`",
+        "dataType" -> "\"INT\"",
+        "sqlExpr" -> "\"to_csv(value)\""),
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
     )
   }
