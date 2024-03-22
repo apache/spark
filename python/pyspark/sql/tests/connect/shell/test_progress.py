@@ -65,14 +65,16 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
 
     def test_progress_handler(self):
         handler_called = 0
+        done = False
 
         def handler(**kwargs):
-            nonlocal handler_called
+            nonlocal handler_called, done
             handler_called = 1
             self.assertEqual(100, kwargs["total_tasks"])
             self.assertEqual(50, kwargs["tasks_completed"])
             self.assertEqual(999, kwargs["bytes_read"])
             self.assertEqual(10, kwargs["inflight_tasks"])
+            done = kwargs["done"]
 
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=True, handlers=[handler])
@@ -80,8 +82,10 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         p.update_ticks(100, 50, 999, 10)
         self.assertIn("++++++", buffer.getvalue(), "Updating the char works.")
         self.assertEqual(1, handler_called, "Handler should be called.")
+        self.assertFalse(done, "Before finish, done should be False")
         p.finish()
         self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
+        self.assertTrue(done, "After finish, done should be True")
 
 
 if __name__ == "__main__":

@@ -35,7 +35,12 @@ from pyspark.sql.connect.shell import progress_bar_enabled
 class ProgressHandler(abc.ABC):
     @abc.abstractmethod
     def __call__(
-        self, total_tasks: int, tasks_completed: int, bytes_read: int, inflight_tasks: int
+        self,
+        total_tasks: int,
+        tasks_completed: int,
+        bytes_read: int,
+        inflight_tasks: int,
+        done: bool,
     ) -> None:
         pass
 
@@ -80,6 +85,16 @@ class Progress:
         self._running = 0
         self._handlers = handlers
 
+    def _notify(self, done: bool = False):
+        for handler in self._handlers:
+            handler(
+                total_tasks=self._ticks,
+                tasks_completed=self._tick,
+                bytes_read=self._bytes_read,
+                inflight_tasks=self._running,
+                done=done,
+            )
+
     def update_ticks(self, ticks: int, current: int, bytes_read: int, inflight_tasks: int) -> None:
         """This method is called from the execution to update the progress bar with a new total
         tick counter and the current position. This is necessary in case new stages get added with
@@ -91,16 +106,11 @@ class Progress:
             if self._tick > 0:
                 self.output()
             self._running = inflight_tasks
-            for handler in self._handlers:
-                handler(
-                    total_tasks=ticks,
-                    tasks_completed=current,
-                    bytes_read=bytes_read,
-                    inflight_tasks=inflight_tasks,
-                )
+            self._notify(False)
 
     def finish(self):
         """Clear the last line"""
+        self._notify(True)
         if self._enabled:
             print("\r" + " " * self._max_printed, end="", flush=True, file=self._out)
             print("\r", end="", flush=True, file=self._out)
@@ -114,13 +124,16 @@ class Progress:
             elapsed = int(time.time() - self._started)
             scanned = self._bytes_to_string(self._bytes_read)
             running = self._running
-            buffer = f"\r[{bar}] {percent_complete:.2f}% Complete ({running} Tasks running, {elapsed}s, Scanned {scanned})"
+            buffer = (
+                f"\r[{bar}] {percent_complete:.2f}% Complete "
+                f"({running} Tasks running, {elapsed}s, Scanned {scanned})"
+            )
             self._max_printed = max(len(buffer), self._max_printed)
             print(buffer, end="", flush=True, file=self._out)
 
     @staticmethod
     def _bytes_to_string(size: int) -> str:
-        """Helper method to convert a numeric bytes value into a human readable representation"""
+        """Helper method to convert a numeric bytes value into a human-readable representation"""
         i = 0
         while i < len(Progress.SI_BYTE_SIZES) - 1 and size < 2 * Progress.SI_BYTE_SIZES[i]:
             i += 1
