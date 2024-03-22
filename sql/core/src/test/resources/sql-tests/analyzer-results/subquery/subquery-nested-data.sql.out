@@ -260,6 +260,58 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select * from x where (select sum(y2) from y where xm[x2] = ym[1]) > 2
+-- !query analysis
+Project [xm#x, x2#x]
++- Filter (scalar-subquery#x [xm#x && x2#x] > cast(2 as bigint))
+   :  +- Aggregate [sum(y2#x) AS sum(y2)#xL]
+   :     +- Filter (outer(xm#x)[outer(x2#x)] = ym#x[1])
+   :        +- SubqueryAlias spark_catalog.default.y
+   :           +- Relation spark_catalog.default.y[ym#x,y2#x] parquet
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[xm#x,x2#x] parquet
+
+
+-- !query
+select * from x where (select sum(y2) from y where xm[x2+1] = ym[1]) > 2
+-- !query analysis
+Project [xm#x, x2#x]
++- Filter (scalar-subquery#x [xm#x && x2#x] > cast(2 as bigint))
+   :  +- Aggregate [sum(y2#x) AS sum(y2)#xL]
+   :     +- Filter (outer(xm#x)[(outer(x2#x) + 1)] = ym#x[1])
+   :        +- SubqueryAlias spark_catalog.default.y
+   :           +- Relation spark_catalog.default.y[ym#x,y2#x] parquet
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[xm#x,x2#x] parquet
+
+
+-- !query
+select * from x where (select sum(y2) from y where xm[x2+1] = ym[1] and xm[1+x2] = ym[2]) > 2
+-- !query analysis
+Project [xm#x, x2#x]
++- Filter (scalar-subquery#x [xm#x && x2#x && xm#x && x2#x] > cast(2 as bigint))
+   :  +- Aggregate [sum(y2#x) AS sum(y2)#xL]
+   :     +- Filter ((outer(xm#x)[(outer(x2#x) + 1)] = ym#x[1]) AND (outer(xm#x)[(1 + outer(x2#x))] = ym#x[2]))
+   :        +- SubqueryAlias spark_catalog.default.y
+   :           +- Relation spark_catalog.default.y[ym#x,y2#x] parquet
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[xm#x,x2#x] parquet
+
+
+-- !query
+select * from x where (select sum(y2) from y where xm[y2] = ym[1]) > 2
+-- !query analysis
+Project [xm#x, x2#x]
++- Filter (scalar-subquery#x [xm#x] > cast(2 as bigint))
+   :  +- Aggregate [sum(y2#x) AS sum(y2)#xL]
+   :     +- Filter (outer(xm#x)[y2#x] = ym#x[1])
+   :        +- SubqueryAlias spark_catalog.default.y
+   :           +- Relation spark_catalog.default.y[ym#x,y2#x] parquet
+   +- SubqueryAlias spark_catalog.default.x
+      +- Relation spark_catalog.default.x[xm#x,x2#x] parquet
+
+
+-- !query
 set spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled = false
 -- !query analysis
 SetCommand (spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled,Some(false))

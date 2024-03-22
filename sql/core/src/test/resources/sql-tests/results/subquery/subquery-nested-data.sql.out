@@ -213,6 +213,53 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select * from x where (select sum(y2) from y where xm[x2] = ym[1]) > 2
+-- !query schema
+struct<xm:map<int,int>,x2:int>
+-- !query output
+
+
+
+-- !query
+select * from x where (select sum(y2) from y where xm[x2+1] = ym[1]) > 2
+-- !query schema
+struct<xm:map<int,int>,x2:int>
+-- !query output
+
+
+
+-- !query
+select * from x where (select sum(y2) from y where xm[x2+1] = ym[1] and xm[1+x2] = ym[2]) > 2
+-- !query schema
+struct<xm:map<int,int>,x2:int>
+-- !query output
+
+
+
+-- !query
+select * from x where (select sum(y2) from y where xm[y2] = ym[1]) > 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "dataType" : "map",
+    "expr" : "spark_catalog.default.x.xm"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 44,
+    "stopIndex" : 44,
+    "fragment" : "y"
+  } ]
+}
+
+
+-- !query
 set spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled = false
 -- !query schema
 struct<key:string,value:string>
