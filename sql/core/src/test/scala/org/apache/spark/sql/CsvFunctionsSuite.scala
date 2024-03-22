@@ -606,7 +606,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row(Row(1, "2\n2")))
   }
 
-  test("SPARK-46654: to_csv can display ArrayType data") {
+  test("SPARK-47497: to_csv support the data of ArrayType as pretty strings") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", Array(100L, 200L, null, 300L))))
 
@@ -623,7 +623,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row("2,Alice,\"[100, 200, null, 300]\""))
   }
 
-  test("SPARK-46654: to_csv can display MapType data") {
+  test("SPARK-47497: to_csv support the data of MapType as pretty strings") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice",
       Map("math" -> 100L, "english" -> 200L, "science" -> null))))
@@ -641,7 +641,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row("2,Alice,\"{math -> 100, english -> 200, science -> null}\""))
   }
 
-  test("SPARK-46654: to_csv can display StructType data") {
+  test("SPARK-47497: to_csv support the data of StructType as pretty strings") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", Row(100L, 200L, null))))
 
@@ -661,7 +661,24 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row("2,Alice,\"{100, 200, null}\""))
   }
 
-  test("SPARK-46654: from_csv/to_csv does not support VariantType data") {
+  test("SPARK-47497: to_csv support the data of BinaryType as pretty strings") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", "a".getBytes(StandardCharsets.UTF_8))))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("b", BinaryType)))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual = df.select(to_csv($"value"))
+    checkAnswer(actual, Row("2,Alice,[61]"))
+  }
+
+  test("SPARK-47497: to_csv can display VariantType data") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5)))))
 
@@ -674,86 +691,32 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("value", valueSchema)))
 
     val df = spark.createDataFrame(rows, schema)
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.select(to_csv($"value")).collect()
-      },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
-      parameters = Map(
-        "functionName" -> "`to_csv`",
-        "dataType" -> "\"STRUCT<age: BIGINT, name: STRING, v: VARIANT>\"",
-        "sqlExpr" -> "\"to_csv(value)\""),
-      context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
-    )
-
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        df.select(from_csv(lit("data"), valueSchema, Map.empty[String, String])).collect()
-      },
-      errorClass = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "\"VARIANT\"")
-    )
+    val actual = df.select(to_csv($"value"))
+    checkAnswer(actual, Row("2,Alice,\"\""))
   }
 
-  test("SPARK-46654: from_csv/to_csv does not support BinaryType data") {
-    val rows = new java.util.ArrayList[Row]()
-    rows.add(Row(1L, Row(2L, "Alice", "b".getBytes(StandardCharsets.UTF_8))))
-
-    val valueSchema = StructType(Seq(
-      StructField("age", LongType),
-      StructField("name", StringType),
-      StructField("b", BinaryType)))
-    val schema = StructType(Seq(
-      StructField("key", LongType),
-      StructField("value", valueSchema)))
-
-    val df = spark.createDataFrame(rows, schema)
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.select(to_csv($"value")).collect()
-      },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
-      parameters = Map(
-        "functionName" -> "`to_csv`",
-        "dataType" -> "\"STRUCT<age: BIGINT, name: STRING, b: BINARY>\"",
-        "sqlExpr" -> "\"to_csv(value)\""),
-      context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
-    )
-
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        df.select(from_csv(lit("data"), valueSchema, Map.empty[String, String])).collect()
-      },
-      errorClass = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "\"BINARY\"")
-    )
-  }
-
-  test("SPARK-46654: from_csv/to_csv does not support NullType data") {
+  test("SPARK-47497: to_csv can display NullType data") {
     val df = Seq(Tuple1(Tuple1(null))).toDF("value")
-    val valueSchema = df.schema
     val options = Map("nullValue" -> "-")
 
+    val actual = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual, Row("-"))
+  }
+
+  test("SPARK-47497: the input of to_csv must be StructType") {
+    val df = Seq(1, 2).toDF("value")
     checkError(
       exception = intercept[AnalysisException] {
-        df.select(to_csv($"value", options.asJava)).collect()
+        df.select(to_csv($"value")).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "functionName" -> "`to_csv`",
-        "dataType" -> "\"STRUCT<_1: VOID>\"",
-        "sqlExpr" -> "\"to_csv(value)\""),
+        "sqlExpr" -> "\"to_csv(value)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"value\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
-    )
-
-    checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        df.select(from_csv(lit("data"), valueSchema, options)).collect()
-      },
-      errorClass = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "\"STRUCT<_1: VOID>\"")
     )
   }
 }

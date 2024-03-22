@@ -1,28 +1,28 @@
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 year month interval one column:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------
-year month interval one column enable radix           22034          22431         525          4.5         220.3       1.0X
-year month interval one column disable radix          31729          31786          72          3.2         317.3       0.7X
+year month interval one column enable radix           22445          22598         237          4.5         224.4       1.0X
+year month interval one column disable radix          32401          32416          20          3.1         324.0       0.7X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 year month interval two columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-year month interval two columns enable radix           32235          32835         923          3.1         322.4       1.0X
-year month interval two columns disable radix          32718          33541        1348          3.1         327.2       1.0X
+year month interval two columns enable radix           33624          33664          36          3.0         336.2       1.0X
+year month interval two columns disable radix          33562          33647          79          3.0         335.6       1.0X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 day time interval one columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-day time interval one columns enable radix           19952          20368         471          5.0         199.5       1.0X
-day time interval one columns disable radix          31946          32323         328          3.1         319.5       0.6X
+day time interval one columns enable radix           22444          22552         166          4.5         224.4       1.0X
+day time interval one columns disable radix          34000          34058          90          2.9         340.0       0.7X
 
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 day time interval two columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-day time interval two columns enable radix           32808          33427         623          3.0         328.1       1.0X
-day time interval two columns disable radix          32756          32824          76          3.1         327.6       1.0X
+day time interval two columns enable radix           35780          35816          34          2.8         357.8       1.0X
+day time interval two columns disable radix          36041          36575         472          2.8         360.4       1.0X
 

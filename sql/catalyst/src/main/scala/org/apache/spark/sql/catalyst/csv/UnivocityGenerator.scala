@@ -22,7 +22,7 @@ import java.io.Writer
 import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -69,6 +69,8 @@ class UnivocityGenerator(
     i => func(i.asInstanceOf[T])
 
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
+    case BinaryType =>
+      acceptAny[Array[Byte]](binary => SparkStringUtils.getHexString(binary))
     case DateType =>
       acceptAny[Int](d => dateFormatter.format(d))
     case TimestampType =>
