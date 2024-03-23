@@ -72,9 +72,9 @@ public final class CollationFactory {
     public final boolean supportsBinaryEquality;
     /**
      * Support for Binary Ordering implies that it is possible to check equality and compare on
-     * byte by byte level. This allows for the usage of binaryEquals and binaryCompare calls on UTF8Strings
-     * which is more performant than calls to external ICU library. Support for Binary Ordering implies
-     * support for Binary Equality.
+     * byte by byte level. This allows for the usage of binaryEquals and binaryCompare calls on
+     * UTF8Strings which is more performant than calls to external ICU library. Support for
+     * Binary Ordering implies support for Binary Equality.
      */
     public final boolean supportsBinaryOrdering;
 
@@ -108,7 +108,11 @@ public final class CollationFactory {
      * Constructor with comparators that are inherited from the given collator.
      */
     public Collation(
-        String collationName, Collator collator, String version, boolean supportsBinaryEquality, boolean supportsBinaryOrdering) {
+        String collationName,
+        Collator collator,
+        String version,
+        boolean supportsBinaryEquality,
+        boolean supportsBinaryOrdering) {
       this(
         collationName,
         collator,
