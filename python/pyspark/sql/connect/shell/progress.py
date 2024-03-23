@@ -19,7 +19,7 @@
 import abc
 import time
 import sys
-from typing import Iterable, Callable
+from typing import Iterable
 
 try:
     from IPython.utils.terminal import get_terminal_size
