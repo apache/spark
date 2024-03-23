@@ -295,7 +295,6 @@ class RangeKeyScanStateEncoder(
       bbuf.order(ByteOrder.BIG_ENDIAN)
       bbuf.put(isNullCol)
       if (isNullCol == 0x01.toByte) {
-        bbuf.put(0x00.toByte)
         writer.write(idx, bbuf.array())
       } else {
         field.dataType match {
