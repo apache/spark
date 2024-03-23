@@ -198,7 +198,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       // Sanity check
       if (t.location.rootPaths.size != 1) {
-        throw QueryCompilationErrors.cannotWriteDataToRelationsWithMultiplePathsError()
+        throw QueryCompilationErrors
+          .cannotWriteDataToRelationsWithMultiplePathsError(t.location.rootPaths)
       }
 
       val outputPath = t.location.rootPaths.head

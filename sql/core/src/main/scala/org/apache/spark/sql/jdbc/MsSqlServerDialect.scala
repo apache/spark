@@ -26,6 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.{Expression, NullOrdering, SortDirection}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.internal.SQLConf
@@ -78,6 +79,20 @@ private case class MsSqlServerDialect() extends JdbcDialect {
       case "STDDEV_POP" => "STDEVP"
       case "STDDEV_SAMP" => "STDEV"
       case _ => super.dialectFunctionName(funcName)
+    }
+
+    override def build(expr: Expression): String = {
+      // MsSqlServer does not support boolean comparison using standard comparison operators
+      // We shouldn't propagate these queries to MsSqlServer
+      expr match {
+        case e: Predicate => e.name() match {
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
+              if e.children().exists(_.isInstanceOf[Predicate]) =>
+            super.visitUnexpectedExpr(expr)
+          case _ => super.build(expr)
+        }
+        case _ => super.build(expr)
+      }
     }
   }
 

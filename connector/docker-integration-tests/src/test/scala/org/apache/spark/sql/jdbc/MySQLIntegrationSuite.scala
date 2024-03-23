@@ -78,6 +78,11 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
       "'jumps', 'over', 'the', 'lazy', 'dog', '{\"status\": \"merrily\"}')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE floats (f1 FLOAT, f2 FLOAT(10), f3 FLOAT(53), " +
+      "f4 FLOAT UNSIGNED, f5 FLOAT(10) UNSIGNED, f6 FLOAT(53) UNSIGNED)").executeUpdate()
+    conn.prepareStatement("INSERT INTO floats VALUES (1.23, 4.56, 7.89, 1.23, 4.56, 7.89)")
+      .executeUpdate()
   }
 
   test("Basic test") {
@@ -103,7 +108,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(4).equals("class java.lang.Integer"))
     assert(types(5).equals("class java.lang.Long"))
     assert(types(6).equals("class java.math.BigDecimal"))
-    assert(types(7).equals("class java.lang.Double"))
+    assert(types(7).equals("class java.lang.Float"))
     assert(types(8).equals("class java.lang.Double"))
     assert(types(9).equals("class java.lang.Byte"))
     assert(rows(0).getBoolean(0) == false)
@@ -114,7 +119,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getLong(5) == 123456789012345L)
     val bd = new BigDecimal("123456789012345.12345678901234500000")
     assert(rows(0).getAs[BigDecimal](6).equals(bd))
-    assert(rows(0).getDouble(7) == 42.75)
+    assert(rows(0).getFloat(7) == 42.75)
     assert(rows(0).getDouble(8) == 1.0000000000000002)
     assert(rows(0).getByte(9) == 0x80.toByte)
   }
@@ -248,5 +253,22 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       .add("b1", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build())
       .add("b2", BooleanType, nullable = true, mb.putBoolean("isSigned", false).build())
       .add("b3", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build()))
+  }
+
+  test("SPARK-47515: Save TimestampNTZType as DATETIME in MySQL") {
+    val expected = sql("select timestamp_ntz'2018-11-17 13:33:33' as col0")
+    expected.write.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "TBL_DATETIME_NTZ")
+      .save()
+
+    val answer = spark.read
+      .option("preferTimestampNTZ", true).jdbc(jdbcUrl, "TBL_DATETIME_NTZ", new Properties)
+    checkAnswer(answer, expected)
+  }
+
+  test("SPARK-47522: Read MySQL FLOAT as FloatType to keep consistent with the write side") {
+    val df = spark.read.jdbc(jdbcUrl, "floats", new Properties)
+    checkAnswer(df, Row(1.23f, 4.56f, 7.89d, 1.23d, 4.56d, 7.89d))
   }
 }
