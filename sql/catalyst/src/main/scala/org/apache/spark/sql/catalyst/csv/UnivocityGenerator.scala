@@ -181,8 +181,9 @@ class UnivocityGenerator(
   }
 
   private def appendNull(builder: StringBuilder): Unit = {
-    if (nullAsQuotedEmptyString) {
-      builder.append(" " + options.nullValue)
+    options.parameters.get(CSVOptions.NULL_VALUE) match {
+      case Some(_) => builder.append(" " + options.nullValue)
+      case None =>
     }
   }
 

@@ -606,6 +606,28 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row(Row(1, "2\n2")))
   }
 
+  test("SPARK-47497: null value display when w or w/o options (nullValue)") {
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice", null, "y")))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("x", StringType),
+      StructField("y", StringType)))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice,,y"))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice,-,y"))
+  }
+
   test("SPARK-47497: to_csv support the data of ArrayType as pretty strings") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", Array(100L, 200L, null, 300L))))
@@ -619,8 +641,12 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("value", valueSchema)))
 
     val df = spark.createDataFrame(rows, schema)
-    val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"[100, 200,, 300]\""))
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice,\"[100, 200,, 300]\""))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice,\"[100, 200, -, 300]\""))
   }
 
   test("SPARK-47497: to_csv support the data of MapType as pretty strings") {
@@ -637,8 +663,12 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("value", valueSchema)))
 
     val df = spark.createDataFrame(rows, schema)
-    val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"{math -> 100, english -> 200, science ->}\""))
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice,\"{math -> 100, english -> 200, science ->}\""))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice,\"{math -> 100, english -> 200, science -> -}\""))
   }
 
   test("SPARK-47497: to_csv support the data of StructType as pretty strings") {
@@ -657,8 +687,12 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       StructField("value", valueSchema)))
 
     val df = spark.createDataFrame(rows, schema)
-    val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"{100, 200,}\""))
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice,\"{100, 200,}\""))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice,\"{100, 200, -}\""))
   }
 
   test("SPARK-47497: to_csv support the data of BinaryType as pretty strings") {
@@ -668,7 +702,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     val valueSchema = StructType(Seq(
       StructField("age", LongType),
       StructField("name", StringType),
-      StructField("b", BinaryType)))
+      StructField("a", BinaryType)))
     val schema = StructType(Seq(
       StructField("key", LongType),
       StructField("value", valueSchema)))
@@ -681,7 +715,6 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-47497: to_csv can display NullType data") {
     val df = Seq(Tuple1(Tuple1(null))).toDF("value")
     val options = Map("nullValue" -> "-")
-
     val actual = df.select(to_csv($"value", options.asJava))
     checkAnswer(actual, Row("-"))
   }
@@ -735,22 +768,4 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
     )
   }
-
-   test("SPARK-47497: null value") {
-     val rows = new java.util.ArrayList[Row]()
-     rows.add(Row(1L, Row(2L, "Alice", null, "y")))
-
-     val valueSchema = StructType(Seq(
-       StructField("age", LongType),
-       StructField("name", StringType),
-       StructField("x", StringType),
-       StructField("y", StringType)))
-     val schema = StructType(Seq(
-       StructField("key", LongType),
-       StructField("value", valueSchema)))
-
-     val df = spark.createDataFrame(rows, schema)
-     val actual = df.select(to_csv($"value"))
-     checkAnswer(actual, Row("2,Alice,,y"))
-   }
 }
