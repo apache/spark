@@ -620,7 +620,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df = spark.createDataFrame(rows, schema)
     val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"[100, 200, null, 300]\""))
+    checkAnswer(actual, Row("2,Alice,\"[100, 200,, 300]\""))
   }
 
   test("SPARK-47497: to_csv support the data of MapType as pretty strings") {
@@ -638,7 +638,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df = spark.createDataFrame(rows, schema)
     val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"{math -> 100, english -> 200, science -> null}\""))
+    checkAnswer(actual, Row("2,Alice,\"{math -> 100, english -> 200, science ->}\""))
   }
 
   test("SPARK-47497: to_csv support the data of StructType as pretty strings") {
@@ -658,7 +658,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val df = spark.createDataFrame(rows, schema)
     val actual = df.select(to_csv($"value"))
-    checkAnswer(actual, Row("2,Alice,\"{100, 200, null}\""))
+    checkAnswer(actual, Row("2,Alice,\"{100, 200,}\""))
   }
 
   test("SPARK-47497: to_csv support the data of BinaryType as pretty strings") {
@@ -735,4 +735,22 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
     )
   }
+
+   test("SPARK-47497: null value") {
+     val rows = new java.util.ArrayList[Row]()
+     rows.add(Row(1L, Row(2L, "Alice", null, "y")))
+
+     val valueSchema = StructType(Seq(
+       StructField("age", LongType),
+       StructField("name", StringType),
+       StructField("x", StringType),
+       StructField("y", StringType)))
+     val schema = StructType(Seq(
+       StructField("key", LongType),
+       StructField("value", valueSchema)))
+
+     val df = spark.createDataFrame(rows, schema)
+     val actual = df.select(to_csv($"value"))
+     checkAnswer(actual, Row("2,Alice,,y"))
+   }
 }

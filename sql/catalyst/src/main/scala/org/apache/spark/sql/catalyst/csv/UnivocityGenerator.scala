@@ -105,11 +105,11 @@ class UnivocityGenerator(
           }
           var i = 1
           while (i < array.numElements()) {
-            builder.append(", ")
+            builder.append(",")
             if (array.isNullAt(i)) {
               appendNull(builder)
             } else {
-              builder.append(elementConverter(array, i))
+              builder.append(" " + elementConverter(array, i))
             }
             i += 1
           }
@@ -128,21 +128,21 @@ class UnivocityGenerator(
           val keyArray = map.keyArray()
           val valueArray = map.valueArray()
           builder.append(keyConverter(keyArray, 0))
-          builder.append(" -> ")
+          builder.append(" ->")
           if (valueArray.isNullAt(0)) {
             appendNull(builder)
           } else {
-            builder.append(valueConverter(valueArray, 0))
+            builder.append(" " + valueConverter(valueArray, 0))
           }
           var i = 1
           while (i < map.numElements()) {
             builder.append(", ")
             builder.append(keyConverter(keyArray, i))
-            builder.append(" -> ")
+            builder.append(" ->")
             if (valueArray.isNullAt(i)) {
               appendNull(builder)
             } else {
-              builder.append(valueConverter(valueArray, i))
+              builder.append(" " + valueConverter(valueArray, i))
             }
             i += 1
           }
@@ -164,11 +164,11 @@ class UnivocityGenerator(
           }
           var i = 1
           while (i < row.numFields) {
-            builder.append(", ")
+            builder.append(",")
             if (row.isNullAt(i)) {
               appendNull(builder)
             } else {
-              builder.append(converters(i)(row, i))
+              builder.append(" " + converters(i)(row, i))
             }
             i += 1
           }
@@ -182,9 +182,7 @@ class UnivocityGenerator(
 
   private def appendNull(builder: StringBuilder): Unit = {
     if (nullAsQuotedEmptyString) {
-      builder.append(options.nullValue)
-    } else {
-      builder.append(null.asInstanceOf[String])
+      builder.append(" " + options.nullValue)
     }
   }
 
