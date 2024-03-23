@@ -1771,7 +1771,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("cache_common_expression") {
+  test("SPARK-47527: Cache should be hit for queries using common expressions") {
     withTempView("data", "the_query", "the_query2") {
       spark.range(10)
         .selectExpr("id", "id * 10").toDF("id", "val")

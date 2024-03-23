@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 class WithSuite extends PlanTest {
   private val testRelation = LocalRelation($"a".int, $"b".int)
 
-  test("Canonicalization") {
+  test("SPARK-47527: Canonicalization") {
     val a = testRelation.output.head
     val b = testRelation.output.last
     val def1 = CommonExpressionDef(a > 2, 7)
