@@ -499,14 +499,6 @@ case class AdaptiveSparkPlanExec(
       indent = depth + 1)
   }
 
-  override def summaryExtensionInfo(indent: Int, sb: StringBuilder): Unit = {
-    currentPhysicalPlan.summaryExtensionInfo(indent, sb)
-  }
-
-  override def summaryExtensionInfoSimple(): mutable.Set[String] = {
-    currentPhysicalPlan.summaryExtensionInfoSimple()
-  }
-
   override def hashCode(): Int = inputPlan.hashCode()
 
   override def equals(obj: Any): Boolean = {

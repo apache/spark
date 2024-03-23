@@ -464,56 +464,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     s"($opId) $nodeName$codegenId"
   }
 
-  // If the session extension information is enabled, the ExtendedMode will provide a string
-  // formatted similar to the ExtendedMode of displaying a physical plan, indenting information
-  // from plan nodes that are nested. This allows end users to map information from the
-  // extension to individual elements in the final physical plan
-  def summaryExtensionInfo(indent: Int, sb: StringBuilder): Unit = {
-    var indentLevel = indent
-    sb.append(
-      getTagValue(QueryPlan.EXTENSION_INFO).map(t => {
-        indentLevel = indentLevel + 1
-        "  " * indentLevel + t + "\n"
-      }).getOrElse("")
-    )
-    if (innerChildren.nonEmpty) {
-      innerChildren.foreach(_.summaryExtensionInfo(indentLevel, sb))
-    }
-    if (children.nonEmpty) {
-      children.foreach(_.summaryExtensionInfo(indentLevel, sb))
-    }
-  }
-
-  // If the session extension information is enabled, the SimpleMode will return a flat
-  // collection of the explain info provided by the extension. This is most useful for
-  // displaying errors or warnings that may have occurred. Because such messages usually
-  // occur in the leaf nodes and tend to get duplicated by parent nodes, the simple mode
-  // collects them bottom up, and removes duplicates.
-  def summaryExtensionInfoSimple(): mutable.Set[String] = {
-    val info = mutable.Set[String]() // don't allow duplicates
-    if (innerChildren.nonEmpty) {
-      innerChildren.foreach(c => {
-        val s = c.summaryExtensionInfoSimple()
-        if (s.nonEmpty) {
-          info ++= s
-        }
-      })
-    }
-    if (children.nonEmpty) {
-      children.foreach(c => {
-        val s = c.summaryExtensionInfoSimple()
-        if (s.nonEmpty) {
-          info ++= s
-        }
-      })
-    }
-    val s = getTagValue(QueryPlan.EXTENSION_INFO_SIMPLE).map(t => t).getOrElse("")
-    if (s.nonEmpty) {
-      info += s
-    }
-    info
-  }
-
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
@@ -698,8 +648,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 object QueryPlan extends PredicateHelper {
   val OP_ID_TAG = TreeNodeTag[Int]("operatorId")
   val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
-  val EXTENSION_INFO_SIMPLE = new TreeNodeTag[String]("extensionInfoSimple")
-  val EXTENSION_INFO = new TreeNodeTag[String]("extensionInfo")
 
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`

@@ -556,14 +556,6 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       indent)
   }
 
-  override def summaryExtensionInfo(indent: Int, sb: StringBuilder): Unit = {
-    child.summaryExtensionInfo(indent, sb)
-  }
-
-  override def summaryExtensionInfoSimple(): mutable.Set[String] = {
-    child.summaryExtensionInfoSimple()
-  }
-
   override def needCopyResult: Boolean = false
 
   override protected def withNewChildInternal(newChild: SparkPlan): InputAdapter =

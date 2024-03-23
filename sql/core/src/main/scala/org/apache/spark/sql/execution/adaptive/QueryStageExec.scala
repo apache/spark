@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.mutable
 import scala.concurrent.Future
 
 import org.apache.spark.{FutureAction, MapOutputStatistics, SparkException}
@@ -132,14 +131,6 @@ abstract class QueryStageExec extends LeafExecNode {
     plan.generateTreeString(
       depth + 1, lastChildren, append, verbose, "", false, maxFields, printNodeId, indent)
     lastChildren.remove(lastChildren.size() - 1)
-  }
-
-  override def summaryExtensionInfo(indent: Int, sb: StringBuilder): Unit = {
-    plan.summaryExtensionInfo(indent, sb)
-  }
-
-  override def summaryExtensionInfoSimple(): mutable.Set[String] = {
-    plan.summaryExtensionInfoSimple()
   }
 
   override protected[sql] def cleanupResources(): Unit = {

@@ -333,12 +333,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val ENABLE_EXTENSION_INFO = buildConf("spark.sql.enableExtensionInfo")
-    .doc("If true, Spark will print plan information from extensions (if any) in explain plan " +
-      " and in the UI")
+  val EXTENDED_EXPLAIN_PROVIDER = buildConf("spark.sql.extendedExplainProvider")
+    .doc("If provided, Spark will print extended plan information from the provider (if any) in" +
+      " explain plan and in the UI")
     .version("4.0.0")
-    .booleanConf
-    .createWithDefault(false)
+    .stringConf
+    .createOptional
 
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
@@ -4871,7 +4871,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
 
-  def enableExtensionInfo: Boolean = getConf(ENABLE_EXTENSION_INFO)
+  def extendedExplainProvider: Option[String] = getConf(EXTENDED_EXPLAIN_PROVIDER)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 

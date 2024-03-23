@@ -258,13 +258,7 @@ class QueryExecution(
       QueryPlan.append(executedPlan,
         append, verbose = false, addSuffix = false, maxFields = maxFields)
     }
-    if (sparkSession.sessionState.conf.enableExtensionInfo) {
-      val extInfo = extensionInfo()
-      if (extInfo.nonEmpty) {
-        append(s"\n== Extended Information ==\n")
-        append(extInfo)
-      }
-    }
+    extendedExplainInfo(append, executedPlan)
     append("\n")
   }
 
@@ -306,18 +300,6 @@ class QueryExecution(
     }
   }
 
-  def extensionInfo(mode: ExplainMode = SimpleMode): String = {
-    mode match {
-      case SimpleMode =>
-        executedPlan.summaryExtensionInfoSimple().mkString("\n")
-      case ExtendedMode =>
-        val sb = new StringBuilder
-        executedPlan.summaryExtensionInfo(0, sb)
-        sb.toString
-      case _ => ""
-    }
-  }
-
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
     append("== Parsed Logical Plan ==\n")
@@ -336,13 +318,7 @@ class QueryExecution(
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
       append("\n== Physical Plan ==\n")
       QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
-      if (sparkSession.sessionState.conf.enableExtensionInfo) {
-        val extInfo = extensionInfo()
-        if (extInfo.nonEmpty) {
-          append("\n== Extended Information ==\n")
-          append(extInfo)
-        }
-      }
+      extendedExplainInfo(append, executedPlan)
     } catch {
       case e: AnalysisException => append(e.toString)
     }
@@ -393,6 +369,25 @@ class QueryExecution(
    */
   private def withRedaction(message: String): String = {
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
+  }
+
+  def extendedExplainInfo(append: String => Unit, plan: SparkPlan): Unit = {
+    sparkSession.sessionState.conf.extendedExplainProvider match {
+      case Some(generator) =>
+        try {
+          val extensionClass = Utils.classForName(generator)
+          val extension = extensionClass.getConstructor().newInstance()
+            .asInstanceOf[ExtendedExplainGenerator]
+          append("\n== Extended Information ==\n")
+          append(extension.generateExtendedInfo(plan))
+        } catch {
+          case e@(_: ClassCastException |
+                  _: ClassNotFoundException |
+                  _: NoClassDefFoundError) =>
+            logWarning(s"Cannot use $generator to get extended information.", e)
+        }
+      case _ =>
+    }
   }
 
   /** A special namespace for commands that can be used to debug query execution. */
