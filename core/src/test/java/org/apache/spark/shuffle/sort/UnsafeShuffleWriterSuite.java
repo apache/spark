@@ -170,8 +170,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       spillFilesCreated.add(file);
       return Tuple2$.MODULE$.apply(blockId, file);
     });
-    when(diskBlockManager.createTempShuffleBlockInDir(any(File.class))).thenAnswer(invocationOnMock -> {
-      File fileDir = (File) invocationOnMock.getArguments()[0];
+    when(diskBlockManager.createTempShuffleBlockInDir(any(File.class))).thenAnswer(invocation -> {
+      File fileDir = (File) invocation.getArguments()[0];
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
       File file = spy(new File(fileDir, blockId.name()));
       when(file.delete()).thenAnswer(inv -> {
