@@ -585,20 +585,25 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       StructField("col1", FloatType, nullable = false),
       StructField("col2", IntegerType, nullable = false)))
 
-    val errs = new mutable.ArrayBuffer[String]()
-    checkError(
-      exception = intercept[AnalysisException] (
-        DataTypeUtils.canWrite("", udtType, sqlType, true,
-          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
-      ),
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
-      parameters = Map(
-        "tableName" -> "``",
-        "colName" -> "`t`.`col2`",
-        "srcType" -> "\"FLOAT\"",
-        "targetType" -> "\"INT\""
+    if (canCast(udtType.sqlType, sqlType)) {
+      assertAllowed(udtType, sqlType, "m",
+        "Should allow udt with compatible sqlType written to struct column")
+    } else {
+      val errs = new mutable.ArrayBuffer[String]()
+      checkError(
+        exception = intercept[AnalysisException](
+          DataTypeUtils.canWrite("", udtType, sqlType, true,
+            analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+        ),
+        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "``",
+          "colName" -> "`t`.`col2`",
+          "srcType" -> "\"FLOAT\"",
+          "targetType" -> "\"INT\""
+        )
       )
-    )
+    }
   }
 
   test("SPARK-47528: Check udt: read side underlying sql type is not same") {
@@ -618,34 +623,25 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       StructField("col1", FloatType, nullable = false),
       StructField("col2", FloatType, nullable = false)))
 
-    val errs = new mutable.ArrayBuffer[String]()
-    checkError(
-      exception = intercept[AnalysisException] (
-        DataTypeUtils.canWrite("", sqlType, udtType, true,
-          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
-      ),
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
-      parameters = Map(
-        "tableName" -> "``",
-        "colName" -> "`t`.`col2`",
-        "srcType" -> "\"FLOAT\"",
-        "targetType" -> "\"INT\""
+    if (canCast(sqlType, udtType.sqlType)) {
+      assertAllowed(sqlType, udtType, "m",
+        "Should allow udt with compatible sqlType written to struct column")
+    } else {
+      val errs = new mutable.ArrayBuffer[String]()
+      checkError(
+        exception = intercept[AnalysisException](
+          DataTypeUtils.canWrite("", sqlType, udtType, true,
+            analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+        ),
+        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "``",
+          "colName" -> "`t`.`col2`",
+          "srcType" -> "\"FLOAT\"",
+          "targetType" -> "\"INT\""
+        )
       )
-    )
-
-    checkError(
-      exception = intercept[AnalysisException] (
-        DataTypeUtils.canWrite("", sqlType, udtType, true,
-          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
-      ),
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
-      parameters = Map(
-        "tableName" -> "``",
-        "colName" -> "`t`.`col2`",
-        "srcType" -> "\"FLOAT\"",
-        "targetType" -> "\"INT\""
-      )
-    )
+    }
   }
 
   test("Check types with multiple errors") {
