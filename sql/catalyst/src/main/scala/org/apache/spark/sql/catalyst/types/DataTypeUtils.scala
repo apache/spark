@@ -64,8 +64,8 @@ object DataTypeUtils {
    * - Both types are structs and have the same number of fields. The type and nullability of each
    *   field from read/write is compatible. If byName is true, the name of each field from
    *   read/write needs to be the same.
-   * - it is user defined type and its underlying sql type is same as the read type.
-   * - the read type is user defined type and its underlying sql type is same as the write type.
+   * - It is user defined type and its underlying sql type is same as the read type, or the read
+   *   type is user defined type and its underlying sql type is same as the write type.
    * - Both types are atomic and the write type can be safely cast to the read type.
    *
    * Extra fields in write-side structs are not allowed to avoid accidentally writing data that
