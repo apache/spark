@@ -14,15 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.execution.ui
 
 import org.apache.spark.SparkFunSuite
 
 class SparkPlanGraphSuite extends SparkFunSuite {
-
   test("SPARK-47503: name of a node should be escaped even if there is no metrics") {
-
     val planGraphNode = new SparkPlanGraphNode(
       id = 24,
       name = "Scan JDBCRelation(\"test-schema\".tickets) [numPartitions=1]",
@@ -32,18 +29,13 @@ class SparkPlanGraphSuite extends SparkFunSuite {
         SQLPlanMetric(
           name = "number of output rows",
           accumulatorId = 75,
-          metricType = "sum",
+          metricType = "sum"
         ),
         SQLPlanMetric(
           name = "JDBC query execution time",
           accumulatorId = 35,
-          metricType = "nsTiming",
-        ),
-      )
-    )
-
+          metricType = "nsTiming")))
     val dotNode = planGraphNode.makeDotNode(Map.empty[Long, String])
-
     val expectedDotNode = "  24 [id=\"node24\" labelType=\"html\" label=\"" +
       "<br><b>Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1]</b><br><br>\" " +
       "tooltip=\"Scan JDBCRelation(\\\"test-schema\\\".tickets) [numPartitions=1] [ticket_no#0] " +
@@ -51,5 +43,4 @@ class SparkPlanGraphSuite extends SparkFunSuite {
 
     assertResult(expectedDotNode)(dotNode)
   }
-
 }
