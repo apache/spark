@@ -22,7 +22,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.pandas.testing import assert_frame_equal, assert_index_equal
+from pyspark.pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
 
 class FrameResetIndexMixin:
@@ -61,7 +61,7 @@ class FrameResetIndexMixin:
         pdf.reset_index(drop=True, inplace=True)
         psdf.reset_index(drop=True, inplace=True)
         assert_frame_equal(psdf, pdf)
-        assert_frame_equal(psser, pser)
+        assert_series_equal(psser, pser)
 
         pdf.columns = ["index", "b"]
         psdf.columns = ["index", "b"]
