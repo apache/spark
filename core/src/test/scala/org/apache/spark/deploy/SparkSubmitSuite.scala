@@ -504,7 +504,7 @@ class SparkSubmitSuite
     }
   }
 
-  test("SPARK-47475: Not to add primary resource to jars again" +
+  test("SPARK-47495: Not to add primary resource to jars again" +
     " in k8s client mode & driver runs inside a POD") {
     val clArgs = Seq(
       "--deploy-mode", "client",
