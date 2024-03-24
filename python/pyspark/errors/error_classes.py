@@ -21,6 +21,7 @@ import importlib.resources
 # Note: Though we call them "error classes" here, the proper name is "error conditions",
 #   hence why the name of the JSON file different.
 #   For more information, please see: https://issues.apache.org/jira/browse/SPARK-46810
+#   This discrepancy will be resolved as part of: https://issues.apache.org/jira/browse/SPARK-47429
 # Note: When we drop support for Python 3.8, we should migrate from importlib.resources.read_text()
 #   to importlib.resources.files().joinpath().read_text().
 #   See: https://docs.python.org/3/library/importlib.resources.html#importlib.resources.open_text
