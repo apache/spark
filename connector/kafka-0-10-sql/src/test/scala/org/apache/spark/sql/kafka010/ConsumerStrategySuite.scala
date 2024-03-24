@@ -27,8 +27,9 @@ import org.apache.kafka.common.TopicPartition
 import org.mockito.Mockito.mock
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
+import org.apache.spark.util.ResetSystemProperties
 
-class ConsumerStrategySuite extends SparkFunSuite {
+class ConsumerStrategySuite extends SparkFunSuite with ResetSystemProperties {
   private var testUtils: KafkaTestUtils = _
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)

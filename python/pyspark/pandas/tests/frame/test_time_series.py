@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -120,7 +120,11 @@ class FrameTimeSeriesMixin:
         self.assert_eq(pd.to_datetime(pdf), ps.to_datetime(psdf))
 
 
-class FrameTimeSeriesTests(FrameTimeSeriesMixin, ComparisonTestBase, SQLTestUtils):
+class FrameTimeSeriesTests(
+    FrameTimeSeriesMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

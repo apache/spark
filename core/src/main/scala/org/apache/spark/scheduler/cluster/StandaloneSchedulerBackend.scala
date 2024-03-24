@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.util.Locale
-import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.{RejectedExecutionException, Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.Future
@@ -343,8 +343,14 @@ private[spark] class StandaloneSchedulerBackend(
             }
           }
         }
-        executorDelayRemoveThread.schedule(removeExecutorTask,
-          _executorRemoveDelay, TimeUnit.MILLISECONDS)
+        try {
+          executorDelayRemoveThread.schedule(removeExecutorTask,
+            _executorRemoveDelay, TimeUnit.MILLISECONDS)
+        } catch {
+          case _: RejectedExecutionException if stopping.get() =>
+            logWarning(
+              "Skipping onDisconnected RemoveExecutor call because the scheduler is stopping")
+        }
       }
     }
   }

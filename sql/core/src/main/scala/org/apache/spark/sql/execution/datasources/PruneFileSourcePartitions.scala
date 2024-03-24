@@ -63,7 +63,8 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
             _))
         if filters.nonEmpty && fsRelation.partitionSchema.nonEmpty =>
       val normalizedFilters = DataSourceStrategy.normalizeExprs(
-        filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)),
+        filters.filter(f =>
+          !SubqueryExpression.hasSubquery(f) && DataSourceUtils.shouldPushFilter(f)),
         logicalRelation.output)
       val (partitionKeyFilters, _) = DataSourceUtils
         .getPartitionFiltersAndDataFilters(partitionSchema, normalizedFilters)

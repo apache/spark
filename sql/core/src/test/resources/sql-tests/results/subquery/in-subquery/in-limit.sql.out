@@ -544,6 +544,45 @@ struct<count(DISTINCT t1a):bigint,t1b:smallint>
 
 
 -- !query
+SELECT COUNT(DISTINCT(t1a))
+FROM t1
+WHERE t1d IN (SELECT t2d
+              FROM   t2
+              WHERE t1a IS NOT NULL
+              LIMIT 10)
+-- !query schema
+struct<count(DISTINCT t1a):bigint>
+-- !query output
+4
+
+
+-- !query
+SELECT COUNT(DISTINCT(t1a))
+FROM t1
+WHERE t1d IN (SELECT MAX(t2d)
+              FROM   t2
+              WHERE t1a IS NOT NULL
+              LIMIT 10)
+-- !query schema
+struct<count(DISTINCT t1a):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(DISTINCT(t1a))
+FROM t1
+WHERE t1d IN (SELECT DISTINCT t2d
+              FROM   t2
+              WHERE t1a IS NOT NULL
+              LIMIT 10)
+-- !query schema
+struct<count(DISTINCT t1a):bigint>
+-- !query output
+4
+
+
+-- !query
 set spark.sql.optimizer.decorrelateExistsIn.enabled = false
 -- !query schema
 struct<key:string,value:string>

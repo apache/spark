@@ -178,4 +178,25 @@ trait DescribeTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       assert(errMsg === "DESC TABLE COLUMN does not support nested column: col.x.")
     }
   }
+
+  test("describe a clustered table") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (col1 STRING COMMENT 'this is comment', col2 struct<x:int, y:int>) " +
+        s"$defaultUsing CLUSTER BY (col1, col2.x)")
+      val descriptionDf = sql(s"DESC $tbl")
+      assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+      QueryTest.checkAnswer(
+        descriptionDf,
+        Seq(
+          Row("col1", "string", "this is comment"),
+          Row("col2", "struct<x:int,y:int>", null),
+          Row("# Clustering Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("col1", "string", "this is comment"),
+          Row("col2.x", "int", null)))
+    }
+  }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkFileNotFoundException}
+import org.apache.spark.{SparkArithmeticException, SparkFileNotFoundException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
@@ -1066,9 +1066,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("CREATE TEMPORARY VIEW v1 AS SELECT * FROM t")
           Seq(4, 6, 5).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
           checkErrorMatchPVals(
-            exception = intercept[SparkException] {
+            exception = intercept[SparkFileNotFoundException] {
               sql("SELECT * FROM v1").collect()
-            }.getCause.asInstanceOf[SparkFileNotFoundException],
+            },
             errorClass = "_LEGACY_ERROR_TEMP_2055",
             parameters = Map("message" -> ".* does not exist")
           )
@@ -1086,9 +1086,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("ALTER VIEW v1 AS SELECT * FROM t")
           Seq(2, 4, 6).toDF("c1").write.mode("overwrite").format("parquet").saveAsTable("t")
           checkErrorMatchPVals(
-            exception = intercept[SparkException] {
+            exception = intercept[SparkFileNotFoundException] {
               sql("SELECT * FROM v1").collect()
-            }.getCause.asInstanceOf[SparkFileNotFoundException],
+            },
             errorClass = "_LEGACY_ERROR_TEMP_2055",
             parameters = Map("message" -> ".* does not exist")
           )

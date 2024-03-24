@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkFileNotFoundException}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -52,10 +52,9 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
       deleteOneFileInDirectory(location)
 
       // Read it again and now we should see a FileNotFoundException
-      val e = intercept[SparkException] {
+      val e = intercept[SparkFileNotFoundException] {
         df.count()
       }
-      assert(e.getMessage.contains("FileNotFoundException"))
       assert(e.getMessage.contains("recreating the Dataset/DataFrame involved"))
     }
   }
@@ -81,10 +80,9 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
       deleteOneFileInDirectory(location)
 
       // Read it again and now we should see a FileNotFoundException
-      val e = intercept[SparkException] {
+      val e = intercept[SparkFileNotFoundException] {
         sql("select count(*) from view_refresh").first()
       }
-      assert(e.getMessage.contains("FileNotFoundException"))
       assert(e.getMessage.contains("REFRESH"))
 
       // Refresh and we should be able to read it again.
@@ -107,7 +105,7 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
 
           // Delete a file
           deleteOneFileInDirectory(location)
-          intercept[SparkException](sql("select count(*) from view_refresh").first())
+          intercept[SparkFileNotFoundException](sql("select count(*) from view_refresh").first())
 
           // Refresh and we should be able to read it again.
           spark.catalog.refreshTable("vIeW_reFrEsH")

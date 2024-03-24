@@ -474,7 +474,7 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkUnsupportedOperationException] {
         RangeShuffleSpec(10, distribution).createPartitioning(distribution.clustering)
       },
-      errorClass = "UNSUPPORTED_CALL",
+      errorClass = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
       parameters = Map(
         "methodName" -> "createPartitioning$",
         "className" -> "org.apache.spark.sql.catalyst.plans.physical.ShuffleSpec"))

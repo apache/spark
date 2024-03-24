@@ -58,6 +58,10 @@ The ANALYZE TABLE command does not support views.
 
 Catalog `<catalogName>` does not support `<operation>`.
 
+## COLLATION
+
+Collation is not yet supported.
+
 ## COMBINATION_QUERY_RESULT_CLAUSES
 
 Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY.
@@ -189,6 +193,14 @@ set PROPERTIES and DBPROPERTIES at the same time.
 ## SET_VARIABLE_USING_SET
 
 `<variableName>` is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE `<variableName>` = ... instead.
+
+## STATE_STORE_MULTIPLE_COLUMN_FAMILIES
+
+Creating multiple column families with `<stateStoreProvider>` is not supported.
+
+## STATE_STORE_REMOVING_COLUMN_FAMILIES
+
+Removing column families with `<stateStoreProvider>` is not supported.
 
 ## TABLE_OPERATION
 

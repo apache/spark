@@ -145,7 +145,7 @@ Use it with caution.
 Security options for the Spark History Server are covered more detail in the
 [Security](security.html#web-ui) page.
 
-<table>
+<table class="spark-config">
   <thead>
   <tr>
     <th>Property Name</th>

@@ -240,7 +240,7 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
   }
 
   /** Name to output in [[StreamingOperatorProgress]] to identify operator type */
-  protected def shortName: String = "defaultName"
+  def shortName: String = "defaultName"
 
   /**
    * Should the MicroBatchExecution run another batch based on this stateful operator and the

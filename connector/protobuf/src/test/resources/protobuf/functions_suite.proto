@@ -269,6 +269,15 @@ message EventRecursiveB {
   OneOfEventWithRecursion recursiveOneOffInB = 3;
 }
 
+message EmptyProto {
+  // This is an empty proto
+}
+
+message EmptyProtoWrapper {
+  string name = 1;
+  EmptyProto empty_proto = 2;
+}
+
 message EmptyRecursiveProto {
   // This is a recursive proto with no fields. Used to test edge. Catalyst schema for this
   // should be "nothing" (i.e. completely dropped) irrespective of recursive limit.

@@ -34,4 +34,18 @@ public class TimeoutMode {
   public static final TimeoutMode NoTimeouts() {
     return NoTimeouts$.MODULE$;
   }
+
+  /**
+   * Stateful processor that only registers processing time based timers
+   */
+  public static final TimeoutMode ProcessingTime() {
+    return ProcessingTime$.MODULE$;
+  }
+
+  /**
+   * Stateful processor that only registers event time based timers
+   */
+  public static final TimeoutMode EventTime() {
+    return EventTime$.MODULE$;
+  }
 }

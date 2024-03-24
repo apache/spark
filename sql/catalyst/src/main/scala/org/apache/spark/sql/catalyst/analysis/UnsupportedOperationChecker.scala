@@ -43,9 +43,6 @@ object UnsupportedOperationChecker extends Logging {
         throwError("dropDuplicatesWithinWatermark is not supported with batch " +
           "DataFrames/DataSets")(d)
 
-      case t: TransformWithState =>
-        throwError("transformWithState is not supported with batch DataFrames/Datasets")(t)
-
       case _ =>
     }
   }

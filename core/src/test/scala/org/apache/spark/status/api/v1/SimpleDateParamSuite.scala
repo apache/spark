@@ -16,8 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
-import javax.ws.rs.WebApplicationException
-
+import jakarta.ws.rs.WebApplicationException
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 

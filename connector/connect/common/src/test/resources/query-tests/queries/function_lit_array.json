@@ -305,6 +305,7 @@
         "array": {
           "elementType": {
             "string": {
+              "collationId": 0
             }
           },
           "elements": [{
@@ -323,6 +324,7 @@
         "array": {
           "elementType": {
             "string": {
+              "collationId": 0
             }
           },
           "elements": [{

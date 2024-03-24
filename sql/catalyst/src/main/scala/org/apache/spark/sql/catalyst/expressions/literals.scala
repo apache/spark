@@ -53,7 +53,6 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -196,14 +195,14 @@ object Literal {
     case TimestampNTZType => create(0L, TimestampNTZType)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
-    case StringType => Literal("")
+    case st: StringType => Literal(UTF8String.fromString(""), st)
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
-      create(InternalRow.fromSeq(
-        struct.fields.map(f => default(f.dataType).value).toImmutableArraySeq), struct)
+      create(new GenericInternalRow(
+        struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
       throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
@@ -237,7 +236,7 @@ object Literal {
           }
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
-        case PhysicalStringType => v.isInstanceOf[UTF8String]
+        case _: PhysicalStringType => v.isInstanceOf[UTF8String]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {

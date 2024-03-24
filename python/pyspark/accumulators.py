@@ -27,7 +27,7 @@ from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark._typing import SupportsIAdd  # noqa: F401
-    import socketserver.BaseRequestHandler  # type: ignore[import]
+    import socketserver.BaseRequestHandler  # type: ignore[import-not-found]
 
 
 __all__ = ["Accumulator", "AccumulatorParam"]

@@ -48,6 +48,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import jakarta.ws.rs.core.UriBuilder
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
@@ -1884,17 +1885,6 @@ private[spark] object Utils
     }
   }
 
-  /** Check whether a path is an absolute URI. */
-  def isAbsoluteURI(path: String): Boolean = {
-    try {
-      val uri = new URI(path: String)
-      uri.isAbsolute
-    } catch {
-      case _: URISyntaxException =>
-        false
-    }
-  }
-
   /** Return all non-local paths from a comma-separated list of paths. */
   def nonLocalPaths(paths: String, testWindows: Boolean = false): Array[String] = {
     val windows = isWindows || testWindows
@@ -1929,20 +1919,6 @@ private[spark] object Utils
       }
     }
     path
-  }
-
-  /**
-   * Updates Spark config with properties from a set of Properties.
-   * Provided properties have the highest priority.
-   */
-  def updateSparkConfigFromProperties(
-      conf: SparkConf,
-      properties: Map[String, String]) : Unit = {
-    properties.filter { case (k, v) =>
-      k.startsWith("spark.")
-    }.foreach { case (k, v) =>
-      conf.set(k, v)
-    }
   }
 
   /**
@@ -2908,6 +2884,20 @@ private[spark] object Utils
   /** Returns whether the URI is a "local:" URI. */
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
+  }
+
+  /** Create a UriBuilder from URI object. */
+  def getUriBuilder(uri: URI): UriBuilder = {
+    // scalastyle:off uribuilder
+    UriBuilder.fromUri(uri)
+    // scalastyle:on uribuilder
+  }
+
+  /** Create a UriBuilder from URI string. */
+  def getUriBuilder(uri: String): UriBuilder = {
+    // scalastyle:off uribuilder
+    UriBuilder.fromUri(uri)
+    // scalastyle:on uribuilder
   }
 
   /** Check whether the file of the path is splittable. */

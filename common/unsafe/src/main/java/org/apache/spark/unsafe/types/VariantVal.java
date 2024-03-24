@@ -107,4 +107,24 @@ public class VariantVal implements Serializable {
     // NOTE: the encoding is not yet implemented, this is not the final implementation.
     return new String(value);
   }
+
+  /**
+   * Compare two variants in bytes. The variant equality is more complex than it, and we haven't
+   * supported it in the user surface yet. This method is only intended for tests.
+   */
+  @Override
+  public boolean equals(Object other) {
+    if (other instanceof VariantVal o) {
+      return Arrays.equals(value, o.value) && Arrays.equals(metadata, o.metadata);
+    } else {
+      return false;
+    }
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Arrays.hashCode(value);
+    result = 31 * result + Arrays.hashCode(metadata);
+    return result;
+  }
 }

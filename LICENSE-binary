@@ -368,7 +368,6 @@ xerces:xercesImpl
 org.codehaus.jackson:jackson-jaxrs
 org.codehaus.jackson:jackson-xc
 org.eclipse.jetty:jetty-client
-org.eclipse.jetty:jetty-continuation
 org.eclipse.jetty:jetty-http
 org.eclipse.jetty:jetty-io
 org.eclipse.jetty:jetty-jndi

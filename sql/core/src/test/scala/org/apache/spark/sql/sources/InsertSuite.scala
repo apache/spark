@@ -28,6 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -433,7 +434,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       )
 
       sql(s"CREATE TABLE target2(a INT, b STRING) USING JSON")
-      val e = sql(
+      sql(
         """
           |WITH tbl AS (SELECT * FROM jt)
           |FROM tbl
@@ -768,21 +769,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(b int) using parquet")
+
         val outOfRangeValue1 = (Int.MaxValue + 1L).toString
+        val e1 = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue1)")
+        }
+        assert(e1.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values($outOfRangeValue1)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = e1.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"BIGINT\"",
             "targetType" -> "\"INT\"",
             "columnName" -> "`b`"))
+
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
+        val e2 = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue2)")
+        }
+        assert(e2.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values($outOfRangeValue2)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = e2.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"BIGINT\"",
@@ -797,21 +804,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(b long) using parquet")
+
         val outOfRangeValue1 = Math.nextUp(Long.MaxValue)
+        val e1 = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue1}D)")
+        }
+        assert(e1.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values(${outOfRangeValue1}D)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = e1.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
             "targetType" -> "\"BIGINT\"",
             "columnName" -> "`b`"))
+
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
+        val e2 = intercept[SparkException] {
+          sql(s"insert into t values(${outOfRangeValue2}D)")
+        }
+        assert(e2.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values(${outOfRangeValue2}D)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = e2.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DOUBLE\"",
@@ -827,10 +840,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(b decimal(3,2)) using parquet")
         val outOfRangeValue = "123.45"
+        val ex = intercept[SparkException] {
+          sql(s"insert into t values($outOfRangeValue)")
+        }
+        assert(ex.getErrorClass == "TASK_WRITE_FAILED")
         checkError(
-          exception = intercept[SparkException] {
-            sql(s"insert into t values($outOfRangeValue)")
-          }.getCause.asInstanceOf[SparkException].getCause.asInstanceOf[SparkArithmeticException],
+          exception = ex.getCause.asInstanceOf[SparkArithmeticException],
           errorClass = "CAST_OVERFLOW_IN_TABLE_INSERT",
           parameters = Map(
             "sourceType" -> "\"DECIMAL(5,2)\"",
@@ -1149,18 +1164,60 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-47164: Make Default Value From Wider Type Narrow Literal pass v2") {
+    withTable("t") {
+      val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+      sql("CREATE TABLE t (" +
+        "key int, " +
+        s"d timestamp DEFAULT '2018-11-17 13:33:33') USING $v2Source")
+    }
+  }
+
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
-    // The default value fails to analyze.
+    // The default value references columns.
     withTable("t") {
       checkError(
         exception = intercept[AnalysisException] {
           sql("create table t(i boolean, s bigint default badvalue) using parquet")
         },
-        errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`s`",
           "defaultValue" -> "badvalue"))
+    }
+    try {
+      // The default value references session variables.
+      sql("DECLARE test_var INT")
+      withTable("t") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("create table t(i boolean, s int default test_var) using parquet")
+          },
+          // V1 command still use the fake Analyzer which can't resolve session variables and we
+          // can only report UNRESOLVED_EXPRESSION error.
+          errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`s`",
+            "defaultValue" -> "test_var")
+        )
+        val v2Source = classOf[FakeV2Provider].getName
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"create table t(i int, j int default test_var) using $v2Source")
+          },
+          // V2 command uses the actual analyzer and can resolve session variables. We can report
+          // a more accurate NOT_CONSTANT error.
+          errorClass = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
+          parameters = Map(
+            "statement" -> "CREATE TABLE",
+            "colName" -> "`j`",
+            "defaultValue" -> "test_var")
+        )
+      }
+    } finally {
+      sql("DROP TEMPORARY VARIABLE test_var")
     }
     // The default value analyzes to a table not in the catalog.
     withTable("t") {
@@ -1979,6 +2036,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         "parquet",
         useDataFrames = true),
       Config(
+        "json"),
+      Config(
+        "json",
+        useDataFrames = true),
+      Config(
         "orc"),
       Config(
         "orc",
@@ -2034,6 +2096,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         "parquet"),
       Config(
         "parquet",
+        useDataFrames = true),
+      Config(
+        "json"),
+      Config(
+        "json",
         useDataFrames = true),
       Config(
         "orc"),
@@ -2093,6 +2160,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       Config(
         "parquet",
         useDataFrames = true),
+      // SPARK-47029: ALTER COLUMN DROP DEFAULT fails to work correctly with JSON data sources.
+      /*
+      Config(
+        "json"),
+        */
+      Config(
+        "json",
+        useDataFrames = true),
       Config(
         "orc"),
       Config(
@@ -2105,8 +2180,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         } else {
           sql("insert into t select false")
         }
-        sql("alter table t add column s map<boolean, string> default map(true, 'abc')")
-        checkAnswer(spark.table("t"), Row(false, Map(true -> "abc")))
+        sql("alter table t add column s map<string, boolean> default map('abc', true)")
+        checkAnswer(spark.table("t"), Row(false, Map("abc" -> true)))
       }
       withTable("t") {
         sql(
@@ -2117,12 +2192,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
                 x array<
                   struct<a int, b int>>,
                 y array<
-                  map<boolean, string>>>
+                  map<string, boolean>>>
               default struct(
                 array(
                   struct(1, 2)),
                 array(
-                  map(false, 'def', true, 'jkl'))))
+                  map('def', false, 'jkl', true))))
               using ${config.dataSource}""")
         sql("insert into t select 1, default")
         sql("alter table t alter column s drop default")
@@ -2138,30 +2213,30 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               array(
                 struct(3, 4)),
               array(
-                map(false, 'mno', true, 'pqr')))""")
+                map('mno', false, 'pqr', true)))""")
         sql("insert into t select 3, default")
         sql(
           """
             alter table t
             add column t array<
-              map<boolean, string>>
+              map<string, boolean>>
             default array(
-              map(true, 'xyz'))""")
+              map('xyz', true))""")
         sql("insert into t(i, s) select 4, default")
         checkAnswer(spark.table("t"),
           Seq(
             Row(1,
-              Row(Seq(Row(1, 2)), Seq(Map(false -> "def", true -> "jkl"))),
-              Seq(Map(true -> "xyz"))),
+              Row(Seq(Row(1, 2)), Seq(Map("def" -> false, "jkl" -> true))),
+              Seq(Map("xyz" -> true))),
             Row(2,
               null,
-              Seq(Map(true -> "xyz"))),
+              Seq(Map("xyz" -> true))),
             Row(3,
-              Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
-              Seq(Map(true -> "xyz"))),
+              Row(Seq(Row(3, 4)), Seq(Map("mno" -> false, "pqr" -> true))),
+              Seq(Map("xyz" -> true))),
             Row(4,
-              Row(Seq(Row(3, 4)), Seq(Map(false -> "mno", true -> "pqr"))),
-              Seq(Map(true -> "xyz")))))
+              Row(Seq(Row(3, 4)), Seq(Map("mno" -> false, "pqr" -> true))),
+              Seq(Map("xyz" -> true)))))
       }
     }
     // Negative tests: provided map element types must match their corresponding DEFAULT
@@ -2323,7 +2398,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               "org.apache.hadoop.fs.FileAlreadyExistsException"))
           } else {
             checkError(
-              exception = err.getCause.asInstanceOf[SparkException],
+              exception = err,
               errorClass = "TASK_WRITE_FAILED",
               parameters = Map("path" -> s".*$tableName"),
               matchPVals = true

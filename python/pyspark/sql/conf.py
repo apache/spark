@@ -16,7 +16,7 @@
 #
 
 import sys
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from py4j.java_gateway import JavaObject
 
@@ -92,6 +92,20 @@ class RuntimeConfig:
             if default is not None:
                 self._check_type(default, "default")
             return self._jconf.get(key, default)
+
+    @property
+    def getAll(self) -> Dict[str, str]:
+        """
+        Returns all properties set in this conf.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        dict
+            A dictionary containing all properties set in this conf.
+        """
+        return dict(self._jconf.getAllAsJava())
 
     def unset(self, key: str) -> None:
         """

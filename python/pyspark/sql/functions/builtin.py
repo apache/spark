@@ -50,7 +50,7 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
-from pyspark.sql.udtf import OrderingColumn, PartitioningColumn  # noqa: F401
+from pyspark.sql.udtf import OrderingColumn, PartitioningColumn, SelectedColumn  # noqa: F401
 from pyspark.sql.udtf import SkipRestOfInputTableException  # noqa: F401
 from pyspark.sql.udtf import UserDefinedTableFunction, _create_py_udtf
 
@@ -1472,12 +1472,50 @@ def sum_distinct(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], schema=["numbers"])
-    >>> df.select(sum_distinct(col("numbers"))).show()
+    Example 1: Using sum_distinct function on a column with all distinct values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (2,), (3,), (4,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                   10|
+    +---------------------+
+
+    Example 2: Using sum_distinct function on a column with no distinct values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (1,), (1,), (1,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                    1|
+    +---------------------+
+
+    Example 3: Using sum_distinct function on a column with null and duplicate values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None,), (1,), (1,), (2,)], ["numbers"])
+    >>> df.select(sf.sum_distinct('numbers')).show()
     +---------------------+
     |sum(DISTINCT numbers)|
     +---------------------+
     |                    3|
+    +---------------------+
+
+    Example 4: Using sum_distinct function on a column with all None values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType
+    >>> schema = StructType([StructField("numbers", IntegerType(), True)])
+    >>> df = spark.createDataFrame([(None,), (None,), (None,), (None,)], schema=schema)
+    >>> df.select(sf.sum_distinct('numbers')).show()
+    +---------------------+
+    |sum(DISTINCT numbers)|
+    +---------------------+
+    |                 NULL|
     +---------------------+
     """
     return _invoke_function_over_columns("sum_distinct", col)
@@ -2851,7 +2889,7 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
 @_try_remote_functions
 def asc_nulls_first(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the ascending order of the given
+    Sort Function: Returns a sort expression based on the ascending order of the given
     column name, and null values return before non-null values.
 
     .. versionadded:: 2.4.0
@@ -2871,10 +2909,11 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df1 = spark.createDataFrame([(1, "Bob"),
-    ...                              (0, None),
-    ...                              (2, "Alice")], ["age", "name"])
-    >>> df1.sort(asc_nulls_first(df1.name)).show()
+    Example 1: Sorting a DataFrame with null values in ascending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "Bob"), (0, None), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.asc_nulls_first(df.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -2883,6 +2922,32 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     |  1|  Bob|
     +---+-----+
 
+    Example 2: Sorting a DataFrame with multiple columns, null values in ascending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [(1, "Bob", None), (0, None, "Z"), (2, "Alice", "Y")], ["age", "name", "grade"])
+    >>> df.sort(sf.asc_nulls_first(df.name), sf.asc_nulls_first(df.grade)).show()
+    +---+-----+-----+
+    |age| name|grade|
+    +---+-----+-----+
+    |  0| NULL|    Z|
+    |  2|Alice|    Y|
+    |  1|  Bob| NULL|
+    +---+-----+-----+
+
+    Example 3: Sorting a DataFrame with null values in ascending order using column name string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "Bob"), (0, None), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.asc_nulls_first("name")).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  0| NULL|
+    |  2|Alice|
+    |  1|  Bob|
+    +---+-----+
     """
     return (
         col.asc_nulls_first()
@@ -2894,7 +2959,7 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def asc_nulls_last(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the ascending order of the given
+    Sort Function: Returns a sort expression based on the ascending order of the given
     column name, and null values appear after non-null values.
 
     .. versionadded:: 2.4.0
@@ -2914,10 +2979,11 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df1 = spark.createDataFrame([(0, None),
-    ...                              (1, "Bob"),
-    ...                              (2, "Alice")], ["age", "name"])
-    >>> df1.sort(asc_nulls_last(df1.name)).show()
+    Example 1: Sorting a DataFrame with null values in ascending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(0, None), (1, "Bob"), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.asc_nulls_last(df.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -2926,6 +2992,32 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     |  0| NULL|
     +---+-----+
 
+    Example 2: Sorting a DataFrame with multiple columns, null values in ascending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [(0, None, "Z"), (1, "Bob", None), (2, "Alice", "Y")], ["age", "name", "grade"])
+    >>> df.sort(sf.asc_nulls_last(df.name), sf.asc_nulls_last(df.grade)).show()
+    +---+-----+-----+
+    |age| name|grade|
+    +---+-----+-----+
+    |  2|Alice|    Y|
+    |  1|  Bob| NULL|
+    |  0| NULL|    Z|
+    +---+-----+-----+
+
+    Example 3: Sorting a DataFrame with null values in ascending order using column name string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(0, None), (1, "Bob"), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.asc_nulls_last("name")).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  2|Alice|
+    |  1|  Bob|
+    |  0| NULL|
+    +---+-----+
     """
     return (
         col.asc_nulls_last() if isinstance(col, Column) else _invoke_function("asc_nulls_last", col)
@@ -2935,7 +3027,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def desc_nulls_first(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the descending order of the given
+    Sort Function: Returns a sort expression based on the descending order of the given
     column name, and null values appear before non-null values.
 
     .. versionadded:: 2.4.0
@@ -2955,10 +3047,11 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df1 = spark.createDataFrame([(0, None),
-    ...                              (1, "Bob"),
-    ...                              (2, "Alice")], ["age", "name"])
-    >>> df1.sort(desc_nulls_first(df1.name)).show()
+    Example 1: Sorting a DataFrame with null values in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "Bob"), (0, None), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.desc_nulls_first(df.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -2967,6 +3060,32 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     |  2|Alice|
     +---+-----+
 
+    Example 2: Sorting a DataFrame with multiple columns, null values in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [(1, "Bob", None), (0, None, "Z"), (2, "Alice", "Y")], ["age", "name", "grade"])
+    >>> df.sort(sf.desc_nulls_first(df.name), sf.desc_nulls_first(df.grade)).show()
+    +---+-----+-----+
+    |age| name|grade|
+    +---+-----+-----+
+    |  0| NULL|    Z|
+    |  1|  Bob| NULL|
+    |  2|Alice|    Y|
+    +---+-----+-----+
+
+    Example 3: Sorting a DataFrame with null values in descending order using column name string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, "Bob"), (0, None), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.desc_nulls_first("name")).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  0| NULL|
+    |  1|  Bob|
+    |  2|Alice|
+    +---+-----+
     """
     return (
         col.desc_nulls_first()
@@ -2978,7 +3097,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def desc_nulls_last(col: "ColumnOrName") -> Column:
     """
-    Returns a sort expression based on the descending order of the given
+    Sort Function: Returns a sort expression based on the descending order of the given
     column name, and null values appear after non-null values.
 
     .. versionadded:: 2.4.0
@@ -2998,10 +3117,11 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df1 = spark.createDataFrame([(0, None),
-    ...                              (1, "Bob"),
-    ...                              (2, "Alice")], ["age", "name"])
-    >>> df1.sort(desc_nulls_last(df1.name)).show()
+    Example 1: Sorting a DataFrame with null values in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(0, None), (1, "Bob"), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.desc_nulls_last(df.name)).show()
     +---+-----+
     |age| name|
     +---+-----+
@@ -3010,6 +3130,32 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     |  0| NULL|
     +---+-----+
 
+    Example 2: Sorting a DataFrame with multiple columns, null values in descending order
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [(0, None, "Z"), (1, "Bob", None), (2, "Alice", "Y")], ["age", "name", "grade"])
+    >>> df.sort(sf.desc_nulls_last(df.name), sf.desc_nulls_last(df.grade)).show()
+    +---+-----+-----+
+    |age| name|grade|
+    +---+-----+-----+
+    |  1|  Bob| NULL|
+    |  2|Alice|    Y|
+    |  0| NULL|    Z|
+    +---+-----+-----+
+
+    Example 3: Sorting a DataFrame with null values in descending order using column name string
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(0, None), (1, "Bob"), (2, "Alice")], ["age", "name"])
+    >>> df.sort(sf.desc_nulls_last("name")).show()
+    +---+-----+
+    |age| name|
+    +---+-----+
+    |  1|  Bob|
+    |  2|Alice|
+    |  0| NULL|
+    +---+-----+
     """
     return (
         col.desc_nulls_last()
@@ -3790,9 +3936,51 @@ def bit_and(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Bitwise AND with all non-null values
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(bit_and("c")).first()
-    Row(bit_and(c)=0)
+    >>> df.select(sf.bit_and("c")).show()
+    +----------+
+    |bit_and(c)|
+    +----------+
+    |         0|
+    +----------+
+
+    Example 2: Bitwise AND with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.select(sf.bit_and("c")).show()
+    +----------+
+    |bit_and(c)|
+    +----------+
+    |         0|
+    +----------+
+
+    Example 3: Bitwise AND with all null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import IntegerType, StructType, StructField
+    >>> schema = StructType([StructField("c", IntegerType(), True)])
+    >>> df = spark.createDataFrame([[None],[None],[None]], schema=schema)
+    >>> df.select(sf.bit_and("c")).show()
+    +----------+
+    |bit_and(c)|
+    +----------+
+    |      NULL|
+    +----------+
+
+    Example 4: Bitwise AND with single input value
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[5]], ["c"])
+    >>> df.select(sf.bit_and("c")).show()
+    +----------+
+    |bit_and(c)|
+    +----------+
+    |         5|
+    +----------+
     """
     return _invoke_function_over_columns("bit_and", col)
 
@@ -3816,9 +4004,51 @@ def bit_or(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Bitwise OR with all non-null values
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(bit_or("c")).first()
-    Row(bit_or(c)=3)
+    >>> df.select(sf.bit_or("c")).show()
+    +---------+
+    |bit_or(c)|
+    +---------+
+    |        3|
+    +---------+
+
+    Example 2: Bitwise OR with some null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.select(sf.bit_or("c")).show()
+    +---------+
+    |bit_or(c)|
+    +---------+
+    |        3|
+    +---------+
+
+    Example 3: Bitwise OR with all null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import IntegerType, StructType, StructField
+    >>> schema = StructType([StructField("c", IntegerType(), True)])
+    >>> df = spark.createDataFrame([[None],[None],[None]], schema=schema)
+    >>> df.select(sf.bit_or("c")).show()
+    +---------+
+    |bit_or(c)|
+    +---------+
+    |     NULL|
+    +---------+
+
+    Example 4: Bitwise OR with single input value
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[5]], ["c"])
+    >>> df.select(sf.bit_or("c")).show()
+    +---------+
+    |bit_or(c)|
+    +---------+
+    |        5|
+    +---------+
     """
     return _invoke_function_over_columns("bit_or", col)
 
@@ -3842,9 +4072,51 @@ def bit_xor(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Bitwise XOR with all non-null values
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.select(bit_xor("c")).first()
-    Row(bit_xor(c)=2)
+    >>> df.select(sf.bit_xor("c")).show()
+    +----------+
+    |bit_xor(c)|
+    +----------+
+    |         2|
+    +----------+
+
+    Example 2: Bitwise XOR with some null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.select(sf.bit_xor("c")).show()
+    +----------+
+    |bit_xor(c)|
+    +----------+
+    |         3|
+    +----------+
+
+    Example 3: Bitwise XOR with all null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import IntegerType, StructType, StructField
+    >>> schema = StructType([StructField("c", IntegerType(), True)])
+    >>> df = spark.createDataFrame([[None],[None],[None]], schema=schema)
+    >>> df.select(sf.bit_xor("c")).show()
+    +----------+
+    |bit_xor(c)|
+    +----------+
+    |      NULL|
+    +----------+
+
+    Example 4: Bitwise XOR with single input value
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[5]], ["c"])
+    >>> df.select(sf.bit_xor("c")).show()
+    +----------+
+    |bit_xor(c)|
+    +----------+
+    |         5|
+    +----------+
     """
     return _invoke_function_over_columns("bit_xor", col)
 
@@ -3996,9 +4268,49 @@ def array_agg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Using array_agg function on an int column
+
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([[1],[1],[2]], ["c"])
-    >>> df.agg(array_agg('c').alias('r')).collect()
-    [Row(r=[1, 1, 2])]
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                        [1, 1, 2]|
+    +---------------------------------+
+
+    Example 2: Using array_agg function on a string column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([["apple"],["apple"],["banana"]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show(truncate=False)
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |[apple, apple, banana]           |
+    +---------------------------------+
+
+    Example 3: Using array_agg function on a column with null values
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],[None],[2]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                           [1, 2]|
+    +---------------------------------+
+
+    Example 4: Using array_agg function on a column with different data types
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([[1],["apple"],[2]], ["c"])
+    >>> df.agg(sf.sort_array(sf.array_agg('c'))).show()
+    +---------------------------------+
+    |sort_array(collect_list(c), true)|
+    +---------------------------------+
+    |                    [1, 2, apple]|
+    +---------------------------------+
     """
     return _invoke_function_over_columns("array_agg", col)
 
@@ -6683,7 +6995,8 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
 
 @_try_remote_functions
 def count_if(col: "ColumnOrName") -> Column:
-    """Returns the number of `TRUE` values for the `col`.
+    """
+    Aggregate function: Returns the number of `TRUE` values for the `col`.
 
     .. versionadded:: 3.5.0
 
@@ -6699,17 +7012,50 @@ def count_if(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.select(count_if(col('c2') % 2 == 0)).show()
+    Example 1: Counting the number of even numbers in a numeric column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
+    >>> df.select(sf.count_if(sf.col('c2') % 2 == 0)).show()
     +------------------------+
     |count_if(((c2 % 2) = 0))|
     +------------------------+
     |                       3|
     +------------------------+
+
+    Example 2: Counting the number of rows where a string column starts with a certain letter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...   [("apple",), ("banana",), ("cherry",), ("apple",), ("banana",)], ["fruit"])
+    >>> df.select(sf.count_if(sf.col('fruit').startswith('a'))).show()
+    +------------------------------+
+    |count_if(startswith(fruit, a))|
+    +------------------------------+
+    |                             2|
+    +------------------------------+
+
+    Example 3: Counting the number of rows where a numeric column is greater than a certain value
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (2,), (3,), (4,), (5,)], ["num"])
+    >>> df.select(sf.count_if(sf.col('num') > 3)).show()
+    +-------------------+
+    |count_if((num > 3))|
+    +-------------------+
+    |                  2|
+    +-------------------+
+
+    Example 4: Counting the number of rows where a boolean column is True
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(True,), (False,), (True,), (False,), (True,)], ["bool"])
+    >>> df.select(sf.count_if(sf.col('bool'))).show()
+    +--------------+
+    |count_if(bool)|
+    +--------------+
+    |             3|
+    +--------------+
     """
     return _invoke_function_over_columns("count_if", col)
 
@@ -12233,6 +12579,58 @@ def mask(
     )
 
 
+@_try_remote_functions
+def collate(col: "ColumnOrName", collation: str) -> Column:
+    """
+    Marks a given column with specified collation.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Target string column to work on.
+    collation : str
+        Target collation name.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column of string type, where each value has the specified collation.
+    """
+    return _invoke_function("collate", _to_java_column(col), collation)
+
+
+@_try_remote_functions
+def collation(col: "ColumnOrName") -> Column:
+    """
+    Returns the collation name of a given column.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        Target string column to work on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        collation name of a given expression.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('name',)], ['dt'])
+    >>> df.select(collation('dt').alias('collation')).show()
+    +-----------+
+    |  collation|
+    +-----------+
+    |UTF8_BINARY|
+    +-----------+
+    """
+    return _invoke_function_over_columns("collation", col)
+
+
 # ---------------------- Collection functions ------------------------------
 
 
@@ -15193,12 +15591,12 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     >>> from pyspark.sql import Row, functions as sf
     >>> data = [(1, Row(age=2, name='Alice', scores=[100, 200, 300]))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(sf.to_csv(df.value)).show(truncate=False) # doctest: +SKIP
-    +-----------------------+
-    |to_csv(value)          |
-    +-----------------------+
-    |2,Alice,"[100,200,300]"|
-    +-----------------------+
+    >>> df.select(sf.to_csv(df.value)).show(truncate=False)
+    +-------------------------+
+    |to_csv(value)            |
+    +-------------------------+
+    |2,Alice,"[100, 200, 300]"|
+    +-------------------------+
 
     Example 3: Converting a StructType with null values to a CSV string
 

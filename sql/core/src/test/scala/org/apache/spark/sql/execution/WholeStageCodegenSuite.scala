@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkException
+import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
@@ -896,6 +897,40 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             parameters = Map("message" -> expectedErrMsg),
             matchPVals = true)
         }
+      }
+    }
+  }
+
+  test("SPARK-47238: Test broadcast threshold for generated code") {
+    // case 1: threshold is -1, shouldn't broadcast since smaller than 0 means disabled.
+    // case 2: threshold is a larger number, shouldn't broadcast since not yet exceeded.
+    // case 3: threshold is 0, should broadcast since it's always smaller than generated code size.
+    Seq((-1, false), (1000000000, false), (0, true)).foreach { case (threshold, shouldBroadcast) =>
+      withSQLConf(SQLConf.WHOLESTAGE_BROADCAST_CLEANED_SOURCE_THRESHOLD.key -> threshold.toString,
+        SQLConf.USE_PARTITION_EVALUATOR.key -> "true") {
+        val df = Seq(0, 1, 2).toDF().groupBy("value").sum()
+        // Invoke WholeStageCodegenExec.execute and cast the rdd, and then get
+        // the evaluatorFactory to check whether it uses broadcast as expected.
+        val wscgExec = df.queryExecution.executedPlan.collectFirst {
+          case exec: WholeStageCodegenExec => exec
+        }
+        assert(wscgExec match {
+          case Some(exec) =>
+            val rdd = exec.execute().asInstanceOf[MapPartitionsWithEvaluatorRDD[_, _]]
+            val evaluatorFactoryField = rdd.getClass.getDeclaredField("evaluatorFactory")
+            evaluatorFactoryField.setAccessible(true)
+            val evaluatorFactory = evaluatorFactoryField.get(rdd)
+            val cleanedSourceOptField = evaluatorFactory.getClass.getDeclaredField(
+              "org$apache$spark$sql$execution$WholeStageCodegenEvaluatorFactory$$cleanedSourceOpt")
+            cleanedSourceOptField.setAccessible(true)
+            cleanedSourceOptField.get(evaluatorFactory).asInstanceOf[Either[_, _]] match {
+              case Left(_) => shouldBroadcast
+              case Right(_) => !shouldBroadcast
+            }
+          case None => false
+        })
+        // Execute and validate that the executor side still yields the correct result.
+        checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
       }
     }
   }

@@ -2831,10 +2831,16 @@ private[spark] class DAGScheduler(
     failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
     updateStageInfoForPushBasedShuffle(failedStage)
     for (job <- dependentJobs) {
-      failJobAndIndependentStages(
-        job,
+      val finalException = exception.collect {
+        // If the error is user-facing (defines error class and is not internal error), we don't
+        // wrap it with "Job aborted" and expose this error to the end users directly.
+        case st: Exception with SparkThrowable if st.getErrorClass != null &&
+            !SparkThrowableHelper.isInternalError(st.getErrorClass) =>
+          st
+      }.getOrElse {
         new SparkException(s"Job aborted due to stage failure: $reason", cause = exception.orNull)
-      )
+      }
+      failJobAndIndependentStages(job, finalException)
     }
     if (dependentJobs.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
@@ -2895,7 +2901,7 @@ private[spark] class DAGScheduler(
   /** Fails a job and all stages that are only used by that job, and cleans up relevant state. */
   private def failJobAndIndependentStages(
       job: ActiveJob,
-      error: SparkException): Unit = {
+      error: Exception): Unit = {
     if (cancelRunningIndependentStages(job, error.getMessage)) {
       // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
       // against the state.  Otherwise we have a *little* bit of flakiness in the tests.

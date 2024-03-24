@@ -33,7 +33,6 @@ from typing import (
 
 from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark import copy_func
 from pyspark.context import SparkContext
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import DataType
@@ -1230,7 +1229,13 @@ class Column:
                 )
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
-    name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
+    def name(self, *alias: str, **kwargs: Any) -> "Column":
+        """
+        :func:`name` is an alias for :func:`alias`.
+
+        .. versionadded:: 2.0.0
+        """
+        return self.alias(*alias, **kwargs)
 
     def cast(self, dataType: Union[DataType, str]) -> "Column":
         """
@@ -1277,7 +1282,13 @@ class Column:
             )
         return Column(jc)
 
-    astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
+    def astype(self, dataType: Union[DataType, str]) -> "Column":
+        """
+        :func:`astype` is an alias for :func:`cast`.
+
+        .. versionadded:: 1.4.0
+        """
+        return self.cast(dataType)
 
     def between(
         self,

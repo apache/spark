@@ -565,8 +565,18 @@ class SparkSession private[sql] (
   }
 
   @DeveloperApi
+  @deprecated("Use execute(Array[Byte]) instead", "4.0.0")
   def execute(extension: com.google.protobuf.Any): Unit = {
     val command = proto.Command.newBuilder().setExtension(extension).build()
+    execute(command)
+  }
+
+  @DeveloperApi
+  def execute(extension: Array[Byte]): Unit = {
+    val command = proto.Command
+      .newBuilder()
+      .setExtension(com.google.protobuf.Any.parseFrom(extension))
+      .build()
     execute(command)
   }
 

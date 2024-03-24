@@ -604,11 +604,17 @@ abstract class OrcQueryTest extends OrcTest {
       val e1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }
-      assert(e1.getMessage.contains("Malformed ORC file"))
+      assert(e1.getErrorClass == "FAILED_READ_FILE" ||
+        // Hive ORC table scan uses a different code path and reports a different error.
+        e1.getErrorClass == "CANNOT_READ_FILE_FOOTER")
+      assert(e1.getCause.getMessage.contains("Malformed ORC file"))
       val e2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
-      assert(e2.getMessage.contains("Malformed ORC file"))
+      assert(e2.getErrorClass == "FAILED_READ_FILE" ||
+        // Hive ORC table scan uses a different code path and reports a different error.
+        e2.getErrorClass == "CANNOT_READ_FILE_FOOTER")
+      assert(e2.getCause.getMessage.contains("Malformed ORC file"))
       checkError(
         exception = intercept[SparkException] {
           testAllCorruptFiles()
@@ -620,7 +626,10 @@ abstract class OrcQueryTest extends OrcTest {
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }
-      assert(e4.getMessage.contains("Malformed ORC file"))
+      assert(e4.getErrorClass == "FAILED_READ_FILE" ||
+        // Hive ORC table scan uses a different code path and reports a different error.
+        e1.getErrorClass == "CANNOT_READ_FILE_FOOTER")
+      assert(e4.getCause.getMessage.contains("Malformed ORC file"))
     }
   }
 

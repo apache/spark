@@ -18,7 +18,7 @@
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
-MINIMUM_MYPY="0.920"
+MINIMUM_MYPY="1.8.0"
 MYPY_BUILD="mypy"
 PYTEST_BUILD="pytest"
 

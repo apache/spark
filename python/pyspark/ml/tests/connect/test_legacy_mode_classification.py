@@ -132,7 +132,7 @@ class ClassificationTestsMixin:
         self._check_result(local_transform_result, expected_predictions, expected_probabilities)
 
     def test_save_load(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_save_load") as tmp_dir:
             estimator = LORV2(maxIter=2, numTrainWorkers=2, learningRate=0.001)
             local_path = os.path.join(tmp_dir, "estimator")
             estimator.saveToLocal(local_path)

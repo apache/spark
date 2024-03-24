@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PlanHelper, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EXPRESSION}
 
@@ -41,10 +41,15 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
           rewriteWithExprAndInputPlans(expr, inputPlans)
         }
         newPlan = newPlan.withNewChildren(inputPlans.toIndexedSeq)
-        if (p.output == newPlan.output) {
-          newPlan
-        } else {
+        // Since we add extra Projects with extra columns to pre-evaluate the common expressions,
+        // the current operator may have extra columns if it inherits the output columns from its
+        // child, and we need to project away the extra columns to keep the plan schema unchanged.
+        assert(p.output.length <= newPlan.output.length)
+        if (p.output.length < newPlan.output.length) {
+          assert(p.outputSet.subsetOf(newPlan.outputSet))
           Project(p.output, newPlan)
+        } else {
+          newPlan
         }
     }
   }
@@ -85,8 +90,14 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
               refToExpr(id) = child
             } else {
               val alias = Alias(child, s"_common_expr_$index")()
-              childProjections(childProjectionIndex) += alias
-              refToExpr(id) = alias.toAttribute
+              val fakeProj = Project(Seq(alias), inputPlans(childProjectionIndex))
+              if (PlanHelper.specialExpressionsInUnsupportedOperator(fakeProj).nonEmpty) {
+                // We have to inline the common expression if it cannot be put in a Project.
+                refToExpr(id) = child
+              } else {
+                childProjections(childProjectionIndex) += alias
+                refToExpr(id) = alias.toAttribute
+              }
             }
           }
         }

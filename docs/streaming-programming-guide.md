@@ -295,7 +295,7 @@ The complete code can be found in the Spark Streaming example
 
 </div>
 
-If you have already [downloaded](index.html#downloading) and [built](index.html#building) Spark,
+If you have already [downloaded](index.html#downloading) and [built](building-spark.html) Spark,
 you can run this example as follows. You will first need to run Netcat
 (a small utility found in most Unix-like systems) as a data server by using
 

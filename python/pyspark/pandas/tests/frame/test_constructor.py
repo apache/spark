@@ -28,7 +28,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 from pyspark.pandas.utils import is_testing
 
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -572,7 +572,11 @@ class FrameConstructorMixin:
         self.assert_eq(psdf.astype(astype), pdf.astype(astype))
 
 
-class FrameConstructorTests(FrameConstructorMixin, ComparisonTestBase, SQLTestUtils):
+class FrameConstructorTests(
+    FrameConstructorMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

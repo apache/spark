@@ -29,7 +29,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1395,10 +1395,11 @@ class DatasetSuite extends QueryTest
   test("row nullability mismatch") {
     val schema = new StructType().add("a", StringType, true).add("b", StringType, false)
     val rdd = spark.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
-    val message = intercept[Exception] {
+    val ex = intercept[SparkRuntimeException] {
       spark.createDataFrame(rdd, schema).collect()
-    }.getMessage
-    assert(message.contains("The 1th field 'b' of input row cannot be null"))
+    }
+    assert(ex.getErrorClass == "EXPRESSION_ENCODING_FAILED")
+    assert(ex.getCause.getMessage.contains("The 1th field 'b' of input row cannot be null"))
   }
 
   test("createTempView") {
@@ -1419,18 +1420,20 @@ class DatasetSuite extends QueryTest
     dataset.sparkSession.catalog.dropTempView("tempView")
 
     withDatabase("test_db") {
-      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
-        spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
-        val e = intercept[AnalysisException](
-          dataset.createTempView("test_db.tempView"))
-        checkError(e,
-          errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-          parameters = Map("actualName" -> "test_db.tempView"))
-      }
+      withTempView("tempView") {
+        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "false") {
+          spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+          val e = intercept[AnalysisException](
+            dataset.createTempView("test_db.tempView"))
+          checkError(e,
+            errorClass = "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
+            parameters = Map("actualName" -> "test_db.tempView"))
+        }
 
-      withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
-          dataset.createTempView("test_db.tempView")
-          assert(spark.catalog.tableExists("tempView"))
+        withSQLConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS.key -> "true") {
+            dataset.createTempView("test_db.tempView")
+            assert(spark.catalog.tableExists("tempView"))
+        }
       }
     }
   }
@@ -1882,21 +1885,24 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-19896: cannot have circular references in case class") {
-    val errMsg1 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassA(null)).toDS()
-    }
-    assert(errMsg1.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
-    val errMsg2 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassC(null)).toDS()
-    }
-    assert(errMsg2.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
-    val errMsg3 = intercept[UnsupportedOperationException] {
-      Seq(CircularReferenceClassD(null)).toDS()
-    }
-    assert(errMsg3.getMessage.startsWith("cannot have circular references in class, but got the " +
-      "circular reference of class"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassA(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassA"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassC(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassC"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Seq(CircularReferenceClassD(null)).toDS()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2139",
+      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassD"))
   }
 
   test("SPARK-20125: option of map") {
@@ -2570,6 +2576,18 @@ class DatasetSuite extends QueryTest
     assert(result == expected)
   }
 
+  test("SPARK-47385: Tuple encoder with Option inputs") {
+    implicit val enc: Encoder[(SingleData, Option[SingleData])] =
+      Encoders.tuple(Encoders.product[SingleData], Encoders.product[Option[SingleData]])
+
+    val input = Seq(
+      (SingleData(1), Some(SingleData(1))),
+      (SingleData(2), None)
+    )
+    val ds = spark.createDataFrame(input).as[(SingleData, Option[SingleData])]
+    checkDataset(ds, input: _*)
+  }
+
   test("SPARK-43124: Show does not trigger job execution on CommandResults") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       withTable("t1") {
@@ -2712,6 +2730,25 @@ class DatasetSuite extends QueryTest
     val ds = Seq(WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo"))).toDS()
     checkDataset(ds.map(t => t),
       WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
+  }
+
+  test("SPARK-47270: isEmpty does not trigger job execution on CommandResults") {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
+      withTable("t1") {
+        sql("create table t1(c int) using parquet")
+
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        withListener(spark.sparkContext, listener) { _ =>
+          sql("show tables").isEmpty
+        }
+        assert(jobCounter === 0)
+      }
+    }
   }
 }
 

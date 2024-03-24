@@ -68,6 +68,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
+from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -94,6 +95,14 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+
+
+try:
+    import memory_profiler  # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 
 class SparkSession:
@@ -704,7 +713,10 @@ class SparkSession:
 
     @property
     def streams(self) -> "StreamingQueryManager":
-        return StreamingQueryManager(self)
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self)
+        return self._sqm
 
     streams.__doc__ = PySparkSession.streams.__doc__
 
@@ -930,10 +942,11 @@ class SparkSession:
     def _profiler_collector(self) -> ProfilerCollector:
         return self._client._profiler_collector
 
-    def showPerfProfiles(self, id: Optional[int] = None) -> None:
-        self._profiler_collector.show_perf_profiles(id)
+    @property
+    def profile(self) -> Profile:
+        return Profile(self._client._profiler_collector)
 
-    showPerfProfiles.__doc__ = PySparkSession.showPerfProfiles.__doc__
+    profile.__doc__ = PySparkSession.profile.__doc__
 
 
 SparkSession.__doc__ = PySparkSession.__doc__
@@ -955,8 +968,6 @@ def _test() -> None:
     # Spark Connect does not support to set master together.
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-    # RDD API is not supported in Spark Connect.
-    del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
 
     # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
     del pyspark.sql.connect.session.SparkSession.sql.__doc__

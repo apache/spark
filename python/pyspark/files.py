@@ -73,7 +73,7 @@ class SparkFiles:
         >>> import tempfile
         >>> from pyspark import SparkFiles
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="get") as d:
         ...     path1 = os.path.join(d, "test.txt")
         ...     with open(path1, "w") as f:
         ...         _ = f.write("100")

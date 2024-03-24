@@ -61,6 +61,20 @@ class UIUtilsSuite extends SparkFunSuite {
       errorMsg = "Base URL should be prepended to html links",
       plainText = false
     )
+
+    verify(
+      """<a onclick="alert('oops');"></a>""",
+      <span class="description-input">{"""<a onclick="alert('oops');"></a>"""}</span>,
+      "Non href attributes should make the description be treated as a string instead of HTML",
+      plainText = false
+    )
+
+    verify(
+      """<a onmouseover="alert('oops');"></a>""",
+      <span class="description-input">{"""<a onmouseover="alert('oops');"></a>"""}</span>,
+      "Non href attributes should make the description be treated as a string instead of HTML",
+      plainText = false
+    )
   }
 
   test("makeDescription(plainText = true)") {

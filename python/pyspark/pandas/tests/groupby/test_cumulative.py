@@ -21,7 +21,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import DataError
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -388,7 +388,11 @@ class GroupbyCumulativeMixin:
         self.assertRaises(DataError, lambda: psdf.groupby(["A"])["B"].cumprod())
 
 
-class GroupbyCumulativeTests(GroupbyCumulativeMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbyCumulativeTests(
+    GroupbyCumulativeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

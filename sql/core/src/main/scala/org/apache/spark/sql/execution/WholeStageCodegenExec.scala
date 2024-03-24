@@ -752,8 +752,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     // but the output must be rows.
     val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
+    val cleanedSourceOpt = tryBroadcastCleanedSource(cleanedSource)
     val evaluatorFactory = new WholeStageCodegenEvaluatorFactory(
-      cleanedSource, durationMs, references)
+      cleanedSourceOpt, durationMs, references)
     if (rdds.length == 1) {
       if (conf.usePartitionEvaluator) {
         rdds.head.mapPartitionsWithEvaluator(evaluatorFactory)
@@ -830,6 +831,23 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
   override protected def withNewChildInternal(newChild: SparkPlan): WholeStageCodegenExec =
     copy(child = newChild)(codegenStageId)
+
+  // Use broadcast if the conf is enabled and the code + comment size exceeds the threshold,
+  // otherwise, fallback to use cleanedSource directly. The method returns either a
+  // broadcast variable or the original form of cleanedSource.
+  private[spark] def tryBroadcastCleanedSource(code: CodeAndComment):
+      Either[broadcast.Broadcast[CodeAndComment], CodeAndComment] = {
+    def exceedThreshold(): Boolean = {
+      code.body.length + code.comment.iterator.map(
+        e => e._1.length + e._2.length).sum > conf.broadcastCleanedSourceThreshold
+    }
+    val enabled = conf.broadcastCleanedSourceThreshold >= 0
+    if (enabled && exceedThreshold()) {
+      scala.util.Left(sparkContext.broadcast(code))
+    } else {
+      scala.util.Right(code)
+    }
+  }
 }
 
 

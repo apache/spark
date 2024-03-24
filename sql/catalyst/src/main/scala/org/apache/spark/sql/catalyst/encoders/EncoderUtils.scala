@@ -91,7 +91,7 @@ object EncoderUtils {
     case _: DayTimeIntervalType => classOf[java.lang.Long]
     case _: YearMonthIntervalType => classOf[java.lang.Integer]
     case BinaryType => classOf[Array[Byte]]
-    case StringType => classOf[UTF8String]
+    case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]

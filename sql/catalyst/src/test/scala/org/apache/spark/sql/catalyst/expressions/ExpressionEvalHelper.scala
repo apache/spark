@@ -157,6 +157,13 @@ trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestB
   protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
       expression: => Expression,
       inputRow: InternalRow,
+      errorClass: String): Unit = {
+    checkErrorInExpression[T](expression, inputRow, errorClass, Map.empty[String, String])
+  }
+
+  protected def checkErrorInExpression[T <: SparkThrowable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
       errorClass: String,
       parameters: Map[String, String]): Unit = {
 

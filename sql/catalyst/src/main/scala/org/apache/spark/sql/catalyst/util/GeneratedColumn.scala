@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * This object contains utility methods and values for Generated Columns
@@ -161,6 +162,10 @@ object GeneratedColumn {
       throw unsupportedExpressionError(
         s"generation expression data type ${analyzed.dataType.simpleString} " +
         s"is incompatible with column data type ${dataType.simpleString}")
+    }
+    if (analyzed.exists(e => SchemaUtils.hasNonDefaultCollatedString(e.dataType))) {
+      throw unsupportedExpressionError(
+        "generation expression cannot contain non-default collated string type")
     }
   }
 

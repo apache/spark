@@ -116,7 +116,7 @@ private[hive] class SparkExecuteStatementOperation(
     val offset = iter.getPosition
     val rows = iter.take(maxRows).toList
     log.debug(s"Returning result set with ${rows.length} rows from offsets " +
-      s"[${iter.getFetchStart}, ${offset}) with $statementId")
+      s"[${iter.getFetchStart}, ${iter.getPosition}) with $statementId")
     RowSetUtils.toTRowSet(offset, rows, dataTypes, getProtocolVersion, getTimeFormatters)
   }
 

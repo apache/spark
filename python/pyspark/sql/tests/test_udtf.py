@@ -408,7 +408,7 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_cleanup_with_exception_in_eval(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_cleanup_with_exception_in_eval") as d:
             path = os.path.join(d, "file.txt")
 
             @udtf(returnType="x: int")
@@ -437,7 +437,9 @@ class BaseUDTFTestsMixin:
             self.assertEqual(data, "cleanup")
 
     def test_udtf_cleanup_with_exception_in_terminate(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(
+            prefix="test_udtf_cleanup_with_exception_in_terminate"
+        ) as d:
             path = os.path.join(d, "file.txt")
 
             @udtf(returnType="x: int")
@@ -942,7 +944,7 @@ class BaseUDTFTestsMixin:
         )
 
     def test_udtf_pickle_error(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_pickle_error") as d:
             file = os.path.join(d, "file.txt")
             file_obj = open(file, "w")
 
@@ -1247,6 +1249,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, DataType)
                 assert a.value is not None
                 assert a.isTable is False
+                assert a.isConstantExpression is True
                 return AnalyzeResult(StructType().add("a", a.dataType))
 
             def eval(self, a):
@@ -1400,6 +1403,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, StructType)
                 assert a.value is None
                 assert a.isTable is True
+                assert a.isConstantExpression is False
                 return AnalyzeResult(StructType().add("a", a.dataType[0].dataType))
 
             def eval(self, a: Row):
@@ -1419,6 +1423,7 @@ class BaseUDTFTestsMixin:
             def analyze(a: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(a.dataType, StructType)
                 assert a.isTable is True
+                assert a.isConstantExpression is False
                 return AnalyzeResult(a.dataType.add("is_even", BooleanType()))
 
             def eval(self, a: Row):
@@ -1715,7 +1720,7 @@ class BaseUDTFTestsMixin:
         self.sc.addPyFile(path)
 
     def test_udtf_with_analyze_using_pyfile(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_pyfile") as d:
             pyfile_path = os.path.join(d, "my_pyfile.py")
             with open(pyfile_path, "w") as f:
                 f.write("my_func = lambda: 'col1'")
@@ -1752,7 +1757,7 @@ class BaseUDTFTestsMixin:
                     assertDataFrameEqual(df, [Row(col1=10), Row(col1=100)])
 
     def test_udtf_with_analyze_using_zipped_package(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_zipped_package") as d:
             package_path = os.path.join(d, "my_zipfile")
             os.mkdir(package_path)
             pyfile_path = os.path.join(package_path, "__init__.py")
@@ -1795,7 +1800,7 @@ class BaseUDTFTestsMixin:
         self.sc.addArchive(path)
 
     def test_udtf_with_analyze_using_archive(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_archive") as d:
             archive_path = os.path.join(d, "my_archive")
             os.mkdir(archive_path)
             pyfile_path = os.path.join(archive_path, "my_file.txt")
@@ -1842,7 +1847,7 @@ class BaseUDTFTestsMixin:
         self.sc.addFile(path)
 
     def test_udtf_with_analyze_using_file(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(prefix="test_udtf_with_analyze_using_file") as d:
             file_path = os.path.join(d, "my_file.txt")
             with open(file_path, "w") as f:
                 f.write("col1")
@@ -1957,7 +1962,8 @@ class BaseUDTFTestsMixin:
             def analyze(**kwargs: AnalyzeArgument) -> AnalyzeResult:
                 assert isinstance(kwargs["a"].dataType, IntegerType)
                 assert kwargs["a"].value == 10
-                assert not kwargs["a"].isTable
+                assert kwargs["a"].isTable is False
+                assert kwargs["a"].isConstantExpression is True
                 assert isinstance(kwargs["b"].dataType, StringType)
                 assert kwargs["b"].value == "x"
                 assert not kwargs["b"].isTable
@@ -2019,6 +2025,7 @@ class BaseUDTFTestsMixin:
                 assert isinstance(a.dataType, IntegerType)
                 assert a.value == 10
                 assert not a.isTable
+                assert a.isConstantExpression is True
                 if b is not None:
                     assert isinstance(b.dataType, StringType)
                     assert b.value == "z"

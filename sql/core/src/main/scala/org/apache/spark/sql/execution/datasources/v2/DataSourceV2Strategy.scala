@@ -24,6 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
@@ -33,7 +34,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TruncatableTable}
-import org.apache.spark.sql.connector.catalog.CatalogV2Util.{structTypeToV2Columns, structTypeToV2ColumnsWithDefaults}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
@@ -42,11 +42,11 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 
@@ -109,7 +109,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
-      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _, _)) =>
+      v2Relation, V1ScanWrapper(scan, pushed, pushedDownOperators), output, _, _)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -117,6 +117,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+
+      val tableIdentifier = v2Relation.identifier.map(_.asMultipartIdentifier) match {
+        case Some(Seq(schema, tableName)) =>
+          Some(new TableIdentifier(tableName, Some(schema), v2Relation.catalog.map(_.name())))
+        case _ =>
+          None
+      }
 
       val dsScan = RowDataSourceScanExec(
         output,
@@ -126,7 +133,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         pushedDownOperators,
         unsafeRowRDD,
         v1Relation,
-        tableIdentifier = None)
+        tableIdentifier)
       withProjectAndFilter(project, filters, dsScan, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters,
@@ -173,19 +180,20 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
-    case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
-        tableSpec: TableSpec, ifNotExists, defaultValueExpressions) =>
-      ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
+    case c @ CreateTable(ResolvedIdentifier(catalog, ident), columns, partitioning,
+        tableSpec: TableSpec, ifNotExists) =>
+      ResolveDefaultColumns.validateCatalogForDefaultValue(columns, catalog.asTableCatalog, ident)
       val statementType = "CREATE TABLE"
-      val newSchema: StructType =
-        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(schema, statementType)
       GeneratedColumn.validateGeneratedColumns(
-        newSchema, catalog.asTableCatalog, ident, statementType)
+        c.tableSchema, catalog.asTableCatalog, ident, statementType)
 
-      val columns =
-        structTypeToV2ColumnsWithDefaults(newSchema, defaultValueExpressions, statementType)
-      CreateTableExec(catalog.asTableCatalog, ident, columns, partitioning,
-        qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
+      CreateTableExec(
+        catalog.asTableCatalog,
+        ident,
+        columns.map(_.toV2Column(statementType)).toArray,
+        partitioning,
+        qualifyLocInTableSpec(tableSpec),
+        ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec: TableSpec,
         options, ifNotExists, true) =>
@@ -201,16 +209,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
-    case ReplaceTable(
-        ResolvedIdentifier(catalog, ident), schema, parts, tableSpec: TableSpec, orCreate) =>
-      ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
-      val newSchema: StructType =
-        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, "CREATE TABLE")
+    case c @ ReplaceTable(
+        ResolvedIdentifier(catalog, ident), columns, parts, tableSpec: TableSpec, orCreate) =>
+      ResolveDefaultColumns.validateCatalogForDefaultValue(columns, catalog.asTableCatalog, ident)
+      val statementType = "REPLACE TABLE"
       GeneratedColumn.validateGeneratedColumns(
-        newSchema, catalog.asTableCatalog, ident, "CREATE TABLE")
+        c.tableSchema, catalog.asTableCatalog, ident, statementType)
 
-      val v2Columns = structTypeToV2Columns(newSchema)
+      val v2Columns = columns.map(_.toV2Column(statementType)).toArray
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident, v2Columns, parts,
@@ -351,10 +357,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
-      val invalidateFunc = () => session.sharedState.cacheManager.uncacheTableOrView(
-        session,
-        (r.catalog.name() +: r.identifier.namespace() :+ r.identifier.name()).toImmutableArraySeq,
-        cascade = true)
+      val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
       DropTableExec(r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
     case _: NoopCommand =>

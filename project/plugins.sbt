@@ -20,7 +20,7 @@ addSbtPlugin("software.purpledragon" % "sbt-checkstyle-plugin" % "4.0.1")
 // sbt-checkstyle-plugin uses an old version of checkstyle. Match it to Maven's.
 // If you are changing the dependency setting for checkstyle plugin,
 // please check pom.xml in the root of the source tree too.
-libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "9.3"
+libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "10.14.0"
 
 // checkstyle uses guava 31.0.1-jre.
 libraryDependencies += "com.google.guava" % "guava" % "31.0.1-jre"

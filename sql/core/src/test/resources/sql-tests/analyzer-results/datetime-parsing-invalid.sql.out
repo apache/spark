@@ -56,6 +56,13 @@ Project [to_timestamp(9, Some(DD), TimestampType, Some(America/Los_Angeles), fal
 
 
 -- !query
+select to_timestamp('366', 'DD')
+-- !query analysis
+Project [to_timestamp(366, Some(DD), TimestampType, Some(America/Los_Angeles), false) AS to_timestamp(366, DD)#x]
++- OneRowRelation
+
+
+-- !query
 select to_timestamp('9', 'DDD')
 -- !query analysis
 Project [to_timestamp(9, Some(DDD), TimestampType, Some(America/Los_Angeles), false) AS to_timestamp(9, DDD)#x]

@@ -76,6 +76,10 @@ If you have to cast `<srcType>` to `<targetType>`, you can set `<config>` as `<c
 cannot cast `<srcType>` to `<targetType>`.
 To convert values from `<srcType>` to `<targetType>`, you can use the functions `<functionNames>` instead.
 
+## COLLATION_MISMATCH
+
+Collations `<collationNameLeft>` and `<collationNameRight>` are not compatible. Please use the same collation for both strings.
+
 ## CREATE_MAP_KEY_DIFF_TYPES
 
 The given keys of function `<functionName>` should all be the same type, but they are `<dataType>`.
@@ -221,7 +225,7 @@ class `<className>` not found.
 
 ## UNEXPECTED_INPUT_TYPE
 
-Parameter `<paramIndex>` requires the `<requiredType>` type, however `<inputSql>` has the type `<inputType>`.
+The `<paramIndex>` parameter requires the `<requiredType>` type, however `<inputSql>` has the type `<inputType>`.
 
 ## UNEXPECTED_NULL
 

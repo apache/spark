@@ -22,7 +22,6 @@ import scala.collection.immutable.IndexedSeq
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
@@ -37,7 +36,6 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, File
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
-import org.apache.spark.util.ArrayImplicits._
 
 /** Holds a cached logical plan and its data */
 case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
@@ -59,17 +57,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   @transient @volatile
   private var cachedData = IndexedSeq[CachedData]()
-
-  /**
-   * Configurations needs to be turned off, to avoid regression for cached query, so that the
-   * outputPartitioning of the underlying cached query plan can be leveraged later.
-   * Configurations include:
-   * 1. AQE
-   * 2. Automatic bucketed table scan
-   */
-  private val forceDisableConfigs: Seq[ConfigEntry[Boolean]] = Seq(
-    SQLConf.ADAPTIVE_EXECUTION_ENABLED,
-    SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
 
   /** Clears all cached tables. */
   def clearCache(): Unit = this.synchronized {
@@ -182,22 +169,20 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     plan match {
       case SubqueryAlias(ident, LogicalRelation(_, _, Some(catalogTable), _)) =>
         val v1Ident = catalogTable.identifier
-        isSameName(ident.qualifier :+ ident.name) &&
-          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+        isSameName(ident.qualifier :+ ident.name) && isSameName(v1Ident.nameParts)
 
       case SubqueryAlias(ident, DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _)) =>
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
         isSameName(ident.qualifier :+ ident.name) &&
-          isSameName((catalog.name() +: v2Ident.namespace() :+ v2Ident.name()).toImmutableArraySeq)
+          isSameName(v2Ident.toQualifiedNameParts(catalog))
 
       case SubqueryAlias(ident, View(catalogTable, _, _)) =>
         val v1Ident = catalogTable.identifier
-        isSameName(ident.qualifier :+ ident.name) &&
-          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+        isSameName(ident.qualifier :+ ident.name) && isSameName(v1Ident.nameParts)
 
       case SubqueryAlias(ident, HiveTableRelation(catalogTable, _, _, _, _)) =>
         val v1Ident = catalogTable.identifier
-        isSameName(ident.qualifier :+ ident.name) &&
-          isSameName(v1Ident.catalog.toSeq ++ v1Ident.database :+ v1Ident.table)
+        isSameName(ident.qualifier :+ ident.name) && isSameName(v1Ident.nameParts)
 
       case _ => false
     }
@@ -395,19 +380,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /**
    * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
-   * `AUTO_BUCKETED_SCAN_ENABLED`.
-   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is disabled, return the session with disabled
-   * `AUTO_BUCKETED_SCAN_ENABLED` and `ADAPTIVE_EXECUTION_ENABLED`.
+   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS`.
+   * `AUTO_BUCKETED_SCAN_ENABLED` is always disabled.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
-    if (session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
-      // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
-      // so we always do bucketed scan in a cached plan.
-      SparkSession.getOrCloneSessionWithConfigsOff(session,
-        SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS ::
-          SQLConf.AUTO_BUCKETED_SCAN_ENABLED :: Nil)
-    } else {
-      SparkSession.getOrCloneSessionWithConfigsOff(session, forceDisableConfigs)
+    // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
+    // so we always do bucketed scan in a cached plan.
+    var disableConfigs = Seq(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+    if (!session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
+      // Allowing changing cached plan output partitioning might lead to regression as it introduces
+      // extra shuffle
+      disableConfigs =
+        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
     }
+    SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
   }
 }

@@ -65,7 +65,8 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
       numColsPrefixKey: Int,
       useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
     id = stateStoreId
   }
 
@@ -130,6 +131,69 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       checkLoadedVersions(loadedMaps, count = 2, earliestKey = 3, latestKey = 2)
       checkVersion(loadedMaps, 3, Map(("a", 0) -> 3))
       checkVersion(loadedMaps, 2, Map(("a", 0) -> 2))
+    }
+  }
+
+  private def verifyStoreOperationUnsupported(operationName: String)(testFn: => Unit): Unit = {
+    if (operationName != "merge") {
+      val ex = intercept[SparkUnsupportedOperationException] {
+        testFn
+      }
+      checkError(
+        ex,
+        errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+        parameters = Map(
+          "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+    } else {
+      val ex = intercept[SparkUnsupportedOperationException] {
+        testFn
+      }
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+        parameters = Map(
+          "operationType" -> operationName,
+          "entity" -> "HDFSBackedStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+
+    }
+  }
+
+  test("get, put, remove etc operations on non-default col family should fail") {
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
+      minDeltasForSnapshot = 5)) { provider =>
+      val store = provider.getStore(0)
+      val keyRow = dataToKeyRow("a", 0)
+      val valueRow = dataToValueRow(1)
+      val colFamilyName = "test"
+      verifyStoreOperationUnsupported("put") {
+        store.put(keyRow, valueRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("remove") {
+        store.remove(keyRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("get") {
+        store.get(keyRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("merge") {
+        store.merge(keyRow, valueRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("iterator") {
+        store.iterator(colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("prefixScan") {
+        store.prefixScan(keyRow, colFamilyName)
+      }
     }
   }
 
@@ -1622,6 +1686,10 @@ object StateStoreTestsHelper {
 
   def put(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
     store.put(dataToKeyRow(key1, key2), dataToValueRow(value))
+  }
+
+  def merge(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
+    store.merge(dataToKeyRow(key1, key2), dataToValueRow(value))
   }
 
   def get(store: ReadStateStore, key1: String, key2: Int): Option[Int] = {

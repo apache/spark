@@ -1667,9 +1667,9 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
     case Filter(Literal(null, _), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     case Filter(Literal(false, BooleanType), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>

@@ -89,10 +89,12 @@ class Expression:
     def __init__(self) -> None:
         pass
 
-    def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
+    def to_plan(  # type: ignore[empty-body]
+        self, session: "SparkConnectClient"
+    ) -> "proto.Expression":
         ...
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> str:  # type: ignore[empty-body]
         ...
 
     def alias(self, *alias: str, **kwargs: Any) -> "ColumnAlias":
@@ -105,7 +107,7 @@ class Expression:
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
         return ColumnAlias(self, list(alias), metadata)
 
-    def name(self) -> str:
+    def name(self) -> str:  # type: ignore[empty-body]
         ...
 
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -418,7 +418,22 @@ trait V2CreateTableAsSelectPlan
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(name, query)
 
-  override def tableSchema: StructType = query.schema
+  override lazy val tableSchema: StructType = query.schema
+
+  override def columns: Seq[ColumnDefinition] = {
+    query.schema.map { field =>
+      ColumnDefinition(
+        field.name,
+        field.dataType,
+        field.nullable,
+        field.getComment(),
+        // The input query can't define column default/generation expressions.
+        defaultValue = None,
+        generationExpression = None,
+        metadata = field.metadata
+      )
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): V2CreateTableAsSelectPlan = {
@@ -427,7 +442,9 @@ trait V2CreateTableAsSelectPlan
       case Seq(newName, newQuery) =>
         withNameAndQuery(newName, newQuery)
       case others =>
-        throw new IllegalArgumentException("Must be 2 children: " + others)
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3218",
+          messageParameters = Map("others" -> others.toString()))
     }
   }
 
@@ -439,8 +456,12 @@ trait V2CreateTableAsSelectPlan
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {
   def name: LogicalPlan
+
   def partitioning: Seq[Transform]
-  def tableSchema: StructType
+
+  def columns: Seq[ColumnDefinition]
+
+  lazy val tableSchema: StructType = StructType(columns.map(_.toV1Column))
 
   def tableName: Identifier = {
     assert(name.resolved)
@@ -456,16 +477,13 @@ trait V2CreateTablePlan extends LogicalPlan {
 
 /**
  * Create a new table with a v2 catalog.
- * The [[defaultValueExpressions]] hold optional default value expressions to use when creating the
- * table, mapping 1:1 with the fields in [[tableSchema]].
  */
 case class CreateTable(
     name: LogicalPlan,
-    tableSchema: StructType,
+    columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    ignoreIfExists: Boolean,
-    defaultValueExpressions: Seq[Option[Expression]])
+    ignoreIfExists: Boolean)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -475,19 +493,6 @@ case class CreateTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
-  }
-}
-
-/** This is a helper to build [[CreateTable]] instances with no column default value expressions. */
-object CreateTable {
-  def apply(
-      name: LogicalPlan,
-      tableSchema: StructType,
-      partitioning: Seq[Transform],
-      tableSpec: TableSpecBase,
-      ignoreIfExists: Boolean): CreateTable = {
-    val defaultValueExpressions = Seq.fill(tableSchema.fields.length)(None)
-    CreateTable(name, tableSchema, partitioning, tableSpec, ignoreIfExists, defaultValueExpressions)
   }
 }
 
@@ -527,7 +532,7 @@ case class CreateTableAsSelect(
  */
 case class ReplaceTable(
     name: LogicalPlan,
-    tableSchema: StructType,
+    columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
     orCreate: Boolean)
@@ -1501,16 +1506,6 @@ case class TableSpec(
   def withNewLocation(newLocation: Option[String]): TableSpec = {
     TableSpec(properties, provider, options, newLocation, comment, serde, external)
   }
-}
-
-/**
- * A fake expression which holds the default value expression and its original SQL text.
- */
-case class DefaultValueExpression(child: Expression, originalSQL: String)
-  extends UnaryExpression with Unevaluable {
-  override def dataType: DataType = child.dataType
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild)
 }
 
 /**

@@ -71,7 +71,7 @@ Column or field `<name>` is ambiguous and has `<n>` matches.
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
-This column points to one of the DataFrame but Spark is unable to figure out which one.
+This column points to one of the DataFrames but Spark is unable to figure out which one.
 Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
 and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
 
@@ -366,23 +366,37 @@ Checkpoint block `<rddBlockId>` not found!
 Either the executor that originally checkpointed this partition is no longer alive, or the original RDD is unpersisted.
 If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant.
 
+### CLASS_NOT_OVERRIDE_EXPECTED_METHOD
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+`<className>` must override either `<method1>` or `<method2>`.
+
 ### CLASS_UNSUPPORTED_BY_MAP_OBJECTS
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 `MapObjects` does not support the class `<cls>` as resulting collection.
 
-### CODEC_NOT_AVAILABLE
+### [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-available-error-class.html)
 
 SQLSTATE: 56038
 
-The codec `<codecName>` is not available. Consider to set the config `<configKey>` to `<configVal>`.
+The codec `<codecName>` is not available.
+
+For more details see [CODEC_NOT_AVAILABLE](sql-error-conditions-codec-not-available-error-class.html)
 
 ### CODEC_SHORT_NAME_NOT_FOUND
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Cannot find a short name for the codec `<codecName>`.
+
+### COLLATION_INVALID_NAME
+
+[SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
 
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
@@ -392,17 +406,17 @@ Can't create array with `<numberOfElements>` elements which exceeding the array 
 
 For more details see [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
-### COLUMN_ALIASES_IS_NOT_ALLOWED
+### COLUMN_ALIASES_NOT_ALLOWED
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Columns aliases are not allowed in `<op>`.
+Column aliases are not allowed in `<op>`.
 
 ### COLUMN_ALREADY_EXISTS
 
 [SQLSTATE: 42711](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The column `<columnName>` already exists. Consider to choose another name or rename the existing column.
+The column `<columnName>` already exists. Choose another name or rename the existing column.
 
 ### COLUMN_NOT_DEFINED_IN_TABLE
 
@@ -718,6 +732,12 @@ For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.
 
 Failed parsing struct: `<raw>`.
 
+### FAILED_READ_FILE
+
+SQLSTATE: KD001
+
+Encountered error while reading file `<path>`.
+
 ### FAILED_REGISTER_CLASS_WITH_KRYO
 
 SQLSTATE: KD000
@@ -736,6 +756,12 @@ SQLSTATE: 58030
 
 Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename returned false.
 
+### FAILED_ROW_TO_JSON
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the row value `<value>` of the class `<class>` to the target SQL type `<sqlType>` in the JSON format.
+
 ### FIELDS_ALREADY_EXISTS
 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -753,6 +779,12 @@ No such struct field `<fieldName>` in `<fields>`.
 [SQLSTATE: 42809](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`.
+
+### FOREACH_BATCH_USER_FUNCTION_ERROR
+
+[SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
+
+An error occurred in the user provided function in foreach batch sink. Reason: `<reason>`
 
 ### FOUND_MULTIPLE_DATA_SOURCES
 
@@ -849,6 +881,14 @@ Sketches have different `lgConfigK` values: `<left>` and `<right>`. Set the `all
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 `<identifier>` is not a valid identifier as it has more than 2 name parts.
+
+### [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Illegal value provided to the State Store
+
+For more details see [ILLEGAL_STATE_STORE_VALUE](sql-error-conditions-illegal-state-store-value-error-class.html)
 
 ### INCOMPARABLE_PIVOT_COLUMN
 
@@ -998,6 +1038,12 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 
 `<message>`
 
+### INTERNAL_ERROR_TWS
+
+[SQLSTATE: XX000](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<message>`
+
 ### INTERVAL_ARITHMETIC_OVERFLOW
 
 [SQLSTATE: 22015](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1036,6 +1082,12 @@ The boundary `<boundary>` is invalid: `<invalidValue>`.
 
 For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary-error-class.html)
 
+### INVALID_BUCKET_COLUMN_DATA_TYPE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use `<type>` for bucket column. Collated data types are not supported for bucketing.
+
 ### INVALID_BUCKET_FILE
 
 SQLSTATE: 58030
@@ -1060,6 +1112,14 @@ The datasource `<datasource>` cannot save the column `<columnName>` because its 
 
 Column or field `<name>` is of type `<type>` while it's required to be `<expectedType>`.
 
+### [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-value-error-class.html)
+
+[SQLSTATE: 22022](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The value '`<confValue>`' in the config "`<confName>`" is invalid.
+
+For more details see [INVALID_CONF_VALUE](sql-error-conditions-invalid-conf-value-error-class.html)
+
 ### [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
 [SQLSTATE: HY109](sql-error-conditions-sqlstates.html#class-HY-cli-specific-condition)
@@ -1068,6 +1128,14 @@ The cursor is invalid.
 
 For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
+### [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
+
+[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Unrecognized datetime pattern: `<pattern>`.
+
+For more details see [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
+
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
 [SQLSTATE: 42623](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1075,6 +1143,14 @@ For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-
 Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
 
 For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
+
+### [INVALID_DELIMITER_VALUE](sql-error-conditions-invalid-delimiter-value-error-class.html)
+
+[SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid value for delimiter.
+
+For more details see [INVALID_DELIMITER_VALUE](sql-error-conditions-invalid-delimiter-value-error-class.html)
 
 ### INVALID_DRIVER_MEMORY
 
@@ -1107,6 +1183,12 @@ SQLSTATE: F0000
 
 Executor memory `<executorMemory>` must be at least `<minSystemMemory>`.
 Please increase executor memory using the --executor-memory option or "`<config>`" in Spark configuration.
+
+### INVALID_EXPRESSION_ENCODER
+
+[SQLSTATE: 42001](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got `<encoderType>`. For more information consult '`<docroot>`/api/java/index.html?org/apache/spark/sql/Encoder.html'.
 
 ### INVALID_EXTRACT_BASE_FIELD_TYPE
 
@@ -1154,17 +1236,14 @@ The handle `<handle>` is invalid.
 
 For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-class.html)
 
-### INVALID_HIVE_COLUMN_NAME
-
-[SQLSTATE: 42K05](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Cannot create the table `<tableName>` having the column `<columnName>` whose name contains invalid characters `<invalidChars>` in Hive metastore.
-
 ### INVALID_IDENTIFIER
 
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The identifier `<ident>` is invalid. Please, consider quoting it with back-quotes as ``<ident>``.
+The unquoted identifier `<ident>` is invalid and must be back quoted as: ``<ident>``.
+Unquoted identifiers can only contain ASCII letters ('a' - 'z', 'A' - 'Z'), digits ('0' - '9'), and underbar ('_').
+Unquoted identifiers must also not start with a digit.
+Different data sources and meta stores may impose additional restrictions on valid identifiers.
 
 ### INVALID_INDEX_OF_ZERO
 
@@ -1180,6 +1259,14 @@ Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
 
+### [INVALID_INTERVAL_FORMAT](sql-error-conditions-invalid-interval-format-error-class.html)
+
+[SQLSTATE: 22006](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Error parsing '`<input>`' to interval. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format.
+
+For more details see [INVALID_INTERVAL_FORMAT](sql-error-conditions-invalid-interval-format-error-class.html)
+
 ### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
 [SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1187,6 +1274,12 @@ For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-
 Invalid inverse distribution function `<funcName>`.
 
 For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+### INVALID_JSON_DATA_TYPE
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the JSON string '`<invalidType>`' to a data type. Please enter a valid data type.
 
 ### INVALID_JSON_ROOT_FIELD
 
@@ -1270,6 +1363,12 @@ The value of parameter(s) `<parameter>` in `<functionName>` is invalid:
 
 For more details see [INVALID_PARAMETER_VALUE](sql-error-conditions-invalid-parameter-value-error-class.html)
 
+### INVALID_PARTITION_COLUMN_DATA_TYPE
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Cannot use `<type>` for partition column.
+
 ### [INVALID_PARTITION_OPERATION](sql-error-conditions-invalid-partition-operation-error-class.html)
 
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1341,6 +1440,12 @@ For more details see [INVALID_SQL_SYNTAX](sql-error-conditions-invalid-sql-synta
 SQLSTATE: 07501
 
 The INTO clause of EXECUTE IMMEDIATE is only valid for queries but the given statement is not a query: `<sqlString>`.
+
+### INVALID_STATEMENT_OR_CLAUSE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The statement or clause: `<operation>` is not valid.
 
 ### [INVALID_SUBQUERY_EXPRESSION](sql-error-conditions-invalid-subquery-expression-error-class.html)
 
@@ -1562,6 +1667,12 @@ SQLSTATE: 07501
 
 Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
 
+### NONEXISTENT_FIELD_NAME_IN_LIST
+
+SQLSTATE: HV091
+
+Field(s) `<nonExistFields>` do(es) not exist. Available fields: `<fieldNames>`
+
 ### NON_FOLDABLE_ARGUMENT
 
 [SQLSTATE: 42K08](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1661,6 +1772,12 @@ Not supported command in JDBC catalog:
 
 For more details see [NOT_SUPPORTED_IN_JDBC_CATALOG](sql-error-conditions-not-supported-in-jdbc-catalog-error-class.html)
 
+### NOT_UNRESOLVED_ENCODER
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Unresolved encoder expected, but `<attr>` was found.
+
 ### NO_DEFAULT_COLUMN_VALUE_AVAILABLE
 
 [SQLSTATE: 42608](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1708,6 +1825,12 @@ Row ID attributes cannot be nullable: `<nullableRowIdAttrs>`.
 [SQLSTATE: 2200E](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Cannot use null as map key.
+
+### NULL_QUERY_STRING_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Execute immediate requires a non-null variable as the query string, but the provided variable `<varName>` is null.
 
 ### NUMERIC_OUT_OF_SUPPORTED_RANGE
 
@@ -1850,6 +1973,12 @@ Protobuf type not yet supported: `<protobufType>`.
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
 Failed to `<action>` Python data source `<type>`: `<msg>`
+
+### PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed when Python streaming data source perform `<action>`: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 
@@ -2019,6 +2148,49 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform stateful processor operation=`<operationType>` with invalid handle state=`<handleState>`.
+
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
+
+### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to create column family with unsupported starting character and name=`<colFamilyName>`.
+
+### STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform column family operation=`<operationName>` with invalid name=`<colFamilyName>`. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default
+
+### STATE_STORE_HANDLE_NOT_INITIALIZED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The handle has not been initialized for this StatefulProcessor.
+Please only use the StatefulProcessor within the transformWithState operator.
+
+### STATE_STORE_UNSUPPORTED_OPERATION
+
+[SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
+
+`<operationType>` operation not supported with `<entity>`
+
+### STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+State store operation=`<operationType>` not supported on missing column family=`<colFamilyName>`.
+
 ### STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST
 
 [SQLSTATE: 42713](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -2084,6 +2256,13 @@ The checkpoint seems to be only run with older Spark version(s). Run the streami
 [SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 '`<optionName>`' must be specified.
+
+### STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA
+
+[SQLSTATE: 42K03](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.
+Stateful operators in the metadata: [`<OpsInMetadataSeq>`]; Stateful operators in current batch: [`<OpsInCurBatchSeq>`].
 
 ### STREAM_FAILED
 
@@ -2170,6 +2349,12 @@ Please ensure that the number of aliases provided matches the number of columns 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to evaluate the user-defined table function because its 'analyze' method returned a requested OrderingColumn whose column name expression included an unnecessary alias `<aliasName>`; please remove this alias and then try the query again.
+
+### UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' expression (`<expression>`) that does not include a corresponding alias; please update the UDTF to specify an alias there and then try the query again.
 
 ### UNABLE_TO_ACQUIRE_MEMORY
 
@@ -2344,11 +2529,13 @@ For more details see [UNSUPPORTED_ADD_FILE](sql-error-conditions-unsupported-add
 
 Unsupported arrow type `<typeName>`.
 
-### UNSUPPORTED_CALL
+### [UNSUPPORTED_CALL](sql-error-conditions-unsupported-call-error-class.html)
 
 [SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
 
 Cannot call the method "`<methodName>`" of the class "`<className>`".
+
+For more details see [UNSUPPORTED_CALL](sql-error-conditions-unsupported-call-error-class.html)
 
 ### UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING
 
@@ -2356,6 +2543,14 @@ Cannot call the method "`<methodName>`" of the class "`<className>`".
 
 The char/varchar type can't be used in the table schema.
 If you want Spark treat them as string type as same as Spark 3.0 and earlier, please set "spark.sql.legacy.charVarcharAsString" to "true".
+
+### [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Collation `<collationName>` is not supported for:
+
+For more details see [UNSUPPORTED_COLLATION](sql-error-conditions-unsupported-collation-error-class.html)
 
 ### UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY
 
@@ -2536,6 +2731,13 @@ Choose a different name, or drop or replace the existing variable.
 The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VARIABLE IF EXISTS.
+
+### VARIANT_SIZE_LIMIT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot build variant bigger than `<sizeLimit>` in `<functionName>`.
+Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big).
 
 ### VIEW_ALREADY_EXISTS
 

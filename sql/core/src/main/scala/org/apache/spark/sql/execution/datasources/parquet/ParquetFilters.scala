@@ -700,17 +700,19 @@ class ParquetFilters(
         makeNotEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
-      case sources.LessThan(name, value) if canMakeFilterOn(name, value) =>
+      case sources.LessThan(name, value) if (value != null) && canMakeFilterOn(name, value) =>
         makeLt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
-      case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
+      case sources.LessThanOrEqual(name, value) if (value != null) &&
+        canMakeFilterOn(name, value) =>
         makeLtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 
-      case sources.GreaterThan(name, value) if canMakeFilterOn(name, value) =>
+      case sources.GreaterThan(name, value) if (value != null) && canMakeFilterOn(name, value) =>
         makeGt.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
-      case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name, value) =>
+      case sources.GreaterThanOrEqual(name, value) if (value != null) &&
+        canMakeFilterOn(name, value) =>
         makeGtEq.lift(nameToParquetField(name).fieldType)
           .map(_(nameToParquetField(name).fieldNames, value))
 

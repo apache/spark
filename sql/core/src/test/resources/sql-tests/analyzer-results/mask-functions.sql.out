@@ -456,7 +456,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"replaceArg\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "2",
+    "paramIndex" : "second",
     "requiredType" : "\"STRING\"",
     "sqlExpr" : "\"mask(c1, replaceArg, x, n, NULL)\""
   },

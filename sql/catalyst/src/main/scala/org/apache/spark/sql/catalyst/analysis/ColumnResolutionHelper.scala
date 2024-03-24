@@ -312,14 +312,35 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }.map(e => Alias(e, nameParts.last)())
     }
 
-    e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
-      case u: UnresolvedAttribute =>
-        resolve(u.nameParts).getOrElse(u)
-      // Re-resolves `TempResolvedColumn` as variable references if it has tried to be resolved with
-      // Aggregate but failed.
-      case t: TempResolvedColumn if t.hasTried =>
-        resolve(t.nameParts).getOrElse(t)
+    def innerResolve(e: Expression, isTopLevel: Boolean): Expression = withOrigin(e.origin) {
+      if (e.resolved || !e.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) return e
+      val resolved = e match {
+        case u @ UnresolvedAttribute(nameParts) =>
+          val result = withPosition(u) {
+            resolve(nameParts).getOrElse(u) match {
+              // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
+              case Alias(child, _) if !isTopLevel => child
+              case other => other
+            }
+          }
+          result
+
+        // Re-resolves `TempResolvedColumn` as variable references if it has tried to be
+        // resolved with Aggregate but failed.
+        case t: TempResolvedColumn if t.hasTried => withPosition(t) {
+          resolve(t.nameParts).getOrElse(t) match {
+            case _: UnresolvedAttribute => t
+            case other => other
+          }
+        }
+
+        case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
+      }
+      resolved.copyTagsFrom(e)
+      resolved
     }
+
+    innerResolve(e, isTopLevel = true)
   }
 
   // Resolves `UnresolvedAttribute` to `TempResolvedColumn` via `plan.child.output` if plan is an

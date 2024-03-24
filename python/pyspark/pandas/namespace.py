@@ -2256,10 +2256,10 @@ def get_dummies(
             values = values[1:]
 
         def column_name(v: Any) -> Name:
-            if prefix is None or cast(List[str], prefix)[i] == "":
+            if prefix is None or prefix[i] == "":  # type: ignore[index]
                 return v
             else:
-                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, v)
+                return "{}{}{}".format(prefix[i], prefix_sep, v)  # type: ignore[index]
 
         for value in values:
             remaining_columns.append(
@@ -2554,7 +2554,10 @@ def concat(
         if isinstance(obj, Series):
             num_series += 1
             series_names.add(obj.name)
-            new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
+            if not ignore_index and not should_return_series:
+                new_objs.append(obj.to_frame())
+            else:
+                new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
         else:
             assert isinstance(obj, DataFrame)
             new_objs.append(obj)

@@ -159,6 +159,14 @@ class ChannelBuilder:
         """
         raise PySparkNotImplementedError
 
+    @property
+    def host(self) -> str:
+        """
+        The hostname where this client intends to connect.
+        This is used for end-user display purpose in REPL
+        """
+        raise PySparkNotImplementedError
+
     def _insecure_channel(self, target: Any, **kwargs: Any) -> grpc.Channel:
         channel = grpc.insecure_channel(target, options=self._channel_options, **kwargs)
 
@@ -360,11 +368,11 @@ class DefaultChannelBuilder(ChannelBuilder):
 
         netloc = self.url.netloc.split(":")
         if len(netloc) == 1:
-            self.host = netloc[0]
-            self.port = DefaultChannelBuilder.default_port()
+            self._host = netloc[0]
+            self._port = DefaultChannelBuilder.default_port()
         elif len(netloc) == 2:
-            self.host = netloc[0]
-            self.port = int(netloc[1])
+            self._host = netloc[0]
+            self._port = int(netloc[1])
         else:
             raise PySparkValueError(
                 error_class="INVALID_CONNECT_URL",
@@ -383,8 +391,15 @@ class DefaultChannelBuilder(ChannelBuilder):
         )
 
     @property
+    def host(self) -> str:
+        """
+        The hostname where this client intends to connect.
+        """
+        return self._host
+
+    @property
     def endpoint(self) -> str:
-        return f"{self.host}:{self.port}"
+        return f"{self._host}:{self._port}"
 
     def toChannel(self) -> grpc.Channel:
         """
@@ -588,7 +603,7 @@ class SparkConnectClient(object):
 
     def __init__(
         self,
-        connection: Union[str, DefaultChannelBuilder],
+        connection: Union[str, ChannelBuilder],
         user_id: Optional[str] = None,
         channel_options: Optional[List[Tuple[str, Any]]] = None,
         retry_policy: Optional[Dict[str, Any]] = None,
@@ -599,7 +614,7 @@ class SparkConnectClient(object):
 
         Parameters
         ----------
-        connection : str or :class:`DefaultChannelBuilder`
+        connection : str or :class:`ChannelBuilder`
             Connection string that is used to extract the connection parameters and configure
             the GRPC connection. Or instance of ChannelBuilder that creates GRPC connection.
             Defaults to `sc://localhost`.
@@ -1039,6 +1054,8 @@ class SparkConnectClient(object):
             client_type=self._builder.userAgent,
             tags=list(self.get_tags()),
         )
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -1046,6 +1063,8 @@ class SparkConnectClient(object):
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1366,6 +1385,8 @@ class SparkConnectClient(object):
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1401,6 +1422,8 @@ class SparkConnectClient(object):
         The result of the config call.
         """
         req = self._config_request_with_metadata()
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.operation.CopyFrom(operation)
         try:
             for attempt in self._retrying():
@@ -1417,6 +1440,8 @@ class SparkConnectClient(object):
     ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if interrupt_type == "all":
             req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
@@ -1576,6 +1601,8 @@ class SparkConnectClient(object):
             client_type=self._builder.userAgent,
             error_id=info.metadata["errorId"],
         )
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
 

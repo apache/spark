@@ -623,4 +623,14 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
     comparePlans(expected, parameterizedSpark)
     comparePlans(expected, parameterizedSql)
   }
+
+  test("SPARK-46999: bind parameters for nested IDENTIFIER clause") {
+    val query = sql(
+      """
+        |EXECUTE IMMEDIATE
+        |'SELECT IDENTIFIER(?)(IDENTIFIER(?)) FROM VALUES (\'abc\') AS (col)'
+        |USING 'UPPER', 'col'
+        |""".stripMargin)
+    checkAnswer(query, Row("ABC"))
+  }
 }

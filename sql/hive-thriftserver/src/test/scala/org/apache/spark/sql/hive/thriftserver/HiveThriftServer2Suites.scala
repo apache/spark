@@ -1206,7 +1206,7 @@ abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAft
   protected var operationLogPath: File = _
   protected var lScratchDir: File = _
   private var logTailingProcess: Process = _
-  private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
+  private val diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
   protected def extraConf: Seq[String] = Nil
 

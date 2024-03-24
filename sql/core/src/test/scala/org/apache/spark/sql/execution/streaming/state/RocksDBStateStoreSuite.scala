@@ -158,6 +158,65 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  testWithColumnFamilies("rocksdb key and value schema encoders for column families",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val testColFamily = "testState"
+
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(testColFamily, keySchema, numColsPrefixKey = 0, valueSchema)
+        val keyRow1 = dataToKeyRow("a", 0)
+        val valueRow1 = dataToValueRow(1)
+        store.put(keyRow1, valueRow1, colFamilyName = testColFamily)
+        assert(valueRowToData(store.get(keyRow1, colFamilyName = testColFamily)) === 1)
+        store.remove(keyRow1, colFamilyName = testColFamily)
+        assert(store.get(keyRow1, colFamilyName = testColFamily) === null)
+      }
+      val keyRow2 = dataToKeyRow("b", 0)
+      val valueRow2 = dataToValueRow(2)
+      store.put(keyRow2, valueRow2)
+      assert(valueRowToData(store.get(keyRow2)) === 2)
+      store.remove(keyRow2)
+      assert(store.get(keyRow2) === null)
+    }
+  }
+
+  test("validate rocksdb values iterator correctness") {
+    withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+      tryWithProviderResource(newStoreProvider(useColumnFamilies = true,
+        useMultipleValuesPerKey = true)) { provider =>
+        val store = provider.getStore(0)
+        // Verify state after updating
+        put(store, "a", 0, 1)
+
+        val iterator0 = store.valuesIterator(dataToKeyRow("a", 0))
+
+        assert(iterator0.hasNext)
+        assert(valueRowToData(iterator0.next()) === 1)
+        assert(!iterator0.hasNext)
+
+        merge(store, "a", 0, 2)
+        merge(store, "a", 0, 3)
+
+        val iterator1 = store.valuesIterator(dataToKeyRow("a", 0))
+
+        (1 to 3).map { i =>
+          assert(iterator1.hasNext)
+          assert(valueRowToData(iterator1.next()) === i)
+        }
+
+        assert(!iterator1.hasNext)
+
+        remove(store, _._1 == "a")
+        val iterator2 = store.valuesIterator(dataToKeyRow("a", 0))
+        assert(!iterator2.hasNext)
+
+        assert(get(store, "a", 0).isEmpty)
+      }
+    }
+  }
+
   override def newStoreProvider(): RocksDBStateStoreProvider = {
     newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0))
   }
@@ -176,6 +235,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       useColumnFamilies = useColumnFamilies)
   }
 
+  def newStoreProvider(useColumnFamilies: Boolean,
+      useMultipleValuesPerKey: Boolean): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = 0,
+      useColumnFamilies = useColumnFamilies,
+      useMultipleValuesPerKey = useMultipleValuesPerKey
+    )
+  }
+
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): RocksDBStateStoreProvider = {
     newStoreProvider(storeId, numColsPrefixKey = -1, conf = conf)
   }
@@ -189,12 +256,19 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       numColsPrefixKey: Int,
       sqlConf: Option[SQLConf] = None,
       conf: Configuration = new Configuration,
-      useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
+      useColumnFamilies: Boolean = false,
+      useMultipleValuesPerKey: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
-      storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
+      storeId,
+      keySchema,
+      valueSchema,
+      numColsPrefixKey = numColsPrefixKey,
       useColumnFamilies,
-      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)), conf)
+      new StateStoreConf(sqlConf.getOrElse(SQLConf.get)),
+      conf,
+      useMultipleValuesPerKey
+    )
     provider
   }
 

@@ -51,7 +51,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite {
   @Mock(answer = RETURNS_SMART_NULLS) private var executorBackend: CoarseGrainedExecutorBackend = _
 
   private var conf: SparkConf = _
-  private var pushedBlocks = new ArrayBuffer[String]
+  private val pushedBlocks = new ArrayBuffer[String]
 
   def createSparkConf(): SparkConf = {
     new SparkConf(loadDefaults = false)

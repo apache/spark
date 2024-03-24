@@ -66,12 +66,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       messageParameters = messageParameters)
   }
 
-  protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
-    exprs.flatMap(_.collect {
-      case e: Generator => e
-    }).length > 1
-  }
-
   protected def hasMapType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
@@ -301,6 +295,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
         new ResolveReferencesInAggregate(catalogManager).checkUnresolvedGroupByAll(operator)
+
+        // Early checks for column definitions, to produce better error messages
+        ColumnDefinition.checkColumnDefinitions(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>
@@ -564,12 +561,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
           case e @ (_: Union | _: SetOperation) if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
-            def ordinalNumber(i: Int): String = i match {
-              case 0 => "first"
-              case 1 => "second"
-              case 2 => "third"
-              case i => s"${i + 1}th"
-            }
+
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
               // Check the number of columns
@@ -670,10 +662,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
                 ))
             }
-
-          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            val generators = exprs.filter(expr => expr.exists(_.isInstanceOf[Generator]))
-            throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(

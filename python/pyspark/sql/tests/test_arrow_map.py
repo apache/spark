@@ -146,6 +146,31 @@ class MapInArrowTestsMixin(object):
         expected = df1.join(df1).collect()
         self.assertEqual(sorted(actual), sorted(expected))
 
+    def test_map_in_arrow_with_barrier_mode(self):
+        df = self.spark.range(10)
+
+        def func1(iterator):
+            from pyspark import TaskContext, BarrierTaskContext
+
+            tc = TaskContext.get()
+            assert tc is not None
+            assert not isinstance(tc, BarrierTaskContext)
+            for batch in iterator:
+                yield batch
+
+        df.mapInArrow(func1, "id long", False).collect()
+
+        def func2(iterator):
+            from pyspark import TaskContext, BarrierTaskContext
+
+            tc = TaskContext.get()
+            assert tc is not None
+            assert isinstance(tc, BarrierTaskContext)
+            for batch in iterator:
+                yield batch
+
+        df.mapInArrow(func2, "id long", True).collect()
+
 
 class MapInArrowTests(MapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod

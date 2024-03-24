@@ -35,6 +35,7 @@ import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
 class MasterWebUISuite extends SparkFunSuite {
+  import MasterWebUISuite._
 
   val conf = new SparkConf().set(DECOMMISSION_ENABLED, true)
   val securityMgr = new SecurityManager(conf)
@@ -105,12 +106,14 @@ class MasterWebUISuite extends SparkFunSuite {
   test("Kill multiple hosts") {
     testKillWorkers(Seq("noSuchHost", "LocalHost"))
   }
+}
 
-  private def convPostDataToString(data: Seq[(String, String)]): String = {
+object MasterWebUISuite {
+  private[ui] def convPostDataToString(data: Seq[(String, String)]): String = {
     (for ((name, value) <- data) yield s"$name=$value").mkString("&")
   }
 
-  private def convPostDataToString(data: Map[String, String]): String = {
+  private[ui] def convPostDataToString(data: Map[String, String]): String = {
     convPostDataToString(data.toSeq)
   }
 
@@ -118,7 +121,7 @@ class MasterWebUISuite extends SparkFunSuite {
    * Send an HTTP request to the given URL using the method and the body specified.
    * Return the connection object.
    */
-  private def sendHttpRequest(
+  private[ui] def sendHttpRequest(
       url: String,
       method: String,
       body: String = ""): HttpURLConnection = {

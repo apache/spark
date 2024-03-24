@@ -204,6 +204,24 @@ WHERE  EXISTS (SELECT max(dept.dept_id)
                GROUP  BY state
                LIMIT  1);
 
+-- SPARK-46526: LIMIT over correlated predicate that references only the outer table.
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT max(dept.dept_id)
+               FROM   dept
+               WHERE  emp.salary > 200
+               LIMIT  1);
+
+-- SPARK-46526: LIMIT over correlated predicate that references only the outer table,
+-- and a group by.
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT state, max(dept.dept_name)
+               FROM   dept
+               WHERE  emp.salary > 200
+               GROUP BY state
+               LIMIT  1);
+
 -- limit and offset in the not exists subquery block.
 -- TC.03.03
 SELECT *

@@ -16,18 +16,17 @@
 #
 import unittest
 
-from pyspark import pandas as ps
 from pyspark.pandas.tests.frame.test_time_series import FrameTimeSeriesMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class FrameParityTimeSeriesTests(
-    FrameTimeSeriesMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+    FrameTimeSeriesMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":

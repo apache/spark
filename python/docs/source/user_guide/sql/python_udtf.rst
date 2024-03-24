@@ -63,7 +63,8 @@ To implement a Python UDTF, you first need to define a class implementing the me
             """
             ...
 
-        def analyze(self, *args: Any) -> AnalyzeResult:
+        @staticmethod
+        def analyze(self, *args: AnalyzeArgument) -> AnalyzeResult:
             """
             Static method to compute the output schema of a particular call to this function in
             response to the arguments provided.
@@ -75,31 +76,52 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
             This method accepts zero or more parameters mapping 1:1 with the arguments provided to
             the particular UDTF call under consideration. Each parameter is an instance of the
-            `AnalyzeArgument` class, which contains fields including the provided argument's data
-            type and value (in the case of literal scalar arguments only). For table arguments, the
-            `isTable` field is set to true and the `dataType` field is a StructType representing
-            the table's column types:
+            `AnalyzeArgument` class.
 
-                dataType: DataType
-                value: Optional[Any]
-                isTable: bool
+            `AnalyzeArgument` fields
+            ------------------------
+            dataType: DataType
+                Indicates the type of the provided input argument to this particular UDTF call.
+                For input table arguments, this is a StructType representing the table's columns.
+            value: Optional[Any]
+                The value of the provided input argument to this particular UDTF call. This is
+                `None` for table arguments, or for literal scalar arguments that are not constant.
+            isTable: bool
+                This is true if the provided input argument to this particular UDTF call is a
+                table argument.
+            isConstantExpression: bool
+                This is true if the provided input argument to this particular UDTF call is either a
+                literal or other constant-foldable scalar expression.
 
             This method returns an instance of the `AnalyzeResult` class which includes the result
             table's schema as a StructType. If the UDTF accepts an input table argument, then the
-            `AnalyzeResult` can also include a requested way to partition the rows of the input
-            table across several UDTF calls. If `withSinglePartition` is set to True, the query
-            planner will arrange a repartitioning operation from the previous execution stage such
-            that all rows of the input table are consumed by the `eval` method from exactly one
-            instance of the UDTF class. On the other hand, if the `partitionBy` list is non-empty,
-            the query planner will arrange a repartitioning such that all rows with each unique
-            combination of values of the partitioning expressions are consumed by a separate unique
-            instance of the UDTF class. If `orderBy` is non-empty, this specifies the requested
-            ordering of rows within each partition.
+            `AnalyzeResult` can also include a requested way to partition and order the rows of
+            the input table across several UDTF calls. See below for more information about UDTF
+            table arguments and how to call them in SQL queries, including the WITH SINGLE
+            PARTITION clause (corresponding to the `withSinglePartition` field here), PARTITION BY
+            clause (corresponding to the `partitionBy` field here), ORDER BY clause (corresponding
+            to the `orderBy` field here), and passing table subqueries as arguments (corresponding
+            to the `select` field here).
 
-                schema: StructType
-                withSinglePartition: bool = False
-                partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
-                orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+            `AnalyzeResult` fields
+            ----------------------
+            schema: StructType
+                The schema of the result table.
+            withSinglePartition: bool = False
+                If True, the query planner will arrange a repartitioning operation from the previous
+                execution stage such that all rows of the input table are consumed by the `eval`
+                method from exactly one instance of the UDTF class.
+            partitionBy: Sequence[PartitioningColumn] = field(default_factory=tuple)
+                If non-empty, the query planner will arrange a repartitioning such that all rows
+                with each unique combination of values of the partitioning expressions are consumed
+                by a separate unique instance of the UDTF class.
+            orderBy: Sequence[OrderingColumn] = field(default_factory=tuple)
+                If non-empty, this specifies the requested ordering of rows within each partition.
+            select: Sequence[SelectedColumn] = field(default_factory=tuple)
+                If non-empty, this is a sequence of expressions that the UDTF is specifying for
+                Catalyst to evaluate against the columns in the input TABLE argument. The UDTF then
+                receives one input attribute for each name in the list, in the order they are
+                listed.
 
             Notes
             -----
@@ -145,8 +167,9 @@ To implement a Python UDTF, you first need to define a class implementing the me
             ...         schema = schema.add(f"word_{index}")
             ...     return AnalyzeResult(schema=schema)
 
-            An `analyze` implementation that returns a constant output schema, but add custom
-            information in the result metadata to be consumed by future __init__ method calls:
+            This is an `analyze` implementation that returns a constant output schema, but add
+            custom information in the result metadata to be consumed by future __init__ method
+            calls:
 
             >>> @staticmethod
             ... def analyze(text: str) -> AnalyzeResult:
@@ -163,6 +186,34 @@ To implement a Python UDTF, you first need to define a class implementing the me
             ...         num_articles=len((
             ...             word for word in words
             ...             if word == 'a' or word == 'an' or word == 'the')))
+
+            This is an `analyze` implementation that returns a constant output schema, and also
+            requests to select a subset of columns from the input table and for the input table to
+            be partitioned across several UDTF calls based on the values of the `date` column.
+            A SQL query may this UDTF passing a table argument like "SELECT * FROM udtf(TABLE(t))".
+            Then this `analyze` method specifies additional constraints on the input table:
+            (1) The input table must be partitioned across several UDTF calls based on the values of
+                the month value of each `date` column.
+            (2) The rows within each partition will arrive ordered by the `date` column.
+            (3) The UDTF will only receive the `date` and `word` columns from the input table.
+
+            >>> @staticmethod
+            ... def analyze(*args) -> AnalyzeResult:
+            ...     assert len(args) == 1, "This function accepts one argument only"
+            ...     assert args[0].isTable, "Only table arguments are supported"
+            ...     return AnalyzeResult(
+            ...         schema=StructType()
+            ...             .add("month", DateType())
+            ...             .add('longest_word", IntegerType()),
+            ...         partitionBy=[
+            ...             PartitioningColumn("extract(month from date)")],
+            ...         orderBy=[
+            ...             OrderingColumn("date")],
+            ...         select=[
+            ...             SelectedColumn("date"),
+            ...             SelectedColumn(
+            ...               name="length(word),
+            ...               alias="length_word")])
             """
             ...
 
@@ -191,13 +242,11 @@ To implement a Python UDTF, you first need to define a class implementing the me
             Yields
             ------
             tuple
-                A tuple representing a single row in the UDTF result table.
-                Yield as many times as needed to produce multiple rows.
+                A tuple, list, or pyspark.sql.Row object representing a single row in the UDTF
+                result table. Yield as many times as needed to produce multiple rows.
 
             Notes
             -----
-            - The result of the function must be a tuple representing a single row
-              in the UDTF result table.
             - It is also possible for UDTFs to accept the exact arguments expected, along with
               their types.
             - UDTFs can instead accept keyword arguments during the function call if needed.
@@ -211,12 +260,12 @@ To implement a Python UDTF, you first need to define a class implementing the me
 
             Examples
             --------
-            eval that returns one row and one column for each input.
+            This `eval` method returns one row and one column for each input.
 
             >>> def eval(self, x: int):
             ...     yield (x, )
 
-            eval that returns two rows and two columns for each input.
+            This `eval` method returns two rows and two columns for each input.
 
             >>> def eval(self, x: int, y: int):
             ...     yield (x + y, x - y)
@@ -285,47 +334,74 @@ To implement a Python UDTF, you first need to define a class implementing the me
             """
             ...
 
+Defining the Output Schema
+--------------------------
 
-The return type of the UDTF defines the schema of the table it outputs. 
-It must be either a ``StructType``, for example ``StructType().add("c1", StringType())``
-or a DDL string representing a struct type, for example ``c1: string``.
+The return type of the UDTF defines the schema of the table it outputs.
 
-**Example of UDTF Class Implementation**
+You can specify it either after the ``@udtf`` decorator or as a result from the ``analyze`` method.
 
-Here is a simple example of a UDTF class implementation:
+It must be either a ``StructType``:
 
-.. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
-    :language: python
-    :lines: 36-40
-    :dedent: 4
+.. code-block:: python
 
+    StructType().add("c1", StringType())
 
-**Instantiating a UDTF with the ``udtf`` Decorator**
+or a DDL string representing a struct type:
 
-To make use of the UDTF, you'll first need to instantiate it using the ``@udtf`` decorator:
+.. code-block:: python
 
-.. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
-    :language: python
-    :lines: 42-55
-    :dedent: 4
+    c1: string
 
+Emitting Output Rows
+--------------------
 
-**Instantiating a UDTF with the ``udtf`` Function**
+The `eval` and `terminate` methods then emit zero or more output rows conforming to this schema by
+yielding tuples, lists, or ``pyspark.sql.Row`` objects.
 
-An alternative way to create a UDTF is to use the :func:`udtf` function:
+For example, here we return a row by providing a tuple of three elements:
 
-.. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
-    :language: python
-    :lines: 60-77
-    :dedent: 4
+.. code-block:: python
 
-For more detailed usage, please see :func:`udtf`.
+    def eval(self, x, y, z):
+        yield (x, y, z)
+
+It is also acceptable to omit the parentheses:
+
+.. code-block:: python
+
+    def eval(self, x, y, z):
+        yield x, y, z
+
+Remember to add a trailing comma if returning a row with only one column!
+
+.. code-block:: python
+
+    def eval(self, x, y, z):
+        yield x,
+
+It is also possible to yield a ``pyspark.sql.Row`` object.
+
+.. code-block:: python
+
+    def eval(self, x, y, z)
+        from pyspark.sql.types import Row
+        yield Row(x, y, z)
+
+This is an example of yielding output rows from the `terminate` method using a Python list.
+Usually it makes sense to store state inside the class for this purpose from earlier steps in the
+UDTF evaluation.
+
+.. code-block:: python
+
+    def terminate(self):
+        yield [self.x, self.y, self.z]
 
 
 Registering and Using Python UDTFs in SQL
 -----------------------------------------
 
-Python UDTFs can also be registered and used in SQL queries.
+Python UDTFs can be registered and used in SQL queries.
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
@@ -335,6 +411,7 @@ Python UDTFs can also be registered and used in SQL queries.
 
 Arrow Optimization
 ------------------
+
 Apache Arrow is an in-memory columnar data format used in Spark to efficiently transfer
 data between Java and Python processes. Apache Arrow is disabled by default for Python UDTFs.
 
@@ -353,35 +430,112 @@ when declaring the UDTF.
 For more details, please see `Apache Arrow in PySpark <../arrow_pandas.rst>`_.
 
 
-TABLE input argument
-~~~~~~~~~~~~~~~~~~~~
-Python UDTFs can also take a TABLE as input argument, and it can be used in conjunction 
-with scalar input arguments.
-By default, you are allowed to have only one TABLE argument as input, primarily for 
-performance reasons. If you need to have more than one TABLE input argument, 
-you can enable this by setting the ``spark.sql.tvf.allowMultipleTableArguments.enabled``
-configuration to ``true``.
+UDTF Examples with Scalar Arguments
+-----------------------------------
+
+Here is a simple example of a UDTF class implementation:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
-    :lines: 191-210
+    :lines: 36-40
     :dedent: 4
 
 
-More Examples
--------------
+To make use of the UDTF, you'll first need to instantiate it using the ``@udtf`` decorator:
 
-A Python UDTF that expands date ranges into individual dates:
+.. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
+    :language: python
+    :lines: 42-55
+    :dedent: 4
+
+
+An alternative way to create a UDTF is to use the :func:`udtf` function:
+
+.. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
+    :language: python
+    :lines: 60-77
+    :dedent: 4
+
+Here is a Python UDTF that expands date ranges into individual dates:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
     :lines: 131-152
     :dedent: 4
 
-
-A Python UDTF with ``__init__`` and ``terminate``:
+Here is a Python UDTF with ``__init__`` and ``terminate``:
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
     :language: python
     :lines: 157-186
     :dedent: 4
+
+
+Accepting an Input Table Argument
+---------------------------------
+
+The UDTF examples above show functions that accept scalar input arguments, such as integers or
+strings.
+
+However, any Python UDTF can also accept an input table as an argument, and this can work in
+conjunction with scalar input argument(s) for the same function definition. You are allowed to
+have only one such table argument as input.
+
+Then any SQL query can provide an input table using the ``TABLE`` keyword followed by parentheses
+surrounding an appropriate table identifier, like ``TABLE(t)``. Alternatively, you can pass a table
+subquery, like ``TABLE(SELECT a, b, c FROM t)`` or
+``TABLE(SELECT t1.a, t2.b FROM t1 INNER JOIN t2 USING (key))``.
+
+The input table argument is then represented as a ``pyspark.sql.Row`` argument to the ``eval``
+method, with one call to the ``eval`` method for each row in the input table.
+  
+For example:
+
+.. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
+    :language: python
+    :lines: 191-210
+    :dedent: 4
+
+When calling a UDTF with a table argument, any SQL query can request that the input table be
+partitioned across several UDTF calls based on the values of one or more columns of the input
+table. To do so, specify the ``PARTITION BY`` clause in the function call after the ``TABLE``
+argument. This provides a guaranteee that all input rows with each unique combination of values of
+the partitioning columns will get consumed by exactly one instance of the UDTF class.
+
+Note that in addition to simple column references, the ``PARTITION BY`` clause also accepts
+arbitrary expressions based on columns of the input table. For example, you can specify the
+``LENGTH`` of a string, extract a month from a date, or concatenate two values.
+
+It is also possible to specify ``WITH SINGLE PARTITION`` instead of ``PARTITION BY`` to request
+only one partition wherein all input rows must be consumed by exactly one instance of the UDTF
+class.
+
+Within each partition, you can optionally specify a required ordering of the input rows as the
+UDTF's ``eval`` method consumes them. To do so, provide an ``ORDER BY`` clause after the
+``PARTITION BY`` or ``WITH SINGLE PARTITION`` clause described above.
+
+For example:
+
+.. literalinclude:: ../../../../../examples/src/main/python/sql/udtf.py
+    :language: python
+    :lines: 215-287
+    :dedent: 4
+
+Note that in for each of these ways of partitioning the input table when calling UDTFs in SQL
+queries, there is a corresponding way for the UDTF's ``analyze`` method to specify the same
+partitioning method automatically instead.
+
+For example, instead of calling a UDTF as ``SELECT * FROM udtf(TABLE(t) PARTITION BY a)``, you can
+update the ``analyze`` method to set the field ``partitionBy=[PartitioningColumn("a")]`` and simply
+call the function like ``SELECT * FROM udtf(TABLE(t))``.
+
+By the same token, instead of specifying ``TABLE(t) WITH SINGLE PARTITION`` in the SQL query,
+make ``analyze`` set the field ``withSinglePartition=true`` and then just pass ``TABLE(t)``.
+
+Instead of passing ``TABLE(t) ORDER BY b`` in the SQL query, you can make ``analyze`` set
+``orderBy=[OrderingColumn("b")]`` and then just pass ``TABLE(t)``.
+
+Instead of passing ``TABLE(SELECT a FROM t)`` in the SQL query, you can make ``analyze`` set
+``select=[SelectedColumn("a")]`` and then just pass ``TABLE(t)``.
+
+
