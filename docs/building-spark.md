@@ -79,7 +79,7 @@ from `hadoop.version`.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.4.0 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
