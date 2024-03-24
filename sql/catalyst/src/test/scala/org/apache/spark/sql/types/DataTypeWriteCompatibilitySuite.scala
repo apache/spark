@@ -510,7 +510,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       "Should allow map of int written to map of long column")
   }
 
-  test("Check udt: underlying sql type is same") {
+  test("SPARK-47528: Check udt: underlying sql type is same") {
     val udtType = new UserDefinedType[Any] {
       override def sqlType: DataType = StructType(Seq(
         StructField("col1", FloatType, nullable = false),
@@ -534,7 +534,41 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       "Should allow udt with same sqlType written to struct column")
   }
 
-  test("Check udt: write underlying sql type is not same") {
+  test("SPARK-47528: Check udt: underlying sql type is same but different nullability") {
+    val udtType = new UserDefinedType[Any] {
+      override def sqlType: DataType = StructType(Seq(
+        StructField("col1", FloatType, nullable = false),
+        StructField("col2", FloatType, nullable = false)))
+
+      override def userClass: java.lang.Class[Any] = null
+
+      override def serialize(obj: Any): Any = null
+
+      override def deserialize(datum: Any): Any = null
+    }
+
+    val sqlType = StructType(Seq(
+      StructField("col1", FloatType, nullable = false),
+      StructField("col2", FloatType, nullable = true)))
+
+    assertAllowed(udtType, sqlType, "m",
+      "Should allow udt with same sqlType written to struct column")
+
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException] (
+        DataTypeUtils.canWrite("", sqlType, udtType, true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+      ),
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`t`.`col2`"
+      )
+    )
+  }
+
+  test("SPARK-47528: Check udt: write underlying sql type is not same") {
     val udtType = new UserDefinedType[Any] {
       override def sqlType: DataType = StructType(Seq(
         StructField("col1", FloatType, nullable = false),
@@ -567,7 +601,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     )
   }
 
-  test("Check udt: read side underlying sql type is not same") {
+  test("SPARK-47528: Check udt: read side underlying sql type is not same") {
     val udtType = new UserDefinedType[Any] {
       override def sqlType: DataType = StructType(Seq(
         StructField("col1", FloatType, nullable = false),
