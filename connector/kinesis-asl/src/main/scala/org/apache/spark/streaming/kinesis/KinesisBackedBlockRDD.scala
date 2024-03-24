@@ -44,6 +44,7 @@ case class SequenceNumberRange(
     toSeqNumber: String,
     recordCount: Int)
 
+
 /** Class representing an array of Kinesis sequence number ranges */
 private[kinesis]
 case class SequenceNumberRanges(ranges: Seq[SequenceNumberRange]) {
