@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{BinaryType, ByteType, CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, ShortType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
