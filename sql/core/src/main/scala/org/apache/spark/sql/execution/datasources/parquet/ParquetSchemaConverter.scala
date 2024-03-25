@@ -179,9 +179,21 @@ class ParquetToSparkSchemaConverter(
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
+        if (groupColumn.getChildrenCount != 2 ) {
+          // We may allow more than two children in the future, so consider this unsupported.
+          throw QueryCompilationErrors.
+            parquetTypeUnsupportedYetError("variant with more than two fields")
+        }
+        val valueIdx = (0 until groupColumn.getChildrenCount)
+            .find(groupColumn.getChild(_).getName == "value")
+        val metadataIdx = (0 until groupColumn.getChildrenCount)
+            .find(groupColumn.getChild(_).getName == "metadata")
+        if (valueIdx.isEmpty || metadataIdx.isEmpty) {
+          throw QueryCompilationErrors.illegalParquetTypeError("variant missing value or metadata")
+        }
         ParquetColumn(VariantType, groupColumn, Seq(
-          convertField(groupColumn.getChild(0), Some(BinaryType)),
-          convertField(groupColumn.getChild(1), Some(BinaryType))
+          convertField(groupColumn.getChild(valueIdx.get), Some(BinaryType)),
+          convertField(groupColumn.getChild(metadataIdx.get), Some(BinaryType))
         ))
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }

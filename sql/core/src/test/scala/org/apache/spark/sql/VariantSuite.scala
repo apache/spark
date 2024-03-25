@@ -25,7 +25,7 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType, VariantType}
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
@@ -189,6 +189,44 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     withTable("t") {
       intercept[AnalysisException] {
         spark.sql(s"CREATE TABLE t USING PARQUET PARTITIONED BY (v) AS $queryString")
+      }
+    }
+  }
+
+  test("invalid variant binary") {
+    // Write a struct-of-binary that looks like a Variant, but with minor variations that may make
+    // it invalid to read.
+    // Test cases:
+    // 1) A binary that has the correct parquet structure for Variant.
+    // 2) A binary that has the correct parquet structure in unexpected order. This is valid.
+    // 3) A binary that is almost correct, but contains an extra field "paths"
+    // 4,5) A binary with incorrect field names
+
+    // Binary value of empty metadata
+    val m = "X'010000'"
+    // Binary value of a literal "false"
+    val v = "X'8'"
+    val cases = Seq(
+        (true, s"named_struct('value', $v, 'metadata', $m)"),
+        (true, s"named_struct('metadata', $m, 'value', $v)"),
+        (false, s"named_struct('value', $v, 'metadata', $m, 'paths', $v)"),
+        (false, s"named_struct('value', $v, 'dictionary', $m)"),
+        (false, s"named_struct('val', $v, 'metadata', $m)")
+    )
+    cases.foreach { case (expectValid, structDef) =>
+      withTempDir { dir =>
+        val file = new File(dir, "dir").getCanonicalPath
+        val df = spark.sql(s"select $structDef as v from range(10)")
+        df.write.parquet(file)
+        val schema = StructType(Seq(StructField("v", VariantType)))
+        val result = spark.read.schema(schema).parquet(file)
+            .selectExpr("to_json(v)")
+        if (expectValid) {
+          checkAnswer(result, Seq.fill(10)(Row("false")))
+        } else {
+          val e = intercept[org.apache.spark.SparkException](result.collect())
+          assert(e.getCause.isInstanceOf[AnalysisException])
+        }
       }
     }
   }
