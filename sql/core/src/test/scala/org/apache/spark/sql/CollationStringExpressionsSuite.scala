@@ -74,7 +74,7 @@ class CollationStringExpressionsSuite extends QueryTest
   }
 
   test("REPEAT check output type on explicitly collated string") {
-    def testRepeat(expected: String, stringType: Integer, input: String, n: Integer): Unit = {
+    def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
       val s = Literal.create(input, StringType(stringType))
 
       checkEvaluation(Collation(StringRepeat(s, Literal.create(n))).replacement, expected)
