@@ -122,7 +122,7 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Variant as pretty strings") {
     checkEvaluation(
-      ToPrettyString(Literal(new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5)))),
+      ToPrettyString(Literal(new VariantVal(Array[Byte](1, 2, 3), Array[Byte](1, 5)))),
       UTF8String.fromBytes(Array[Byte](1, 2, 3)).toString)
   }
 }
