@@ -226,7 +226,7 @@ class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
     override val usesIpc = false
     override val jdbcPort: Int = 3306
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&disableMariaDbDriver"
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
   }
 
   override def testConnection(): Unit = {
