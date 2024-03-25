@@ -660,13 +660,8 @@ class CodegenContext extends Logging {
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
-      val elementA = freshName("elementA")
-      val isNullA = freshName("isNullA")
-      val elementB = freshName("elementB")
-      val isNullB = freshName("isNullB")
       val compareFunc = freshName("compareArray")
       val minLength = freshName("minLength")
-      val jt = javaType(elementType)
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
@@ -679,22 +674,7 @@ class CodegenContext extends Logging {
             int lengthB = b.numElements();
             int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
             for (int i = 0; i < $minLength; i++) {
-              boolean $isNullA = a.isNullAt(i);
-              boolean $isNullB = b.isNullAt(i);
-              if ($isNullA && $isNullB) {
-                // Nothing
-              } else if ($isNullA) {
-                return -1;
-              } else if ($isNullB) {
-                return 1;
-              } else {
-                $jt $elementA = ${getValue("a", elementType, "i")};
-                $jt $elementB = ${getValue("b", elementType, "i")};
-                int comp = ${genComp(elementType, elementA, elementB)};
-                if (comp != 0) {
-                  return comp;
-                }
-              }
+              ${genCompElementsAt("a", "b", "i", elementType)}
             }
 
             if (lengthA < lengthB) {
