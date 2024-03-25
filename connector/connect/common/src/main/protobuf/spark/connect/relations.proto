@@ -73,6 +73,7 @@ message Relation {
     CachedRemoteRelation cached_remote_relation = 37;
     CommonInlineUserDefinedTableFunction common_inline_user_defined_table_function = 38;
     AsOfJoin as_of_join = 39;
+    CommonInlineUserDefinedDataSource common_inline_user_defined_data_source = 40;
 
     // NA functions
     NAFill fill_na = 90;
