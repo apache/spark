@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -46,11 +47,13 @@ class JacksonGenerator(
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
-  // `JackGenerator` can only be initialized with a `StructType`, a `MapType` or a `ArrayType`.
+  // `JackGenerator` can only be initialized with a `StructType`, a `MapType`, a `ArrayType` or a
+  // `VariantType`.
   require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType]
-    || dataType.isInstanceOf[ArrayType],
+    || dataType.isInstanceOf[ArrayType] || dataType.isInstanceOf[VariantType],
     s"JacksonGenerator only supports to be initialized with a ${StructType.simpleString}, " +
-      s"${MapType.simpleString} or ${ArrayType.simpleString} but got ${dataType.catalogString}")
+      s"${MapType.simpleString}, ${ArrayType.simpleString} or ${VariantType.simpleString} but " +
+      s"got ${dataType.catalogString}")
 
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
@@ -202,6 +205,9 @@ class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         writeObject(writeMapData(row.getMap(ordinal), mt, valueWriter))
 
+    case VariantType =>
+      (row: SpecializedGetters, ordinal: Int) => write(row.getVariant(ordinal))
+
     // For UDT values, they should be in the SQL type's corresponding value type.
     // We should not see values in the user-defined class at here.
     // For example, VectorUDT's SQL type is an array of double. So, we should expect that v is
@@ -308,6 +314,10 @@ class JacksonGenerator(
       fieldWriter = mapElementWriter,
       map = map,
       mapType = dataType.asInstanceOf[MapType]))
+  }
+
+  def write(v: VariantVal): Unit = {
+    gen.writeRawValue(v.toString)
   }
 
   def writeLineEnding(): Unit = {
