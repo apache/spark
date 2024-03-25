@@ -1224,10 +1224,6 @@ setGeneric("map_values", function(x) { standardGeneric("map_values") })
 #' @name NULL
 setGeneric("map_zip_with", function(x, y, f) { standardGeneric("map_zip_with") })
 
-#' @rdname column_collection_functions
-#' @name NULL
-setGeneric("map_sort", function(x, asc = TRUE) { standardGeneric("map_sort") })
-
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("max_by", function(x, y) { standardGeneric("max_by") })

@@ -888,54 +888,19 @@ case class MapFromEntries(child: Expression)
     copy(child = newChild)
 }
 
-@ExpressionDescription(
-  usage = """
-    _FUNC_(map[, ascendingOrder]) - Sorts the input map in ascending or descending order
-      according to the natural ordering of the map keys. The algorithm used for sorting is
-      an adaptive, stable and iterative algorithm. If the input map is empty, function
-      returns an empty map.
-  """,
-  arguments =
-    """
-    Arguments:
-      * map - The map that will be sorted.
-      * ascendingOrder - A boolean value describing the order in which the map will be sorted.
-          This can be either be ascending (true) or descending (false).
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(map(3, 'c', 1, 'a', 2, 'b'), true);
-       {1:"a",2:"b",3:"c"}
-  """,
-  group = "map_funcs",
-  since = "4.0.0")
-case class MapSort(base: Expression, ascendingOrder: Expression)
-  extends BinaryExpression with NullIntolerant with QueryErrorsBase {
-
-  def this(e: Expression) = this(e, Literal(true))
+case class MapSort(base: Expression)
+  extends UnaryExpression with NullIntolerant with QueryErrorsBase {
 
   val keyType: DataType = base.dataType.asInstanceOf[MapType].keyType
   val valueType: DataType = base.dataType.asInstanceOf[MapType].valueType
 
-  override def left: Expression = base
-  override def right: Expression = ascendingOrder
+  override def child: Expression = base
+
   override def dataType: DataType = base.dataType
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case m: MapType if RowOrdering.isOrderable(m.keyType) =>
-      ascendingOrder match {
-        case Literal(_: Boolean, BooleanType) =>
-          TypeCheckResult.TypeCheckSuccess
-        case _ =>
-          DataTypeMismatch(
-            errorSubClass = "UNEXPECTED_INPUT_TYPE",
-            messageParameters = Map(
-              "paramIndex" -> ordinalNumber(1),
-              "requiredType" -> toSQLType(BooleanType),
-              "inputSql" -> toSQLExpr(ascendingOrder),
-              "inputType" -> toSQLType(ascendingOrder.dataType))
-          )
-      }
+        TypeCheckResult.TypeCheckSuccess
     case _: MapType =>
       DataTypeMismatch(
         errorSubClass = "INVALID_ORDERING_TYPE",
@@ -955,7 +920,7 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
       )
   }
 
-  override def nullSafeEval(array: Any, ascending: Any): Any = {
+  override def nullSafeEval(array: Any): Any = {
     // put keys and their respective values inside a tuple and sort them
     // according to the key ordering. Extract the new sorted k/v pairs to form a sorted map
 
@@ -964,11 +929,7 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
     val keys = mapData.keyArray()
     val values = mapData.valueArray()
 
-    val ordering = if (ascending.asInstanceOf[Boolean]) {
-      PhysicalDataType.ordering(keyType)
-    } else {
-      PhysicalDataType.ordering(keyType).reverse
-    }
+    val ordering = PhysicalDataType.ordering(keyType)
 
     val sortedMap = Array
       .tabulate(numElements)(i => (keys.get(i, keyType).asInstanceOf[Any],
@@ -980,11 +941,11 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (b, order) => sortCodegen(ctx, ev, b, order))
+    nullSafeCodeGen(ctx, ev, b => sortCodegen(ctx, ev, b))
   }
 
   private def sortCodegen(ctx: CodegenContext, ev: ExprCode,
-      base: String, order: String): String = {
+      base: String): String = {
 
     val arrayBasedMapData = classOf[ArrayBasedMapData].getName
     val genericArrayData = classOf[GenericArrayData].getName
@@ -1038,7 +999,7 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
        |    Object $o1 = (($simpleEntryType) $o1entry).getKey();
        |    Object $o2 = (($simpleEntryType) $o2entry).getKey();
        |    $comp;
-       |    return $order ? $c : -$c;
+       |    return $c;
        |  }
        |});
        |
@@ -1055,10 +1016,8 @@ case class MapSort(base: Expression, ascendingOrder: Expression)
        |""".stripMargin
   }
 
-  override def prettyName: String = "map_sort"
-
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-    : MapSort = copy(base = newLeft, ascendingOrder = newRight)
+  override protected def withNewChildInternal(newChild: Expression)
+    : MapSort = copy(base = newChild)
 }
 
 /**

@@ -696,7 +696,6 @@ object FunctionRegistry {
     expression[MapEntries]("map_entries"),
     expression[MapFromEntries]("map_from_entries"),
     expression[MapConcat]("map_concat"),
-    expression[MapSort]("map_sort"),
     expression[Size]("size"),
     expression[Slice]("slice"),
     expression[Size]("cardinality", true),

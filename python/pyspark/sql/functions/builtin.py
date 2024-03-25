@@ -15543,6 +15543,8 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Dict[str, str]] = N
     return _invoke_function("schema_of_csv", col, _options_to_str(options))
 
 
+# TODO(SPARK-46654) Re-enable the `Example 2` test after fixing the display
+#  difference between Regular Spark and Spark Connect on `df.show`.
 @_try_remote_functions
 def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
@@ -15584,7 +15586,19 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     |      2,Alice|
     +-------------+
 
-    Example 2: Converting a StructType with null values to a CSV string
+    Example 2: Converting a complex StructType to a CSV string
+
+    >>> from pyspark.sql import Row, functions as sf
+    >>> data = [(1, Row(age=2, name='Alice', scores=[100, 200, 300]))]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(sf.to_csv(df.value)).show(truncate=False)
+    +-------------------------+
+    |to_csv(value)            |
+    +-------------------------+
+    |2,Alice,"[100, 200, 300]"|
+    +-------------------------+
+
+    Example 3: Converting a StructType with null values to a CSV string
 
     >>> from pyspark.sql import Row, functions as sf
     >>> from pyspark.sql.types import StructType, StructField, IntegerType, StringType
@@ -15604,7 +15618,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     |       ,Alice|
     +-------------+
 
-    Example 3: Converting a StructType with different data types to a CSV string
+    Example 4: Converting a StructType with different data types to a CSV string
 
     >>> from pyspark.sql import Row, functions as sf
     >>> data = [(1, Row(age=2, name='Alice', isStudent=True))]
@@ -16876,54 +16890,6 @@ def map_concat(
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
     return _invoke_function_over_seq_of_columns("map_concat", cols)  # type: ignore[arg-type]
-
-
-@_try_remote_functions
-def map_sort(col: "ColumnOrName", asc: bool = True) -> Column:
-    """
-    Map function: Sorts the input map in ascending or descending order according
-    to the natural ordering of the map keys.
-
-    .. versionadded:: 4.0.0
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or str
-        Name of the column or expression.
-    asc : bool, optional
-        Whether to sort in ascending or descending order. If `asc` is True (default),
-        then the sorting is in ascending order. If False, then in descending order.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        Sorted map.
-
-    Examples
-    --------
-    Example 1: Sorting a map in ascending order
-
-    >>> import pyspark.sql.functions as sf
-    >>> df = spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as data")
-    >>> df.select(sf.map_sort(df.data)).show(truncate=False)
-    +------------------------+
-    |map_sort(data, true)    |
-    +------------------------+
-    |{1 -> a, 2 -> b, 3 -> c}|
-    +------------------------+
-
-    Example 2: Sorting a map in descending order
-
-    >>> import pyspark.sql.functions as sf
-    >>> df = spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as data")
-    >>> df.select(sf.map_sort(df.data, False)).show(truncate=False)
-    +------------------------+
-    |map_sort(data, false)   |
-    +------------------------+
-    |{3 -> c, 2 -> b, 1 -> a}|
-    +------------------------+
-    """
-    return _invoke_function("map_sort", _to_java_column(col), asc)
 
 
 @_try_remote_functions

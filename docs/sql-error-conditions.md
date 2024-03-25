@@ -1597,6 +1597,12 @@ Parse Mode: `<failFastMode>`. To process malformed records as null result, try s
 
 For more details see [MALFORMED_RECORD_IN_PARSING](sql-error-conditions-malformed-record-in-parsing-error-class.html)
 
+### MALFORMED_VARIANT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Variant binary is malformed. Please check the data source is valid.
+
 ### MERGE_CARDINALITY_VIOLATION
 
 [SQLSTATE: 23K01](sql-error-conditions-sqlstates.html#class-23-integrity-constraint-violation)
@@ -2739,6 +2745,12 @@ Choose a different name, or drop or replace the existing variable.
 The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VARIABLE IF EXISTS.
+
+### VARIANT_CONSTRUCTOR_SIZE_LIMIT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB.
 
 ### VARIANT_SIZE_LIMIT
 
