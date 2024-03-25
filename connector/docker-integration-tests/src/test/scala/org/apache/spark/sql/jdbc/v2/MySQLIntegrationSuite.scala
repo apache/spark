@@ -139,11 +139,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
  */
 @DockerTest
 class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
-  override def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
-    .putLong("scale", 0)
-    .putBoolean("isSigned", true)
-    .build()
-
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
     override val env = Map(
