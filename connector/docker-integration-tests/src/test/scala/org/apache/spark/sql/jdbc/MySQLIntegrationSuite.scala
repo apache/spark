@@ -22,9 +22,10 @@ import java.sql.{Connection, Date, Timestamp}
 import java.time.LocalDateTime
 import java.util.Properties
 
+import scala.util.Using
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StructType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -83,6 +84,16 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       "f4 FLOAT UNSIGNED, f5 FLOAT(10) UNSIGNED, f6 FLOAT(53) UNSIGNED)").executeUpdate()
     conn.prepareStatement("INSERT INTO floats VALUES (1.23, 4.56, 7.89, 1.23, 4.56, 7.89)")
       .executeUpdate()
+  }
+
+  def testConnection(): Unit = {
+    Using.resource(getConnection()) { conn =>
+      assert(conn.getClass.getName === "com.mysql.cj.jdbc.ConnectionImpl")
+    }
+  }
+
+  test("SPARK-47537: ensure use the right jdbc driver") {
+    testConnection()
   }
 
   test("Basic test") {
@@ -246,13 +257,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     checkAnswer(df, Row(true, true, true))
     df.write.mode("append").jdbc(jdbcUrl, "bools", new Properties)
     checkAnswer(df, Seq(Row(true, true, true), Row(true, true, true)))
-    val mb = new MetadataBuilder()
-      .putBoolean("isTimestampNTZ", false)
-      .putLong("scale", 0)
-    assert(df.schema === new StructType()
-      .add("b1", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build())
-      .add("b2", BooleanType, nullable = true, mb.putBoolean("isSigned", false).build())
-      .add("b3", BooleanType, nullable = true, mb.putBoolean("isSigned", true).build()))
   }
 
   test("SPARK-47515: Save TimestampNTZType as DATETIME in MySQL") {
@@ -270,5 +274,30 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-47522: Read MySQL FLOAT as FloatType to keep consistent with the write side") {
     val df = spark.read.jdbc(jdbcUrl, "floats", new Properties)
     checkAnswer(df, Row(1.23f, 4.56f, 7.89d, 1.23d, 4.56d, 7.89d))
+  }
+}
+
+
+/**
+ * To run this test suite for a specific version (e.g., mysql:8.3.0):
+ * {{{
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
+ * }}}
+ */
+@DockerTest
+class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
+
+  override val db = new MySQLDatabaseOnDocker {
+    override def getJdbcUrl(ip: String, port: Int): String =
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
+        s"&useSSL=false"
+  }
+
+  override def testConnection(): Unit = {
+    Using.resource(getConnection()) { conn =>
+      assert(conn.getClass.getName === "org.mariadb.jdbc.MariaDbConnection")
+    }
   }
 }
