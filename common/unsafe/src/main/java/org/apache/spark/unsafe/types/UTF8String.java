@@ -850,6 +850,70 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Find the `str` from left to right considering different collations.
+   */
+  private int find(UTF8String str, int start, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.find(str, start);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return findLowercase(str, start);
+    }
+    return collatedFind(str, start, collationId);
+  }
+
+  /**
+   * Find the `str` from left to right considering UTF8_BINARY_LCASE collation.
+   */
+  private int findLowercase(UTF8String str, int start) {
+    assert (str.numBytes > 0);
+
+    UTF8String lowercaseThis = this.toLowerCase();
+    UTF8String lowercaseStr = str.toLowerCase();
+
+    int matchStart = lowercaseThis.indexOf(lowercaseStr, start);
+    if (matchStart == -1) {
+      return -1;
+    }
+
+    int c = 0;
+    int byteStart = 0;
+    // Calculate byte position of matchStart
+    while (byteStart < numBytes && c < matchStart) {
+      byteStart += numBytesForFirstByte(getByte(byteStart));
+      c += 1;
+    }
+
+    return byteStart;
+  }
+
+  /**
+   * Find the `str` from left to right considering non-binary collations.
+   */
+  private int collatedFind(UTF8String str, int start, int collationId) {
+    assert (str.numBytes > 0);
+
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
+    // Set search start position (start from character at start position)
+    stringSearch.setIndex(start);
+    // Find next occurrence of str in this
+    int matchStart = stringSearch.next();
+    if (matchStart == StringSearch.DONE) {
+      return -1;
+    }
+
+    int c = 0;
+    int byteStart = 0;
+    // Calculate byte position of matchStart
+    while (byteStart < numBytes && c < matchStart) {
+      byteStart += numBytesForFirstByte(getByte(byteStart));
+      c += 1;
+    }
+
+    return byteStart;
+  }
+
+  /**
    * Find the `str` from right to left.
    */
   private int rfind(UTF8String str, int start) {
@@ -910,6 +974,57 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       byte[] bytes = new byte[size];
       copyMemory(base, offset + idx + delim.numBytes, bytes, BYTE_ARRAY_OFFSET, size);
       return fromBytes(bytes);
+    }
+  }
+
+  public UTF8String subStringIndex(UTF8String delim, int count, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return subStringIndex(delim, count);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return this.toLowerCase().subStringIndex(delim.toLowerCase(), count);
+    }
+    return collatedSubStringIndex(delim, count, collationId);
+  }
+
+  private UTF8String collatedSubStringIndex(UTF8String delim, int count, int collationId) {
+    if (delim.numBytes == 0 || count == 0) {
+      return EMPTY_UTF8;
+    }
+    if (count > 0) {
+      int idx = -1;
+      while (count > 0) {
+        StringSearch stringSearch = CollationFactory.getStringSearch(this, delim, collationId);
+
+        idx = stringSearch.next();
+        if (idx != StringSearch.DONE) {
+          count --;
+        } else {
+          // can not find enough delim
+          return this;
+        }
+      }
+      if (idx == 0) {
+        return EMPTY_UTF8;
+      }
+      return substring(0, idx);
+
+    } else {
+      int idx = numBytes - delim.numBytes + 1;
+      count = -count;
+      while (count > 0) {
+        idx = rfind(delim, idx - 1, collationId);
+        if (idx >= 0) {
+          count --;
+        } else {
+          // can not find enough delim
+          return this;
+        }
+      }
+      if (idx + delim.numBytes == numBytes) {
+        return EMPTY_UTF8;
+      }
+      return substring(idx + delim.numBytes, numChars());
     }
   }
 
