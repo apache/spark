@@ -3295,6 +3295,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NESTED_SCHEMA_PRUNING_THROUGH_FILTER_GENERATE =
+    buildConf("spark.sql.optimizer.nestedSchemaPruningThroughFilterGenerate.enabled")
+      .internal()
+      .doc("This optimization is an enhance for spark.sql.optimizer.nestedSchemaPruning.enabled " +
+        "where it solved the problem that the pruning could be pushed down if there was a filter " +
+        "on one of the nested fields of the exploded field."
+      )
+      .version("3.5.2")
+      .booleanConf
+      .createWithDefault(false)
+
   val DISABLE_HINTS =
     buildConf("spark.sql.optimizer.disableHints")
       .internal()
@@ -5098,6 +5109,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def nestedSchemaPruningThroughFilterGenerate: Boolean =
+    getConf(NESTED_SCHEMA_PRUNING_THROUGH_FILTER_GENERATE)
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)

@@ -79,6 +79,20 @@ import org.apache.spark.sql.types._
  *       +- Project [s#0.a AS _extract_a#3]
  *         +- LocalRelation <empty>, [s#0]
  *
+ * Example 4: Project above Filter & Generate
+ * -------------------------------
+ * Before:
+ * Project [a#0, c#2.d AS c.d#4, explode#3]
+ *    +- Filter isnotnull(explode#3)
+ *      +- Generate explode(c#2.e), false, [explode#3]
+ *        +- LocalRelation <empty>, [a#0, b#1, c#2]
+ *
+ * After:
+ * Project [a#0, _extract_d#7 AS c.d#4, explode#3]
+ *    +- Filter isnotnull(explode#3)
+ *      +- Generate explode(_extract_e#8), [2], false, [explode#3]
+ *        +- Project [a#0, c#2.d AS _extract_d#7, c#2.e AS _extract_e#8]
+ *          +- LocalRelation <empty>, [a#0, b#1, c#2]
  * The schema of the datasource relation will be pruned in the [[SchemaPruning]] optimizer rule.
  */
 object NestedColumnAliasing {
@@ -94,6 +108,31 @@ object NestedColumnAliasing {
         SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>
       rewritePlanIfSubsetFieldsUsed(
         plan, projectList ++ Seq(condition) ++ child.expressions, child.producedAttributes.toSeq)
+
+    // Push projection through filter only if the pruning could be pushed through generate too
+    case Project(projectList, Filter(condition, g: Generate)) if
+      SQLConf.get.nestedSchemaPruningEnabled &&
+        SQLConf.get.nestedSchemaPruningThroughFilterGenerate =>
+      // As the pruning could not be pushed through Generate under following conditions
+      // it may cause infinite loop during the [[PushDownPredicates]] rule.
+      g.generator.children.head.dataType match {
+        case _: MapType => return None
+        case ArrayType(_: ArrayType, _) => return None
+        case _ =>
+      }
+      // As purnning multiple nested fields is not supported right now,
+      // this projection should not be pushed through filter as it won't
+      // take any effect, and will cause infinite loop during the [[PushDownPredicates]] rule.
+      // TODO(SPARK-34956): support multiple fields.
+
+      val attrToExtractValues = getAttributeToExtractValues(
+        projectList ++ Seq(condition), Seq())
+      if (!attrToExtractValues.exists(p => p._2.size > 1)) {
+        rewritePlanIfSubsetFieldsUsed(
+          plan, projectList ++ Seq(condition), Seq())
+      } else {
+        None
+      }
 
     case Project(projectList, child) if
         SQLConf.get.nestedSchemaPruningEnabled && canProjectPushThrough(child) =>

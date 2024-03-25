@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedAttribute, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -285,6 +285,11 @@ case class Generate(
     child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
   }
 
+  lazy val unrequiredChildOutput: Seq[Attribute] = {
+    val unrequiredSet = unrequiredChildIndex.toSet
+    child.output.zipWithIndex.filter(t => unrequiredSet.contains(t._2)).map(_._1)
+  }
+
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&
@@ -309,8 +314,26 @@ case class Generate(
 
   def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): Generate =
-    copy(child = newChild)
+  /**
+   * Need to recalculate the unrequiredChildIndex as the output of the newChild may not
+   * be the same as the original child, which makes the unrequiredChildIndex incorrect
+   * @param newChild
+   * @return
+   */
+  override protected def withNewChildInternal(newChild: LogicalPlan): Generate = {
+    if (unrequiredChildIndex.isEmpty) {
+      copy(child = newChild)
+    } else {
+      val unrequired = if (child.output.exists(x => x.isInstanceOf[UnresolvedAttribute])) {
+        // or the unit test will fail
+        Seq()
+      } else {
+        val newOut = AttributeMap[Int](newChild.output.zipWithIndex.map(x => x._1 -> x._2))
+        unrequiredChildOutput.map(x => newOut.getOrElse(x, -1)).filter(x => x > 0)
+      }
+      copy(child = newChild, unrequiredChildIndex = unrequired)
+    }
+  }
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
