@@ -739,12 +739,23 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         |""".stripMargin), Seq(Row("a, b")))
     checkAnswer(sql(
       """
+        |select array_join(array('a' collate utf8_binary_lcase,
+        |'b' collate utf8_binary_lcase, null), ', ' collate utf8_binary_lcase,
+        |'c' collate utf8_binary_lcase)
+        |""".stripMargin), Seq(Row("a, b, c")))
+    checkAnswer(sql(
+      """
         |select concat('a' collate utf8_binary_lcase, 'b' collate utf8_binary_lcase)
         |""".stripMargin), Seq(Row("ab")))
     checkAnswer(sql(
       """
         |select concat(array('a' collate utf8_binary_lcase, 'b' collate utf8_binary_lcase))
         |""".stripMargin), Seq(Row(Seq("a", "b"))))
+    checkAnswer(sql(
+      """
+        |select map('a' collate utf8_binary_lcase, 1, 'b' collate utf8_binary_lcase, 2)
+        |['A' collate utf8_binary_lcase]
+        |""".stripMargin), Seq(Row(1)))
     val ctx = "map('aaa' collate utf8_binary_lcase, 1, 'AAA' collate utf8_binary_lcase, 2)['AaA']"
     val query = s"select $ctx"
     checkError(
