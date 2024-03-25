@@ -235,10 +235,7 @@ class SparkSession:
 
     _client: SparkConnectClient
 
-    @classproperty
-    def builder(cls) -> Builder:
-        return cls.Builder()
-
+    builder: Builder = classproperty(lambda cls: cls.Builder())
     builder.__doc__ = PySparkSession.builder.__doc__
 
     def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):

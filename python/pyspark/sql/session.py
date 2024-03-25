@@ -567,7 +567,7 @@ class SparkSession(SparkConversionMixin):
                     message_parameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
+    # TODO(SPARK-38912): Replace classproperty with @classmethod + @property once support for
     # Python 3.8 is dropped.
     #
     # In Python 3.9, the @property decorator has been made compatible with the
@@ -575,14 +575,12 @@ class SparkSession(SparkConversionMixin):
     #
     # @classmethod + @property is also affected by a bug in Python's docstring which was backported
     # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-    @classproperty
-    def builder(cls) -> Builder:
-        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+    builder: Builder = classproperty(lambda cls: cls.Builder())
+    """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-        """
-        return cls.Builder()
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+    """
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
