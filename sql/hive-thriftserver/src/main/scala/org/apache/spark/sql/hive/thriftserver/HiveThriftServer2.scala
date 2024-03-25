@@ -57,7 +57,7 @@ object HiveThriftServer2 extends Logging {
    *                    call throws an exception instead.
    */
   @DeveloperApi
-  def startWithContext(sqlContext: SQLContext, exitOnError: Boolean = true): HiveThriftServer2 = {
+  def startWithContext(sqlContext: SQLContext, exitOnError: Boolean): HiveThriftServer2 = {
     systemExitOnError.set(exitOnError)
 
     val executionHive = HiveUtils.newClientForExecution(
@@ -73,6 +73,17 @@ object HiveThriftServer2 extends Logging {
     logInfo("HiveThriftServer2 started")
     createListenerAndUI(server, sqlContext.sparkContext)
     server
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Starts a new thrift server with the given context.
+   *
+   * @param sqlContext SQLContext to use for the server
+   */
+  @DeveloperApi
+  def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
+    startWithContext(sqlContext, exitOnError)
   }
 
   private def createListenerAndUI(server: HiveThriftServer2, sc: SparkContext): Unit = {
