@@ -692,7 +692,7 @@ class SparkConnectClient(object):
 
         self._profiler_collector = ConnectProfilerCollector()
 
-        self._progress_handlers: Iterable[ProgressHandler] = []
+        self._progress_handlers: List[ProgressHandler] = []
 
     def register_progress_handler(self, handler: Callable) -> None:
         """

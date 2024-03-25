@@ -22,5 +22,5 @@ import os
 PROGRESS_BAR_ENABLED = "SPARK_CONNECT_PROGRESS_BAR_ENABLED"
 
 
-def progress_bar_enabled():
+def progress_bar_enabled() -> bool:
     return os.getenv(PROGRESS_BAR_ENABLED, "0") == "1"

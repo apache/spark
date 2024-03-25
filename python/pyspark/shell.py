@@ -56,7 +56,7 @@ if is_remote():
         if PROGRESS_BAR_ENABLED not in os.environ:
             os.environ[PROGRESS_BAR_ENABLED] = "1"
         else:
-            val = os.getenv(PROGRESS_BAR_ENABLED)
+            val = os.getenv(PROGRESS_BAR_ENABLED, "false")
             if val.lower().strip() == "false":
                 os.environ[PROGRESS_BAR_ENABLED] = "0"
             elif val.lower().strip() == "true":

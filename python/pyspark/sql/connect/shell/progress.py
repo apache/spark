@@ -19,13 +19,14 @@
 import abc
 import time
 import sys
-from typing import Iterable
+import typing
+from typing import Iterable, Any
 
 try:
     from IPython.utils.terminal import get_terminal_size
 except ImportError:
 
-    def get_terminal_size():
+    def get_terminal_size(x: Any = None, y: Any = None) -> tuple[int, int]:
         return (80, 25)
 
 
@@ -55,12 +56,12 @@ class Progress:
 
     def __init__(
         self,
-        char="*",
-        min_width=80,
-        output=sys.stdout,
-        enabled=False,
+        char: str = "*",
+        min_width: int = 80,
+        output: typing.IO = sys.stdout,
+        enabled: bool = False,
         handlers: Iterable[ProgressHandler] = [],
-    ):
+    ) -> None:
         """
         Constructs a new Progress bar. The progress bar is typically used in
         the blocking query execution path to process the execution progress
@@ -87,7 +88,7 @@ class Progress:
         self._running = 0
         self._handlers = handlers
 
-    def _notify(self, done: bool = False):
+    def _notify(self, done: bool = False) -> None:
         for handler in self._handlers:
             handler(
                 total_tasks=self._ticks,
@@ -119,14 +120,14 @@ class Progress:
             self._running = inflight_tasks
             self._notify(False)
 
-    def finish(self):
+    def finish(self) -> None:
         """Clear the last line. Called when the processing is done."""
         self._notify(True)
         if self._enabled:
             print("\r" + " " * self._max_printed, end="", flush=True, file=self._out)
             print("\r", end="", flush=True, file=self._out)
 
-    def output(self):
+    def output(self) -> None:
         """Writes the progress bar out."""
         if self._enabled:
             val = int((self._tick / float(self._ticks)) * self._width)
