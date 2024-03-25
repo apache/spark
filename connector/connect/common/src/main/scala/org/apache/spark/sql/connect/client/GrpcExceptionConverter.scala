@@ -204,7 +204,8 @@ private[client] object GrpcExceptionConverter {
         context = params.queryContext)),
     errorConstructor(params =>
       new NamespaceAlreadyExistsException(
-        params.errorClass.getOrElse("UNCLASSIFIED"), params.messageParameters)),
+        params.errorClass.getOrElse("UNCLASSIFIED"),
+        params.messageParameters)),
     errorConstructor(params =>
       new TableAlreadyExistsException(
         params.errorClass.getOrElse("UNCLASSIFIED"),
@@ -223,7 +224,8 @@ private[client] object GrpcExceptionConverter {
     errorConstructor(params =>
       new NoSuchTableException(
         params.errorClass.getOrElse("UNCLASSIFIED"),
-        params.messageParameters, params.cause)),
+        params.messageParameters,
+        params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3104"),
