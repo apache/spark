@@ -23,7 +23,6 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
-import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StructField, StructType, VariantType}
@@ -231,8 +230,8 @@ class VariantSuite extends QueryTest with SharedSparkSession {
           checkAnswer(result, Seq.fill(10)(Row("false")))
         } else {
           val e = intercept[org.apache.spark.SparkException](result.collect())
-          assert(e.getCause.isInstanceOf[AnalysisException] ||
-            e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
+          assert(
+            e.getCause.isInstanceOf[AnalysisException], e.printStackTrace)
         }
       }
     }

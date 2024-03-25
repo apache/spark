@@ -407,23 +407,26 @@ class ParquetToSparkSchemaConverter(
       throw QueryCompilationErrors.
         parquetTypeUnsupportedYetError("variant with more than two fields")
     }
-    val valueIdx = (0 until groupColumn.getChildrenCount)
-        .find(groupColumn.getChild(_).getName == "value")
-    val metadataIdx = (0 until groupColumn.getChildrenCount)
-        .find(groupColumn.getChild(_).getName == "metadata")
-    if (valueIdx.isEmpty || metadataIdx.isEmpty) {
-      throw QueryCompilationErrors.illegalParquetTypeError("variant missing value or metadata")
-    }
-    // The value and metadata cannot be individually null, only the full struct can.
-    if (groupColumn.getChild(valueIdx.get).getType.getRepetition != REQUIRED) {
-      throw QueryCompilationErrors.illegalParquetTypeError("variant value must be non-nullable")
-    }
-    if (groupColumn.getChild(metadataIdx.get).getType.getRepetition != REQUIRED) {
-      throw QueryCompilationErrors.illegalParquetTypeError("variant metadata must be non-nullable")
+    // Find the binary columns, and validate that they have the correct type.
+    val valueAndMetadata = Seq("value", "metadata").map { colName =>
+      val idx = (0 until groupColumn.getChildrenCount)
+          .find(groupColumn.getChild(_).getName == colName)
+      if (idx.isEmpty) {
+        throw QueryCompilationErrors.illegalParquetTypeError(s"variant missing $colName field")
+      }
+      val child = groupColumn.getChild(idx.get)
+      // The value and metadata cannot be individually null, only the full struct can.
+      if (child.getType.getRepetition != REQUIRED ||
+        !child.isInstanceOf[PrimitiveColumnIO] ||
+        child.asInstanceOf[PrimitiveColumnIO].getPrimitive != BINARY) {
+        throw QueryCompilationErrors.illegalParquetTypeError(
+          s"variant $colName must be a non-nullable binary")
+      }
+      child
     }
     ParquetColumn(VariantType, groupColumn, Seq(
-      convertField(groupColumn.getChild(valueIdx.get), Some(BinaryType)),
-      convertField(groupColumn.getChild(metadataIdx.get), Some(BinaryType))
+      convertField(valueAndMetadata(0), Some(BinaryType)),
+      convertField(valueAndMetadata(1), Some(BinaryType))
     ))
   }
 
