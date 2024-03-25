@@ -1995,7 +1995,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 case class ArrayJoin(
     array: Expression,
     delimiter: Expression,
-    nullReplacement: Option[Expression]) extends ImplicitCastInputTypes {
+    nullReplacement: Option[Expression]) extends Expression with ExpectsInputTypes {
 
   def this(array: Expression, delimiter: Expression) = this(array, delimiter, None)
 

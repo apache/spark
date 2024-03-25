@@ -1987,7 +1987,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         "paramIndex" -> "first",
         "inputSql" -> "\"struct(1, a)\"",
         "inputType" -> "\"STRUCT<col1: INT NOT NULL, col2: STRING NOT NULL>\"",
-        "requiredType" -> "(\"STRING\" or \"ARRAY\")"
+        "requiredType" -> "(\"STRING_ANY_COLLATION\" or \"ARRAY\")"
       ),
       queryContext = Array(ExpectedContext("", "", 7, 29, "reverse(struct(1, 'a'))"))
     )
@@ -2526,7 +2526,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "sqlExpr" -> "\"concat(i1, i2, NULL)\"",
         "functionName" -> "`concat`",
-        "dataType" -> "(\"ARRAY<INT>\" or \"ARRAY<INT>\" or \"STRING\")"
+        "dataType" -> "(\"ARRAY<INT>\" or \"ARRAY<INT>\" or \"STRING_ANY_COLLATION\")"
       ),
       queryContext = Array(ExpectedContext("", "", 0, 19, "concat(i1, i2, null)"))
     )
