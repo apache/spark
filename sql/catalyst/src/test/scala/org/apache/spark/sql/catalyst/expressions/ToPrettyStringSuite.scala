@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
@@ -30,35 +31,72 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Binary as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Cast(Literal("abcdef"), BinaryType)),
-      "[61 62 63 64 65 66]")
+    checkEvaluation(ToPrettyString(Cast(Literal("abcdef"), BinaryType)), "[61 62 63 64 65 66]")
   }
 
   test("Date as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Cast(Literal("1980-12-17"), DateType)),
-      "1980-12-17")
+    checkEvaluation(ToPrettyString(Cast(Literal("1980-12-17"), DateType, UTC_OPT)), "1980-12-17")
   }
 
   test("Timestamp as pretty strings") {
     checkEvaluation(
-      ToPrettyString(Literal.create(1L, TimestampType)),
-      "1969-12-31 16:00:00.000001")
+      ToPrettyString(Cast(Literal("2012-11-30 09:19:00"), TimestampType, UTC_OPT)),
+      "2012-11-30 01:19:00")
   }
 
   test("TimestampNTZ as pretty strings") {
+    checkEvaluation(ToPrettyString(Literal(1L, TimestampNTZType)), "1970-01-01 00:00:00.000001")
+  }
+
+  test("Array as pretty strings") {
+    checkEvaluation(ToPrettyString(Literal.create(Array(1, 2, 3, 4, 5))), "[1, 2, 3, 4, 5]")
+  }
+
+  test("Map as pretty strings") {
     checkEvaluation(
-      ToPrettyString(Literal.create(1L, TimestampNTZType)),
-      "1970-01-01 00:00:00.000001")
+      ToPrettyString(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c"))),
+      "{1 -> a, 2 -> b, 3 -> c}")
+  }
+
+  test("Struct as pretty strings") {
+    checkEvaluation(ToPrettyString(Literal.create((1, "a", 0.1))), "{1, a, 0.1}")
+    checkEvaluation(
+      ToPrettyString(Literal.create(Tuple2[String, String](null, null))),
+      "{NULL, NULL}"
+    )
+  }
+
+  test("YearMonthInterval as pretty strings") {
+    checkEvaluation(
+      ToPrettyString(Cast(Literal("INTERVAL '1-0' YEAR TO MONTH"), YearMonthIntervalType())),
+      "INTERVAL '1-0' YEAR TO MONTH")
+  }
+
+  test("DayTimeInterval as pretty strings") {
+    checkEvaluation(
+      ToPrettyString(Cast(Literal("INTERVAL '1 2:03:04' DAY TO SECOND"), DayTimeIntervalType())),
+      "INTERVAL '1 02:03:04' DAY TO SECOND")
+  }
+
+  test("Decimal as pretty strings") {
+    checkEvaluation(
+      ToPrettyString(Cast(Literal(1234.65), DecimalType(6, 2))), "1234.65")
+  }
+
+  test("String as pretty strings") {
+    checkEvaluation(ToPrettyString(Literal("s")), "s")
+  }
+
+  test("Char as pretty strings") {
+    checkEvaluation(ToPrettyString(Literal.create('a', CharType(5))), "a")
   }
 
   test("Byte as pretty strings") {
-    checkEvaluation(ToPrettyString(Cast(Literal.create(8), ByteType)), "8")
+    checkEvaluation(ToPrettyString(Cast(Literal(8), ByteType)), "8")
   }
 
   test("Short as pretty strings") {
-    checkEvaluation(ToPrettyString(Cast(Literal.create(8), ShortType)), "8")
+    checkEvaluation(ToPrettyString(Cast(Literal(8), ShortType)), "8")
   }
 
   test("Int as pretty strings") {
@@ -70,61 +108,16 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Float as pretty strings") {
-    checkEvaluation(ToPrettyString(Cast(Literal.create(8), FloatType)), "8.0")
+    checkEvaluation(ToPrettyString(Cast(Literal(8), FloatType)), "8.0")
   }
 
   test("Double as pretty strings") {
-    checkEvaluation(ToPrettyString(Cast(Literal.create(8), DoubleType)), "8.0")
+    checkEvaluation(ToPrettyString(Cast(Literal(8), DoubleType)), "8.0")
   }
 
   test("Boolean as pretty strings") {
     checkEvaluation(ToPrettyString(Literal(false)), "false")
     checkEvaluation(ToPrettyString(Literal(true)), "true")
-  }
-
-  test("Array as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Literal.create(Array(1, 2, 3, 4, 5))),
-      "[1, 2, 3, 4, 5]")
-  }
-
-  test("Map as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c"))),
-      "{1 -> a, 2 -> b, 3 -> c}")
-  }
-
-  test("Struct as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Literal.create((1, "a", 0.1))),
-      "{1, a, 0.1}")
-    checkEvaluation(
-      ToPrettyString(Literal.create(Tuple2[String, String](null, null))),
-      "{NULL, NULL}"
-    )
-  }
-
-  test("YearMonthInterval as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Cast(Literal.create("INTERVAL '1-0' YEAR TO MONTH"),
-        YearMonthIntervalType())),
-      "INTERVAL '1-0' YEAR TO MONTH")
-  }
-
-  test("DayTimeInterval as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Cast(Literal.create("INTERVAL '1 2:03:04' DAY TO SECOND"),
-        DayTimeIntervalType())),
-        "INTERVAL '1 02:03:04' DAY TO SECOND")
-  }
-
-  test("Decimal as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Cast(Literal.create(1234.65), DecimalType(6, 2))), "1234.65")
-  }
-
-  test("String as pretty strings") {
-    checkEvaluation(ToPrettyString(Literal("s")), "s")
   }
 
   test("Variant as pretty strings") {
