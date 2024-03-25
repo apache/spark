@@ -20,16 +20,18 @@ import java.lang.ref.Cleaner
 import java.util.Objects
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.{ArrowMessage, ArrowRecordBatch}
 import org.apache.arrow.vector.types.pojo
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -46,6 +48,7 @@ private[sql] class SparkResult[T](
   private[this] var arrowSchema: pojo.Schema = _
   private[this] var nextResultIndex: Int = 0
   private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
+  private val obMetrics = mutable.ListBuffer.empty[ObservedMetrics]
   private val cleanable =
     SparkResult.cleaner.register(this, new SparkResultCloseable(resultMap, responses))
 
@@ -83,6 +86,9 @@ private[sql] class SparkResult[T](
     var stop = false
     while (!stop && responses.hasNext) {
       val response = responses.next()
+
+      // Collect metrics for this response
+      obMetrics ++= response.getObservedMetricsList.asScala
 
       // Save and validate operationId
       if (opId == null) {
@@ -207,6 +213,24 @@ private[sql] class SparkResult[T](
       rows.close()
     }
     result
+  }
+
+  /**
+   * Returns all observed metrics of this result.
+   */
+  def getObservedMetrics: Map[String, Map[String, Any]] = {
+    // We need to process all responses to collect all metrics.
+    processResponses()
+
+    this.obMetrics.map { metric =>
+      assert(metric.getKeysCount == metric.getValuesCount)
+      val kv = (0 until metric.getKeysCount).map { i =>
+        val key = metric.getKeys(i)
+        val value = LiteralValueProtoConverter.toCatalystValue(metric.getValues(i))
+        key -> value
+      }
+      metric.getName -> kv.toMap
+    }.toMap
   }
 
   /**
