@@ -732,8 +732,10 @@ class CodegenContext extends Logging {
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("compare", dataType)
   }
 
-  private def genCompMapData(keyType: DataType,
-    valueType: DataType, compareFunc : String): String = {
+  private def genCompMapData(
+      keyType: DataType,
+      valueType: DataType,
+      compareFunc : String): String = {
     val keyArrayA = freshName("keyArrayA")
     val keyArrayB = freshName("keyArrayB")
     val valueArrayA = freshName("valueArrayA")
