@@ -93,8 +93,9 @@ object CollationBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
-  def benchmarkFilterEqual(collationTypes: Seq[String],
-                           dfUncollated: DataFrame): Unit = {
+  def benchmarkFilterEqual(
+      collationTypes: Seq[String],
+      dfUncollated: DataFrame): Unit = {
     val benchmark =
       new Benchmark("filter df column with collation", dfUncollated.count(), output = output)
     collationTypes.foreach(collationType => {
