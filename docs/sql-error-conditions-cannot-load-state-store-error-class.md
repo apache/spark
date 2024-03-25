@@ -68,7 +68,7 @@ Version cannot be `<version>` because it is less than 0.
 
 ## UNRELEASED_THREAD_ERROR
 
-`<loggingId>`: RocksDB instance could not be acquired by `<newAcquiredThreadInfo>` as it was not released by `<acquiredThreadInfo>` after `<timeWaitedMs>` ms.
+`<loggingId>`: RocksDB instance could not be acquired by `<newAcquiredThreadInfo>` for operationType=`<operationType>` as it was not released by `<acquiredThreadInfo>` after `<timeWaitedMs>` ms.
 Thread holding the lock has trace: `<stackTraceOutput>`
 
 

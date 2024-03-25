@@ -2,15 +2,15 @@
 radix sort
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.9+9-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 radix sort 25000000:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-reference TimSort key prefix array                 8151           8156           7          3.1         326.0       1.0X
-reference Arrays.sort                              1971           1996          34         12.7          78.8       4.1X
-radix sort one byte                                  64             71           4        387.7           2.6     126.4X
-radix sort two bytes                                119            132           7        210.5           4.8      68.6X
-radix sort eight bytes                              472            488          15         52.9          18.9      17.3X
-radix sort key prefix array                         956            961           7         26.2          38.2       8.5X
+reference TimSort key prefix array                 8372           8465         132          3.0         334.9       1.0X
+reference Arrays.sort                              2043           2071          40         12.2          81.7       4.1X
+radix sort one byte                                  64             72           5        390.2           2.6     130.7X
+radix sort two bytes                                119            130           8        209.6           4.8      70.2X
+radix sort eight bytes                              476            508          27         52.5          19.0      17.6X
+radix sort key prefix array                         913            917           5         27.4          36.5       9.2X
 
 

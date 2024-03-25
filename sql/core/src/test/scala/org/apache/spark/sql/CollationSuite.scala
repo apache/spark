@@ -27,13 +27,18 @@ import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCu
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+
+  private val collationPreservingSources = Seq("parquet")
+  private val collationNonPreservingSources = Seq("orc", "csv", "json", "text")
+  private val allFileBasedDataSources = collationPreservingSources ++  collationNonPreservingSources
 
   test("collate returns proper type") {
     Seq("utf8_binary", "utf8_binary_lcase", "unicode", "unicode_ci").foreach { collationName =>
@@ -423,22 +428,49 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("create table with collation") {
-    val tableName = "parquet_dummy_tbl"
+    val tableName = "dummy_tbl"
     val collationName = "UTF8_BINARY_LCASE"
     val collationId = CollationFactory.collationNameToId(collationName)
 
-    withTable(tableName) {
-      sql(
+    allFileBasedDataSources.foreach { format =>
+      withTable(tableName) {
+        sql(
         s"""
-           |CREATE TABLE $tableName (c1 STRING COLLATE $collationName)
-           |USING PARQUET
+           |CREATE TABLE $tableName (
+           |  c1 STRING COLLATE $collationName
+           |)
+           |USING $format
            |""".stripMargin)
 
-      sql(s"INSERT INTO $tableName VALUES ('aaa')")
-      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+        sql(s"INSERT INTO $tableName VALUES ('aaa')")
+        sql(s"INSERT INTO $tableName VALUES ('AAA')")
 
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
-      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
+        assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+      }
+    }
+  }
+
+  test("write collated data to different data sources with dataframe api") {
+    val collationName = "UNICODE_CI"
+
+    allFileBasedDataSources.foreach { format =>
+      withTempPath { path =>
+        val df = sql(s"SELECT c COLLATE $collationName AS c FROM VALUES ('aaa') AS data(c)")
+        df.write.format(format).save(path.getAbsolutePath)
+
+        val readback = spark.read.format(format).load(path.getAbsolutePath)
+        val readbackCollation = if (collationPreservingSources.contains(format)) {
+          collationName
+        } else {
+          "UTF8_BINARY"
+        }
+
+        checkAnswer(readback, Row("aaa"))
+        checkAnswer(
+          readback.selectExpr(s"collation(${readback.columns.head})"),
+          Row(readbackCollation))
+      }
     }
   }
 
@@ -638,6 +670,90 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "fieldName" -> "c2",
         "expressionStr" -> "UCASE(struct1.a)",
         "reason" -> "generation expression cannot contain non-default collated string type"))
+  }
+
+  test("Aggregation on complex containing collated strings") {
+    val table = "table_agg"
+    // array
+    withTable(table) {
+      sql(s"create table $table (a array<string collate utf8_binary_lcase>) using parquet")
+      sql(s"insert into $table values (array('aaa')), (array('AAA'))")
+      checkAnswer(sql(s"select distinct a from $table"), Seq(Row(Seq("aaa"))))
+    }
+    // map doesn't support aggregation
+    withTable(table) {
+      sql(s"create table $table (m map<string collate utf8_binary_lcase, string>) using parquet")
+      val query = s"select distinct m from $table"
+      checkError(
+        exception = intercept[ExtendedAnalysisException](sql(query)),
+        errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+        parameters = Map(
+          "colName" -> "`m`",
+          "dataType" -> toSQLType(MapType(
+            StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE")),
+            StringType))),
+        context = ExpectedContext(query, 0, query.length - 1)
+      )
+    }
+    // struct
+    withTable(table) {
+      sql(s"create table $table (s struct<fld:string collate utf8_binary_lcase>) using parquet")
+      sql(s"insert into $table values (named_struct('fld', 'aaa')), (named_struct('fld', 'AAA'))")
+      checkAnswer(sql(s"select s.fld from $table group by s"), Seq(Row("aaa")))
+    }
+  }
+
+  test("Joins on complex types containing collated strings") {
+    val tableLeft = "table_join_le"
+    val tableRight = "table_join_ri"
+    // array
+    withTable(tableLeft, tableRight) {
+      Seq(tableLeft, tableRight).map(tab =>
+        sql(s"create table $tab (a array<string collate utf8_binary_lcase>) using parquet"))
+      Seq((tableLeft, "array('aaa')"), (tableRight, "array('AAA')")).map{
+        case (tab, data) => sql(s"insert into $tab values ($data)")
+      }
+      checkAnswer(sql(
+        s"""
+           |select $tableLeft.a from $tableLeft
+           |join $tableRight on $tableLeft.a = $tableRight.a
+           |""".stripMargin), Seq(Row(Seq("aaa"))))
+    }
+    // map doesn't support joins
+    withTable(tableLeft, tableRight) {
+      Seq(tableLeft, tableRight).map(tab =>
+        sql(s"create table $tab (m map<string collate utf8_binary_lcase, string>) using parquet"))
+      val query =
+        s"select $tableLeft.m from $tableLeft join $tableRight on $tableLeft.m = $tableRight.m"
+      val ctx = s"$tableLeft.m = $tableRight.m"
+      checkError(
+        exception = intercept[AnalysisException](sql(query)),
+        errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+        parameters = Map(
+          "functionName" -> "`=`",
+          "dataType" -> toSQLType(MapType(
+            StringType(CollationFactory.collationNameToId("UTF8_BINARY_LCASE")),
+            StringType
+          )),
+          "sqlExpr" -> "\"(m = m)\""),
+        context = ExpectedContext(ctx, query.length - ctx.length, query.length - 1))
+    }
+    // struct
+    withTable(tableLeft, tableRight) {
+      Seq(tableLeft, tableRight).map(tab =>
+        sql(s"create table $tab (s struct<fld:string collate utf8_binary_lcase>) using parquet"))
+      Seq(
+        (tableLeft, "named_struct('fld', 'aaa')"),
+        (tableRight, "named_struct('fld', 'AAA')")
+      ).map {
+        case (tab, data) => sql(s"insert into $tab values ($data)")
+      }
+      checkAnswer(sql(
+        s"""
+           |select $tableLeft.s.fld from $tableLeft
+           |join $tableRight on $tableLeft.s = $tableRight.s
+           |""".stripMargin), Seq(Row("aaa")))
+    }
   }
 
   test("window aggregates should respect collation") {

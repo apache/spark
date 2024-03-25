@@ -25,17 +25,11 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
 
-private case object OracleDialect extends JdbcDialect {
-  private[jdbc] val BINARY_FLOAT = 100
-  private[jdbc] val BINARY_DOUBLE = 101
-  private[jdbc] val TIMESTAMP_TZ = -101
-  // oracle.jdbc.OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
-  private[jdbc] val TIMESTAMP_LTZ = -102
-
-
+private case class OracleDialect() extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
@@ -229,4 +223,12 @@ private case object OracleDialect extends JdbcDialect {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+}
+
+private[jdbc] object OracleDialect {
+  final val BINARY_FLOAT = 100
+  final val BINARY_DOUBLE = 101
+  final val TIMESTAMP_TZ = -101
+  // oracle.jdbc.OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+  final val TIMESTAMP_LTZ = -102
 }

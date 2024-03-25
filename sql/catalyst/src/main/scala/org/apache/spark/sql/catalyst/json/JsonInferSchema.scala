@@ -194,7 +194,7 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
         val builder = Array.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
           builder += StructField(
-            parser.getCurrentName,
+            parser.currentName,
             inferField(parser),
             nullable = true)
         }
