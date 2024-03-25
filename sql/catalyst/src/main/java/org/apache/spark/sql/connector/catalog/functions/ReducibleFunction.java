@@ -68,21 +68,21 @@ public interface ReducibleFunction<I, O> {
    * <p>
    * Example to return reducer for reducing f_source = bucket(4, x) on f_target = bucket(2, x)
    * <ul>
-   *     <li>thisFunction = bucket</li>
-   *     <li>thisParam = Int(4)</li>
-   *     <li>otherFunction = bucket</li>
-   *     <li>otherParam = Int(2)</li>
+   *     <li>thisBucketFunction = bucket</li>
+   *     <li>thisNumBuckets = 4</li>
+   *     <li>otherBucketFunction = bucket</li>
+   *     <li>otherNumBuckets = 2</li>
    * </ul>
    *
-   * @param thisParam parameter for this function
-   * @param otherFunction the other parameterized function
-   * @param otherParam parameter for the other function
+   * @param thisNumBuckets parameter for this function
+   * @param otherBucketFunction the other parameterized function
+   * @param otherNumBuckets parameter for the other function
    * @return a reduction function if it is reducible, null if not
    */
-  default Reducer<I, O> reducer(
-    Object thisParam,
-    ReducibleFunction<?, ?> otherFunction,
-    Object otherParam) {
+  default Reducer<I, O> bucketReducer(
+    int thisNumBuckets,
+    ReducibleFunction<?, ?> otherBucketFunction,
+    int otherNumBuckets) {
     throw new UnsupportedOperationException();
   }
 
@@ -100,7 +100,7 @@ public interface ReducibleFunction<I, O> {
    * @param otherFunction the other function
    * @return a reduction function if it is reducible, null if not.
    */
-  default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
+  default Reducer<I, O> bucketReducer(ReducibleFunction<?, ?> otherFunction) {
     throw new UnsupportedOperationException();
   }
 }

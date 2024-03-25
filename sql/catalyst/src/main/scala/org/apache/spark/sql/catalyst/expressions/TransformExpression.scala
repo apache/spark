@@ -102,8 +102,8 @@ case class TransformExpression(
     otherNumBucketsOpt: Option[Int]): Option[Reducer[_, _]] = {
     val res = (thisNumBucketsOpt, otherNumBucketsOpt) match {
       case (Some(numBuckets), Some(otherNumBuckets)) =>
-        thisFunction.reducer(numBuckets, otherFunction, otherNumBuckets)
-      case _ => thisFunction.reducer(otherFunction)
+        thisFunction.bucketReducer(numBuckets, otherFunction, otherNumBuckets)
+      case _ => thisFunction.bucketReducer(otherFunction)
     }
     Option(res)
   }
