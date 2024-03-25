@@ -554,6 +554,20 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
                 self.spark.createDataFrame(pdf).collect(),
             )
 
+    def test_schema_inference_from_pandas_with_dict(self):
+        from pyspark.sql.connect import functions as CF
+        from pyspark.sql import functions as F
+
+        pdf = pd.DataFrame({"str_col": ["second"], "dict_col": [{"first": 0.7, "second": 0.3}]})
+
+        self.connect.conf.set("spark.sql.execution.pandas.inferPandasDictAsMap", True)
+        sdf = self.spark.createDataFrame(pdf)
+        cdf = self.connect.createDataFrame(pdf)
+        self.assertEqual(
+            sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
+            cdf.withColumn("test", CF.col("dict_col")[CF.col("str_col")]).collect(),
+        )
+
     def test_schema_has_nullable(self):
         schema_false = StructType().add("id", IntegerType(), False)
         cdf1 = self.connect.createDataFrame([[1]], schema=schema_false)

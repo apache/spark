@@ -67,7 +67,13 @@ from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
-from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
+from pyspark.sql.pandas.types import (
+    to_arrow_schema,
+    to_arrow_type,
+    _deduplicate_field_names,
+    from_arrow_type,
+    to_spark_type,
+)
 from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
@@ -80,6 +86,8 @@ from pyspark.sql.types import (
     StructType,
     AtomicType,
     TimestampType,
+    StructField,
+    MapType,
 )
 from pyspark.sql.utils import to_str
 from pyspark.errors import (
@@ -418,6 +426,34 @@ class SparkSession:
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+                session = SparkSession.active()
+                infer_pandas_dict_as_map = (
+                    str(session.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower()
+                    == "true"
+                )
+                if infer_pandas_dict_as_map:
+                    fields = []
+                    pa_schema = pa.Schema.from_pandas(data)
+                    spark_type: Union[MapType, DataType]
+                    for field in pa_schema:
+                        field_type = field.type
+                        if isinstance(field_type, pa.StructType):
+                            pandas_dict_col = data[field.name]
+                            first_item = pandas_dict_col.iloc[0]
+                            if first_item is None:
+                                raise PySparkValueError(
+                                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                                    message_parameters={},
+                                )
+                            first_key = next(iter(first_item))
+                            first_value = first_item[first_key]
+                            key_type = type(first_key)
+                            value_type = type(first_value)
+                            spark_type = MapType(to_spark_type(key_type), to_spark_type(value_type))
+                        else:
+                            spark_type = from_arrow_type(field_type)
+                        fields.append(StructField(field.name, spark_type, nullable=field.nullable))
+                    schema = StructType(fields)
             elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
                 assert isinstance(_cols, list)
                 _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])

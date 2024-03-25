@@ -772,6 +772,11 @@ ERROR_CLASSES_JSON = '''
       "No active Spark session found. Please create a new Spark session before running the code."
     ]
   },
+  "NO_MATCHING_SPARK_TYPE_FOR_PYTHON_TYPE": {
+    "message": [
+      "No matching Spark type for Python type: <py_type>."
+    ]
+  },
   "NO_OBSERVE_BEFORE_GET": {
     "message": [
       "Should observe by calling `DataFrame.observe` before `get`."

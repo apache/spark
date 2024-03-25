@@ -208,6 +208,25 @@ def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = Fa
     )
 
 
+def to_spark_type(py_type: Any) -> DataType:
+    """
+    Simple type mapper for Python <> Spark.
+    """
+    type_mapping = {
+        str: StringType(),
+        int: IntegerType(),
+        float: DoubleType(),
+        bool: BooleanType(),
+        # TODO: dict, list
+    }
+    if py_type not in type_mapping:
+        raise PySparkTypeError(
+            error_class="NO_MATCHING_SPARK_TYPE_FOR_PYTHON_TYPE",
+            message_parameters={"py_type": py_type},
+        )
+    return type_mapping[py_type]
+
+
 def _get_local_timezone() -> str:
     """Get local timezone using pytz with environment variable, or dateutil.
 
