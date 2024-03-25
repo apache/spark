@@ -137,7 +137,7 @@ class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeNumber(row.getDouble(ordinal))
 
-    case StringType =>
+    case _: StringType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeString(row.getUTF8String(ordinal).toString)
 
