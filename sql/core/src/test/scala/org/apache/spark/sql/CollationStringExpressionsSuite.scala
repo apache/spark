@@ -74,28 +74,23 @@ class CollationStringExpressionsSuite extends QueryTest
     })
   }
 
-  test("INSTR check result on non-explicit default collation") {
-    checkEvaluation(StringInstr(Literal("aAads"), Literal("Aa")), 2)
-  }
-
   test("INSTR check result on explicitly collated strings") {
+    def testInStr(expected: Integer, stringType: Integer, str: String, substr: String): Unit = {
+      val string = Literal.create(str, StringType(stringType))
+      val substring = Literal.create(substr, StringType(stringType))
+
+      checkEvaluation(StringInstr(string, substring), expected)
+    }
+
     // UTF8_BINARY_LCASE
-    checkEvaluation(StringInstr(Literal.create("aaads", StringType(1)),
-      Literal.create("Aa", StringType(1))), 1)
-    checkEvaluation(StringInstr(Collate(Literal("aaads"), "UTF8_BINARY_LCASE"),
-      Collate(Literal("Aa"), "UTF8_BINARY_LCASE")), 1)
-    checkEvaluation(StringInstr(Collate(Literal("aaads"), "UTF8_BINARY_LCASE"),
-      Collate(Literal("de"), "UTF8_BINARY_LCASE")), 0)
+    testInStr(1, 1, "aaads", "Aa")
+    testInStr(0, 1, "aaaDs", "de")
     // UNICODE
-    checkEvaluation(StringInstr(Literal.create("aaads", StringType(2)),
-      Literal.create("Aa", StringType(2))), 0)
-    checkEvaluation(StringInstr(Collate(Literal("aaads"), "UNICODE"),
-      Collate(Literal("de"), "UNICODE")), 0)
+    testInStr(0, 2, "aaads", "Aa")
+    testInStr(0, 2, "aaads", "de")
     // UNICODE_CI
-    checkEvaluation(StringInstr(Literal.create("aaads", StringType(3)),
-      Literal.create("de", StringType(3))), 0)
-    checkEvaluation(StringInstr(Collate(Literal("aaads"), "UNICODE_CI"),
-      Collate(Literal("AD"), "UNICODE_CI")), 3)
+    testInStr(3, 3, "aaads", "AD")
+    testInStr(4, 3, "aaads", "dS")
   }
 
   test("INSTR fail mismatched collation types") {
@@ -143,42 +138,30 @@ class CollationStringExpressionsSuite extends QueryTest
   }
 
   test("FIND_IN_SET check result on explicitly collated strings") {
+    def testFindInSet(expected: Integer, stringType: Integer, word: String, set: String): Unit = {
+      val w = Literal.create(word, StringType(stringType))
+      val s = Literal.create(set, StringType(stringType))
+
+      checkEvaluation(FindInSet(w, s), expected)
+    }
+
     // UTF8_BINARY
-    checkEvaluation(FindInSet(Collate(Literal("a"), "UTF8_BINARY"),
-      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY")), 0)
-    checkEvaluation(FindInSet(Collate(Literal("c"), "UTF8_BINARY"),
-      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY")), 4)
-    checkEvaluation(FindInSet(Collate(Literal("AB"), "UTF8_BINARY"),
-      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY")), 0)
-    checkEvaluation(FindInSet(Collate(Literal("abcd"), "UTF8_BINARY"),
-      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY")), 0)
+    testFindInSet(0, 0, "AB", "abc,b,ab,c,def")
     // UTF8_BINARY_LCASE
-    checkEvaluation(FindInSet(Collate(Literal("aB"), "UTF8_BINARY_LCASE"),
-      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY_LCASE")), 3)
-    checkEvaluation(FindInSet(Collate(Literal("a"), "UTF8_BINARY_LCASE"),
-      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY_LCASE")), 0)
-    checkEvaluation(FindInSet(Collate(Literal("abc"), "UTF8_BINARY_LCASE"),
-      Collate(Literal("aBc,b,ab,c,def"), "UTF8_BINARY_LCASE")), 1)
-    checkEvaluation(FindInSet(Collate(Literal("abcd"), "UTF8_BINARY_LCASE"),
-      Collate(Literal("aBc,b,ab,c,def"), "UTF8_BINARY_LCASE")), 0)
+    testFindInSet(0, 1, "a", "abc,b,ab,c,def")
+    testFindInSet(4, 1, "c", "abc,b,ab,c,def")
+    testFindInSet(3, 1, "AB", "abc,b,ab,c,def")
+    testFindInSet(1, 1, "AbC", "abc,b,ab,c,def")
+    testFindInSet(0, 1, "abcd", "abc,b,ab,c,def")
     // UNICODE
-    checkEvaluation(FindInSet(Collate(Literal("a"), "UNICODE"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE")), 0)
-    checkEvaluation(FindInSet(Collate(Literal("ab"), "UNICODE"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE")), 3)
-    checkEvaluation(FindInSet(Collate(Literal("Ab"), "UNICODE"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE")), 0)
+    testFindInSet(0, 2, "a", "abc,b,ab,c,def")
+    testFindInSet(3, 2, "ab", "abc,b,ab,c,def")
+    testFindInSet(0, 2, "Ab", "abc,b,ab,c,def")
     // UNICODE_CI
-    checkEvaluation(FindInSet(Collate(Literal("a"), "UNICODE_CI"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 0)
-    checkEvaluation(FindInSet(Collate(Literal("C"), "UNICODE_CI"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 4)
-    checkEvaluation(FindInSet(Collate(Literal("DeF"), "UNICODE_CI"),
-      Collate(Literal("abc,b,ab,c,dEf"), "UNICODE_CI")), 5)
-    checkEvaluation(FindInSet(Collate(Literal("DEFG"), "UNICODE_CI"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 0)
-    checkEvaluation(FindInSet(Collate(Literal("dsf"), "UNICODE_CI"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI")), 0)
+    testFindInSet(0, 3, "a", "abc,b,ab,c,def")
+    testFindInSet(4, 3, "C", "abc,b,ab,c,def")
+    testFindInSet(5, 3, "DeF", "abc,b,ab,c,dEf")
+    testFindInSet(0, 3, "DEFG", "abc,b,ab,c,def")
   }
 
   test("FIND_IN_SET fail mismatched collation types") {
