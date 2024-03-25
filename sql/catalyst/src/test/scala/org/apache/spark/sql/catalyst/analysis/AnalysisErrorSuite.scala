@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
-import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryErrorsBase}
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -119,7 +119,7 @@ case class TestFunctionWithTypeCheckFailure(
 
 case class UnresolvedTestPlan() extends UnresolvedLeafNode
 
-class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase with QueryErrorsBase {
+class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
   import TestRelations._
 
   def errorTest(
