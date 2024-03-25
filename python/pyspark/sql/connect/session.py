@@ -432,6 +432,11 @@ class SparkSession:
                     == "true"
                 )
                 if infer_pandas_dict_as_map:
+                    if data.empty:
+                        raise PySparkValueError(
+                            error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                            message_parameters={},
+                        )
                     fields = []
                     pa_schema = pa.Schema.from_pandas(data)
                     spark_type: Union[MapType, DataType]
@@ -440,11 +445,6 @@ class SparkSession:
                         if isinstance(field_type, pa.StructType):
                             pandas_dict_col = data[field.name]
                             first_item = pandas_dict_col.iloc[0]
-                            if first_item is None:
-                                raise PySparkValueError(
-                                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                                    message_parameters={},
-                                )
                             first_key = next(iter(first_item))
                             first_value = first_item[first_key]
                             key_type = type(first_key)
