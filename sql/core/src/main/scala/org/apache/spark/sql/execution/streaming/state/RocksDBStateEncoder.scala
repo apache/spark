@@ -217,7 +217,8 @@ class PrefixKeyScanStateEncoder(
  * nullability on the UnsafeRow itself as the expected ordering would change if non-first
  * columns are marked as null. If the first col is null, those entries will appear last in
  * the iterator. If non-first columns are null, ordering based on the previous columns will
- * still be honored.
+ * still be honored. For rows with null column values, ordering for subsequent columns
+ * will also be maintained within those set of rows.
  *
  * @param keySchema - schema of the key to be encoded
  * @param numOrderingCols - number of columns to be used for range scan

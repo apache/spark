@@ -411,7 +411,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       val timerTimestamps = Seq((931L, 10), (null, 40), (452300L, 1),
         (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
-        (6L, 90118), (9L, 95118), (6L, 87210), (null, 113))
+        (6L, 90118), (9L, 95118), (6L, 87210), (null, 113), (null, 28))
       timerTimestamps.foreach { ts =>
         // order by long col first and then by int col
         val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
@@ -426,7 +426,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val keyRow = kv.key
         keyRow.isNullAt(0)
       }
-      assert(nullRows.size === 2)
+      assert(nullRows.size === 3)
 
       // filter out the null rows and verify the rest
       val result: Seq[(Long, Int)] = store.iterator(cfName).filter { kv =>
@@ -443,6 +443,45 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         (6L, 90118), (9L, 95118), (6L, 87210))
 
       assert(result === timerTimestampsWithoutNulls.sorted)
+
+      // verify that the null cols are seen in the correct order filtering for nulls
+      val nullRowsWithOrder = store.iterator(cfName).filter { kv =>
+        val keyRow = kv.key
+        keyRow.isNullAt(0)
+      }.map { kv =>
+        val keyRow = kv.key
+        keyRow.getInt(1)
+      }.toSeq
+
+      assert(nullRowsWithOrder === Seq(28, 40, 113))
+
+      store.abort()
+
+      val store1 = provider.getStore(0)
+      if (colFamiliesEnabled) {
+        store1.createColFamilyIfAbsent(cfName,
+          testSchema, valueSchema,
+          RangeKeyScanStateEncoderSpec(testSchema, 2))
+      }
+
+      val timerTimestamps1 = Seq((null, 3), (null, 1), (null, 32), (null, 113), (null, 40872),
+        (null, 66))
+      timerTimestamps1.foreach { ts =>
+        // order by long col first and then by int col
+        val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
+          UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
+        val valueRow = dataToValueRow(1)
+        store1.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store1.get(keyRow, cfName)) === 1)
+      }
+
+      // verify that ordering for non-null columns on the right in still maintained
+      val result1: Seq[Int] = store.iterator(cfName).map { kv =>
+        val keyRow = kv.key
+        keyRow.getInt(1)
+      }.toSeq
+
+      assert(result1 === timerTimestamps1.map(_._2).sorted)
     }
   }
 
