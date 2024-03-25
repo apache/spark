@@ -204,8 +204,8 @@ object UnsafeRowUtils {
    * e.g. this is not true for non-binary collations (any case/accent insensitive collation
    * can lead to rows being semantically equal even though their binary representations differ).
    */
-  def isBinaryStable(dataType: DataType): Boolean = dataType.existsRecursively {
-    case st: StringType => CollationFactory.fetchCollation(st.collationId).isBinaryCollation
-    case _ => true
+  def isBinaryStable(dataType: DataType): Boolean = !dataType.existsRecursively {
+    case st: StringType => !CollationFactory.fetchCollation(st.collationId).isBinaryCollation
+    case _ => false
   }
 }

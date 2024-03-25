@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
+import java.util.ServiceLoader
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
@@ -46,6 +47,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -153,6 +155,14 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("3.5.0")
   def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = t
+
+  /**
+   * Converts an instance of `java.sql.Date` to a custom `java.sql.Date` value.
+   * @param d the date value returned from JDBC ResultSet getDate method.
+   * @return the date value after conversion
+   */
+  @Since("4.0.0")
+  def convertJavaDateToDate(d: Date): Date = d
 
   /**
    * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
@@ -825,16 +835,14 @@ object JdbcDialects {
 
   private[this] var dialects = List[JdbcDialect]()
 
-  registerDialect(MySQLDialect)
-  registerDialect(PostgresDialect)
-  registerDialect(DB2Dialect)
-  registerDialect(MsSqlServerDialect)
-  registerDialect(DerbyDialect)
-  registerDialect(OracleDialect)
-  registerDialect(TeradataDialect)
-  registerDialect(H2Dialect)
-  registerDialect(SnowflakeDialect)
-  registerDialect(DatabricksDialect)
+  private def registerDialects(): Unit = {
+    val loader = ServiceLoader.load(classOf[JdbcDialect], Utils.getContextOrSparkClassLoader)
+    val iter = loader.iterator()
+    while (iter.hasNext) {
+      registerDialect(iter.next())
+    }
+  }
+  registerDialects()
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

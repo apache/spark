@@ -1445,13 +1445,6 @@ class FunctionsTestsMixin:
             {1: "a", 2: "b", 3: "c"},
         )
 
-    def test_map_sort(self):
-        df = self.spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as map1")
-        self.assertEqual(
-            df.select(F.map_sort("map1").alias("map2")).first()[0],
-            {1: "a", 2: "b", 3: "c"},
-        )
-
     def test_version(self):
         self.assertIsInstance(self.spark.range(1).select(F.version()).first()[0], str)
 
