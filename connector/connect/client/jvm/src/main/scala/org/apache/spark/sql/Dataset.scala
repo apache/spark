@@ -3452,7 +3452,7 @@ class Dataset[T] private[sql] (
   }
 
   def collectObservations(): Map[String, Map[String, Any]] = {
-    collectResult().getObservedMetrics
+    collectResult().observedMetrics.toMap
   }
 
   private[sql] def withResult[E](f: SparkResult[T] => E): E = {
