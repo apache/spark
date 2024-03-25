@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.expressions.variant
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
-import org.apache.spark.sql.catalyst.expressions.variant._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.VariantVal
-import org.apache.spark.variant.VariantUtil._
 
 class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   // Zero-extend each byte in the array with the appropriate number of bytes.

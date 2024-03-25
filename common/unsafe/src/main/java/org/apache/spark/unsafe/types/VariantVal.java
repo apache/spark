@@ -18,7 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.variant.Variant;
+import org.apache.spark.types.variant.Variant;
 
 import java.io.Serializable;
 import java.util.Arrays;

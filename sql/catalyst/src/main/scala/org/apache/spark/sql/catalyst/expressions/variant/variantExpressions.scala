@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.{VariantBuilder, VariantSizeLimitException, VariantUtil}
 import org.apache.spark.unsafe.types._
-import org.apache.spark.variant._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(

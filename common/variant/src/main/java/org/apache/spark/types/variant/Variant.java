@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.variant;
+package org.apache.spark.types.variant;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -23,7 +23,7 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import java.io.CharArrayWriter;
 import java.io.IOException;
 
-import static org.apache.spark.variant.VariantUtil.*;
+import static org.apache.spark.types.variant.VariantUtil.*;
 
 /**
  * This class is structurally equivalent to {@link org.apache.spark.unsafe.types.VariantVal}. We

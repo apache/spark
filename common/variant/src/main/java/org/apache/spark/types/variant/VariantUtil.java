@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.variant;
+package org.apache.spark.types.variant;
 
 import org.apache.spark.QueryContext;
 import org.apache.spark.SparkRuntimeException;
