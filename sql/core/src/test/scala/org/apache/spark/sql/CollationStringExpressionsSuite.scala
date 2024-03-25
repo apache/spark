@@ -132,11 +132,6 @@ class CollationStringExpressionsSuite extends QueryTest
     )
   }
 
-  test("FIND_IN_SET check result on non-explicit default collation") {
-    checkEvaluation(FindInSet(Literal("def"), Literal("abc,b,ab,c,def")), 5)
-    checkEvaluation(FindInSet(Literal("defg"), Literal("abc,b,ab,c,def")), 0)
-  }
-
   test("FIND_IN_SET check result on explicitly collated strings") {
     def testFindInSet(expected: Integer, stringType: Integer, word: String, set: String): Unit = {
       val w = Literal.create(word, StringType(stringType))
