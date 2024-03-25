@@ -101,6 +101,7 @@ class Relation(google.protobuf.message.Message):
     CACHED_REMOTE_RELATION_FIELD_NUMBER: builtins.int
     COMMON_INLINE_USER_DEFINED_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
     AS_OF_JOIN_FIELD_NUMBER: builtins.int
+    COMMON_INLINE_USER_DEFINED_DATA_SOURCE_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -196,6 +197,10 @@ class Relation(google.protobuf.message.Message):
     @property
     def as_of_join(self) -> global___AsOfJoin: ...
     @property
+    def common_inline_user_defined_data_source(
+        self,
+    ) -> global___CommonInlineUserDefinedDataSource: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -272,6 +277,8 @@ class Relation(google.protobuf.message.Message):
         common_inline_user_defined_table_function: global___CommonInlineUserDefinedTableFunction
         | None = ...,
         as_of_join: global___AsOfJoin | None = ...,
+        common_inline_user_defined_data_source: global___CommonInlineUserDefinedDataSource
+        | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -310,6 +317,8 @@ class Relation(google.protobuf.message.Message):
             b"collect_metrics",
             "common",
             b"common",
+            "common_inline_user_defined_data_source",
+            b"common_inline_user_defined_data_source",
             "common_inline_user_defined_table_function",
             b"common_inline_user_defined_table_function",
             "corr",
@@ -423,6 +432,8 @@ class Relation(google.protobuf.message.Message):
             b"collect_metrics",
             "common",
             b"common",
+            "common_inline_user_defined_data_source",
+            b"common_inline_user_defined_data_source",
             "common_inline_user_defined_table_function",
             b"common_inline_user_defined_table_function",
             "corr",
@@ -555,6 +566,7 @@ class Relation(google.protobuf.message.Message):
             "cached_remote_relation",
             "common_inline_user_defined_table_function",
             "as_of_join",
+            "common_inline_user_defined_data_source",
             "fill_na",
             "drop_na",
             "replace",
