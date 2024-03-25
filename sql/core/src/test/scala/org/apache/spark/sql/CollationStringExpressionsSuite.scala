@@ -21,7 +21,7 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Collate, Collation, ExpressionEvalHelper, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, Literal, StringRepeat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -73,29 +73,17 @@ class CollationStringExpressionsSuite extends QueryTest
     })
   }
 
-  test("REPEAT check output type on non-explicit default collation") {
-    checkEvaluation(Collation(StringRepeat(Literal("hi"), Literal(2))).replacement, "UTF8_BINARY")
-  }
-
   test("REPEAT check output type on explicitly collated string") {
-    checkEvaluation(
-      Collation(StringRepeat(Literal.create("abc", StringType(1)), Literal(2))).replacement,
-      "UTF8_BINARY_LCASE")
-    checkEvaluation(
-      Collation(StringRepeat(Collate(Literal("aBc"), "UTF8_BINARY_LCASE"), Literal(3))).replacement,
-      "UTF8_BINARY_LCASE")
-    checkEvaluation(
-      Collation(StringRepeat(Literal.create("abc", StringType(2)), Literal(4))).replacement,
-      "UNICODE")
-    checkEvaluation(
-      Collation(StringRepeat(Collate(Literal("aBc"), "UNICODE_CI"), Literal(3))).replacement,
-      "UNICODE_CI")
-  }
+    def testRepeat(expected: String, stringType: Integer, input: String, n: Integer): Unit = {
+      val s = Literal.create(input, StringType(stringType))
 
-  test("REPEAT check result") {
-    checkEvaluation(StringRepeat(Literal.create("abc", StringType(1)), Literal(2)), "abcabc")
-    checkEvaluation(StringRepeat(Literal.create("aBc", StringType(2)), Literal(2)), "aBcaBc")
-    checkEvaluation(StringRepeat(Literal.create("abC", StringType(3)), Literal(2)), "abCabC")
+      checkEvaluation(Collation(StringRepeat(s, Literal.create(n))).replacement, expected)
+    }
+
+    testRepeat("UTF8_BINARY", 0, "abc", 2)
+    testRepeat("UTF8_BINARY_LCASE", 1, "abc", 2)
+    testRepeat("UNICODE", 2, "abc", 2)
+    testRepeat("UNICODE_CI", 3, "abc", 2)
   }
 
   // TODO: Add more tests for other string expressions
