@@ -663,6 +663,18 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-47431: Create table with UTF8_BINARY, make sure collation persists on read") {
+    sql(
+      s"""
+         |CREATE TABLE t(c1 STRING)
+         |USING PARQUET
+         |""".stripMargin)
+    sql("INSERT INTO t VALUES ('a')")
+    checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
+    sql("SET spark.sql.session.collation.default=UNICODE")
+    checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
+  }
+
   test("Aggregation on complex containing collated strings") {
     val table = "table_agg"
     // array
