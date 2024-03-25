@@ -187,9 +187,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (_: StringType, _: StringType) => None
       case (_: StringType, _: StringTypeCollated) => None
 
-      case (DateType, AnyTimestampType) =>
-        Some(AnyTimestampType.defaultConcreteType)
-
       // If a function expects integral type, fractional input is not allowed.
       case (_: FractionalType, IntegralType) => None
 
