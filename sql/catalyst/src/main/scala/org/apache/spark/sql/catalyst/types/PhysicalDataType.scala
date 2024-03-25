@@ -21,8 +21,9 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SQLOrderingUtil, StringTypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
@@ -40,8 +41,8 @@ object PhysicalDataType {
     case ShortType => PhysicalShortType
     case IntegerType => PhysicalIntegerType
     case LongType => PhysicalLongType
-    case VarcharType(_) => PhysicalStringType(StringTypeUtils.getDefaultCollationId)
-    case CharType(_) => PhysicalStringType(StringTypeUtils.getDefaultCollationId)
+    case VarcharType(_) => PhysicalStringType(SqlApiConf.get.defaultStringType.collationId)
+    case CharType(_) => PhysicalStringType(SqlApiConf.get.defaultStringType.collationId)
     case s: StringType => PhysicalStringType(s.collationId)
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType

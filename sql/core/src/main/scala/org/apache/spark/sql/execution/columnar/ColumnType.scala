@@ -25,8 +25,8 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalBinaryType, PhysicalBooleanType, PhysicalByteType, PhysicalCalendarIntervalType, PhysicalDataType, PhysicalDecimalType, PhysicalDoubleType, PhysicalFloatType, PhysicalIntegerType, PhysicalLongType, PhysicalMapType, PhysicalNullType, PhysicalShortType, PhysicalStringType, PhysicalStructType}
-import org.apache.spark.sql.catalyst.util.StringTypeUtils
 import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -493,7 +493,7 @@ private[columnar] trait DirectCopyColumnType[JvmType] extends ColumnType[JvmType
 }
 
 private[columnar] object STRING
-  extends NativeColumnType(PhysicalStringType(StringTypeUtils.getDefaultCollationId), 8)
+  extends NativeColumnType(PhysicalStringType(SqlApiConf.get.defaultStringType.collationId), 8)
     with DirectCopyColumnType[UTF8String] {
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {

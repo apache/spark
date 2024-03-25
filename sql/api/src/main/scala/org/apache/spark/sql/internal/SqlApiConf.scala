@@ -20,7 +20,7 @@ import java.util.TimeZone
 
 import scala.util.Try
 
-import org.apache.spark.sql.types.{AtomicType, TimestampType}
+import org.apache.spark.sql.types.{AtomicType, StringType, TimestampType}
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -43,7 +43,7 @@ private[sql] trait SqlApiConf {
   def datetimeJava8ApiEnabled: Boolean
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
-  def defaultCollation: String
+  def defaultStringType: StringType
 }
 
 private[sql] object SqlApiConf {
@@ -80,5 +80,5 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.EXCEPTION
-  override def defaultCollation: String = "UTF8_BINARY"
+  override def defaultStringType: StringType = StringType
 }

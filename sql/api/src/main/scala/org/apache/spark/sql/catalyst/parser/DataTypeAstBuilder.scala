@@ -75,7 +75,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {
           case Seq(_) =>
-            StringType(CollationFactory.collationNameToId(SqlApiConf.get.defaultCollation))
+            SqlApiConf.get.defaultStringType
           case Seq(_, ctx: CollateClauseContext) =>
             val collationName = visitCollateClause(ctx)
             val collationId = CollationFactory.collationNameToId(collationName)

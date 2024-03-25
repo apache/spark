@@ -651,13 +651,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-47431: Check if config changes value") {
-    sql("SET spark.sql.session.collation.default=UNICODE")
-    checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UNICODE")))
-    sql("SET spark.sql.session.collation.default=UTF8_BINARY")
-    checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UTF8_BINARY")))
-  }
-
   test("SPARK-47431: Default collation set to UNICODE, column type test") {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
       sql(

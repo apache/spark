@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, SqlApiConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
@@ -70,15 +70,15 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String =>
-        Literal(UTF8String.fromString(s), StringType(StringTypeUtils.getDefaultCollationId))
+        Literal(UTF8String.fromString(s), SqlApiConf.get.defaultStringType)
     case s: UTF8String =>
-      Literal(s, StringType(StringTypeUtils.getDefaultCollationId))
+      Literal(s, SqlApiConf.get.defaultStringType)
     case c: Char =>
       Literal(UTF8String.fromString(c.toString),
-        StringType(StringTypeUtils.getDefaultCollationId))
+        SqlApiConf.get.defaultStringType)
     case ac: Array[Char] =>
         Literal(UTF8String.fromString(String.valueOf(ac)),
-          StringType(StringTypeUtils.getDefaultCollationId))
+          SqlApiConf.get.defaultStringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal =>
       val decimal = Decimal(d)
@@ -136,7 +136,7 @@ object Literal {
     case _ if clz == classOf[Period] => YearMonthIntervalType()
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
-    case _ if clz == classOf[Array[Char]] => StringType(StringTypeUtils.getDefaultCollationId)
+    case _ if clz == classOf[Array[Char]] => SqlApiConf.get.defaultStringType
     case _ if clz == classOf[JavaShort] => ShortType
     case _ if clz == classOf[JavaInteger] => IntegerType
     case _ if clz == classOf[JavaLong] => LongType
@@ -146,7 +146,7 @@ object Literal {
     case _ if clz == classOf[JavaBoolean] => BooleanType
 
     // other scala classes
-    case _ if clz == classOf[String] => StringType(StringTypeUtils.getDefaultCollationId)
+    case _ if clz == classOf[String] => SqlApiConf.get.defaultStringType
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
