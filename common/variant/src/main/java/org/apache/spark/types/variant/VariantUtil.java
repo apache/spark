@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.variant;
+package org.apache.spark.types.variant;
 
 /**
  * This class defines constants related to the variant format and provides functions for
