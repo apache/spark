@@ -15,26 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.variant;
+package org.apache.spark.types.variant;
 
 /**
- * This class is structurally equivalent to {@link org.apache.spark.unsafe.types.VariantVal}. We
- * define a new class to avoid depending on or modifying Spark.
+ * An exception indicating that we are attempting to build a variant with it value or metadata
+ * exceeding the 16MiB size limit.
  */
-public final class Variant {
-  private final byte[] value;
-  private final byte[] metadata;
-
-  public Variant(byte[] value, byte[] metadata) {
-    this.value = value;
-    this.metadata = metadata;
-  }
-
-  public byte[] getValue() {
-    return value;
-  }
-
-  public byte[] getMetadata() {
-    return metadata;
-  }
+public class VariantSizeLimitException extends RuntimeException {
 }
