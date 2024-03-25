@@ -147,7 +147,8 @@ class Dataset[T] private[sql] (
     }
   }
 
-  private def getObservationsMapOpt: Option[Map[String, Observation]] = observationsOpt.map(_.toMap)
+  private def getObservationsMapOpt: Option[Map[String, Observation]] =
+    observationsOpt.map(_.toMap)
 
   override def toString: String = {
     try {
@@ -1285,9 +1286,8 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def filter(condition: Column): Dataset[T] =
-    sparkSession.newDataset(agnosticEncoder, getObservationsMapOpt) {
-      builder =>
-        builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
+    sparkSession.newDataset(agnosticEncoder, getObservationsMapOpt) { builder =>
+      builder.getFilterBuilder.setInput(plan.getRoot).setCondition(condition.expr)
     }
 
   /**
@@ -3358,12 +3358,11 @@ class Dataset[T] private[sql] (
   }
 
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
-    sparkSession.newDataset(agnosticEncoder, getObservationsMapOpt) {
-      builder =>
-        builder.getCollectMetricsBuilder
-          .setInput(plan.getRoot)
-          .setName(name)
-          .addAllMetrics((expr +: exprs).map(_.expr).asJava)
+    sparkSession.newDataset(agnosticEncoder, getObservationsMapOpt) { builder =>
+      builder.getCollectMetricsBuilder
+        .setInput(plan.getRoot)
+        .setName(name)
+        .addAllMetrics((expr +: exprs).map(_.expr).asJava)
     }
   }
 
@@ -3439,7 +3438,7 @@ class Dataset[T] private[sql] (
   def collectResult(): SparkResult[T] = {
     val results = sparkSession.execute(plan, agnosticEncoder)
 
-    results.getObservedMetrics.map { case (name, metric) =>
+    results.observedMetrics.map { case (name, metric) =>
       observationsOpt.map {
         _.get(name) match {
           case Some(observation) =>

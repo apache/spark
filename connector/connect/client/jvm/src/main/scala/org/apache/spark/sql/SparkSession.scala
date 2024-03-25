@@ -490,8 +490,8 @@ class SparkSession private[sql] (
 
   private[sql] def newDataset[T](
       encoder: AgnosticEncoder[T],
-      observations: Option[Map[String, Observation]] = None
-  )(f: proto.Relation.Builder => Unit): Dataset[T] = {
+      observations: Option[Map[String, Observation]] = None)(
+      f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
