@@ -742,27 +742,27 @@ class CodegenContext extends Logging {
     val valueArrayB = freshName("valueArrayB")
     val minLength = freshName("minLength")
     s"""
-      public int $compareFunc(MapData a, MapData b) {
-        int lengthA = a.numElements();
-        int lengthB = b.numElements();
-        ArrayData $keyArrayA = a.keyArray();
-        ArrayData $valueArrayA = a.valueArray();
-        ArrayData $keyArrayB = b.keyArray();
-        ArrayData $valueArrayB = b.valueArray();
-        int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
-        for (int i = 0; i < $minLength; i++) {
-          ${genCompElementsAt(keyArrayA, keyArrayB, "i", keyType)}
-          ${genCompElementsAt(valueArrayA, valueArrayB, "i", valueType)}
-        }
-
-        if (lengthA < lengthB) {
-          return -1;
-        } else if (lengthA > lengthB) {
-          return 1;
-        }
-        return 0;
-      }
-    """
+       |public int $compareFunc(MapData a, MapData b) {
+       |  int lengthA = a.numElements();
+       |  int lengthB = b.numElements();
+       |  ArrayData $keyArrayA = a.keyArray();
+       |  ArrayData $valueArrayA = a.valueArray();
+       |  ArrayData $keyArrayB = b.keyArray();
+       |  ArrayData $valueArrayB = b.valueArray();
+       |  int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
+       |  for (int i = 0; i < $minLength; i++) {
+       |    ${genCompElementsAt(keyArrayA, keyArrayB, "i", keyType)}
+       |    ${genCompElementsAt(valueArrayA, valueArrayB, "i", valueType)}
+       |  }
+       |
+       |  if (lengthA < lengthB) {
+       |    return -1;
+       |  } else if (lengthA > lengthB) {
+       |    return 1;
+       |  }
+       |  return 0;
+       |}
+     """.stripMargin
   }
 
   private def genCompElementsAt(arrayA: String, arrayB: String, i: String,
@@ -773,23 +773,23 @@ class CodegenContext extends Logging {
     val isNullB = freshName("isNullB")
     val jt = javaType(elementType);
     s"""
-    boolean $isNullA = $arrayA.isNullAt($i);
-    boolean $isNullB = $arrayB.isNullAt($i);
-    if ($isNullA && $isNullB) {
-      // Nothing
-    } else if ($isNullA) {
-      return -1;
-    } else if ($isNullB) {
-      return 1;
-    } else {
-      $jt $elementA = ${getValue(arrayA, elementType, i)};
-      $jt $elementB = ${getValue(arrayB, elementType, i)};
-      int comp = ${genComp(elementType, elementA, elementB)};
-      if (comp != 0) {
-        return comp;
-      }
-    }
-    """
+       |boolean $isNullA = $arrayA.isNullAt($i);
+       |boolean $isNullB = $arrayB.isNullAt($i);
+       |if ($isNullA && $isNullB) {
+       |  // Nothing
+       |} else if ($isNullA) {
+       |  return -1;
+       |} else if ($isNullB) {
+       |  return 1;
+       |} else {
+       |  $jt $elementA = ${getValue(arrayA, elementType, i)};
+       |  $jt $elementB = ${getValue(arrayB, elementType, i)};
+       |  int comp = ${genComp(elementType, elementA, elementB)};
+       |  if (comp != 0) {
+       |    return comp;
+       |  }
+       |}
+     """.stripMargin
   }
 
   /**
