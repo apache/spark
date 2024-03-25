@@ -740,18 +740,39 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   }
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
+    val collationId = first.dataType.asInstanceOf[StringType].collationId
     srcEval.asInstanceOf[UTF8String].replace(
-      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String])
+      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (src, search, replace) => {
-      s"""${ev.value} = $src.replace($search, $replace);"""
-    })
+    val collationId = first.dataType.asInstanceOf[StringType].collationId
+
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      nullSafeCodeGen(ctx, ev, (src, search, replace) => {
+        s"""${ev.value} = $src.replace($search, $replace);"""
+      })
+    } else {
+      nullSafeCodeGen(ctx, ev, (src, search, replace) => {
+        s"""${ev.value} = $src.replace($search, $replace, $collationId);"""
+      })
+    }
   }
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+
+    // Only srcExpr and searchExpr are checked for collation compatibility.
+    val collationId = first.dataType.asInstanceOf[StringType].collationId
+    CollationTypeConstraints.checkCollationCompatibility(collationId, Seq(second.dataType))
+  }
+
+  override def dataType: DataType = srcExpr.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
   override def first: Expression = srcExpr
   override def second: Expression = searchExpr
   override def third: Expression = replaceExpr
