@@ -1532,17 +1532,15 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val observedDf = df.observe(observation, min("id"), avg("id"), max("id"))
 
     // Start a new thread to get the observation
-    val future = Future {
-      observation.get
-    }(ExecutionContext.global)
-    // make sure the thread in `future` is blocked right now
+    val future = Future(observation.get)(ExecutionContext.global)
+    // make sure the thread is blocked right now
     val e = intercept[java.util.concurrent.TimeoutException] {
-      SparkThreadUtils.awaitResult(future, 5.seconds)
+      SparkThreadUtils.awaitResult(future, 2.seconds)
     }
     assert(e.getMessage.contains("Future timed out"))
     observedDf.collect()
-    // make sure the thread in `future` is unblocked after the query is finished
-    val metrics = SparkThreadUtils.awaitResult(future, 5.seconds)
+    // make sure the thread is unblocked after the query is finished
+    val metrics = SparkThreadUtils.awaitResult(future, 2.seconds)
     assert(metrics === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
   }
 }
