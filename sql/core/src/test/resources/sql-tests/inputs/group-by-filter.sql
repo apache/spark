@@ -169,7 +169,7 @@ GROUP BY dept_id;
 -- Aggregate with filter is subquery
 SELECT t1.b FROM (SELECT COUNT(b) FILTER (WHERE a >= 2) AS b FROM testData) t1;
 
--- Wrong use of FILTER expression in aggregate functions
+-- SPARK-47256: Wrong use of FILTER expression in aggregate functions
 SELECT count(num1) FILTER (WHERE rand(int(num2)) > 1) FROM FilterExpressionTestData;
 
 SELECT sum(num1) FILTER (WHERE str) FROM FilterExpressionTestData;
