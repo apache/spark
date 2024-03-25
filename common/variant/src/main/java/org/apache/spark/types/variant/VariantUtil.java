@@ -344,8 +344,8 @@ public class VariantUtil {
       int start;
       int length;
       if (basicType == SHORT_STR) {
-        start = pos;
-        length = value.length;
+        start = pos + 1;
+        length = typeInfo;
       } else {
         start = pos + 1 + U32_SIZE;
         length = readUnsigned(value, pos + 1, U32_SIZE);

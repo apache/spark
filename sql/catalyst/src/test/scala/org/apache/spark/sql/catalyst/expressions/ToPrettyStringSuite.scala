@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -118,11 +117,5 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Boolean as pretty strings") {
     checkEvaluation(ToPrettyString(Literal(false)), "false")
     checkEvaluation(ToPrettyString(Literal(true)), "true")
-  }
-
-  test("Variant as pretty strings") {
-    checkEvaluation(
-      ToPrettyString(Literal(new VariantVal(Array[Byte](1, 2, 3), Array[Byte](1, 5)))),
-      UTF8String.fromBytes(Array[Byte](1, 2, 3)).toString)
   }
 }

@@ -69,7 +69,7 @@ public final class Variant {
   static String escapeJson(String str) {
     try (CharArrayWriter writer = new CharArrayWriter();
          JsonGenerator gen = new JsonFactory().createGenerator(writer)) {
-      gen.writeRaw(str);
+      gen.writeString(str);
       gen.flush();
       return writer.toString();
     } catch (IOException e) {
