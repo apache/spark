@@ -31,7 +31,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *   2. build/sbt "sql/Test/runMain org.apache.spark.sql.execution.benchmark.CollationBenchmark"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
- *      Results will be written to "benchmarks/JoinBenchmark-results.txt".
+ *      Results will be written to "benchmarks/CollationBenchmark-results.txt".
  * }}}
  */
 
@@ -70,7 +70,7 @@ object CollationBenchmark extends SqlBasedBenchmark {
         b.addCase(s"equalsFunction - $collationType") { _ =>
           sublistStrings.foreach(s1 =>
             utf8Strings.foreach(s =>
-            collation.equalsFunction(s, s1).booleanValue()
+              collation.equalsFunction(s, s1).booleanValue()
             )
           )
         }
@@ -98,12 +98,12 @@ object CollationBenchmark extends SqlBasedBenchmark {
     val benchmark = collationTypes.foldLeft(
       new Benchmark(s"filter df column with collation", dfUncollated.count(), output = output)) {
       (b, collationType) =>
-          val dfCollated = dfUncollated.selectExpr(
-            s"collate(s2, '$collationType') as k2_$collationType",
-            s"collate(s1, '$collationType') as k1_$collationType")
+        val dfCollated = dfUncollated.selectExpr(
+          s"collate(s2, '$collationType') as k2_$collationType",
+          s"collate(s1, '$collationType') as k1_$collationType")
         b.addCase(s"filter df column with collation - $collationType") { _ =>
           dfCollated.where(col(s"k1_$collationType") === col(s"k2_$collationType"))
-                .queryExecution.executedPlan.executeCollect()
+            .queryExecution.executedPlan.executeCollect()
         }
         b
     }
@@ -114,5 +114,4 @@ object CollationBenchmark extends SqlBasedBenchmark {
     benchmarkFilterEqual(collationTypes, generateDataframeInput(10000L))
     benchmarkUTFString(collationTypes, generateSeqInput(10000L))
   }
-
 }
