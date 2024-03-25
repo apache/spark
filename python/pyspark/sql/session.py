@@ -575,6 +575,9 @@ class SparkSession(SparkConversionMixin):
     #
     # @classmethod + @property is also affected by a bug in Python's docstring which was backported
     # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
+    #
+    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
+    # If changing, make sure this bug is not reintroduced.
     builder: Builder = classproperty(lambda cls: cls.Builder())
     """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 

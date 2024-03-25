@@ -235,6 +235,8 @@ class SparkSession:
 
     _client: SparkConnectClient
 
+    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
+    # If changing, make sure this bug is not reintroduced.
     builder: Builder = classproperty(lambda cls: cls.Builder())
     builder.__doc__ = PySparkSession.builder.__doc__
 
