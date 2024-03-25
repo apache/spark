@@ -23,7 +23,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Benchmark to measure performance for joins. To run this benchmark:
+ * Benchmark to measure performance for comparisons between collated strings. To run this benchmark:
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class>
@@ -63,50 +63,50 @@ object CollationBenchmark extends SqlBasedBenchmark {
 
   def benchmarkUTFString(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
-    val benchmark = collationTypes.foldLeft(
-      new Benchmark(s"collation unit benchmarks", utf8Strings.size, output = output)) {
-      (b, collationType) =>
-        val collation = CollationFactory.fetchCollation(collationType)
-        b.addCase(s"equalsFunction - $collationType") { _ =>
-          sublistStrings.foreach(s1 =>
-            utf8Strings.foreach(s =>
-              collation.equalsFunction(s, s1).booleanValue()
-            )
+
+    val benchmark = new Benchmark("collation unit benchmarks", utf8Strings.size, output = output)
+    collationTypes.foreach(collationType => {
+      val collation = CollationFactory.fetchCollation(collationType)
+      benchmark.addCase(s"equalsFunction - $collationType") { _ =>
+        sublistStrings.foreach(s1 =>
+          utf8Strings.foreach(s =>
+            collation.equalsFunction(s, s1).booleanValue()
           )
-        }
-        b.addCase(s"collator.compare - $collationType") { _ =>
-          sublistStrings.foreach(s1 =>
-            utf8Strings.foreach(s =>
-              collation.comparator.compare(s, s1)
-            )
+        )
+      }
+      benchmark.addCase(s"collator.compare - $collationType") { _ =>
+        sublistStrings.foreach(s1 =>
+          utf8Strings.foreach(s =>
+            collation.comparator.compare(s, s1)
           )
-        }
-        b.addCase(s"hashFunction - $collationType") { _ =>
-          sublistStrings.foreach(_ =>
-            utf8Strings.foreach(s =>
-              collation.hashFunction.applyAsLong(s)
-            )
+        )
+      }
+      benchmark.addCase(s"hashFunction - $collationType") { _ =>
+        sublistStrings.foreach(_ =>
+          utf8Strings.foreach(s =>
+            collation.hashFunction.applyAsLong(s)
           )
-        }
-        b
+        )
+      }
     }
+    )
     benchmark.run()
   }
 
   def benchmarkFilterEqual(collationTypes: Seq[String],
                            dfUncollated: DataFrame): Unit = {
-    val benchmark = collationTypes.foldLeft(
-      new Benchmark(s"filter df column with collation", dfUncollated.count(), output = output)) {
-      (b, collationType) =>
-        val dfCollated = dfUncollated.selectExpr(
-          s"collate(s2, '$collationType') as k2_$collationType",
-          s"collate(s1, '$collationType') as k1_$collationType")
-        b.addCase(s"filter df column with collation - $collationType") { _ =>
-          dfCollated.where(col(s"k1_$collationType") === col(s"k2_$collationType"))
-            .queryExecution.executedPlan.executeCollect()
-        }
-        b
+    val benchmark =
+      new Benchmark("filter df column with collation", dfUncollated.count(), output = output)
+    collationTypes.foreach(collationType => {
+      val dfCollated = dfUncollated.selectExpr(
+        s"collate(s2, '$collationType') as k2_$collationType",
+        s"collate(s1, '$collationType') as k1_$collationType")
+      benchmark.addCase(s"filter df column with collation - $collationType") { _ =>
+        dfCollated.where(col(s"k1_$collationType") === col(s"k2_$collationType"))
+          .queryExecution.executedPlan.executeCollect()
+      }
     }
+    )
     benchmark.run()
   }
 
