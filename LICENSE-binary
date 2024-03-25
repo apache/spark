@@ -325,7 +325,6 @@ commons-cli:commons-cli
 commons-dbcp:commons-dbcp
 commons-io:commons-io
 commons-lang:commons-lang
-commons-logging:commons-logging
 commons-net:commons-net
 commons-pool:commons-pool
 io.fabric8:zjsonpatch
