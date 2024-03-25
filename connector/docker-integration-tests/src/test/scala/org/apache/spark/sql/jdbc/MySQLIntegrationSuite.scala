@@ -43,7 +43,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val usesIpc = false
     override val jdbcPort: Int = 3306
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&disableMariaDbDriver"
   }
 
   override def dataPreparation(conn: Connection): Unit = {
@@ -73,6 +73,19 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
       "'jumps', 'over', 'the', 'lazy', 'dog', '{\"status\": \"merrily\"}')").executeUpdate()
+  }
+
+  def testConnection(): Unit = {
+    val conn = getConnection()
+    try {
+      assert(conn.getClass.getName === "com.mysql.cj.jdbc.ConnectionImpl")
+    } finally {
+      conn.close()
+    }
+  }
+
+  test("SPARK-47537: ensure use the right jdbc driver") {
+    testConnection()
   }
 
   test("Basic test") {
@@ -198,5 +211,37 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
+  }
+}
+
+/**
+ * To run this test suite for a specific version (e.g., mysql:8.3.0):
+ * {{{
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
+ * }}}
+ */
+@DockerTest
+class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
+
+  override val db = new DatabaseOnDocker {
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
+    override val env = Map(
+      "MYSQL_ROOT_PASSWORD" -> "rootpass"
+    )
+    override val usesIpc = false
+    override val jdbcPort: Int = 3306
+    override def getJdbcUrl(ip: String, port: Int): String =
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&disableMariaDbDriver"
+  }
+
+  override def testConnection(): Unit = {
+    val conn = getConnection()
+    try {
+      assert(conn.getClass.getName === "org.mariadb.jdbc.MariaDbConnection")
+    } finally {
+      conn.close()
+    }
   }
 }

@@ -68,8 +68,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     override val jdbcPort: Int = 3306
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/" +
-        s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
+        "&useSSL=false&disableMariaDbDriver"
   }
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -82,11 +82,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override val connectionTimeout = timeout(7.minutes)
 
   private var mySQLVersion = -1
-
-  override def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
-    .putLong("scale", 0)
-    .putBoolean("isSigned", true)
-    .build()
 
   override def tablePreparation(connection: Connection): Unit = {
     mySQLVersion = connection.getMetaData.getDatabaseMajorVersion
@@ -170,5 +165,34 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
       sql(s"INSERT INTO $tableName SELECT rpad('hi', 65536, 'spark')")
       assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 65536)
     }
+  }
+}
+
+/**
+ * To run this test suite for a specific version (e.g., mysql:8.3.0):
+ * {{{
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:8.3.0
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly *MySQLOverMariaConnectorIntegrationSuite"
+ * }}}
+ */
+@DockerTest
+class MySQLOverMariaConnectorIntegrationSuite extends MySQLIntegrationSuite {
+  override def defaultMetadata(dataType: DataType = StringType): Metadata = new MetadataBuilder()
+    .putLong("scale", 0)
+    .putBoolean("isSigned", true)
+    .build()
+
+  override val db = new DatabaseOnDocker {
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
+    override val env = Map(
+      "MYSQL_ROOT_PASSWORD" -> "rootpass"
+    )
+    override val usesIpc = false
+    override val jdbcPort: Int = 3306
+
+    override def getJdbcUrl(ip: String, port: Int): String =
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true" +
+        "&useSSL=false"
   }
 }
