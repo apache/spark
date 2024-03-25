@@ -169,6 +169,71 @@ Project [a#x, b#x, scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
 
 
 -- !query
+CREATE TEMPORARY VIEW null_view(a, b) AS SELECT CAST(null AS int), CAST(null as int)
+-- !query analysis
+CreateViewCommand `null_view`, [(a,None), (b,None)], SELECT CAST(null AS int), CAST(null as int), false, false, LocalTempView, true
+   +- Project [cast(null as int) AS CAST(NULL AS INT)#x, cast(null as int) AS CAST(NULL AS INT)#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    WHERE
+      null_view.a = l.a
+  )
+FROM
+  l
+-- !query analysis
+Project [scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
+:  +- Aggregate [count(a#x) AS result#xL]
+:     +- Filter (a#x = outer(a#x))
+:        +- SubqueryAlias null_view
+:           +- View (`null_view`, [a#x, b#x])
+:              +- Project [cast(CAST(NULL AS INT)#x as int) AS a#x, cast(CAST(NULL AS INT)#x as int) AS b#x]
+:                 +- Project [cast(null as int) AS CAST(NULL AS INT)#x, cast(null as int) AS CAST(NULL AS INT)#x]
+:                    +- OneRowRelation
++- SubqueryAlias l
+   +- View (`l`, [a#x, b#x])
+      +- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    WHERE
+      null_view.a = l.a
+    having count(*) > -1
+  )
+FROM
+  l
+-- !query analysis
+Project [scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
+:  +- Project [result#xL]
+:     +- Filter (count(1)#xL > cast(-1 as bigint))
+:        +- Aggregate [count(a#x) AS result#xL, count(1) AS count(1)#xL]
+:           +- Filter (a#x = outer(a#x))
+:              +- SubqueryAlias null_view
+:                 +- View (`null_view`, [a#x, b#x])
+:                    +- Project [cast(CAST(NULL AS INT)#x as int) AS a#x, cast(CAST(NULL AS INT)#x as int) AS b#x]
+:                       +- Project [cast(null as int) AS CAST(NULL AS INT)#x, cast(null as int) AS CAST(NULL AS INT)#x]
+:                          +- OneRowRelation
++- SubqueryAlias l
+   +- View (`l`, [a#x, b#x])
+      +- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true
 -- !query analysis
 SetCommand (spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled,Some(true))
