@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression, Predicate, SupportQueryContext}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{RuleContextBase, RuleWithContext}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -178,11 +178,13 @@ case class InSubqueryExec(
 /**
  * Plans subqueries that are present in the given [[SparkPlan]].
  */
-case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
-  def apply(plan: SparkPlan): SparkPlan = {
+case class PlanSubqueries(sparkSession: SparkSession) extends RuleWithContext[SparkPlan] {
+  def applyWithContext(plan: SparkPlan, ruleContext: Option[RuleContextBase]): SparkPlan = {
+    val ruleContextWithSubquery = ruleContext.map(_.withSubquery(true))
     plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY)) {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
+        val executedPlan = QueryExecution.prepareExecutedPlan(
+          sparkSession, subquery.plan, ruleContextWithSubquery)
         ScalarSubquery(
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
@@ -197,7 +199,8 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
             }
           )
         }
-        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, query)
+        val executedPlan = QueryExecution.prepareExecutedPlan(
+          sparkSession, query, ruleContextWithSubquery)
         InSubqueryExec(expr, SubqueryExec(s"subquery#${exprId.id}", executedPlan),
           exprId, isDynamicPruning = false)
     }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{RuleContextBase, RuleWithContext}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
@@ -29,9 +29,9 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelati
 /**
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
-case class PlanAdaptiveDynamicPruningFilters(
-    rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
-  def apply(plan: SparkPlan): SparkPlan = {
+case class PlanAdaptiveDynamicPruningFilters(rootPlan: AdaptiveSparkPlanExec)
+  extends RuleWithContext[SparkPlan] with AdaptiveSparkPlanHelper {
+  def applyWithContext(plan: SparkPlan, ruleContext: Option[RuleContextBase]): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
       return plan
     }
@@ -72,7 +72,7 @@ case class PlanAdaptiveDynamicPruningFilters(
 
           val session = adaptivePlan.context.session
           val sparkPlan = QueryExecution.prepareExecutedPlan(
-            session, aggregate, adaptivePlan.context)
+            session, aggregate, adaptivePlan.context, ruleContext.map(_.withSubquery(true)))
           assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
           val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
           val values = SubqueryExec(name, newAdaptivePlan)

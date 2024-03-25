@@ -20,12 +20,14 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Literal, ScalarSubquery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{RuleContextBase, RuleWithContext}
 import org.apache.spark.sql.catalyst.trees.TreePattern.RELATION_TIME_TRAVEL
 import org.apache.spark.sql.execution.{QueryExecution, ScalarSubquery => ScalarSubqueryExec, SubqueryExec}
 
-class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+class EvalSubqueriesForTimeTravel extends RuleWithContext[LogicalPlan] {
+  override def applyWithContext(
+      plan: LogicalPlan,
+      ruleContext: Option[RuleContextBase]): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(RELATION_TIME_TRAVEL)) {
     case r @ RelationTimeTravel(_, Some(ts), _)
         if ts.resolved && SubqueryExpression.hasSubquery(ts) =>
@@ -36,7 +38,8 @@ class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
           assert(!s.isCorrelated, "Correlated subquery should not appear in " +
             classOf[EvalSubqueriesForTimeTravel].getSimpleName)
           SimpleAnalyzer.checkSubqueryExpression(r, s)
-          val executedPlan = QueryExecution.prepareExecutedPlan(SparkSession.active, s.plan)
+          val executedPlan = QueryExecution.prepareExecutedPlan(
+            SparkSession.active, s.plan, ruleContext.map(_.withSubquery(true)))
           val physicalSubquery = ScalarSubqueryExec(
             SubqueryExec.createForScalarSubquery(
               s"scalar-subquery#${s.exprId.id}", executedPlan),

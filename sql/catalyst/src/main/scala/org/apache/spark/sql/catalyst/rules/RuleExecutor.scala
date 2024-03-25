@@ -177,17 +177,22 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    * rule using the provided tracker.
    * @see [[execute]]
    */
-  def executeAndTrack(plan: TreeType, tracker: QueryPlanningTracker): TreeType = {
+  def executeAndTrack(
+      plan: TreeType,
+      tracker: QueryPlanningTracker,
+      ruleContext: Option[RuleContextBase] = None): TreeType = {
     QueryPlanningTracker.withTracker(tracker) {
-      execute(plan)
+      execute(plan, ruleContext)
     }
   }
+
+  def execute(plan: TreeType): TreeType = execute(plan, None)
 
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
    * using the defined execution strategy. Within each batch, rules are also executed serially.
    */
-  def execute(plan: TreeType): TreeType = {
+  def execute(plan: TreeType, ruleContext: Option[RuleContextBase]): TreeType = {
     var curPlan = plan
     val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
     val planChangeLogger = new PlanChangeLogger[TreeType]()
@@ -219,7 +224,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         curPlan = batch.rules.foldLeft(curPlan) {
           case (plan, rule) =>
             val startTime = System.nanoTime()
-            val result = rule(plan)
+            val result = rule(plan, ruleContext)
             val runTime = System.nanoTime() - startTime
             val effective = !result.fastEquals(plan)
 

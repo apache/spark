@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder, Speciali
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleContextBase, RuleWithContext}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
@@ -492,7 +492,7 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
 case class ApplyColumnarRulesAndInsertTransitions(
     columnarRules: Seq[ColumnarRule],
     outputsColumnar: Boolean)
-  extends Rule[SparkPlan] {
+  extends RuleWithContext[SparkPlan] {
 
   /**
    * Inserts an transition to columnar formatted data.
@@ -535,11 +535,13 @@ case class ApplyColumnarRulesAndInsertTransitions(
     }
   }
 
-  def apply(plan: SparkPlan): SparkPlan = {
+  def applyWithContext(plan: SparkPlan, ruleContext: Option[RuleContextBase]): SparkPlan = {
     var preInsertPlan: SparkPlan = plan
-    columnarRules.foreach(r => preInsertPlan = r.preColumnarTransitions(preInsertPlan))
+    columnarRules.foreach(
+      r => preInsertPlan = r.preColumnarTransitions(preInsertPlan, ruleContext))
     var postInsertPlan = insertTransitions(preInsertPlan, outputsColumnar)
-    columnarRules.reverse.foreach(r => postInsertPlan = r.postColumnarTransitions(postInsertPlan))
+    columnarRules.reverse.foreach(
+      r => postInsertPlan = r.postColumnarTransitions(postInsertPlan, ruleContext))
     postInsertPlan
   }
 }

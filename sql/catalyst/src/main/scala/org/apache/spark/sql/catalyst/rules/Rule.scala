@@ -33,4 +33,31 @@ abstract class Rule[TreeType <: TreeNode[_]] extends SQLConfHelper with Logging 
   }
 
   def apply(plan: TreeType): TreeType
+
+  def apply(plan: TreeType, ruleContext: Option[RuleContextBase]): TreeType = apply(plan)
+}
+
+trait RuleContextBase {
+  def isSubquery: Boolean
+
+  private[sql] def withSubquery(isSubquery: Boolean): RuleContextBase
+}
+
+case class RuleContext(isSubquery: Boolean) extends RuleContextBase {
+  private[sql] def withSubquery(isSubquery: Boolean): RuleContextBase = {
+    if (this.isSubquery == isSubquery) {
+      this
+    } else {
+      RuleContext(isSubquery = isSubquery)
+    }
+  }
+}
+
+abstract class RuleWithContext[TreeType <: TreeNode[_]] extends Rule[TreeType] {
+  final override def apply(plan: TreeType): TreeType = apply(plan, None)
+
+  final override def apply(plan: TreeType, ruleContext: Option[RuleContextBase]): TreeType =
+    applyWithContext(plan, ruleContext)
+
+  def applyWithContext(plan: TreeType, ruleContext: Option[RuleContextBase]): TreeType
 }
