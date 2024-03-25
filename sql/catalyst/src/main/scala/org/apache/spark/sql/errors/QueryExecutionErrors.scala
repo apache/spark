@@ -1238,7 +1238,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotParseJSONFieldError(parser: JsonParser, jsonType: JsonToken, dataType: DataType)
   : SparkRuntimeException = {
-    cannotParseJSONFieldError(parser.getCurrentName, parser.getText, jsonType, dataType)
+    cannotParseJSONFieldError(parser.currentName, parser.getText, jsonType, dataType)
   }
 
   def cannotParseJSONFieldError(

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, Decimal, DecimalType, MapType, NullType, StructField, StructType, UserDefinedType}
 import org.apache.spark.sql.types.DecimalType.{forType, fromDecimal}
 
 object DataTypeUtils {
@@ -64,6 +64,8 @@ object DataTypeUtils {
    * - Both types are structs and have the same number of fields. The type and nullability of each
    *   field from read/write is compatible. If byName is true, the name of each field from
    *   read/write needs to be the same.
+   * - It is user defined type and its underlying sql type is same as the read type, or the read
+   *   type is user defined type and its underlying sql type is same as the write type.
    * - Both types are atomic and the write type can be safely cast to the read type.
    *
    * Extra fields in write-side structs are not allowed to avoid accidentally writing data that
@@ -179,6 +181,16 @@ object DataTypeUtils {
 
       case (w, r) if DataTypeUtils.sameType(w, r) && !w.isInstanceOf[NullType] =>
         true
+
+      // If write-side data type is a user-defined type, check with its underlying data type.
+      case (w, r) if w.isInstanceOf[UserDefinedType[_]] && !r.isInstanceOf[UserDefinedType[_]] =>
+        canWrite(tableName, w.asInstanceOf[UserDefinedType[_]].sqlType, r, byName, resolver,
+          context, storeAssignmentPolicy, addError)
+
+      // If read-side data type is a user-defined type, check with its underlying data type.
+      case (w, r) if r.isInstanceOf[UserDefinedType[_]] && !w.isInstanceOf[UserDefinedType[_]] =>
+        canWrite(tableName, w, r.asInstanceOf[UserDefinedType[_]].sqlType, byName, resolver,
+          context, storeAssignmentPolicy, addError)
 
       case (w, r) =>
         throw QueryCompilationErrors.incompatibleDataToTableCannotSafelyCastError(

@@ -2895,6 +2895,12 @@
     },
     "sqlState" : "22023"
   },
+  "MALFORMED_VARIANT" : {
+    "message" : [
+      "Variant binary is malformed. Please check the data source is valid."
+    ],
+    "sqlState" : "22023"
+  },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
       "The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.",
@@ -4573,6 +4579,12 @@
       "To tolerate the error on drop use DROP VARIABLE IF EXISTS."
     ],
     "sqlState" : "42883"
+  },
+  "VARIANT_CONSTRUCTOR_SIZE_LIMIT" : {
+    "message" : [
+      "Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB."
+    ],
+    "sqlState" : "22023"
   },
   "VARIANT_SIZE_LIMIT" : {
     "message" : [

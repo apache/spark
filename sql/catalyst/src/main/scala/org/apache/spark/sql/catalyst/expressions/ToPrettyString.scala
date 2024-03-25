@@ -51,7 +51,7 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected def useHexFormatForBinary: Boolean = true
 
-  private[this] lazy val castFunc: Any => Any = castToString(child.dataType)
+  private[this] lazy val castFunc: Any => UTF8String = castToString(child.dataType)
 
   override def eval(input: InternalRow): Any = {
     val v = child.eval(input)

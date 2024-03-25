@@ -504,6 +504,25 @@ class SparkSubmitSuite
     }
   }
 
+  test("SPARK-47495: Not to add primary resource to jars again" +
+    " in k8s client mode & driver runs inside a POD") {
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--proxy-user", "test.user",
+      "--master", "k8s://host:port",
+      "--executor-memory", "1g",
+      "--class", "org.SomeClass",
+      "--driver-memory", "1g",
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "--jars", "src/test/resources/TestUDTF.jar",
+      "/home/jarToIgnore.jar",
+      "arg1")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, sparkConf, _) = submit.prepareSubmitEnvironment(appArgs)
+    sparkConf.get("spark.jars").contains("jarToIgnore") shouldBe false
+    sparkConf.get("spark.jars").contains("TestUDTF") shouldBe true
+  }
+
   test("SPARK-33782: handles k8s files download to current directory") {
     val clArgs = Seq(
       "--deploy-mode", "client",
