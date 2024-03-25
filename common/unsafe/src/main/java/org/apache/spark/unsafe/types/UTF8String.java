@@ -1136,6 +1136,104 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return buf.build();
   }
 
+  public UTF8String replace(UTF8String search, UTF8String replace, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.replace(search, replace);
+    }
+    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return lowercaseReplace(search, replace);
+    }
+    return collatedReplace(search, replace, collationId);
+  }
+
+  public UTF8String lowercaseReplace(UTF8String search, UTF8String replace) {
+    if (numBytes == 0 || search.numBytes == 0) {
+      return this;
+    }
+    UTF8String lowercaseString = this.toLowerCase();
+    UTF8String lowercaseSearch = search.toLowerCase();
+
+    int start = 0;
+    int end = lowercaseString.indexOf(lowercaseSearch, 0);
+    if (end == -1) {
+      // Search string was not found, so string is unchanged.
+      return this;
+    }
+
+    // Initialize byte positions
+    int c = 0;
+    int byteStart = 0; // position in byte
+    int byteEnd = 0; // position in byte
+    while (byteEnd < numBytes && c < end) {
+      byteEnd += numBytesForFirstByte(getByte(byteEnd));
+      c += 1;
+    }
+
+    // At least one match was found. Estimate space needed for result.
+    // The 16x multiplier here is chosen to match commons-lang3's implementation.
+    int increase = Math.max(0, replace.numBytes - search.numBytes) * 16;
+    final UTF8StringBuilder buf = new UTF8StringBuilder(numBytes + increase);
+    while (end != -1) {
+      buf.appendBytes(this.base, this.offset + byteStart, byteEnd - byteStart);
+      buf.append(replace);
+      // Update character positions
+      start = end + lowercaseSearch.numChars();
+      end = lowercaseString.indexOf(lowercaseSearch, start);
+      // Update byte positions
+      byteStart = byteEnd + search.numBytes;
+      while (byteEnd < numBytes && c < end) {
+        byteEnd += numBytesForFirstByte(getByte(byteEnd));
+        c += 1;
+      }
+    }
+    buf.appendBytes(this.base, this.offset + byteStart, numBytes - byteStart);
+    return buf.build();
+  }
+
+  private UTF8String collatedReplace(UTF8String search, UTF8String replace, int collationId) {
+    if (numBytes == 0 || search.numBytes == 0) {
+      return this;
+    }
+
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, search, collationId);
+
+    // Find the first occurrence of the search string.
+    int end = stringSearch.next();
+    if (end == StringSearch.DONE) {
+      // Search string was not found, so string is unchanged.
+      return this;
+    }
+
+    // Initialize byte positions
+    int c = 0;
+    int byteStart = 0; // position in byte
+    int byteEnd = 0; // position in byte
+    while (byteEnd < numBytes && c < end) {
+      byteEnd += numBytesForFirstByte(getByte(byteEnd));
+      c += 1;
+    }
+
+    // At least one match was found. Estimate space needed for result.
+    // The 16x multiplier here is chosen to match commons-lang3's implementation.
+    int increase = Math.max(0, Math.abs(replace.numBytes - search.numBytes)) * 16;
+    final UTF8StringBuilder buf = new UTF8StringBuilder(numBytes + increase);
+    while (end != StringSearch.DONE) {
+      if(stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        buf.appendBytes(this.base, this.offset + byteStart, byteEnd - byteStart);
+        buf.append(replace);
+        byteStart = byteEnd + search.numBytes;
+      }
+      end = stringSearch.next();
+      // Update byte positions
+      while (byteEnd < numBytes && c < end) {
+        byteEnd += numBytesForFirstByte(getByte(byteEnd));
+        c += 1;
+      }
+    }
+    buf.appendBytes(this.base, this.offset + byteStart, numBytes - byteStart);
+    return buf.build();
+  }
+
   public UTF8String translate(Map<String, String> dict) {
     String srcStr = this.toString();
 
