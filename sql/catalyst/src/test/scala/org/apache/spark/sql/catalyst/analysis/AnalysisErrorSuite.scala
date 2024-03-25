@@ -295,11 +295,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) FILTER (WHERE c > 1)", 7, 76)))
   }
 
-  errorTest(
-    "non-deterministic filter predicate in aggregate functions",
-    CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
-    "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
-
   test("function don't support ignore nulls") {
     assertAnalysisErrorClass(
       CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
@@ -806,22 +801,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     "The generator is not supported: only one generator allowed per SELECT clause but found 2: " +
       """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
-
-  errorTest(
-    "SPARK-38666: non-boolean aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where e) FROM TaBlE2"),
-    "FILTER expression is not of type boolean" :: Nil)
-
-  errorTest(
-    "SPARK-38666: aggregate in aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where max(e) > 1) FROM TaBlE2"),
-    "FILTER expression contains aggregate" :: Nil)
-
-  errorTest(
-    "SPARK-38666: window function in aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) " +
-       "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
-    "FILTER expression contains window function" :: Nil)
 
   errorClassTest(
     "EXEC IMMEDIATE - nested execute immediate not allowed",

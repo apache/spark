@@ -1056,6 +1056,14 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 
 Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
 
+### [INVALID_AGGREGATE_FILTER](sql-error-conditions-invalid-aggregate-filter-error-class.html)
+
+[SQLSTATE: 42903](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The FILTER expression `<filterExpr>` in an aggregate function is invalid.
+
+For more details see [INVALID_AGGREGATE_FILTER](sql-error-conditions-invalid-aggregate-filter-error-class.html)
+
 ### INVALID_ARRAY_INDEX
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
