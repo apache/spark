@@ -1995,26 +1995,23 @@ case class Slice(x: Expression, start: Expression, length: Expression)
 case class ArrayJoin(
     array: Expression,
     delimiter: Expression,
-    nullReplacement: Option[Expression]) extends ImplicitCastInputTypes with ExpectsInputTypes {
+    nullReplacement: Option[Expression]) extends ImplicitCastInputTypes {
 
   def this(array: Expression, delimiter: Expression) = this(array, delimiter, None)
 
   def this(array: Expression, delimiter: Expression, nullReplacement: Expression) =
     this(array, delimiter, Some(nullReplacement))
 
-  private val commonType: DataType = {
-    val elementType = array.dataType.asInstanceOf[ArrayType].elementType
-    val s = nullReplacement match {
-      case Some(replacement) => Seq(elementType, delimiter.dataType, replacement.dataType)
-      case _ => Seq(elementType, delimiter.dataType)
+  override def inputTypes: Seq[AbstractDataType] = {
+    val arrayType = array.dataType.asInstanceOf[ArrayType].elementType match {
+      case _: StringType => array.dataType
+      case _ => ArrayType(StringType)
     }
-    TypeCoercion.findWiderCommonType(s).getOrElse(StringType)
-  }
-
-  override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(ArrayType(commonType), commonType, commonType)
-  } else {
-    Seq(ArrayType(commonType), commonType)
+    if (nullReplacement.isDefined) {
+      Seq(arrayType, StringTypeAnyCollation, StringTypeAnyCollation)
+    } else {
+      Seq(arrayType, StringTypeAnyCollation)
+    }
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
@@ -2057,7 +2054,7 @@ case class ArrayJoin(
       }
       case None => (_: Boolean) => false
     }
-    arrayEval.asInstanceOf[ArrayData].foreach(commonType, (_, item) => {
+    arrayEval.asInstanceOf[ArrayData].foreach(StringType, (_, item) => {
       if (item == null) {
         if (nullHandling(firstItem)) {
           firstItem = false
@@ -2137,7 +2134,7 @@ case class ArrayJoin(
          |    if (!$firstItem) {
          |      $buffer.append(${delimiterGen.value});
          |    }
-         |    $buffer.append(${CodeGenerator.getValue(arrayGen.value, commonType, i)});
+         |    $buffer.append(${CodeGenerator.getValue(arrayGen.value, StringType, i)});
          |    $firstItem = false;
          |  }
          |}
@@ -2159,7 +2156,7 @@ case class ArrayJoin(
     }
   }
 
-  override def dataType: DataType = commonType
+  override def dataType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
 
   override def prettyName: String = "array_join"
 }
