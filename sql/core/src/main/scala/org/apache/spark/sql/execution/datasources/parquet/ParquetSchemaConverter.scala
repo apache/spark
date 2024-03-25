@@ -179,22 +179,7 @@ class ParquetToSparkSchemaConverter(
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
-        if (groupColumn.getChildrenCount != 2 ) {
-          // We may allow more than two children in the future, so consider this unsupported.
-          throw QueryCompilationErrors.
-            parquetTypeUnsupportedYetError("variant with more than two fields")
-        }
-        val valueIdx = (0 until groupColumn.getChildrenCount)
-            .find(groupColumn.getChild(_).getName == "value")
-        val metadataIdx = (0 until groupColumn.getChildrenCount)
-            .find(groupColumn.getChild(_).getName == "metadata")
-        if (valueIdx.isEmpty || metadataIdx.isEmpty) {
-          throw QueryCompilationErrors.illegalParquetTypeError("variant missing value or metadata")
-        }
-        ParquetColumn(VariantType, groupColumn, Seq(
-          convertField(groupColumn.getChild(valueIdx.get), Some(BinaryType)),
-          convertField(groupColumn.getChild(metadataIdx.get), Some(BinaryType))
-        ))
+        convertVariantField(groupColumn)
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }
   }
@@ -414,6 +399,32 @@ class ParquetToSparkSchemaConverter(
       case _ =>
         throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString)
     }
+  }
+
+  private def convertVariantField(groupColumn: GroupColumnIO): ParquetColumn = {
+    if (groupColumn.getChildrenCount != 2 ) {
+      // We may allow more than two children in the future, so consider this unsupported.
+      throw QueryCompilationErrors.
+        parquetTypeUnsupportedYetError("variant with more than two fields")
+    }
+    val valueIdx = (0 until groupColumn.getChildrenCount)
+        .find(groupColumn.getChild(_).getName == "value")
+    val metadataIdx = (0 until groupColumn.getChildrenCount)
+        .find(groupColumn.getChild(_).getName == "metadata")
+    if (valueIdx.isEmpty || metadataIdx.isEmpty) {
+      throw QueryCompilationErrors.illegalParquetTypeError("variant missing value or metadata")
+    }
+    // The value and metadata cannot be individually null, only the full struct can.
+    if (groupColumn.getChild(valueIdx.get).getType.getRepetition != REQUIRED) {
+      throw QueryCompilationErrors.illegalParquetTypeError("variant value must be non-nullable")
+    }
+    if (groupColumn.getChild(metadataIdx.get).getType.getRepetition != REQUIRED) {
+      throw QueryCompilationErrors.illegalParquetTypeError("variant metadata must be non-nullable")
+    }
+    ParquetColumn(VariantType, groupColumn, Seq(
+      convertField(groupColumn.getChild(valueIdx.get), Some(BinaryType)),
+      convertField(groupColumn.getChild(metadataIdx.get), Some(BinaryType))
+    ))
   }
 
   // scalastyle:off
