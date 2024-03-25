@@ -75,8 +75,13 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
+      // MariaDB connector behaviour
       // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
       // byte arrays instead of longs.
+      md.putLong("binarylong", 1)
+      Option(LongType)
+    } else if (sqlType == Types.BIT && size > 1) {
+      // MySQL connector behaviour
       md.putLong("binarylong", 1)
       Option(LongType)
     } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
