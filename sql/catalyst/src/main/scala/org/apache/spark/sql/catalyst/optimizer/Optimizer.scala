@@ -196,7 +196,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceDeduplicateWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
-      InsertMapSortInGroupingExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
     Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo) :+
@@ -245,7 +244,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
+    Batch("NormalizeFloatingNumbers", Once,
+      InsertMapSortInGroupingExpressions,
+      NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
 
     // remove any batches with no rules. this may happen when subclasses do not add optional rules.
@@ -2468,26 +2469,5 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
       } else {
         a.copy(groupingExpressions = newGrouping)
       }
-  }
-}
-
-/**
- * Adds MapSort to group expressions containing map columns, as the key/value paris need to be
- * in the correct order before grouping:
- * SELECT COUNT(*) FROM TABLE GROUP BY map_column =>
- * SELECT COUNT(*) FROM TABLE GROUP BY map_sort(map_column)
- */
-object InsertMapSortInGroupingExpressions extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(AGGREGATE), ruleId) {
-    case a @ Aggregate(groupingExpr, _, _) =>
-      val newGrouping = groupingExpr.map { expr =>
-        if (!expr.isInstanceOf[MapSort] && expr.dataType.isInstanceOf[MapType]) {
-          MapSort(expr)
-        } else {
-          expr
-        }
-      }
-      a.copy(groupingExpressions = newGrouping)
   }
 }
