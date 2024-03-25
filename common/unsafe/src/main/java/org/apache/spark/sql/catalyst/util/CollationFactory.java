@@ -71,7 +71,7 @@ public final class CollationFactory {
      */
     public final boolean supportsBinaryEquality;
     /**
-     * Support for Binary Ordering implies that it is possible to check equality and compare on
+     * Support for Binary Ordering implies that it is possible to check equality and ordering on
      * byte by byte level. This allows for the usage of binaryEquals and binaryCompare calls on
      * UTF8Strings which is more performant than calls to external ICU library. Support for
      * Binary Ordering implies support for Binary Equality.
