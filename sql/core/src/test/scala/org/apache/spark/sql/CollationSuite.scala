@@ -465,7 +465,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("implicit cast of default collated strings") {
+  test("implicit casting of collated strings") {
     val tableName = "parquet_dummy_implicit_cast_t22"
     withTable(tableName) {
       spark.sql(
@@ -504,14 +504,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('b', COLLATE('a', 'UTF8_BINARY'))"),
         Seq(Row("a")))
 
-      // concat should not change collation
+      // concat without type mismatch
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || 'a' || 'a' = 'aaa'"),
         Seq(Row("a"), Row("A")))
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE(c2, 'UTF8_BINARY') = 'aa'"),
         Seq(Row("a")))
 
       // concat of columns of different collations is allowed
-      // as long as we don't use binary comparison on the result
+      // as long as we don't use the result in an unsupported function
       sql(s"SELECT c1 || c3 from $tableName")
 
       // concat + in
@@ -565,7 +565,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
       )
 
-      // concat on different implicit collations should fail
+      // concat on different implicit collations should succeed,
+      // but should fail on try of comparison
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 FROM $tableName WHERE c1 || c3 = 'aa'")
@@ -573,7 +574,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         errorClass = "INDETERMINATE_COLLATION"
       )
 
-      // concat on different implicit collations should fail
+      // concat on different implicit collations should succeed,
+      // but should fail on try of ordering
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tableName ORDER BY c1 || c3")
@@ -585,10 +587,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE('a', 'UTF8_BINARY') IN " +
         s"(COLLATE('aa', 'UNICODE'))"),
         Seq(Row("a")))
+
+      // array creation supports implicit casting
+      checkAnswer(sql(s"SELECT typeof(array('a' COLLATE UNICODE, 'b')[1])"),
+        Seq(Row("string collate UNICODE")))
+
+      // contains fails with indeterminate collation
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT * FROM $tableName WHERE contains(c1||c3, 'a')")
+        },
+        errorClass = "INDETERMINATE_COLLATION"
+      )
     }
   }
 
-  test("cast of default collated string in IN expression") {
+  test("cast of default collated strings in IN expression") {
     val tableName = "t1"
     withTable(tableName) {
       spark.sql(

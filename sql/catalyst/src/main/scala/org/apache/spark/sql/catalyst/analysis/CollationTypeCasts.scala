@@ -21,7 +21,7 @@ import javax.annotation.Nullable
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, Collate, Concat, CreateArray, ExpectsInputTypes, Expression, Predicate, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, CreateArray, ExpectsInputTypes, Expression, Predicate, SortOrder}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
@@ -30,7 +30,7 @@ object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
     // Case when we do not fail if resulting collation is indeterminate
-    case checkCastWithIndeterminate @ (_: Concat | _: CreateArray)
+    case checkCastWithIndeterminate @ (_: ComplexTypeMergingExpression | _: CreateArray)
       if shouldCast(checkCastWithIndeterminate.children) =>
       val newChildren =
         collateToSingleType(checkCastWithIndeterminate.children, failOnIndeterminate = false)

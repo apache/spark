@@ -504,14 +504,6 @@ abstract class StringPredicate extends BinaryExpression
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      return defaultCheck
-    }
-    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
-  }
-
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
     compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
 
