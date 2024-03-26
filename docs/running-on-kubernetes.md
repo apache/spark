@@ -1711,6 +1711,28 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>3.3.0</td>
 </tr>
+<tr>
+  <td><code>spark.ui.custom.driver.log.url</code></td>
+  <td>(none)</td>
+  <td>
+    Specifies custom Spark driver log URL for supporting external log service instead of using cluster
+    managers' application log URLs in Spark UI. Spark will support some path variables via patterns
+    which can vary on cluster manager. Spark Kubernetes cluster manager supports the following path variables:
+    <ul>
+      <li><code>APP_ID</code>: The unique application id</li>
+      <li><code>KUBERNETES_NAMESPACE</code>: The namespace where the executor pods run</li>
+      <li><code>KUBERNETES_POD_NAME</code>: The name of the pod that contains the executor</li>
+      <li><code>FILE_NAME</code>: The name of the log, which is always <code>"log"</code></li>
+    </ul>
+    Please note that this configuration also replaces original log urls in event log,
+    which will be also effective when accessing the application on history server. The new log urls must be
+    permanent, otherwise you might have dead link for driver log urls. <p/>
+    Example: Config value <code>"https://my.custom.url/logs?app={{APP_ID}}"</code>
+    adds for application <code>"app-example-123"</code> this link to the Spark UI:
+    <code>https://my.custom.url/logs?app=app-example-123</code>
+  </td>
+  <td>4.0.0</td>
+</tr>
 </table>
 
 #### Pod template properties
