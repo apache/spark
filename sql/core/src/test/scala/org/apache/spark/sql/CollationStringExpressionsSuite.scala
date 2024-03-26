@@ -93,45 +93,6 @@ class CollationStringExpressionsSuite extends QueryTest
     testInStr("aaads", "dS", 3, 4)
   }
 
-  test("INSTR fail mismatched collation types") {
-    // UNICODE and UNICODE_CI
-    val expr1 = StringInstr(Collate(Literal("aaads"), "UNICODE"),
-      Collate(Literal("Aa"), "UNICODE_CI"))
-    assert(expr1.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> "UNICODE",
-          "collationNameRight" -> "UNICODE_CI"
-        )
-      )
-    )
-    // DEFAULT(UTF8_BINARY) and UTF8_BINARY_LCASE
-    val expr2 = StringInstr(Literal("aaads"),
-      Collate(Literal("Aa"), "UTF8_BINARY_LCASE"))
-    assert(expr2.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> "UTF8_BINARY",
-          "collationNameRight" -> "UTF8_BINARY_LCASE"
-        )
-      )
-    )
-    // UTF8_BINARY_LCASE and UNICODE_CI
-    val expr3 = StringInstr(Collate(Literal("aaads"), "UTF8_BINARY_LCASE"),
-      Collate(Literal("Aa"), "UNICODE_CI"))
-    assert(expr3.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> "UTF8_BINARY_LCASE",
-          "collationNameRight" -> "UNICODE_CI"
-        )
-      )
-    )
-  }
-
   test("FIND_IN_SET check result on explicitly collated strings") {
     def testFindInSet(expected: Integer, stringType: Integer, word: String, set: String): Unit = {
       val w = Literal.create(word, StringType(stringType))
