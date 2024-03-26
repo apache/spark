@@ -236,10 +236,9 @@ class SparkSession:
 
     _client: SparkConnectClient
 
-    @classproperty
-    def builder(cls) -> Builder:
-        return cls.Builder()
-
+    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
+    # If changing, make sure this bug is not reintroduced.
+    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
     builder.__doc__ = PySparkSession.builder.__doc__
 
     def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):
