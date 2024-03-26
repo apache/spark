@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort.io;
 
+import java.io.File;
 import java.util.Map;
 import java.util.Optional;
 
@@ -81,5 +82,10 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
           "Executor components must be initialized before getting writers.");
     }
     return Optional.of(new LocalDiskSingleSpillMapOutputWriter(shuffleId, mapId, blockResolver));
+  }
+
+  @Override
+  public Optional<File> getFinalDataFile(int shuffleId, long mapId) {
+    return Optional.of(blockResolver.getDataFile(shuffleId, mapId));
   }
 }

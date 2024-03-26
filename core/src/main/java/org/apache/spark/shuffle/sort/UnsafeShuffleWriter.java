@@ -221,14 +221,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     updatePeakMemoryUsed();
     serBuffer = null;
     serOutputStream = null;
-    Optional<File> finalDataFileDir;
-    if (shuffleExecutorComponents instanceof LocalDiskShuffleExecutorComponents) {
-      File dataFile =
-        new IndexShuffleBlockResolver(sparkConf, blockManager).getDataFile(shuffleId, mapId);
-      finalDataFileDir = Optional.of(dataFile.getParentFile());
-    } else {
-      finalDataFileDir = Optional.empty();
-    }
+    Optional<File> finalDataFileDir =
+      shuffleExecutorComponents.getFinalDataFile(shuffleId, mapId).map(File::getParentFile);
     final SpillInfo[] spills = sorter.closeAndGetSpills(finalDataFileDir);
     try {
       partitionLengths = mergeSpills(spills);

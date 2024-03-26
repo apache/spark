@@ -17,7 +17,9 @@
 
 package org.apache.spark.shuffle
 
+import java.io.File
 import java.util.{Map => JMap}
+import java.util.Optional
 import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.common.collect.ImmutableMap
@@ -89,5 +91,9 @@ class TestShuffleExecutorComponentsInitialized(delegate: ShuffleExecutorComponen
       mapTaskId: Long,
       numPartitions: Int): ShuffleMapOutputWriter = {
     delegate.createMapOutputWriter(shuffleId, mapTaskId, numPartitions)
+  }
+
+  override def getFinalDataFile(shuffleId: Int, mapId: Long): Optional[File] = {
+    delegate.getFinalDataFile(shuffleId, mapId)
   }
 }

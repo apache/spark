@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.api;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
@@ -73,4 +74,14 @@ public interface ShuffleExecutorComponents {
       long mapId) throws IOException {
     return Optional.empty();
   }
+
+  /**
+   * Get the final data file for a given shuffle and map task.
+   * Returns empty if there is special logic in customized shuffle components.
+   *
+   * @param shuffleId Unique identifier for the shuffle the map task is a part of
+   * @param mapId An ID of the map task. The ID is unique within this Spark application.
+   * @return
+   */
+  Optional<File> getFinalDataFile(int shuffleId, long mapId);
 }
