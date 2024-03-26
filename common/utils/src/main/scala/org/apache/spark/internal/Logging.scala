@@ -91,6 +91,8 @@ trait Logging {
               map.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
             }
           case other =>
+            // Note: all the arguments are supposed to be MDCs, but we only throw an exception
+            //       if we are running in test mode. This is to avoid breaking existing code.
             if (SparkEnvUtils.isTesting) {
               throw new SparkException(s"Argument $other is not a MDC")
             } else {
