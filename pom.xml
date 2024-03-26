@@ -172,7 +172,7 @@
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
     <commons.collections4.version>4.4</commons.collections4.version>
-    <scala.version>2.13.13</scala.version>
+    <scala.version>2.13.12</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <!-- don't upgrade scala-maven-plugin to version 4.7.2 or higher, see SPARK-45144 for details -->
@@ -226,7 +226,7 @@
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
     <arrow.version>15.0.0</arrow.version>
-    <ammonite.version>3.0.0-M1</ammonite.version>
+    <ammonite.version>2.5.11</ammonite.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
