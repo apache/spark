@@ -28,6 +28,7 @@ from pyspark.sql.datasource import (
     WriterCommitMessage,
     CaseInsensitiveDict,
 )
+from pyspark.sql.functions import spark_partition_id
 from pyspark.sql.types import Row, StructType
 from pyspark.testing.sqlutils import (
     have_pyarrow,
@@ -236,12 +237,12 @@ class BasePythonDataSourceTestsMixin:
 
         self.spark.dataSource.register(InMemoryDataSource)
         df = self.spark.read.format("memory").load()
-        self.assertEqual(df.rdd.getNumPartitions(), 3)
+        self.assertEqual(df.select(spark_partition_id()).distinct().count(), 3)
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1"), Row(x=2, y="2")])
 
         df = self.spark.read.format("memory").option("num_partitions", 2).load()
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
-        self.assertEqual(df.rdd.getNumPartitions(), 2)
+        self.assertEqual(df.select(spark_partition_id()).distinct().count(), 2)
 
     def _get_test_json_data_source(self):
         import json

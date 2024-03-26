@@ -22,7 +22,7 @@ import scala.collection.immutable.Seq
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Collate, ExpressionEvalHelper, FindInSet, Literal, StringInstr}
+import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, FindInSet, Literal, StringInstr, StringRepeat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -196,6 +196,19 @@ class CollationStringExpressionsSuite extends QueryTest
         )
       )
     )
+  }
+    
+  test("REPEAT check output type on explicitly collated string") {
+    def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
+      val s = Literal.create(input, StringType(collationId))
+
+      checkEvaluation(Collation(StringRepeat(s, Literal.create(n))).replacement, expected)
+    }
+
+    testRepeat("UTF8_BINARY", 0, "abc", 2)
+    testRepeat("UTF8_BINARY_LCASE", 1, "abc", 2)
+    testRepeat("UNICODE", 2, "abc", 2)
+    testRepeat("UNICODE_CI", 3, "abc", 2)
   }
 
   // TODO: Add more tests for other string expressions

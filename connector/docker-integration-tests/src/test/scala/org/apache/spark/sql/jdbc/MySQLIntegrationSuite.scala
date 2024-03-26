@@ -26,6 +26,7 @@ import scala.util.Using
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -84,6 +85,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       "f4 FLOAT UNSIGNED, f5 FLOAT(10) UNSIGNED, f6 FLOAT(53) UNSIGNED)").executeUpdate()
     conn.prepareStatement("INSERT INTO floats VALUES (1.23, 4.56, 7.89, 1.23, 4.56, 7.89)")
       .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE collections (" +
+        "a SET('cap', 'hat', 'helmet'), b ENUM('S', 'M', 'L', 'XL'))").executeUpdate()
+    conn.prepareStatement("INSERT INTO collections VALUES ('cap,hat', 'M')").executeUpdate()
   }
 
   def testConnection(): Unit = {
@@ -274,6 +279,16 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-47522: Read MySQL FLOAT as FloatType to keep consistent with the write side") {
     val df = spark.read.jdbc(jdbcUrl, "floats", new Properties)
     checkAnswer(df, Row(1.23f, 4.56f, 7.89d, 1.23d, 4.56d, 7.89d))
+  }
+
+  test("SPARK-47557: MySQL ENUM/SET types contains only java.sq.Types.CHAR information") {
+    val df = spark.read.jdbc(jdbcUrl, "collections", new Properties)
+    checkAnswer(df, Row("cap,hat       ", "M "))
+    df.write.mode("append").jdbc(jdbcUrl, "collections", new Properties)
+    withSQLConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      checkAnswer(spark.read.jdbc(jdbcUrl, "collections", new Properties),
+        Row("cap,hat", "M") :: Row("cap,hat", "M") :: Nil)
+    }
   }
 }
 

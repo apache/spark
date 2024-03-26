@@ -123,8 +123,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
-        numColsPrefixKey: Int,
         valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
@@ -280,11 +280,39 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
   }
 
+  // Run bunch of validations specific to HDFSBackedStateStoreProvider
+  private def runValidation(
+      useColumnFamilies: Boolean,
+      useMultipleValuesPerKey: Boolean,
+      keyStateEncoderSpec: KeyStateEncoderSpec): Unit = {
+    // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
+    if (useColumnFamilies) {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+    }
+
+    if (useMultipleValuesPerKey) {
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
+    }
+
+    if (keyStateEncoderSpec.isInstanceOf[RangeKeyScanStateEncoderSpec]) {
+      throw StateStoreErrors.unsupportedOperationException("Range scan", providerName)
+    }
+  }
+
+  private def getNumColsPrefixKey(keyStateEncoderSpec: KeyStateEncoderSpec): Int = {
+    keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(_) => 0
+      case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) => numColsPrefixKey
+      case _ => throw StateStoreErrors.unsupportedOperationException("Invalid key state encoder",
+        providerName)
+    }
+  }
+
   override def init(
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -296,19 +324,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     this.hadoopConf = hadoopConf
     this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
 
-    // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
-    if (useColumnFamilies) {
-      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
-    }
+    // run a bunch of validation checks for this state store provider
+    runValidation(useColumnFamilies, useMultipleValuesPerKey, keyStateEncoderSpec)
 
-    if (useMultipleValuesPerKey) {
-      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
-    }
-
-    require((keySchema.length == 0 && numColsPrefixKey == 0) ||
-      (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
-      "greater than the number of columns for prefix key!")
-    this.numColsPrefixKey = numColsPrefixKey
+    this.numColsPrefixKey = getNumColsPrefixKey(keyStateEncoderSpec)
 
     fm.mkdirs(baseDir)
   }

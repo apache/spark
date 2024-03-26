@@ -230,7 +230,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.10.0</kubernetes-client.version>
+    <kubernetes-client.version>6.11.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -645,11 +645,6 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-collections4</artifactId>
         <version>${commons.collections4.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-beanutils</groupId>
-        <artifactId>commons-beanutils</artifactId>
-        <version>1.9.4</version>
       </dependency>
       <dependency>
         <groupId>org.apache.ivy</groupId>
