@@ -72,7 +72,8 @@ object Literal {
     case s: String => Literal(UTF8String.fromString(s), SqlApiConf.get.defaultStringType)
     case s: UTF8String => Literal(s, SqlApiConf.get.defaultStringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), SqlApiConf.get.defaultStringType)
-    case ac: Array[Char] => Literal(UTF8String.fromString(String.valueOf(ac)), SqlApiConf.get.defaultStringType)
+    case ac: Array[Char] =>
+      Literal(UTF8String.fromString(String.valueOf(ac)), SqlApiConf.get.defaultStringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal =>
       val decimal = Decimal(d)
