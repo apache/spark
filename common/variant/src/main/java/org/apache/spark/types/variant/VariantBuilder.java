@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.variant;
+package org.apache.spark.types.variant;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -32,7 +32,7 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.exc.InputCoercionException;
 
-import static org.apache.spark.variant.VariantUtil.*;
+import static org.apache.spark.types.variant.VariantUtil.*;
 
 /**
  * Build variant value and metadata by parsing JSON values.

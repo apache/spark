@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMON_EXPR_REF, WITH_EX
  */
 object RewriteWithExpression extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+    plan.transformDownWithSubqueriesAndPruning(_.containsPattern(WITH_EXPRESSION)) {
       case p if p.expressions.exists(_.containsPattern(WITH_EXPRESSION)) =>
         val inputPlans = p.children.toArray
         var newPlan: LogicalPlan = p.mapExpressions { expr =>
