@@ -73,6 +73,7 @@ message Relation {
     CachedRemoteRelation cached_remote_relation = 37;
     CommonInlineUserDefinedTableFunction common_inline_user_defined_table_function = 38;
     AsOfJoin as_of_join = 39;
+    CommonInlineUserDefinedDataSource common_inline_user_defined_data_source = 40;
 
     // NA functions
     NAFill fill_na = 90;
@@ -998,6 +999,24 @@ message PythonUDTF {
 
   // (Required) Python version being used in the client.
   string python_ver = 4;
+}
+
+message CommonInlineUserDefinedDataSource {
+  // (Required) Name of the data source.
+  string name = 1;
+
+  // (Required) The data source type.
+  oneof data_source {
+    PythonDataSource python_data_source = 2;
+  }
+}
+
+message PythonDataSource {
+  // (Required) The encoded commands of the Python data source.
+  bytes command = 1;
+
+  // (Required) Python version being used in the client.
+  string python_ver = 2;
 }
 
 // Collect arbitrary (named) metrics from a dataset.
