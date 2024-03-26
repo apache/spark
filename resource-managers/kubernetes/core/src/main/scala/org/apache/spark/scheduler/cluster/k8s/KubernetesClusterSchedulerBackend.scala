@@ -107,7 +107,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   override def getDriverAttributes: Option[Map[String, String]] = Some(Map(
     "LOG_FILES" -> "log",
     "APP_ID" -> applicationId,
-    "KUBERNETES_NAMESPACE" -> namespace
+    "KUBERNETES_NAMESPACE" -> namespace,
+    "KUBERNETES_POD_NAME" -> System.getenv(ENV_DRIVER_POD_NAME)
   ))
 
   override def start(): Unit = {
