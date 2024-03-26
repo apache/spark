@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal
 
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -64,8 +65,16 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DRIVER_DEFAULT_EXTRA_CLASS_PATH =
+    ConfigBuilder(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH)
+      .internal()
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH_VALUE)
+
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH)
+      .withPrepended(DRIVER_DEFAULT_EXTRA_CLASS_PATH.key, File.pathSeparator)
       .version("1.0.0")
       .stringConf
       .createOptional
@@ -107,6 +116,14 @@ package object config {
     .version("2.3.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
+
+  private[spark] val DRIVER_MIN_MEMORY_OVERHEAD = ConfigBuilder("spark.driver.minMemoryOverhead")
+    .doc("The minimum amount of non-heap memory to be allocated per driver in cluster mode, " +
+      "in MiB unless otherwise specified. This value is ignored if " +
+      "spark.driver.memoryOverhead is set directly.")
+    .version("4.0.0")
+    .bytesConf(ByteUnit.MiB)
+    .createWithDefaultString("384m")
 
   private[spark] val DRIVER_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.driver.memoryOverheadFactor")
@@ -254,8 +271,16 @@ package object config {
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").version("1.2.0").stringConf.createOptional
 
+  private[spark] val EXECUTOR_DEFAULT_EXTRA_CLASS_PATH =
+    ConfigBuilder(SparkLauncher.EXECUTOR_DEFAULT_EXTRA_CLASS_PATH)
+      .internal()
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault(SparkLauncher.EXECUTOR_DEFAULT_EXTRA_CLASS_PATH_VALUE)
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
+      .withPrepended(EXECUTOR_DEFAULT_EXTRA_CLASS_PATH.key, File.pathSeparator)
       .version("1.0.0")
       .stringConf
       .createOptional
@@ -340,6 +365,15 @@ package object config {
     .version("2.3.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
+
+  private[spark] val EXECUTOR_MIN_MEMORY_OVERHEAD =
+    ConfigBuilder("spark.executor.minMemoryOverhead")
+    .doc("The minimum amount of non-heap memory to be allocated per executor " +
+      "in MiB unless otherwise specified. This value is ignored if " +
+      "spark.executor.memoryOverhead is set directly.")
+    .version("4.0.0")
+    .bytesConf(ByteUnit.MiB)
+    .createWithDefaultString("384m")
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.executor.memoryOverheadFactor")
@@ -703,7 +737,7 @@ package object config {
         "application ends.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_FETCH_RDD_ENABLED =
     ConfigBuilder(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
@@ -1081,6 +1115,15 @@ package object config {
     .version("1.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  private[spark] val DRIVER_TIMEOUT = ConfigBuilder("spark.driver.timeout")
+    .doc("A timeout for Spark driver in minutes. 0 means infinite. For the positive time value, " +
+      "terminate the driver with the exit code 124 if it runs after timeout duration. To use, " +
+      "it's required to set `spark.plugins=org.apache.spark.deploy.DriverTimeoutPlugin`.")
+    .version("4.0.0")
+    .timeConf(TimeUnit.MINUTES)
+    .checkValue(v => v >= 0, "The value should be a non-negative time value.")
+    .createWithDefaultString("0min")
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
@@ -2491,10 +2534,10 @@ package object config {
       .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
         "package files from spark.jars.packages. " +
         "This will override the Ivy property ivy.default.ivy.user.dir " +
-        "which defaults to ~/.ivy2.")
+        "which defaults to ~/.ivy2.5.2")
       .version("1.3.0")
       .stringConf
-      .createOptional
+      .createWithDefault("~/.ivy2.5.2")
 
   private[spark] val JAR_IVY_SETTING_PATH =
     ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
@@ -2620,4 +2663,34 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
+
+  private[spark] val LEGACY_ABORT_STAGE_AFTER_KILL_TASKS =
+    ConfigBuilder("spark.scheduler.stage.legacyAbortAfterKillTasks")
+      .doc("Whether to abort a stage after TaskScheduler.killAllTaskAttempts(). This is " +
+        "used to restore the original behavior in case there are any regressions after " +
+        "abort stage is removed")
+      .version("4.0.0")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION =
+    ConfigBuilder("spark.scheduler.dropTaskInfoAccumulablesOnTaskCompletion.enabled")
+      .internal()
+      .doc("If true, the task info accumulables will be cleared upon task completion in " +
+        "TaskSetManager. This reduces the heap usage of the driver by only referencing the " +
+        "task info accumulables for the active tasks and not for completed tasks.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SPARK_SHUTDOWN_TIMEOUT_MS =
+    ConfigBuilder("spark.shutdown.timeout")
+      .internal()
+      .doc("Defines the timeout period to wait for all shutdown hooks to be executed. " +
+        "This must be passed as a system property argument in the Java options, for example " +
+        "spark.driver.extraJavaOptions=\"-Dspark.shutdown.timeout=60s\".")
+      .version("4.0.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
 }

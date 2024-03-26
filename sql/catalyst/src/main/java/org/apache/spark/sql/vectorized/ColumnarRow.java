@@ -95,7 +95,7 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public boolean anyNull() {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3154");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
@@ -203,11 +203,11 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3156");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
   public void setNullAt(int ordinal) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3157");
+    throw SparkUnsupportedOperationException.apply();
   }
 }

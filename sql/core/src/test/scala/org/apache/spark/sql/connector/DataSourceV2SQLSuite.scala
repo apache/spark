@@ -1735,6 +1735,14 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-46972: asymmetrical replacement for char/varchar in V2SessionCatalog.createTable") {
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    withTable("t") {
+      sql(s"CREATE TABLE t(c char(1), v varchar(2)) USING $v2Source")
+    }
+  }
+
   test("ShowCurrentNamespace: basic tests") {
     def testShowCurrentNamespace(expectedCatalogName: String, expectedNamespace: String): Unit = {
       val schema = new StructType()
@@ -2997,6 +3005,19 @@ class DataSourceV2SQLSuiteV1Filter
 
       checkError(
         exception = intercept[AnalysisException] {
+          // `current_date()` is a valid expression for time travel timestamp, but the test uses
+          // a fake time travel implementation that only supports two hardcoded timestamp values.
+          sql("SELECT * FROM t TIMESTAMP AS OF current_date()")
+        },
+        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> "`t`"),
+        context = ExpectedContext(
+          fragment = "t",
+          start = 14,
+          stop = 14))
+
+      checkError(
+        exception = intercept[AnalysisException] {
           sql("SELECT * FROM t TIMESTAMP AS OF INTERVAL 1 DAY").collect()
         },
         errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.INPUT",
@@ -3049,7 +3070,7 @@ class DataSourceV2SQLSuiteV1Filter
         sqlState = None,
         parameters = Map(
           "sqlExpr" -> "\"abs(true)\"",
-          "paramIndex" -> "1",
+          "paramIndex" -> "first",
           "inputSql" -> "\"true\"",
           "inputType" -> "\"BOOLEAN\"",
           "requiredType" ->

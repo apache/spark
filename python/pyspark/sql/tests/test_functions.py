@@ -24,9 +24,7 @@ import math
 import re
 import unittest
 
-from py4j.protocol import Py4JJavaError
-
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.column import Column
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
@@ -190,7 +188,7 @@ class FunctionsTestsMixin:
                 "arg_name": "fractions",
                 "arg_type": "dict",
                 "allowed_types": "float, int, str",
-                "return_type": "NoneType",
+                "item_type": "NoneType",
             },
         )
 
@@ -377,6 +375,11 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)(F.col("name"))).first()[0],
             )
 
+    def test_collation(self):
+        df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
+        self.assertEqual([Row("UNICODE")], actual)
+
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
         df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
@@ -420,6 +423,12 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([Row(date=dt)])
         row = df.select(F.monthname(df.date)).first()
         self.assertEqual(row[0], "Nov")
+
+    def test_dayname(self):
+        dt = datetime.datetime(2017, 11, 6)
+        df = self.spark.createDataFrame([Row(date=dt)])
+        row = df.select(F.dayname(df.date)).first()
+        self.assertEqual(row[0], "Mon")
 
     # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):
@@ -1067,7 +1076,7 @@ class FunctionsTestsMixin:
         self.assertEqual(datetime.date(2017, 1, 22), parse_result["to_date(dateCol)"])
 
     def test_assert_true(self):
-        self.check_assert_true(Py4JJavaError)
+        self.check_assert_true(SparkRuntimeException)
 
     def check_assert_true(self, tpe):
         df = self.spark.range(3)
@@ -1093,7 +1102,7 @@ class FunctionsTestsMixin:
         )
 
     def test_raise_error(self):
-        self.check_raise_error(Py4JJavaError)
+        self.check_raise_error(SparkRuntimeException)
 
     def check_raise_error(self, tpe):
         df = self.spark.createDataFrame([Row(id="foobar")])

@@ -160,6 +160,8 @@ String Functions
     char
     char_length
     character_length
+    collate
+    collation
     concat_ws
     contains
     decode
@@ -252,6 +254,7 @@ Date and Timestamp Functions
     datediff
     datepart
     day
+    dayname
     dayofmonth
     dayofweek
     dayofyear

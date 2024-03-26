@@ -45,13 +45,21 @@ object HiveThriftServer2 extends Logging {
   var uiTab: Option[ThriftServerTab] = None
   var listener: HiveThriftServer2Listener = _
   var eventManager: HiveThriftServer2EventManager = _
+  val systemExitOnError = new AtomicBoolean(true)
 
   /**
    * :: DeveloperApi ::
    * Starts a new thrift server with the given context.
+   *
+   * @param sqlContext SQLContext to use for the server
+   * @param exitOnError Whether to exit the JVM if HiveThriftServer2 fails to initialize. When true,
+   *                    the call logs the error and exits the JVM with exit code -1. When false, the
+   *                    call throws an exception instead.
    */
   @DeveloperApi
-  def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
+  def startWithContext(sqlContext: SQLContext, exitOnError: Boolean = true): HiveThriftServer2 = {
+    systemExitOnError.set(exitOnError)
+
     val executionHive = HiveUtils.newClientForExecution(
       sqlContext.sparkContext.conf,
       sqlContext.sessionState.newHadoopConf())

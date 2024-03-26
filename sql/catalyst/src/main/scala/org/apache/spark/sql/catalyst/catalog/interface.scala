@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -223,6 +223,12 @@ object ClusterBySpec {
       resolver)
 
     ClusterBySpec(normalizedColumns)
+  }
+
+  def extractClusterBySpec(transforms: Seq[Transform]): Option[ClusterBySpec] = {
+    transforms.collectFirst {
+      case ClusterByTransform(columnNames) => ClusterBySpec(columnNames)
+    }
   }
 }
 

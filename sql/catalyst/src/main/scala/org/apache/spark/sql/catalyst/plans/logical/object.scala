@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode}
 import org.apache.spark.sql.types._
 
 object CatalystSerde {
@@ -567,6 +567,47 @@ case class FlatMapGroupsWithState(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapGroupsWithState =
     copy(child = newLeft, initialState = newRight)
+}
+
+object TransformWithState {
+  def apply[K: Encoder, V: Encoder, U: Encoder](
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode,
+      child: LogicalPlan): LogicalPlan = {
+    val keyEncoder = encoderFor[K]
+    val mapped = new TransformWithState(
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
+      groupingAttributes,
+      dataAttributes,
+      statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
+      timeoutMode,
+      outputMode,
+      keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
+      CatalystSerde.generateObjAttr[U],
+      child
+    )
+    CatalystSerde.serialize[U](mapped)
+  }
+}
+
+case class TransformWithState(
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    statefulProcessor: StatefulProcessor[Any, Any, Any],
+    timeoutMode: TimeoutMode,
+    outputMode: OutputMode,
+    keyEncoder: ExpressionEncoder[Any],
+    outputObjAttr: Attribute,
+    child: LogicalPlan) extends UnaryNode with ObjectProducer {
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): TransformWithState =
+    copy(child = newChild)
 }
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */

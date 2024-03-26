@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -138,7 +138,11 @@ class SeriesSortMixin:
             ps.from_pandas(pser1).searchsorted(1.1, side="middle")
 
 
-class SeriesSortTests(SeriesSortMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesSortTests(
+    SeriesSortMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

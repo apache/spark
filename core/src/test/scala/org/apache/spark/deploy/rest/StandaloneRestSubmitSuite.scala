@@ -20,10 +20,10 @@ package org.apache.spark.deploy.rest
 import java.io.DataOutputStream
 import java.net.{HttpURLConnection, URL}
 import java.nio.charset.StandardCharsets
-import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 
+import jakarta.servlet.http.HttpServletResponse
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
@@ -31,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
+import org.apache.spark.deploy.master.RecoveryState
 import org.apache.spark.rpc._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -246,6 +247,24 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(killAllResponse.success)
   }
 
+  test("SPARK-46368: readyz with SC_OK") {
+    val masterUrl = startDummyServer()
+    val response = new RestSubmissionClient(masterUrl).readyz()
+    val readyzResponse = getReadyzResponse(response)
+    assert(readyzResponse.action === Utils.getFormattedClassName(readyzResponse))
+    assert(readyzResponse.success)
+    assert(readyzResponse.message.isBlank)
+  }
+
+  test("SPARK-46368: readyz with SC_SERVICE_UNAVAILABLE") {
+    val masterUrl = startDummyServer(recoveryState = RecoveryState.STANDBY)
+    val response = new RestSubmissionClient(masterUrl).readyz()
+    val errorResponse = getReadyzResponse(response)
+    assert(errorResponse.action === Utils.getFormattedClassName(errorResponse))
+    assert(errorResponse.success == null)
+    assert(errorResponse.message.contains("Master is not ready."))
+  }
+
   /* ---------------------------------------- *
    |     Aberrant client / server behavior    |
    * ---------------------------------------- */
@@ -448,8 +467,10 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       submitMessage: String = "driver is submitted",
       killMessage: String = "driver is killed",
       state: DriverState = FINISHED,
+      recoveryState: RecoveryState.Value = RecoveryState.ALIVE,
       exception: Option[Exception] = None): String = {
-    startServer(new DummyMaster(_, submitId, submitMessage, killMessage, state, exception))
+    startServer(new DummyMaster(_, submitId, submitMessage, killMessage, state, recoveryState,
+      exception))
   }
 
   /** Start a smarter dummy server that keeps track of submitted driver states. */
@@ -543,6 +564,16 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     }
   }
 
+  /** Return the response as a readyz response, or fail with error otherwise. */
+  private def getReadyzResponse(response: SubmitRestProtocolResponse)
+    : SubmitRestProtocolResponse = {
+    response match {
+      case k: ReadyzResponse => k
+      case e: ErrorResponse => e // This is a valid response for readyz
+      case r => fail(s"Expected readyz response. Actual: ${r.toJson}")
+    }
+  }
+
   /** Return the response as a status response, or fail with error otherwise. */
   private def getStatusResponse(response: SubmitRestProtocolResponse): SubmissionStatusResponse = {
     response match {
@@ -602,6 +633,7 @@ private class DummyMaster(
     submitMessage: String = "submitted",
     killMessage: String = "killed",
     state: DriverState = FINISHED,
+    recoveryState: RecoveryState.Value = RecoveryState.ALIVE,
     exception: Option[Exception] = None)
   extends RpcEndpoint {
 
@@ -616,6 +648,8 @@ private class DummyMaster(
       context.reply(DriverStatusResponse(found = true, Some(state), None, None, exception))
     case RequestClearCompletedDriversAndApps =>
       context.reply(true)
+    case RequestReadyz =>
+      context.reply(recoveryState != RecoveryState.STANDBY)
   }
 }
 
@@ -661,6 +695,7 @@ private class SmarterMaster(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEn
  * When handling a killAll request, the server returns an invalid JSON.
  * When handling a status request, the server throws an internal exception.
  * When handling a clear request, the server throws an internal exception.
+ * When handling a readyz request, the server throws an internal exception.
  * The purpose of this class is to test that client handles these cases gracefully.
  */
 private class FaultyStandaloneRestServer(
@@ -676,6 +711,7 @@ private class FaultyStandaloneRestServer(
   protected override val killAllRequestServlet = new InvalidKillAllServlet
   protected override val statusRequestServlet = new ExplodingStatusServlet
   protected override val clearRequestServlet = new ExplodingClearServlet
+  protected override val readyzRequestServlet = new ExplodingReadyzServlet
 
   /** A faulty servlet that produces malformed responses. */
   class MalformedSubmitServlet
@@ -722,6 +758,17 @@ private class FaultyStandaloneRestServer(
     protected override def handleClear(): ClearResponse = {
       val s = super.handleClear()
       s.message = explode.toString
+      s
+    }
+  }
+
+  /** A faulty readyz servlet that explodes. */
+  class ExplodingReadyzServlet extends StandaloneReadyzRequestServlet(masterEndpoint, masterConf) {
+    private def explode: Int = 1 / 0
+
+    protected override def handleReadyz(): ReadyzResponse = {
+      val s = super.handleReadyz()
+      explode.toString
       s
     }
   }

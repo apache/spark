@@ -27,23 +27,23 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.util.quoteNameParts
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DecimalType, MetadataBuilder, ShortType, StringType, TimestampType}
 
-private[sql] object H2Dialect extends JdbcDialect {
+private[sql] case class H2Dialect() extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
 
   private val distinctUnsupportedAggregateFunctions =
     Set("COVAR_POP", "COVAR_SAMP", "CORR", "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY",
-      "MODE")
+      "MODE", "PERCENTILE_CONT", "PERCENTILE_DISC")
 
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP") ++ distinctUnsupportedAggregateFunctions
@@ -68,6 +68,7 @@ private[sql] object H2Dialect extends JdbcDialect {
         val scale = if (null != md) md.build().getLong("scale") else 0L
         val selectedScale = (DecimalType.MAX_PRECISION * (scale.toDouble / size.toDouble)).toInt
         Option(DecimalType(DecimalType.MAX_PRECISION, selectedScale))
+      case Types.TIMESTAMP_WITH_TIMEZONE | Types.TIME_WITH_TIMEZONE => Some(TimestampType)
       case _ => None
     }
   }
@@ -195,7 +196,11 @@ private[sql] object H2Dialect extends JdbcDialect {
     (ident.namespace() :+ indexName).map(quoteIdentifier).mkString(".")
   }
 
-  override def classifyException(message: String, e: Throwable): AnalysisException = {
+  override def classifyException(
+      e: Throwable,
+      errorClass: String,
+      messageParameters: Map[String, String],
+      description: String): AnalysisException = {
     e match {
       case exception: SQLException =>
         // Error codes are from https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
@@ -206,15 +211,16 @@ private[sql] object H2Dialect extends JdbcDialect {
             val regex = """"((?:[^"\\]|\\[\\"ntbrf])+)"""".r
             val name = regex.findFirstMatchIn(e.getMessage).get.group(1)
             val quotedName = org.apache.spark.sql.catalyst.util.quoteIdentifier(name)
-            throw new TableAlreadyExistsException(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+            throw new TableAlreadyExistsException(
+              errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
               messageParameters = Map("relationName" -> quotedName),
               cause = Some(e))
           // TABLE_OR_VIEW_NOT_FOUND_1
           case 42102 =>
-            val quotedName = quoteNameParts(UnresolvedAttribute.parseAttributeName(message))
+            val relationName = messageParameters.getOrElse("tableName", "")
             throw new NoSuchTableException(
               errorClass = "TABLE_OR_VIEW_NOT_FOUND",
-              messageParameters = Map("relationName" -> quotedName),
+              messageParameters = Map("relationName" -> relationName),
               cause = Some(e))
           // SCHEMA_NOT_FOUND_1
           case 90079 =>
@@ -224,25 +230,21 @@ private[sql] object H2Dialect extends JdbcDialect {
             throw new NoSuchNamespaceException(errorClass = "SCHEMA_NOT_FOUND",
               messageParameters = Map("schemaName" -> quotedName))
           // INDEX_ALREADY_EXISTS_1
-          case 42111 =>
-            // The message is: Failed to create index indexName in tableName
-            val regex = "(?s)Failed to create index (.*) in (.*)".r
-            val indexName = regex.findFirstMatchIn(message).get.group(1)
-            val tableName = regex.findFirstMatchIn(message).get.group(2)
+          case 42111 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
+            val indexName = messageParameters("indexName")
+            val tableName = messageParameters("tableName")
             throw new IndexAlreadyExistsException(
               indexName = indexName, tableName = tableName, cause = Some(e))
           // INDEX_NOT_FOUND_1
-          case 42112 =>
-            // The message is: Failed to drop index indexName in tableName
-            val regex = "(?s)Failed to drop index (.*) in (.*)".r
-            val indexName = regex.findFirstMatchIn(message).get.group(1)
-            val tableName = regex.findFirstMatchIn(message).get.group(2)
+          case 42112 if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+            val indexName = messageParameters("indexName")
+            val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
           case _ => // do nothing
         }
       case _ => // do nothing
     }
-    super.classifyException(message, e)
+    super.classifyException(e, errorClass, messageParameters, description)
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -268,21 +270,13 @@ private[sql] object H2Dialect extends JdbcDialect {
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
-        throw new UnsupportedOperationException(s"${this.getClass.getSimpleName} does not " +
-          s"support aggregate function: $funcName with DISTINCT")
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3184",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       } else {
-        funcName match {
-          case "MODE" =>
-            // Support Mode only if it is deterministic or reverse is defined.
-            assert(inputs.length == 2)
-            if (inputs.last == "true") {
-              s"MODE() WITHIN GROUP (ORDER BY ${inputs.head})"
-            } else {
-              s"MODE() WITHIN GROUP (ORDER BY ${inputs.head} DESC)"
-            }
-          case _ =>
-            super.visitAggregateFunction(funcName, isDistinct, inputs)
-        }
+        super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
 
     override def visitExtract(field: String, source: String): String = {
@@ -307,8 +301,11 @@ private[sql] object H2Dialect extends JdbcDialect {
           case _ => super.visitSQLFunction(funcName, inputs)
         }
       } else {
-        throw new UnsupportedOperationException(
-          s"${this.getClass.getSimpleName} does not support function: $funcName");
+        throw new SparkUnsupportedOperationException(
+          errorClass = "_LEGACY_ERROR_TEMP_3177",
+          messageParameters = Map(
+            "class" -> this.getClass.getSimpleName,
+            "funcName" -> funcName))
       }
     }
   }

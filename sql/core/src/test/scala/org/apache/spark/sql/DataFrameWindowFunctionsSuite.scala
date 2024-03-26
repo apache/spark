@@ -1640,4 +1640,31 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-46941: Can't insert window group limit node for top-k computation if contains " +
+    "SizeBasedWindowFunction") {
+    val df = Seq(
+      (1, "Dave", 1, 2020),
+      (2, "Mark", 2, 2020),
+      (3, "Amy", 3, 2020),
+      (4, "Dave", 1, 2021),
+      (5, "Mark", 2, 2021),
+      (6, "Amy", 3, 2021),
+      (7, "John", 4, 2021)).toDF("id", "name", "score", "year")
+
+    val window = Window.partitionBy($"year").orderBy($"score".desc)
+
+    Seq(-1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
+        val df2 = df
+          .withColumn("rank", rank().over(window))
+          .withColumn("percent_rank", percent_rank().over(window))
+          .sort($"year")
+        checkAnswer(df2.filter("rank=2"), Seq(
+          Row(2, "Mark", 2, 2020, 2, 0.5),
+          Row(6, "Amy", 3, 2021, 2, 0.3333333333333333)
+        ))
+      }
+    }
+  }
 }

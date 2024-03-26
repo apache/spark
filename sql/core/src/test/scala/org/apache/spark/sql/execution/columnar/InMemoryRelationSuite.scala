@@ -18,20 +18,42 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.test.SharedSparkSessionBase
 import org.apache.spark.storage.StorageLevel
 
-class InMemoryRelationSuite extends SparkFunSuite with SharedSparkSessionBase {
-  test("SPARK-43157: Clone innerChildren cached plan") {
+class InMemoryRelationSuite extends SparkFunSuite
+  with SharedSparkSessionBase with AdaptiveSparkPlanHelper {
+
+  test("SPARK-46779: InMemoryRelations with the same cached plan are semantically equivalent") {
     val d = spark.range(1)
-    val relation = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
-    val cloned = relation.clone().asInstanceOf[InMemoryRelation]
+    val r1 = InMemoryRelation(StorageLevel.MEMORY_ONLY, d.queryExecution, None)
+    val r2 = r1.withOutput(r1.output.map(_.newInstance()))
+    assert(r1.sameResult(r2))
+  }
 
-    val relationCachedPlan = relation.innerChildren.head
-    val clonedCachedPlan = cloned.innerChildren.head
+  test("SPARK-47177: Cached SQL plan do not display final AQE plan in explain string") {
+    def findIMRInnerChild(p: SparkPlan): SparkPlan = {
+      val tableCache = find(p) {
+        case _: InMemoryTableScanExec => true
+        case _ => false
+      }
+      assert(tableCache.isDefined)
+      tableCache.get.asInstanceOf[InMemoryTableScanExec].relation.innerChildren.head
+    }
 
-    // verify the plans are not the same object but are logically equivalent
-    assert(!relationCachedPlan.eq(clonedCachedPlan))
-    assert(relationCachedPlan === clonedCachedPlan)
+    val d1 = spark.range(1).withColumn("key", expr("id % 100"))
+      .groupBy("key").agg(Map("key" -> "count"))
+    val cached_d2 = d1.cache()
+    val df = cached_d2.withColumn("key2", expr("key % 10"))
+      .groupBy("key2").agg(Map("key2" -> "count"))
+
+    assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
+      .contains("AdaptiveSparkPlan isFinalPlan=false"))
+    df.collect()
+    assert(findIMRInnerChild(df.queryExecution.executedPlan).treeString
+      .contains("AdaptiveSparkPlan isFinalPlan=true"))
   }
 }

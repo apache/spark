@@ -75,7 +75,10 @@ class RankTestsMixin:
         )
 
 
-class RankTests(RankTestsMixin, PandasOnSparkTestCase):
+class RankTests(
+    RankTestsMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 

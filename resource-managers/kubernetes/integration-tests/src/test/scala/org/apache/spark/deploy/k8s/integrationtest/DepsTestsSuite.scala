@@ -386,7 +386,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.kubernetes.file.upload.path", s"s3a://$BUCKET")
       .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
       .set("spark.jars.packages", packages)
-      .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
+      .set("spark.jars.ivy", "/tmp")
   }
 
   private def tryDepsTest(runTest: => Unit): Unit = {

@@ -323,11 +323,11 @@ class BlockManagerMasterEndpoint(
       val isAlive = try {
         driverEndpoint.askSync[Boolean](CoarseGrainedClusterMessages.IsExecutorAlive(executorId))
       } catch {
-        // ignore the non-fatal error from driverEndpoint since the caller doesn't really
-        // care about the return result of removing blocks. And so we could avoid breaking
+        // Ignore the non-fatal error from driverEndpoint since the caller doesn't really
+        // care about the return result of removing blocks. That way we avoid breaking
         // down the whole application.
         case NonFatal(e) =>
-          logError(s"Fail to know the executor $executorId is alive or not.", e)
+          logError(s"Cannot determine whether executor $executorId is alive or not.", e)
           false
       }
       if (!isAlive) {

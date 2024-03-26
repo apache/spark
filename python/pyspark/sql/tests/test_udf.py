@@ -16,6 +16,7 @@
 #
 
 import functools
+import platform
 import pydoc
 import shutil
 import tempfile
@@ -39,7 +40,11 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    test_compiled,
+    test_not_compiled_message,
+)
 from pyspark.testing.utils import QuietTest, assertDataFrameEqual
 
 
@@ -1039,6 +1044,9 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
             with self.assertRaisesRegex(Exception, "Segmentation fault"):

@@ -228,7 +228,7 @@ object ExecutorLifecycleTestUtils {
       .withNewSpec()
         .withStorageClassName(storageClass)
         .withAccessModes("ReadWriteOnce")
-        .withResources(new ResourceRequirementsBuilder()
+        .withResources(new VolumeResourceRequirementsBuilder()
           .withRequests(Map("storage" -> new Quantity(size)).asJava).build())
         .endSpec()
       .build()

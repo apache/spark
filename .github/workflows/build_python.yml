@@ -26,8 +26,9 @@ on:
 jobs:
   run-build:
     strategy:
+      fail-fast: false
       matrix:
-        pyversion: ["pypy3,python3.10", "python3.11", "python3.12"]
+        pyversion: ["pypy3", "python3.10", "python3.11", "python3.12"]
     permissions:
       packages: write
     name: Run

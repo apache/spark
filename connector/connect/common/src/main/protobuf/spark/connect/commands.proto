@@ -42,6 +42,8 @@ message Command {
     GetResourcesCommand get_resources_command = 8;
     StreamingQueryManagerCommand streaming_query_manager_command = 9;
     CommonInlineUserDefinedTableFunction register_table_function = 10;
+    StreamingQueryListenerBusCommand streaming_query_listener_bus_command = 11;
+    CommonInlineUserDefinedDataSource register_data_source = 12;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -248,6 +250,9 @@ message WriteStreamOperationStartResult {
   // An optional query name.
   string name = 2;
 
+  // Optional query started event if there is any listener registered on the client side.
+  optional string query_started_event_json = 3;
+
   // TODO: How do we indicate errors?
   // TODO: Consider adding status, last progress etc here.
 }
@@ -419,6 +424,41 @@ message StreamingQueryManagerCommandResult {
     // (Required) Reference IDs of listener instances.
     repeated string listener_ids = 1;
   }
+}
+
+// The protocol for client-side StreamingQueryListener.
+// This command will only be set when either the first listener is added to the client, or the last
+// listener is removed from the client.
+// The add_listener_bus_listener command will only be set true in the first case.
+// The remove_listener_bus_listener command will only be set true in the second case.
+message StreamingQueryListenerBusCommand {
+  oneof command {
+    bool add_listener_bus_listener = 1;
+    bool remove_listener_bus_listener = 2;
+  }
+}
+
+// The enum used for client side streaming query listener event
+// There is no QueryStartedEvent defined here,
+// it is added as a field in WriteStreamOperationStartResult
+enum StreamingQueryEventType {
+  QUERY_PROGRESS_UNSPECIFIED = 0;
+  QUERY_PROGRESS_EVENT = 1;
+  QUERY_TERMINATED_EVENT = 2;
+  QUERY_IDLE_EVENT = 3;
+}
+
+// The protocol for the returned events in the long-running response channel.
+message StreamingQueryListenerEvent {
+  // (Required) The json serialized event, all StreamingQueryListener events have a json method
+  string event_json = 1;
+  // (Required) Query event type used by client to decide how to deserialize the event_json
+  StreamingQueryEventType event_type = 2;
+}
+
+message StreamingQueryListenerEventsResult {
+  repeated StreamingQueryListenerEvent events = 1;
+  optional bool listener_bus_listener_added = 2;
 }
 
 // Command to get the output of 'SparkContext.resources'

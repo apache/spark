@@ -31,7 +31,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
+from pyspark.testing.utils import QuietTest, eventually
 
 if have_pandas:
     import pandas as pd
@@ -381,6 +381,7 @@ class MapInPandasTestsMixin:
         self.assertEqual(sorted(actual), sorted(expected))
 
     # SPARK-33277
+    @eventually(timeout=180, catch_assertions=True)
     def test_map_in_pandas_with_column_vector(self):
         path = tempfile.mkdtemp()
         shutil.rmtree(path)
@@ -399,6 +400,31 @@ class MapInPandasTestsMixin:
                     )
         finally:
             shutil.rmtree(path)
+
+    def test_map_in_pandas_with_barrier_mode(self):
+        df = self.spark.range(10)
+
+        def func1(iterator):
+            from pyspark import TaskContext, BarrierTaskContext
+
+            tc = TaskContext.get()
+            assert tc is not None
+            assert not isinstance(tc, BarrierTaskContext)
+            for batch in iterator:
+                yield batch
+
+        df.mapInPandas(func1, "id long", False).collect()
+
+        def func2(iterator):
+            from pyspark import TaskContext, BarrierTaskContext
+
+            tc = TaskContext.get()
+            assert tc is not None
+            assert isinstance(tc, BarrierTaskContext)
+            for batch in iterator:
+                yield batch
+
+        df.mapInPandas(func2, "id long", True).collect()
 
 
 class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):

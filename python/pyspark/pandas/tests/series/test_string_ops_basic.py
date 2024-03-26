@@ -167,7 +167,11 @@ class SeriesStringOpsMixin:
         self.check_func(lambda x: x.str.count("WH", flags=re.IGNORECASE))
 
 
-class SeriesStringOpsTests(SeriesStringOpsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class SeriesStringOpsTests(
+    SeriesStringOpsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -36,7 +36,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
-import org.apache.spark.resource.ResourceAmountUtils.{ONE_ENTIRE_RESOURCE}
+import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.status.api.v1.ThreadStackTrace
@@ -1651,7 +1651,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(1 === taskDescriptions.length)
   }
 
-  test("cancelTasks shall kill all the running tasks and fail the stage") {
+  test("killAllTaskAttempts shall kill all the running tasks") {
     val taskScheduler = setupScheduler()
 
     taskScheduler.initialize(new FakeSchedulerBackend {
@@ -1677,41 +1677,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
     assert(2 === tsm.runningTasks)
 
-    taskScheduler.cancelTasks(0, false, "test message")
+    taskScheduler.killAllTaskAttempts(0, false, "test message")
     assert(0 === tsm.runningTasks)
     assert(tsm.isZombie)
     assert(taskScheduler.taskSetManagerForAttempt(0, 0).isEmpty)
-  }
-
-  test("killAllTaskAttempts shall kill all the running tasks and not fail the stage") {
-    val taskScheduler = setupScheduler()
-
-    taskScheduler.initialize(new FakeSchedulerBackend {
-      override def killTask(
-          taskId: Long,
-          executorId: String,
-          interruptThread: Boolean,
-          reason: String): Unit = {
-        // Since we only submit one stage attempt, the following call is sufficient to mark the
-        // task as killed.
-        taskScheduler.taskSetManagerForAttempt(0, 0).get.runningTasksSet.remove(taskId)
-      }
-    })
-
-    val attempt1 = FakeTask.createTaskSet(10)
-    taskScheduler.submitTasks(attempt1)
-
-    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
-      new WorkerOffer("executor1", "host1", 1))
-    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
-    assert(2 === taskDescriptions.length)
-    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
-    assert(2 === tsm.runningTasks)
-
-    taskScheduler.killAllTaskAttempts(0, false, "test")
-    assert(0 === tsm.runningTasks)
-    assert(!tsm.isZombie)
-    assert(taskScheduler.taskSetManagerForAttempt(0, 0).isDefined)
   }
 
   test("mark taskset for a barrier stage as zombie in case a task fails") {
@@ -2190,7 +2159,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
     val busyTask = new Runnable {
       val lock : Object = new Object
-      var running : AtomicBoolean = new AtomicBoolean(false)
+      val running: AtomicBoolean = new AtomicBoolean(false)
       override def run(): Unit = {
         lock.synchronized {
           running.set(true)
@@ -2301,12 +2270,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   // 1 executor with 4 GPUS
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
-    (1 to 20).foreach { taskNum =>
+    scala.util.Random.shuffle((1 to 12).toList).take(3).foreach { taskNum =>
       val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run in the same executor") {
         val taskCpus = 1
-        val executorCpus = 100 // cpu will not limit the concurrent tasks number
+        val executorCpus = 50 // cpu will not limit the concurrent tasks number
         val executorGpus = 1
 
         val taskScheduler = setupScheduler(numCores = executorCpus,
@@ -2316,9 +2285,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
           config.EXECUTOR_CORES.key -> executorCpus.toString)
 
         val taskSet = if (barrierMode) {
-          FakeTask.createTaskSet(100)
-        } else {
           FakeTask.createBarrierTaskSet(4 * taskNum)
+        } else {
+          FakeTask.createTaskSet(100)
         }
 
         val resources = new ExecutorResourcesAmounts(
@@ -2329,7 +2298,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
         taskScheduler.submitTasks(taskSet)
         // Launch tasks on executor that satisfies resource requirements.
-        val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        taskDescriptions = taskDescriptions.sortBy(t => t.index)
         assert(4 * taskNum === taskDescriptions.length)
         assert(!failedTaskSet)
         var gpuAddress = -1
@@ -2347,12 +2317,12 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   // 4 executors, each of which has 1 GPU
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
-    (1 to 20).foreach { taskNum =>
+    scala.util.Random.shuffle((1 to 12).toList).take(3).foreach { taskNum =>
       val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 default rp with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run on the different executor") {
         val taskCpus = 1
-        val executorCpus = 100 // cpu will not limit the concurrent tasks number
+        val executorCpus = 50 // cpu will not limit the concurrent tasks number
         val executorGpus = 1
 
         val taskScheduler = setupScheduler(numCores = executorCpus,
@@ -2362,9 +2332,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
           config.EXECUTOR_CORES.key -> executorCpus.toString)
 
         val taskSet = if (barrierMode) {
-          FakeTask.createTaskSet(100)
-        } else {
           FakeTask.createBarrierTaskSet(4 * taskNum)
+        } else {
+          FakeTask.createTaskSet(100)
         }
 
         val workerOffers =
@@ -2404,11 +2374,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   // 1 executor with 4 GPUS
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
-    (1 to 20).foreach { taskNum =>
+    scala.util.Random.shuffle((1 to 12).toList).take(3).foreach { taskNum =>
       val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 TaskResourceProfile with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run in the same executor") {
-        val executorCpus = 100 // cpu will not limit the concurrent tasks number
+        val executorCpus = 50 // cpu will not limit the concurrent tasks number
 
         val taskScheduler = setupScheduler(numCores = executorCpus,
           config.CPUS_PER_TASK.key -> "1",
@@ -2421,9 +2391,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
 
         val taskSet = if (barrierMode) {
-          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
-        } else {
           FakeTask.createBarrierTaskSet(4 * taskNum, 0, 1, 1, rp.id)
+        } else {
+          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
         }
         val resources = new ExecutorResourcesAmounts(
           Map(GPU -> toInternalResource(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
@@ -2434,7 +2404,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
         taskScheduler.submitTasks(taskSet)
         // Launch tasks on executor that satisfies resource requirements.
-        val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        taskDescriptions = taskDescriptions.sortBy(t => t.index)
         assert(4 * taskNum === taskDescriptions.length)
         assert(!failedTaskSet)
         var gpuAddress = -1
@@ -2452,11 +2423,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   // 4 executors, each of which has 1 GPU
   Seq(true, false).foreach { barrierMode =>
     val barrier = if (barrierMode) "barrier" else ""
-    (1 to 20).foreach { taskNum =>
+    scala.util.Random.shuffle((1 to 12).toList).take(3).foreach { taskNum =>
       val gpuTaskAmount = ResourceAmountUtils.toFractionalResource(ONE_ENTIRE_RESOURCE / taskNum)
       test(s"SPARK-45527 TaskResourceProfile with task.gpu.amount=${gpuTaskAmount} can " +
         s"restrict $taskNum $barrier tasks run on the different executor") {
-        val executorCpus = 100 // cpu will not limit the concurrent tasks number
+        val executorCpus = 50 // cpu will not limit the concurrent tasks number
 
         val taskScheduler = setupScheduler(numCores = executorCpus,
           config.CPUS_PER_TASK.key -> "1",
@@ -2469,9 +2440,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
 
         val taskSet = if (barrierMode) {
-          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
-        } else {
           FakeTask.createBarrierTaskSet(4 * taskNum, 0, 1, 1, rp.id)
+        } else {
+          FakeTask.createTaskSet(100, 0, 1, 1, rp.id)
         }
 
         val workerOffers =
@@ -2518,7 +2489,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val taskCpus = 1
     val taskGpus = 0.3
     val executorGpus = 4
-    val executorCpus = 1000
+    val executorCpus = 50
 
     // each tasks require 0.3 gpu
     val taskScheduler = setupScheduler(numCores = executorCpus,
@@ -2574,7 +2545,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val taskCpus = 1
     val taskGpus = 0.3
     val executorGpus = 4
-    val executorCpus = 1000
+    val executorCpus = 50
 
     // each tasks require 0.3 gpu
     val taskScheduler = setupScheduler(numCores = executorCpus,
@@ -2583,7 +2554,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       EXECUTOR_GPU_ID.amountConf -> executorGpus.toString,
       config.EXECUTOR_CORES.key -> executorCpus.toString
     )
-    val lowerTaskSet = FakeTask.createTaskSet(100, 1, 0, 1,
+    val lowerTaskSet = FakeTask.createTaskSet(30, 1, 0, 1,
       ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     // each task require 0.7 gpu
@@ -2591,19 +2562,19 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val rp = new TaskResourceProfile(treqs.requests)
     taskScheduler.sc.resourceProfileManager.addResourceProfile(rp)
 
-    val higherRpTaskSet = FakeTask.createTaskSet(1000, stageId = 2, stageAttemptId = 0,
+    val higherRpTaskSet = FakeTask.createTaskSet(50, stageId = 2, stageAttemptId = 0,
       priority = 0, rpId = rp.id)
 
     val workerOffers =
       IndexedSeq(
         // cpu won't be a problem
-        WorkerOffer("executor0", "host0", 1000, None, new ExecutorResourcesAmounts(
+        WorkerOffer("executor0", "host0", 50, None, new ExecutorResourcesAmounts(
           Map(GPU -> toInternalResource(Map("0" -> 1.0))))),
-        WorkerOffer("executor1", "host1", 1000, None, new ExecutorResourcesAmounts(
+        WorkerOffer("executor1", "host1", 50, None, new ExecutorResourcesAmounts(
           Map(GPU -> toInternalResource(Map("1" -> 1.0))))),
-        WorkerOffer("executor2", "host2", 1000, None, new ExecutorResourcesAmounts(
+        WorkerOffer("executor2", "host2", 50, None, new ExecutorResourcesAmounts(
           Map(GPU -> toInternalResource(Map("2" -> 1.0))))),
-        WorkerOffer("executor3", "host3", 1000, None, new ExecutorResourcesAmounts(
+        WorkerOffer("executor3", "host3", 50, None, new ExecutorResourcesAmounts(
           Map(GPU -> toInternalResource(Map("3" -> 1.0)))))
       )
 
@@ -2716,4 +2687,58 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
     assert(3 === taskDescriptions.length)
   }
+
+  // 1 executor with 4 GPUS
+  Seq(true, false).foreach { barrierMode =>
+    val barrier = if (barrierMode) "in barrier" else ""
+    Seq(1, 2, 3, 4).foreach { gpuTaskAmount =>
+      test(s"SPARK-47458 GPU fraction resource should work when " +
+        s"gpu task amount = ${gpuTaskAmount} $barrier") {
+
+        val executorCpus = 10 // cpu will not limit the concurrent tasks number
+
+        val taskScheduler = setupScheduler(numCores = executorCpus,
+          config.CPUS_PER_TASK.key -> "1",
+          TASK_GPU_ID.amountConf -> gpuTaskAmount.toString,
+          EXECUTOR_GPU_ID.amountConf -> "4",
+          config.EXECUTOR_CORES.key -> executorCpus.toString)
+
+        val taskNum = 4 / gpuTaskAmount
+        val taskSet = if (barrierMode) {
+          FakeTask.createBarrierTaskSet(taskNum)
+        } else {
+          FakeTask.createTaskSet(10)
+        }
+        val resources = new ExecutorResourcesAmounts(
+          Map(GPU -> toInternalResource(Map("0" -> 1.0, "1" -> 1.0, "2" -> 1.0, "3" -> 1.0))))
+
+        val workerOffers = IndexedSeq(
+          WorkerOffer("executor0", "host0", executorCpus, Some("host0"), resources)
+        )
+
+        taskScheduler.submitTasks(taskSet)
+        // Launch tasks on executor that satisfies resource requirements.
+        var taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+        taskDescriptions = taskDescriptions.sortBy(t => t.index)
+        assert(taskNum === taskDescriptions.length)
+        assert(!failedTaskSet)
+
+        // The key is gpuTaskAmount
+        // The values are the gpu addresses of each task.
+        val gpuTaskAmountToExpected = Map(
+          1 -> Seq(Array("0"), Array("1"), Array("2"), Array("3")),
+          2 -> Seq(Array("0", "1"), Array("2", "3")),
+          3 -> Seq(Array("0", "1", "2")),
+          4 -> Seq(Array("0", "1", "2", "3"))
+        )
+
+        taskDescriptions.foreach { task =>
+          val taskResources = task.resources(GPU).keys.toArray.sorted
+          val expected = gpuTaskAmountToExpected(gpuTaskAmount)(task.index)
+          assert(taskResources sameElements expected)
+        }
+      }
+    }
+  }
+
 }

@@ -20,7 +20,7 @@ import unittest
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class IndexesSortMixin:
@@ -81,7 +81,7 @@ class IndexesSortMixin:
 
 class IndexesSortTests(
     IndexesSortMixin,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     TestUtils,
 ):
     pass

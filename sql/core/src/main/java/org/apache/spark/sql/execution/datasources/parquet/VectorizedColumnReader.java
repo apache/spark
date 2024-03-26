@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 import java.time.ZoneId;
+import java.util.Map;
 
 import org.apache.parquet.CorruptDeltaByteArrays;
 import org.apache.parquet.VersionParser.ParsedVersion;
@@ -37,6 +38,7 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotat
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit;
 import org.apache.parquet.schema.PrimitiveType;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
@@ -151,10 +153,9 @@ public class VectorizedColumnReader {
     // rebasing.
     switch (typeName) {
       case INT32: {
-        boolean isDate = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation;
-        boolean isDecimal = logicalTypeAnnotation instanceof DecimalLogicalTypeAnnotation;
+        boolean isDecimal = sparkType instanceof DecimalType;
         boolean needsUpcast = sparkType == LongType || sparkType == DoubleType ||
-          (isDate && sparkType == TimestampNTZType) ||
+          sparkType == TimestampNTZType ||
           (isDecimal && !DecimalType.is32BitDecimalType(sparkType));
         boolean needsRebase = logicalTypeAnnotation instanceof DateLogicalTypeAnnotation &&
           !"CORRECTED".equals(datetimeRebaseMode);
@@ -162,7 +163,7 @@ public class VectorizedColumnReader {
         break;
       }
       case INT64: {
-        boolean isDecimal = logicalTypeAnnotation instanceof DecimalLogicalTypeAnnotation;
+        boolean isDecimal = sparkType instanceof DecimalType;
         boolean needsUpcast = (isDecimal && !DecimalType.is64BitDecimalType(sparkType)) ||
           updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS);
         boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
@@ -336,7 +337,8 @@ public class VectorizedColumnReader {
       @SuppressWarnings("deprecation")
       Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
       if (dataEncoding != plainDict && dataEncoding != Encoding.RLE_DICTIONARY) {
-        throw new UnsupportedOperationException("Unsupported encoding: " + dataEncoding);
+        throw new SparkUnsupportedOperationException(
+          "_LEGACY_ERROR_TEMP_3189", Map.of("encoding", dataEncoding.toString()));
       }
       this.dataColumn = new VectorizedRleValuesReader();
       this.isCurrentPageDictionaryEncoded = true;
@@ -371,18 +373,21 @@ public class VectorizedColumnReader {
         if (typeName == BOOLEAN) {
           yield new VectorizedRleValuesReader(1);
         } else {
-          throw new UnsupportedOperationException(
-            "RLE encoding is not supported for values of type: " + typeName);
+          throw new SparkUnsupportedOperationException(
+            "_LEGACY_ERROR_TEMP_3190", Map.of("typeName", typeName.toString()));
         }
       }
-      default -> throw new UnsupportedOperationException("Unsupported encoding: " + encoding);
+      default ->
+        throw new SparkUnsupportedOperationException(
+          "_LEGACY_ERROR_TEMP_3189", Map.of("encoding", encoding.toString()));
     };
   }
 
 
   private int readPageV1(DataPageV1 page) throws IOException {
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
-      throw new UnsupportedOperationException("Unsupported encoding: " + page.getDlEncoding());
+      throw new SparkUnsupportedOperationException(
+        "_LEGACY_ERROR_TEMP_3189", Map.of("encoding", page.getDlEncoding().toString()));
     }
 
     int pageValueCount = page.getValueCount();

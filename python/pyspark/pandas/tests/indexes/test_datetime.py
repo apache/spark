@@ -122,7 +122,11 @@ class DatetimeIndexTestsMixin(DatetimeIndexTestingFuncMixin):
             self.assertRaises(NotImplementedError, lambda: py_datetime - psidx)
 
 
-class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+class DatetimeIndexTests(
+    DatetimeIndexTestsMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
     pass
 
 

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -77,7 +78,7 @@ class NoPrefixHDFSBackedStateStoreMap extends HDFSBackedStateStoreMap {
   }
 
   override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
-    throw new UnsupportedOperationException("Prefix scan is not supported!")
+    throw SparkUnsupportedOperationException()
   }
 
   override def clear(): Unit = map.clear()

@@ -76,10 +76,12 @@ object AggUtils {
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
     val useHash = Aggregate.supportsHashAggregate(
-      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
+
+    val forceObjHashAggregate = forceApplyObjectHashAggregate(child.conf)
     val forceSortAggregate = forceApplySortAggregate(child.conf)
 
-    if (useHash && !forceSortAggregate) {
+    if (useHash && !forceSortAggregate && !forceObjHashAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         isStreaming = isStreaming,
@@ -94,7 +96,7 @@ object AggUtils {
       val objectHashEnabled = child.conf.useObjectHashAggregation
       val useObjectHash = Aggregate.supportsObjectHashAggregate(aggregateExpressions)
 
-      if (objectHashEnabled && useObjectHash && !forceSortAggregate) {
+      if (forceObjHashAggregate || (objectHashEnabled && useObjectHash && !forceSortAggregate)) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           isStreaming = isStreaming,
@@ -588,5 +590,14 @@ object AggUtils {
   private def forceApplySortAggregate(conf: SQLConf): Boolean = {
     Utils.isTesting &&
       conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
+  }
+
+  /**
+   * Returns whether a object hash aggregate should be force applied.
+   * The config key is hard-coded because it's testing only and should not be exposed.
+   */
+  private def forceApplyObjectHashAggregate(conf: SQLConf): Boolean = {
+    Utils.isTesting &&
+      conf.getConfString("spark.sql.test.forceApplyObjectHashAggregate", "false") == "true"
   }
 }

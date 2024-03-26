@@ -45,7 +45,7 @@ import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -68,6 +68,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.groupStateTimeoutFromString
@@ -108,7 +109,7 @@ class SparkConnectPlanner(
 
   private[connect] def sessionId: String = sessionHolder.sessionId
 
-  lazy val executeHolder = executeHolderOpt.getOrElse {
+  private lazy val executeHolder = executeHolderOpt.getOrElse {
     throw new IllegalArgumentException("executeHolder is not set")
   }
 
@@ -208,11 +209,11 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.transform(extension, this))
+      .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .get()
   }
 
   private def transformCatalog(catalog: proto.Catalog): LogicalPlan = {
@@ -549,13 +550,15 @@ class SparkConnectPlanner(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
-              isBarrier)
+              isBarrier,
+              None)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
             logical.MapInArrow(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
-              isBarrier)
+              isBarrier,
+              None)
           case _ =>
             throw InvalidPlanInput(
               s"Function with EvalType: ${pythonUdf.evalType} is not supported")
@@ -711,8 +714,6 @@ class SparkConnectPlanner(
         transformTypedCoGroupMap(rel, commonUdf)
 
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        val pythonUdf = transformPythonUDF(commonUdf)
-
         val inputCols =
           rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
             Column(transformExpression(expr)))
@@ -726,6 +727,10 @@ class SparkConnectPlanner(
         val other = Dataset
           .ofRows(session, transformRelation(rel.getOther))
           .groupBy(otherCols: _*)
+
+        val pythonUdf = createUserDefinedPythonFunction(commonUdf)
+          .builder(input.df.logicalPlan.output ++ other.df.logicalPlan.output)
+          .asInstanceOf[PythonUDF]
 
         pythonUdf.evalType match {
           case PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF =>
@@ -970,8 +975,22 @@ class SparkConnectPlanner(
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables
       broadcastVars = Lists.newArrayList(),
-      // Null accumulator
-      accumulator = null)
+      // Accumulator if available
+      accumulator = sessionHolder.pythonAccumulator.orNull)
+  }
+
+  private def transformPythonDataSource(ds: proto.PythonDataSource): SimplePythonFunction = {
+    SimplePythonFunction(
+      command = ds.getCommand.toByteArray.toImmutableArraySeq,
+      // Empty environment variables
+      envVars = Maps.newHashMap(),
+      pythonIncludes = sessionHolder.artifactManager.getPythonIncludes.asJava,
+      pythonExec = pythonExec,
+      pythonVer = ds.getPythonVer,
+      // Empty broadcast variables
+      broadcastVars = Lists.newArrayList(),
+      // Accumulator if available
+      accumulator = sessionHolder.pythonAccumulator.orNull)
   }
 
   private def transformCachedRemoteRelation(rel: proto.CachedRemoteRelation): LogicalPlan = {
@@ -1469,11 +1488,11 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.transform(extension, this))
+      .map(p => p.transform(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_.isPresent)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
+      .get
   }
 
   /**
@@ -1505,12 +1524,6 @@ class SparkConnectPlanner(
 
   /**
    * Translates a scalar function from proto to the Catalyst expression.
-   *
-   * TODO(SPARK-40546) We need to homogenize the function names for binary operators.
-   *
-   * @param fun
-   *   Proto representation of the function call.
-   * @return
    */
   private def transformUnresolvedFunction(
       fun: proto.Expression.UnresolvedFunction): Expression = {
@@ -1649,17 +1662,23 @@ class SparkConnectPlanner(
 
   private def transformPythonFuncExpression(
       fun: proto.CommonInlineUserDefinedFunction): Expression = {
-    val udf = fun.getPythonUdf
-    UserDefinedPythonFunction(
-      name = fun.getFunctionName,
-      func = transformPythonFunction(udf),
-      dataType = transformDataType(udf.getOutputType),
-      pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
+    createUserDefinedPythonFunction(fun)
       .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
       case other => other
     }
+  }
+
+  private def createUserDefinedPythonFunction(
+      fun: proto.CommonInlineUserDefinedFunction): UserDefinedPythonFunction = {
+    val udf = fun.getPythonUdf
+    val function = transformPythonFunction(udf)
+    UserDefinedPythonFunction(
+      name = fun.getFunctionName,
+      func = function,
+      dataType = transformDataType(udf.getOutputType),
+      pythonEvalType = udf.getEvalType,
+      udfDeterministic = fun.getDeterministic)
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
@@ -1672,8 +1691,8 @@ class SparkConnectPlanner(
       pythonVer = fun.getPythonVer,
       // Empty broadcast variables
       broadcastVars = Lists.newArrayList(),
-      // Null accumulator
-      accumulator = null)
+      // Accumulator if available
+      accumulator = sessionHolder.pythonAccumulator.orNull)
   }
 
   /**
@@ -1708,53 +1727,6 @@ class SparkConnectPlanner(
    */
   private def transformUnregisteredFunction(
       fun: proto.Expression.UnresolvedFunction): Option[Expression] = {
-    def extractArgsOfProtobufFunction(
-        functionName: String,
-        argumentsCount: Int,
-        children: collection.Seq[Expression])
-        : (String, Option[Array[Byte]], Map[String, String]) = {
-      val messageClassName = children(1) match {
-        case Literal(s, StringType) if s != null => s.toString
-        case other =>
-          throw InvalidPlanInput(
-            s"MessageClassName in $functionName should be a literal string, but got $other")
-      }
-      val (binaryFileDescSetOpt, options) = if (argumentsCount == 2) {
-        (None, Map.empty[String, String])
-      } else if (argumentsCount == 3) {
-        children(2) match {
-          case Literal(b, BinaryType) if b != null =>
-            (Some(b.asInstanceOf[Array[Byte]]), Map.empty[String, String])
-          case UnresolvedFunction(Seq("map"), arguments, _, _, _, _) =>
-            (None, ExprUtils.convertToMapData(CreateMap(arguments)))
-          case other =>
-            throw InvalidPlanInput(
-              s"The valid type for the 3rd arg in $functionName " +
-                s"is binary or map, but got $other")
-        }
-      } else if (argumentsCount == 4) {
-        val fileDescSetOpt = children(2) match {
-          case Literal(b, BinaryType) if b != null =>
-            Some(b.asInstanceOf[Array[Byte]])
-          case other =>
-            throw InvalidPlanInput(
-              s"DescFilePath in $functionName should be a literal binary, but got $other")
-        }
-        val map = children(3) match {
-          case UnresolvedFunction(Seq("map"), arguments, _, _, _, _) =>
-            ExprUtils.convertToMapData(CreateMap(arguments))
-          case other =>
-            throw InvalidPlanInput(
-              s"Options in $functionName should be created by map, but got $other")
-        }
-        (fileDescSetOpt, map)
-      } else {
-        throw InvalidPlanInput(
-          s"$functionName requires 2 ~ 4 arguments, but got $argumentsCount ones!")
-      }
-      (messageClassName, binaryFileDescSetOpt, options)
-    }
-
     fun.getFunctionName match {
       case "product" if fun.getArgumentsCount == 1 =>
         Some(
@@ -1803,31 +1775,8 @@ class SparkConnectPlanner(
       case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
         // [col, expectedNumItems: Long, numBits: Long]
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-
-        // Check expectedNumItems is LongType and value greater than 0L
-        val expectedNumItemsExpr = children(1)
-        val expectedNumItems = expectedNumItemsExpr match {
-          case Literal(l: Long, LongType) => l
-          case _ =>
-            throw InvalidPlanInput("Expected insertions must be long literal.")
-        }
-        if (expectedNumItems <= 0L) {
-          throw InvalidPlanInput("Expected insertions must be positive.")
-        }
-
-        val numBitsExpr = children(2)
-        // Check numBits is LongType and value greater than 0L
-        numBitsExpr match {
-          case Literal(numBits: Long, LongType) =>
-            if (numBits <= 0L) {
-              throw InvalidPlanInput("Number of bits must be positive.")
-            }
-          case _ =>
-            throw InvalidPlanInput("Number of bits must be long literal.")
-        }
-
         Some(
-          new BloomFilterAggregate(children.head, expectedNumItemsExpr, numBitsExpr)
+          new BloomFilterAggregate(children(0), children(1), children(2))
             .toAggregateExpression())
 
       case "window" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
@@ -2000,17 +1949,13 @@ class SparkConnectPlanner(
       // Protobuf-specific functions
       case "from_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val (messageClassName, binaryFileDescSetOpt, options) =
-          extractArgsOfProtobufFunction("from_protobuf", fun.getArgumentsCount, children)
-        Some(
-          ProtobufDataToCatalyst(children.head, messageClassName, binaryFileDescSetOpt, options))
+        val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
+        Some(ProtobufDataToCatalyst(children(0), msgName, desc, options))
 
       case "to_protobuf" if Seq(2, 3, 4).contains(fun.getArgumentsCount) =>
         val children = fun.getArgumentsList.asScala.map(transformExpression)
-        val (messageClassName, binaryFileDescSetOpt, options) =
-          extractArgsOfProtobufFunction("to_protobuf", fun.getArgumentsCount, children)
-        Some(
-          CatalystDataToProtobuf(children.head, messageClassName, binaryFileDescSetOpt, options))
+        val (msgName, desc, options) = extractProtobufArgs(children.toSeq)
+        Some(CatalystDataToProtobuf(children(0), msgName, desc, options))
 
       case "uuid" if fun.getArgumentsCount == 1 =>
         // Uuid does not have a constructor which accepts Expression typed 'seed'
@@ -2047,6 +1992,22 @@ class SparkConnectPlanner(
       udfDeterministic = f.deterministic)
   }
 
+  private def extractProtobufArgs(children: Seq[Expression]) = {
+    val msgName = extractString(children(1), "MessageClassName")
+    var desc = Option.empty[Array[Byte]]
+    var options = Map.empty[String, String]
+    if (children.length == 3) {
+      children(2) match {
+        case b: Literal => desc = Some(extractBinary(b, "binaryFileDescriptorSet"))
+        case o => options = extractMapData(o, "options")
+      }
+    } else if (children.length == 4) {
+      desc = Some(extractBinary(children(2), "binaryFileDescriptorSet"))
+      options = extractMapData(children(3), "options")
+    }
+    (msgName, desc, options)
+  }
+
   private def extractBoolean(expr: Expression, field: String): Boolean = expr match {
     case Literal(bool: Boolean, BooleanType) => bool
     case other => throw InvalidPlanInput(s"$field should be a literal boolean, but got $other")
@@ -2070,6 +2031,11 @@ class SparkConnectPlanner(
   private def extractString(expr: Expression, field: String): String = expr match {
     case Literal(s, StringType) if s != null => s.toString
     case other => throw InvalidPlanInput(s"$field should be a literal string, but got $other")
+  }
+
+  private def extractBinary(expr: Expression, field: String): Array[Byte] = expr match {
+    case Literal(b: Array[Byte], BinaryType) if b != null => b
+    case other => throw InvalidPlanInput(s"$field should be a literal binary, but got $other")
   }
 
   @scala.annotation.tailrec
@@ -2101,19 +2067,28 @@ class SparkConnectPlanner(
     parser.parseExpression(expr.getExpression)
   }
 
-  private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): UnresolvedStar = {
-    if (star.hasUnparsedTarget) {
-      val target = star.getUnparsedTarget
-      if (!target.endsWith(".*")) {
-        throw InvalidPlanInput(
-          s"UnresolvedStar requires a unparsed target ending with '.*', " +
-            s"but got $target.")
-      }
+  private def transformUnresolvedStar(star: proto.Expression.UnresolvedStar): Expression = {
+    (star.hasUnparsedTarget, star.hasPlanId) match {
+      case (false, false) =>
+        // functions.col("*")
+        UnresolvedStar(None)
 
-      UnresolvedStar(
-        Some(UnresolvedAttribute.parseAttributeName(target.substring(0, target.length - 2))))
-    } else {
-      UnresolvedStar(None)
+      case (true, false) =>
+        // functions.col("s.*")
+        val target = star.getUnparsedTarget
+        if (!target.endsWith(".*")) {
+          throw InvalidPlanInput(
+            s"UnresolvedStar requires a unparsed target ending with '.*', but got $target.")
+        }
+        val parts = UnresolvedAttribute.parseAttributeName(target.dropRight(2))
+        UnresolvedStar(Some(parts))
+
+      case (false, true) =>
+        // dataframe.col("*")
+        UnresolvedDataFrameStar(star.getPlanId)
+
+      case _ =>
+        throw InvalidPlanInput("UnresolvedStar with both target and plan id is not supported.")
     }
   }
 
@@ -2534,6 +2509,8 @@ class SparkConnectPlanner(
         handleRegisterUserDefinedFunction(command.getRegisterFunction)
       case proto.Command.CommandTypeCase.REGISTER_TABLE_FUNCTION =>
         handleRegisterUserDefinedTableFunction(command.getRegisterTableFunction)
+      case proto.Command.CommandTypeCase.REGISTER_DATA_SOURCE =>
+        handleRegisterUserDefinedDataSource(command.getRegisterDataSource)
       case proto.Command.CommandTypeCase.WRITE_OPERATION =>
         handleWriteOperation(command.getWriteOperation)
       case proto.Command.CommandTypeCase.CREATE_DATAFRAME_VIEW =>
@@ -2558,7 +2535,7 @@ class SparkConnectPlanner(
     }
   }
 
-  def handleSqlCommand(
+  private def handleSqlCommand(
       getSqlCommand: SqlCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
@@ -2701,6 +2678,20 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
+  private def handleRegisterUserDefinedDataSource(
+      fun: proto.CommonInlineUserDefinedDataSource): Unit = {
+    fun.getDataSourceCase match {
+      case proto.CommonInlineUserDefinedDataSource.DataSourceCase.PYTHON_DATA_SOURCE =>
+        val ds = fun.getPythonDataSource
+        val dataSource = UserDefinedPythonDataSource(transformPythonDataSource(ds))
+        session.dataSource.registerPython(fun.getName, dataSource)
+      case _ =>
+        throw InvalidPlanInput(
+          s"Data source with ID: ${fun.getDataSourceCase.getNumber} is not supported")
+    }
+    executeHolder.eventsManager.postFinished()
+  }
+
   private def createPythonUserDefinedTableFunction(
       fun: proto.CommonInlineUserDefinedTableFunction): UserDefinedPythonTableFunction = {
     val udtf = fun.getPythonUdtf
@@ -2725,15 +2716,7 @@ class SparkConnectPlanner(
   }
 
   private def handleRegisterPythonUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
-    val udf = fun.getPythonUdf
-    val function = transformPythonFunction(udf)
-    val udpf = UserDefinedPythonFunction(
-      name = fun.getFunctionName,
-      func = function,
-      dataType = transformDataType(udf.getOutputType),
-      pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
-
+    val udpf = createUserDefinedPythonFunction(fun)
     session.udf.registerPython(fun.getFunctionName, udpf)
   }
 
@@ -2761,10 +2744,9 @@ class SparkConnectPlanner(
       // Lazily traverse the collection.
       .view
       // Apply the transformation.
-      .map(p => p.process(extension, this))
+      .map(p => p.process(extension.toByteArray, this))
       // Find the first non-empty transformation or throw.
-      .find(_.nonEmpty)
-      .flatten
+      .find(_ == true)
       .getOrElse(throw InvalidPlanInput("No handler found for extension"))
     executeHolder.eventsManager.postFinished()
   }
@@ -2877,7 +2859,7 @@ class SparkConnectPlanner(
    *
    * @param writeOperation
    */
-  def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
+  private def handleWriteOperationV2(writeOperation: proto.WriteOperationV2): Unit = {
     // Transform the input plan into the logical plan.
     val plan = transformRelation(writeOperation.getInput)
     // And create a Dataset from the plan.
@@ -2936,7 +2918,7 @@ class SparkConnectPlanner(
     executeHolder.eventsManager.postFinished()
   }
 
-  def handleWriteStreamOperationStart(
+  private def handleWriteStreamOperationStart(
       writeOp: WriteStreamOperationStart,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
@@ -3062,7 +3044,7 @@ class SparkConnectPlanner(
         .build())
   }
 
-  def handleStreamingQueryCommand(
+  private def handleStreamingQueryCommand(
       command: StreamingQueryCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
@@ -3240,7 +3222,7 @@ class SparkConnectPlanner(
     builder.build()
   }
 
-  def handleStreamingQueryManagerCommand(
+  private def handleStreamingQueryManagerCommand(
       command: StreamingQueryManagerCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
@@ -3321,7 +3303,7 @@ class SparkConnectPlanner(
         .build())
   }
 
-  def handleGetResourcesCommand(
+  private def handleGetResourcesCommand(
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(

@@ -52,12 +52,21 @@ class ResampleErrorMixin:
             psdf.A.resample("3W").sum()
 
         with self.assertRaisesRegex(ValueError, "rule offset must be positive"):
+            psdf.A.resample("0D").sum()
+
+        with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
             psdf.A.resample("0Y").sum()
 
         with self.assertRaisesRegex(ValueError, "invalid closed: 'middle'"):
+            psdf.A.resample("3D", closed="middle").sum()
+
+        with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
             psdf.A.resample("3Y", closed="middle").sum()
 
         with self.assertRaisesRegex(ValueError, "invalid label: 'both'"):
+            psdf.A.resample("3D", label="both").sum()
+
+        with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
             psdf.A.resample("3Y", label="both").sum()
 
         with self.assertRaisesRegex(

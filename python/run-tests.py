@@ -147,8 +147,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         # this code is invoked from a thread other than the main thread.
         os._exit(1)
     duration = time.time() - start_time
-    # Exit on the first failure.
-    if retcode != 0:
+    # Exit on the first failure but exclude the code 5 for no test ran, see SPARK-46801.
+    if retcode != 0 and retcode != 5:
         try:
             with FAILURE_REPORTING_LOCK:
                 with open(LOG_FILE, 'ab') as log_file:

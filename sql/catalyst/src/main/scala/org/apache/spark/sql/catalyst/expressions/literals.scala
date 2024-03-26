@@ -50,10 +50,9 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -70,10 +69,11 @@ object Literal {
     case f: Float => Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
-    case s: String => Literal(UTF8String.fromString(s), StringType)
-    case s: UTF8String => Literal(s, StringType)
-    case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
-    case ac: Array[Char] => Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
+    case s: String => Literal(UTF8String.fromString(s), SqlApiConf.get.defaultStringType)
+    case s: UTF8String => Literal(s, SqlApiConf.get.defaultStringType)
+    case c: Char => Literal(UTF8String.fromString(c.toString), SqlApiConf.get.defaultStringType)
+    case ac: Array[Char] =>
+      Literal(UTF8String.fromString(String.valueOf(ac)), SqlApiConf.get.defaultStringType)
     case b: Boolean => Literal(b, BooleanType)
     case d: BigDecimal =>
       val decimal = Decimal(d)
@@ -131,7 +131,7 @@ object Literal {
     case _ if clz == classOf[Period] => YearMonthIntervalType()
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
-    case _ if clz == classOf[Array[Char]] => StringType
+    case _ if clz == classOf[Array[Char]] => SqlApiConf.get.defaultStringType
     case _ if clz == classOf[JavaShort] => ShortType
     case _ if clz == classOf[JavaInteger] => IntegerType
     case _ if clz == classOf[JavaLong] => LongType
@@ -141,7 +141,7 @@ object Literal {
     case _ if clz == classOf[JavaBoolean] => BooleanType
 
     // other scala classes
-    case _ if clz == classOf[String] => StringType
+    case _ if clz == classOf[String] => SqlApiConf.get.defaultStringType
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
@@ -196,14 +196,14 @@ object Literal {
     case TimestampNTZType => create(0L, TimestampNTZType)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
-    case StringType => Literal("")
+    case st: StringType => Literal(UTF8String.fromString(""), st)
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
-      create(InternalRow.fromSeq(
-        struct.fields.map(f => default(f.dataType).value).toImmutableArraySeq), struct)
+      create(new GenericInternalRow(
+        struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
       throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
@@ -237,7 +237,7 @@ object Literal {
           }
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
-        case PhysicalStringType => v.isInstanceOf[UTF8String]
+        case _: PhysicalStringType => v.isInstanceOf[UTF8String]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
@@ -321,7 +321,7 @@ object LongLiteral {
  */
 object StringLiteral {
   def unapply(a: Any): Option[String] = a match {
-    case Literal(s: UTF8String, StringType) => Some(s.toString)
+    case Literal(s: UTF8String, _: StringType) => Some(s.toString)
     case _ => None
   }
 }
@@ -485,7 +485,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def sql: String = (value, dataType) match {
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
-    case (v: UTF8String, StringType) =>
+    case (v: UTF8String, _: StringType) =>
       // Escapes all backslashes and single quotes.
       "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
     case (v: Byte, ByteType) => s"${v}Y"

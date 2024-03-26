@@ -43,6 +43,7 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportFactory;
 
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2$;
 
 public class ThriftBinaryCLIService extends ThriftCLIService {
 
@@ -137,7 +138,11 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       LOG.error(
           "Error starting HiveServer2: could not start "
               + ThriftBinaryCLIService.class.getSimpleName(), t);
-      System.exit(-1);
+      if (HiveThriftServer2$.MODULE$.systemExitOnError().get()) {
+        System.exit(-1);
+      } else {
+        throw new ServiceException(t);
+      }
     }
   }
 

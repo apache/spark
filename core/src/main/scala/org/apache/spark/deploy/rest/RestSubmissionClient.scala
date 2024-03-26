@@ -21,7 +21,6 @@ import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
-import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 import scala.concurrent.{Await, Future}
@@ -30,6 +29,7 @@ import scala.io.Source
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
+import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkApplication
@@ -176,6 +176,35 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
         response = post(url)
         response match {
           case k: ClearResponse =>
+            if (!Utils.responseFromBackup(k.message)) {
+              handleRestResponse(k)
+              handled = true
+            }
+          case unexpected =>
+            handleUnexpectedRestResponse(unexpected)
+        }
+      } catch {
+        case e: SubmitRestConnectionException =>
+          if (handleConnectionException(m)) {
+            throw new SubmitRestConnectionException("Unable to connect to server", e)
+          }
+      }
+    }
+    response
+  }
+
+  /** Check the readiness of Master. */
+  def readyz(): SubmitRestProtocolResponse = {
+    logInfo(s"Submitting a request to check the status of $master.")
+    var handled: Boolean = false
+    var response: SubmitRestProtocolResponse = new ErrorResponse
+    for (m <- masters if !handled) {
+      validateMaster(m)
+      val url = getReadyzUrl(m)
+      try {
+        response = get(url)
+        response match {
+          case k: ReadyzResponse =>
             if (!Utils.responseFromBackup(k.message)) {
               handleRestResponse(k)
               handled = true
@@ -368,6 +397,12 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   private def getClearUrl(master: String): URL = {
     val baseUrl = getBaseUrl(master)
     new URL(s"$baseUrl/clear")
+  }
+
+  /** Return the REST URL for requesting the readyz API. */
+  private def getReadyzUrl(master: String): URL = {
+    val baseUrl = getBaseUrl(master)
+    new URL(s"$baseUrl/readyz")
   }
 
   /** Return the REST URL for requesting the status of an existing submission. */

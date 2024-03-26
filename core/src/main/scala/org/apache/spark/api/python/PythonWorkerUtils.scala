@@ -21,6 +21,7 @@ import java.io.{DataInputStream, DataOutputStream, File}
 import java.nio.charset.StandardCharsets
 
 import org.apache.spark.{SparkEnv, SparkFiles}
+import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 
@@ -186,7 +187,8 @@ private[spark] object PythonWorkerUtils extends Logging {
    * The updates are sent by `worker_util.send_accumulator_updates`.
    */
   def receiveAccumulatorUpdates(
-      maybeAccumulator: Option[PythonAccumulatorV2], dataIn: DataInputStream): Unit = {
+      maybeAccumulator: Option[PythonAccumulator],
+      dataIn: DataInputStream): Unit = {
     val numAccumulatorUpdates = dataIn.readInt()
     (1 to numAccumulatorUpdates).foreach { _ =>
       val update = readBytes(dataIn)

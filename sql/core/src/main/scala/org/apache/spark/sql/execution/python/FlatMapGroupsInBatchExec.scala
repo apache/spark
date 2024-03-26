@@ -43,8 +43,10 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val largeVarTypes = conf.arrowUseLargeVarTypes
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
-  private val pythonFunction = func.asInstanceOf[PythonUDF].func
-  private val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
+  private val pythonUDF = func.asInstanceOf[PythonUDF]
+  private val pythonFunction = pythonUDF.func
+  private val chainedFunc =
+    Seq((ChainedPythonFunctions(Seq(pythonFunction)), pythonUDF.resultId.id))
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
@@ -89,7 +91,8 @@ trait FlatMapGroupsInBatchExec extends SparkPlan with UnaryExecNode with PythonS
         largeVarTypes,
         pythonRunnerConf,
         pythonMetrics,
-        jobArtifactUUID)
+        jobArtifactUUID,
+        conf.pythonUDFProfiler)
 
       executePython(data, output, runner)
     }}

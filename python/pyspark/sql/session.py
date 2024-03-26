@@ -47,6 +47,7 @@ from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
+from pyspark.sql.profiler import AccumulatorProfilerCollector, Profile
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
 from pyspark.sql.streaming import DataStreamReader
@@ -80,6 +81,12 @@ if TYPE_CHECKING:
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
 
+try:
+    import memory_profiler  # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 __all__ = ["SparkSession"]
 
@@ -122,7 +129,7 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
-    RDD.toDF = toDF  # type: ignore[assignment]
+    RDD.toDF = toDF  # type: ignore[method-assign]
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -492,12 +499,18 @@ class SparkSession(SparkConversionMixin):
 
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
-                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                            return cast(
+                                SparkSession,
+                                RemoteSparkSession.builder.config(map=opts).getOrCreate(),
+                            )
                         elif "SPARK_LOCAL_REMOTE" in os.environ:
                             url = "sc://localhost"
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
-                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                            return cast(
+                                SparkSession,
+                                RemoteSparkSession.builder.config(map=opts).getOrCreate(),
+                            )
                         else:
                             raise PySparkRuntimeError(
                                 error_class="SESSION_ALREADY_EXIST",
@@ -553,14 +566,14 @@ class SparkSession(SparkConversionMixin):
                 # used in conjunction with Spark Connect mode.
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
-                return RemoteSparkSession.builder.config(map=opts).create()
+                return cast(SparkSession, RemoteSparkSession.builder.config(map=opts).create())
             else:
                 raise PySparkRuntimeError(
                     error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
                     message_parameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
+    # TODO(SPARK-38912): Replace classproperty with @classmethod + @property once support for
     # Python 3.8 is dropped.
     #
     # In Python 3.9, the @property decorator has been made compatible with the
@@ -568,14 +581,15 @@ class SparkSession(SparkConversionMixin):
     #
     # @classmethod + @property is also affected by a bug in Python's docstring which was backported
     # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-    @classproperty
-    def builder(cls) -> Builder:
-        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+    #
+    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
+    # If changing, make sure this bug is not reintroduced.
+    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
+    """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-        """
-        return cls.Builder()
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+    """
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
@@ -622,6 +636,8 @@ class SparkSession(SparkConversionMixin):
             assert self._jvm is not None
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
             self._jvm.SparkSession.setActiveSession(self._jsparkSession)
+
+        self._profiler_collector = AccumulatorProfilerCollector()
 
     def _repr_html_(self) -> str:
         return """
@@ -896,6 +912,22 @@ class SparkSession(SparkConversionMixin):
         from pyspark.sql.datasource import DataSourceRegistration
 
         return DataSourceRegistration(self)
+
+    @property
+    def profile(self) -> Profile:
+        """Returns a :class:`Profile` for performance/memory profiling.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Profile`
+
+        Notes
+        -----
+        Supports Spark Connect.
+        """
+        return Profile(self._profiler_collector)
 
     def range(
         self,
@@ -1286,7 +1318,7 @@ class SparkSession(SparkConversionMixin):
         ----------
         data : :class:`RDD` or iterable
             an RDD of any kind of SQL data representation (:class:`Row`,
-            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`,
+            :class:`tuple`, ``int``, ``boolean``, ``dict``, etc.), or :class:`list`,
             :class:`pandas.DataFrame` or :class:`numpy.ndarray`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional
             a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
@@ -1312,6 +1344,9 @@ class SparkSession(SparkConversionMixin):
             if ``samplingRatio`` is ``None``.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
+            When the input is :class:`pandas.DataFrame` and
+            `spark.sql.execution.arrow.pyspark.enabled` is enabled, this option is not
+            effective. It follows Arrow type coercion.
 
             .. versionadded:: 2.1.0
 
@@ -1418,7 +1453,7 @@ class SparkSession(SparkConversionMixin):
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         if isinstance(schema, str):
@@ -1663,10 +1698,15 @@ class SparkSession(SparkConversionMixin):
         try:
             if isinstance(args, Dict):
                 litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
-            else:
+            elif args is None or isinstance(args, List):
                 assert self._jvm is not None
                 litArgs = self._jvm.PythonUtils.toArray(
                     [_to_java_column(lit(v)) for v in (args or [])]
+                )
+            else:
+                raise PySparkTypeError(
+                    error_class="INVALID_TYPE",
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
                 )
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
@@ -1704,6 +1744,12 @@ class SparkSession(SparkConversionMixin):
         |  4|
         +---+
         """
+        if not isinstance(tableName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
         return DataFrame(self._jsparkSession.table(tableName), self)
 
     @property
@@ -1729,7 +1775,7 @@ class SparkSession(SparkConversionMixin):
         Write a DataFrame into a JSON file and read it back.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="read") as d:
         ...     # Write a DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -1816,7 +1862,10 @@ class SparkSession(SparkConversionMixin):
         """
         from pyspark.sql.streaming import StreamingQueryManager
 
-        return StreamingQueryManager(self._jsparkSession.streams())
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
+        return self._sqm
 
     def stop(self) -> None:
         """

@@ -87,7 +87,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"col\"",
     "inputType" : "\"ARRAY<INT>\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INT\" or \"BIGINT\" or \"STRING\" or \"BINARY\")",
     "sqlExpr" : "\"hll_sketch_agg(col, 12)\""
   },
@@ -170,7 +170,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BINARY\"",
     "sqlExpr" : "\"hll_union(1, 2, false)\""
   },

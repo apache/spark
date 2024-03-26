@@ -69,15 +69,6 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       columns: Array[Column],
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
-    createTable(ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties)
-  }
-
-  // TODO: remove it when no tests calling this deprecated method.
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: java.util.Map[String, String]): Table = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
     val key = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY
     val propsWithLocation = if (properties.containsKey(key)) {
@@ -93,7 +84,8 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
     } else {
       properties
     }
-    super.createTable(ident, schema, partitions, propsWithLocation)
+    super.createTable(ident, columns, partitions, propsWithLocation)
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     val t = newTable(ident.quoted, schema, partitions, propsWithLocation)
     addTable(ident, t)
     t

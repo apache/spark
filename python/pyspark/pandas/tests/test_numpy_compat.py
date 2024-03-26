@@ -20,7 +20,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas import set_option, reset_option
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -45,6 +45,10 @@ class NumPyCompatTestsMixin:
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_np_add_series(self):
         psdf = self.psdf
@@ -178,7 +182,11 @@ class NumPyCompatTestsMixin:
             reset_option("compute.ops_on_diff_frames")
 
 
-class NumPyCompatTests(NumPyCompatTestsMixin, ComparisonTestBase, SQLTestUtils):
+class NumPyCompatTests(
+    NumPyCompatTestsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

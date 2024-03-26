@@ -35,7 +35,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
   test("sessionId needs to be an UUID") {
     val key = SessionKey("user", "not an uuid")
     val exGetOrCreate = intercept[SparkSQLException] {
-      SparkConnectService.sessionManager.getOrCreateIsolatedSession(key)
+      SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
     }
     assert(exGetOrCreate.getErrorClass == "INVALID_HANDLE.FORMAT")
   }
@@ -44,33 +44,51 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     "getOrCreateIsolatedSession/getIsolatedSession/getIsolatedSessionIfPresent " +
       "gets the existing session") {
     val key = SessionKey("user", UUID.randomUUID().toString)
-    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
 
     val sessionGetOrCreate =
-      SparkConnectService.sessionManager.getOrCreateIsolatedSession(key)
+      SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
     assert(sessionGetOrCreate === sessionHolder)
 
-    val sessionGet = SparkConnectService.sessionManager.getIsolatedSession(key)
+    val sessionGet = SparkConnectService.sessionManager.getIsolatedSession(key, None)
     assert(sessionGet === sessionHolder)
 
     val sessionGetIfPresent = SparkConnectService.sessionManager.getIsolatedSessionIfPresent(key)
     assert(sessionGetIfPresent.get === sessionHolder)
   }
 
+  test("client-observed session id validation works") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    // Works if the client doesn't set the observed session id.
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    // Works with the correct existing session id.
+    SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+      key,
+      Some(sessionHolder.session.sessionUUID))
+    // Fails with the different session id.
+    val exGet = intercept[SparkSQLException] {
+      SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+        key,
+        Some(sessionHolder.session.sessionUUID + "invalid"))
+    }
+    assert(exGet.getErrorClass == "INVALID_HANDLE.SESSION_CHANGED")
+  }
+
   test(
     "getOrCreateIsolatedSession/getIsolatedSession/getIsolatedSessionIfPresent " +
       "doesn't recreate closed session") {
     val key = SessionKey("user", UUID.randomUUID().toString)
-    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
     SparkConnectService.sessionManager.closeSession(key)
 
     val exGetOrCreate = intercept[SparkSQLException] {
-      SparkConnectService.sessionManager.getOrCreateIsolatedSession(key)
+      SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
     }
     assert(exGetOrCreate.getErrorClass == "INVALID_HANDLE.SESSION_CLOSED")
 
     val exGet = intercept[SparkSQLException] {
-      SparkConnectService.sessionManager.getIsolatedSession(key)
+      SparkConnectService.sessionManager.getIsolatedSession(key, None)
     }
     assert(exGet.getErrorClass == "INVALID_HANDLE.SESSION_CLOSED")
 
@@ -82,7 +100,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     val key = SessionKey("user", UUID.randomUUID().toString)
 
     val exGet = intercept[SparkSQLException] {
-      SparkConnectService.sessionManager.getIsolatedSession(key)
+      SparkConnectService.sessionManager.getIsolatedSession(key, None)
     }
     assert(exGet.getErrorClass == "INVALID_HANDLE.SESSION_NOT_FOUND")
 
@@ -92,7 +110,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
 
   test("SessionHolder with custom expiration time is not cleaned up due to inactivity") {
     val key = SessionKey("user", UUID.randomUUID().toString)
-    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
 
     assert(
       SparkConnectService.sessionManager.listActiveSessions.exists(
@@ -117,7 +135,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
 
   test("SessionHolder is recorded with status closed after close") {
     val key = SessionKey("user", UUID.randomUUID().toString)
-    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
 
     val activeSessionInfo = SparkConnectService.sessionManager.listActiveSessions.find(
       _.sessionId == sessionHolder.sessionId)

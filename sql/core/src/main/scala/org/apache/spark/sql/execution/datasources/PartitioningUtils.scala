@@ -562,16 +562,26 @@ object PartitioningUtils extends SQLConfHelper {
 
     SchemaUtils.checkColumnNameDuplication(partitionColumns, caseSensitive)
 
-    partitionColumnsSchema(schema, partitionColumns).foreach {
-      field => field.dataType match {
-        case _: AtomicType => // OK
-        case _ => throw QueryCompilationErrors.cannotUseDataTypeForPartitionColumnError(field)
+    partitionColumnsSchema(schema, partitionColumns).foreach { field =>
+      if (!canPartitionOn(field.dataType)) {
+        throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)
       }
     }
 
     if (partitionColumns.nonEmpty && partitionColumns.size == schema.fields.length) {
       throw QueryCompilationErrors.cannotUseAllColumnsForPartitionColumnsError()
     }
+  }
+
+  /**
+   * Checks whether a given data type can be used as a partition column.
+   */
+  def canPartitionOn(dateType: DataType): Boolean = dateType match {
+    // non default collated strings should not be used as partition columns
+    // as we cannot implement string collation semantic with directory names
+    case st: StringType => st.supportsBinaryOrdering
+    case a: AtomicType => !a.isInstanceOf[VariantType]
+    case _ => false
   }
 
   def partitionColumnsSchema(

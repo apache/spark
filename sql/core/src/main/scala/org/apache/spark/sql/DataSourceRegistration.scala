@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceManager}
-import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
+import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.internal.SQLConf
 
 /**

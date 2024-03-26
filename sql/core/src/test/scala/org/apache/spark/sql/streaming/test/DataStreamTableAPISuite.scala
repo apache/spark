@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
@@ -433,7 +433,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           val explainWithExtended = sq.explainInternal(true)
           // `extended = true` displays 3 logical plans (Parsed/Analyzed/Optimized) and 1 physical
           // plan.
-          assert("StreamingDataSourceV2Relation".r
+          assert("StreamingDataSourceV2ScanRelation".r
             .findAllMatchIn(explainWithExtended).size === 3)
           // WriteToMicroBatchDataSource is used for both parsed and analyzed logical plan
           assert("WriteToMicroBatchDataSource".r
@@ -649,7 +649,7 @@ class InMemoryStreamTableCatalog extends InMemoryTableCatalog {
 
   override def createTable(
       ident: Identifier,
-      schema: StructType,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
     if (tables.containsKey(ident)) {

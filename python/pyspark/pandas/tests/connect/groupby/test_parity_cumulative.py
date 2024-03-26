@@ -22,7 +22,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class GroupbyParityCumulativeTests(
-    GroupbyCumulativeMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+    GroupbyCumulativeMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 

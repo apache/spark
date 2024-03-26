@@ -880,29 +880,52 @@ class Expression(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         UNPARSED_TARGET_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
         unparsed_target: builtins.str
         """(Optional) The target of the expansion.
 
         If set, it should end with '.*' and will be parsed by 'parseAttributeName'
         in the server side.
         """
+        plan_id: builtins.int
+        """(Optional) The id of corresponding connect plan."""
         def __init__(
             self,
             *,
             unparsed_target: builtins.str | None = ...,
+            plan_id: builtins.int | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_unparsed_target", b"_unparsed_target", "unparsed_target", b"unparsed_target"
+                "_plan_id",
+                b"_plan_id",
+                "_unparsed_target",
+                b"_unparsed_target",
+                "plan_id",
+                b"plan_id",
+                "unparsed_target",
+                b"unparsed_target",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_unparsed_target", b"_unparsed_target", "unparsed_target", b"unparsed_target"
+                "_plan_id",
+                b"_plan_id",
+                "_unparsed_target",
+                b"_unparsed_target",
+                "plan_id",
+                b"plan_id",
+                "unparsed_target",
+                b"unparsed_target",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
+        @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_unparsed_target", b"_unparsed_target"]
         ) -> typing_extensions.Literal["unparsed_target"] | None: ...

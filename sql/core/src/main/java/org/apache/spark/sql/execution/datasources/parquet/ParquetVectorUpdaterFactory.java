@@ -27,6 +27,7 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotat
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimestampLogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
@@ -147,12 +148,10 @@ public class ParquetVectorUpdaterFactory {
           }
         } else if (sparkType == DataTypes.TimestampNTZType &&
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
-          validateTimestampNTZType();
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongUpdater();
         } else if (sparkType == DataTypes.TimestampNTZType &&
           isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
-          validateTimestampNTZType();
           // TIMESTAMP_NTZ is a new data type and has no legacy files that need to do rebase.
           return new LongAsMicrosUpdater();
         } else if (sparkType instanceof DayTimeIntervalType) {
@@ -175,7 +174,8 @@ public class ParquetVectorUpdaterFactory {
       }
       case INT96 -> {
         if (sparkType == DataTypes.TimestampNTZType) {
-          convertErrorForTimestampNTZ(typeName.name());
+          // TimestampNTZ type does not require rebasing due to its lack of time zone context.
+          return new BinaryToSQLTimestampUpdater();
         } else if (sparkType == DataTypes.TimestampType) {
           final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
           if (!shouldConvertTimestamps()) {
@@ -197,7 +197,7 @@ public class ParquetVectorUpdaterFactory {
         }
       }
       case BINARY -> {
-        if (sparkType == DataTypes.StringType || sparkType == DataTypes.BinaryType ||
+        if (sparkType instanceof  StringType || sparkType == DataTypes.BinaryType ||
           canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new BinaryUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
@@ -229,20 +229,6 @@ public class ParquetVectorUpdaterFactory {
   boolean isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit unit) {
     return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation annotation &&
       annotation.getUnit() == unit;
-  }
-
-  private void validateTimestampNTZType() {
-    assert(logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation);
-    // Throw an exception if the Parquet type is TimestampLTZ as the Catalyst type is TimestampNTZ.
-    // This is to avoid mistakes in reading the timestamp values.
-    if (((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC()) {
-      convertErrorForTimestampNTZ("int64 time(" + logicalTypeAnnotation + ")");
-    }
-  }
-
-  void convertErrorForTimestampNTZ(String parquetType) {
-    throw new RuntimeException("Unable to create Parquet converter for data type " +
-      DataTypes.TimestampNTZType.json() + " whose Parquet type is " + parquetType);
   }
 
   boolean isUnsignedIntTypeMatched(int bitWidth) {
@@ -279,7 +265,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      throw new UnsupportedOperationException("Boolean is not supported");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3186");
     }
   }
 
@@ -1406,7 +1392,11 @@ public class ParquetVectorUpdaterFactory {
       super(sparkType);
       LogicalTypeAnnotation typeAnnotation =
         descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+        this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      } else {
+        this.parquetScale = 0;
+      }
     }
 
     @Override
@@ -1435,14 +1425,18 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-private static class LongToDecimalUpdater extends DecimalUpdater {
+  private static class LongToDecimalUpdater extends DecimalUpdater {
     private final int parquetScale;
 
-   LongToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
+    LongToDecimalUpdater(ColumnDescriptor descriptor, DecimalType sparkType) {
       super(sparkType);
       LogicalTypeAnnotation typeAnnotation =
         descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-      this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+        this.parquetScale = ((DecimalLogicalTypeAnnotation) typeAnnotation).getScale();
+      } else {
+        this.parquetScale = 0;
+      }
     }
 
     @Override
@@ -1640,6 +1634,12 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
     return typeAnnotation instanceof DateLogicalTypeAnnotation;
   }
 
+  private static boolean isSignedIntAnnotation(LogicalTypeAnnotation typeAnnotation) {
+    if (!(typeAnnotation instanceof IntLogicalTypeAnnotation)) return false;
+    IntLogicalTypeAnnotation intAnnotation = (IntLogicalTypeAnnotation) typeAnnotation;
+    return intAnnotation.isSigned();
+  }
+
   private static boolean isDecimalTypeMatched(ColumnDescriptor descriptor, DataType dt) {
     DecimalType requestedType = (DecimalType) dt;
     LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
@@ -1651,6 +1651,20 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
       int scaleIncrease = requestedType.scale() - parquetType.getScale();
       int precisionIncrease = requestedType.precision() - parquetType.getPrecision();
       return scaleIncrease >= 0 && precisionIncrease >= scaleIncrease;
+    } else if (typeAnnotation == null || isSignedIntAnnotation(typeAnnotation)) {
+      // Allow reading signed integers (which may be un-annotated) as decimal as long as the
+      // requested decimal type is large enough to represent all possible values.
+      PrimitiveType.PrimitiveTypeName typeName =
+        descriptor.getPrimitiveType().getPrimitiveTypeName();
+      int integerPrecision = requestedType.precision() - requestedType.scale();
+      switch (typeName) {
+        case INT32:
+          return integerPrecision >= DecimalType$.MODULE$.IntDecimal().precision();
+        case INT64:
+          return integerPrecision >= DecimalType$.MODULE$.LongDecimal().precision();
+        default:
+          return false;
+      }
     }
     return false;
   }
@@ -1661,6 +1675,9 @@ private static class FixedLenByteArrayToDecimalUpdater extends DecimalUpdater {
     if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
       DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
       return decimalType.getScale() == d.scale();
+    } else if (typeAnnotation == null || isSignedIntAnnotation(typeAnnotation)) {
+      // Consider signed integers (which may be un-annotated) as having scale 0.
+      return d.scale() == 0;
     }
     return false;
   }

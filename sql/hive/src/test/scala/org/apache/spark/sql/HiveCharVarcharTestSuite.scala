@@ -87,17 +87,19 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
           checkAnswer(spark.table(tableName), Nil)
         }
 
-        val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)"))
         checkError(
-          exception = e1.getCause.asInstanceOf[SparkException],
+          exception = intercept[SparkException] {
+            sql(s"INSERT OVERWRITE $tableName VALUES ('1', 100000)")
+          },
           errorClass = "TASK_WRITE_FAILED",
           parameters = Map("path" -> s".*$tableName.*"),
           matchPVals = true
         )
 
-        val e2 = intercept[SparkRuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
         checkError(
-          exception = e2,
+          exception = intercept[SparkRuntimeException] {
+            sql("ALTER TABLE t DROP PARTITION(c=100000)")
+          },
           errorClass = "EXCEED_LIMIT_LENGTH",
           parameters = Map("limit" -> "5")
         )

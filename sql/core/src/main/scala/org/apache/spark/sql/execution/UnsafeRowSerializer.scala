@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.ByteStreams
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -36,7 +37,7 @@ import org.apache.spark.unsafe.Platform
  * instance that is backed by an on-heap byte array.
  *
  * Note that this serializer implements only the [[Serializer]] methods that are used during
- * shuffle, so certain [[SerializerInstance]] methods will throw UnsupportedOperationException.
+ * shuffle, so certain [[SerializerInstance]] methods will throw SparkUnsupportedOperationException.
  *
  * @param numFields the number of fields in the row being serialized.
  */
@@ -79,12 +80,12 @@ private class UnsafeRowSerializerInstance(
 
     override def writeAll[T: ClassTag](iter: Iterator[T]): SerializationStream = {
       // This method is never called by shuffle code.
-      throw new UnsupportedOperationException
+      throw SparkUnsupportedOperationException()
     }
 
     override def writeObject[T: ClassTag](t: T): SerializationStream = {
       // This method is never called by shuffle code.
-      throw new UnsupportedOperationException
+      throw SparkUnsupportedOperationException()
     }
 
     override def flush(): Unit = {
@@ -145,7 +146,7 @@ private class UnsafeRowSerializerInstance(
 
       override def asIterator: Iterator[Any] = {
         // This method is never called by shuffle code.
-        throw new UnsupportedOperationException
+        throw SparkUnsupportedOperationException()
       }
 
       override def readKey[T: ClassTag](): T = {
@@ -166,7 +167,7 @@ private class UnsafeRowSerializerInstance(
 
       override def readObject[T: ClassTag](): T = {
         // This method is never called by shuffle code.
-        throw new UnsupportedOperationException
+        throw SparkUnsupportedOperationException()
       }
 
       override def close(): Unit = {
@@ -176,9 +177,9 @@ private class UnsafeRowSerializerInstance(
   }
 
   // These methods are never called by shuffle code.
-  override def serialize[T: ClassTag](t: T): ByteBuffer = throw new UnsupportedOperationException
+  override def serialize[T: ClassTag](t: T): ByteBuffer = throw SparkUnsupportedOperationException()
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T =
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   override def deserialize[T: ClassTag](bytes: ByteBuffer, loader: ClassLoader): T =
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
 }

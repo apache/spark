@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+from pyspark.sql.connect.column import Column
 from pyspark.sql.tests.pandas.test_pandas_udf_scalar import ScalarPandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -50,6 +51,9 @@ class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCas
 
     def test_vectorized_udf_invalid_length(self):
         self.check_vectorized_udf_invalid_length()
+
+    def test_mixed_udf_and_sql(self):
+        self._test_mixed_udf_and_sql(Column)
 
 
 if __name__ == "__main__":

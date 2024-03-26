@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 abstract class BaseArrowPythonRunner(
-    funcs: Seq[ChainedPythonFunctions],
+    funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
     _schema: StructType,
@@ -38,13 +38,13 @@ abstract class BaseArrowPythonRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
-    funcs, evalType, argOffsets, jobArtifactUUID)
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with BasicPythonArrowInput
   with BasicPythonArrowOutput {
 
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
-      funcs.head.funcs.head.pythonExec)
+      funcs.head._1.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
 
@@ -67,7 +67,7 @@ abstract class BaseArrowPythonRunner(
  * Similar to `PythonUDFRunner`, but exchange data with Python worker via Arrow stream.
  */
 class ArrowPythonRunner(
-    funcs: Seq[ChainedPythonFunctions],
+    funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argOffsets: Array[Array[Int]],
     _schema: StructType,
@@ -75,13 +75,14 @@ class ArrowPythonRunner(
     largeVarTypes: Boolean,
     workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    profiler: Option[String])
   extends BaseArrowPythonRunner(
     funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit =
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
 }
 
 /**
@@ -89,7 +90,7 @@ class ArrowPythonRunner(
  * via Arrow stream.
  */
 class ArrowPythonWithNamedArgumentRunner(
-    funcs: Seq[ChainedPythonFunctions],
+    funcs: Seq[(ChainedPythonFunctions, Long)],
     evalType: Int,
     argMetas: Array[Array[ArgumentMetadata]],
     _schema: StructType,
@@ -97,13 +98,14 @@ class ArrowPythonWithNamedArgumentRunner(
     largeVarTypes: Boolean,
     workerConf: Map[String, String],
     pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    profiler: Option[String])
   extends BaseArrowPythonRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes, workerConf,
     pythonMetrics, jobArtifactUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit =
-    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas)
+    PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
 }
 
 object ArrowPythonRunner {

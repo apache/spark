@@ -189,6 +189,14 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 # Copy jars
 cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 
+# Only create the hive-jackson directory if they exist.
+if [ -f "$DISTDIR"/jars/jackson-core-asl-1.9.13.jar ]; then
+  for f in "$DISTDIR"/jars/jackson-*-asl-*.jar; do
+    mkdir -p "$DISTDIR"/hive-jackson
+    mv $f "$DISTDIR"/hive-jackson/
+  done
+fi
+
 # Only create the yarn directory if the yarn artifacts were built.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
   mkdir "$DISTDIR/yarn"

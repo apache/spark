@@ -28,7 +28,6 @@ from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 from py4j.java_gateway import JavaObject
 
 from pyspark import SparkContext
-from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_expr, _to_seq
 from pyspark.sql.types import (
@@ -143,7 +142,8 @@ def _create_py_udf(
             eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         else:
             warnings.warn(
-                "Arrow optimization for Python UDFs cannot be enabled.",
+                "Arrow optimization for Python UDFs cannot be enabled for functions"
+                " without arguments.",
                 UserWarning,
             )
 
@@ -403,24 +403,24 @@ class UserDefinedFunction:
             for key, value in kwargs.items()
         ]
 
-        profiler: Optional[Profiler] = None
-        memory_profiler: Optional[Profiler] = None
-        if sc.profiler_collector:
-            profiler_enabled = sc._conf.get("spark.python.profile", "false") == "true"
-            memory_profiler_enabled = sc._conf.get("spark.python.profile.memory", "false") == "true"
+        profiler_enabled = sc._conf.get("spark.python.profile", "false") == "true"
+        memory_profiler_enabled = sc._conf.get("spark.python.profile.memory", "false") == "true"
 
+        if profiler_enabled or memory_profiler_enabled:
             # Disable profiling Pandas UDFs with iterators as input/output.
-            if profiler_enabled or memory_profiler_enabled:
-                if self.evalType in [
-                    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-                    PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-                    PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
-                ]:
-                    profiler_enabled = memory_profiler_enabled = False
-                    warnings.warn(
-                        "Profiling UDFs with iterators input/output is not supported.",
-                        UserWarning,
-                    )
+            if self.evalType in [
+                PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+                PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+                PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            ]:
+                warnings.warn(
+                    "Profiling UDFs with iterators input/output is not supported.",
+                    UserWarning,
+                )
+                judf = self._judf
+                jUDFExpr = judf.builder(_to_seq(sc, jexprs))
+                jPythonUDF = judf.fromUDFExpr(jUDFExpr)
+                return Column(jPythonUDF)
 
             # Disallow enabling two profilers at the same time.
             if profiler_enabled and memory_profiler_enabled:

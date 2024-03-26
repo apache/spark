@@ -48,8 +48,15 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SET TIME ZONE 'invalid/zone'
 -- !query analysis
-java.lang.IllegalArgumentException
-'invalid/zone' in spark.sql.session.timeZone is invalid. Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "INVALID_CONF_VALUE.TIME_ZONE",
+  "sqlState" : "22022",
+  "messageParameters" : {
+    "confName" : "spark.sql.session.timeZone",
+    "confValue" : "invalid/zone"
+  }
+}
 
 
 -- !query

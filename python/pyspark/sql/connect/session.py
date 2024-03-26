@@ -50,7 +50,7 @@ import urllib
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.loose_version import LooseVersion
-from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
+from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import (
@@ -62,11 +62,13 @@ from pyspark.sql.connect.plan import (
     CachedRelation,
     CachedRemoteRelation,
 )
+from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
+from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -93,6 +95,15 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark.sql.connect.datasource import DataSourceRegistration
+
+
+try:
+    import memory_profiler  # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 
 class SparkSession:
@@ -109,7 +120,7 @@ class SparkSession:
 
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
-            self._channel_builder: Optional[ChannelBuilder] = None
+            self._channel_builder: Optional[DefaultChannelBuilder] = None
 
         @overload
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
@@ -143,7 +154,7 @@ class SparkSession:
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
             return self.config("spark.remote", location)
 
-        def channelBuilder(self, channelBuilder: ChannelBuilder) -> "SparkSession.Builder":
+        def channelBuilder(self, channelBuilder: DefaultChannelBuilder) -> "SparkSession.Builder":
             """Uses custom :class:`ChannelBuilder` implementation, when there is a need
             to customize the behavior for creation of GRPC connections.
 
@@ -225,13 +236,12 @@ class SparkSession:
 
     _client: SparkConnectClient
 
-    @classproperty
-    def builder(cls) -> Builder:
-        return cls.Builder()
-
+    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
+    # If changing, make sure this bug is not reintroduced.
+    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
     builder.__doc__ = PySparkSession.builder.__doc__
 
-    def __init__(self, connection: Union[str, ChannelBuilder], userId: Optional[str] = None):
+    def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):
         """
         Creates a new SparkSession for the Spark Connect interface.
 
@@ -286,6 +296,12 @@ class SparkSession:
     active.__doc__ = PySparkSession.active.__doc__
 
     def table(self, tableName: str) -> DataFrame:
+        if not isinstance(tableName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
         return self.read.table(tableName)
 
     table.__doc__ = PySparkSession.table.__doc__
@@ -346,7 +362,7 @@ class SparkSession:
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         _schema: Optional[Union[AtomicType, StructType]] = None
@@ -697,7 +713,10 @@ class SparkSession:
 
     @property
     def streams(self) -> "StreamingQueryManager":
-        return StreamingQueryManager(self)
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self)
+        return self._sqm
 
     streams.__doc__ = PySparkSession.streams.__doc__
 
@@ -723,6 +742,14 @@ class SparkSession:
         return UDTFRegistration(self)
 
     udtf.__doc__ = PySparkSession.udtf.__doc__
+
+    @property
+    def dataSource(self) -> "DataSourceRegistration":
+        from pyspark.sql.connect.datasource import DataSourceRegistration
+
+        return DataSourceRegistration(self)
+
+    dataSource.__doc__ = PySparkSession.dataSource.__doc__
 
     @property
     def version(self) -> str:
@@ -919,6 +946,16 @@ class SparkSession:
     def session_id(self) -> str:
         return self._session_id
 
+    @property
+    def _profiler_collector(self) -> ProfilerCollector:
+        return self._client._profiler_collector
+
+    @property
+    def profile(self) -> Profile:
+        return Profile(self._client._profiler_collector)
+
+    profile.__doc__ = PySparkSession.profile.__doc__
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 
@@ -939,8 +976,6 @@ def _test() -> None:
     # Spark Connect does not support to set master together.
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-    # RDD API is not supported in Spark Connect.
-    del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
 
     # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
     del pyspark.sql.connect.session.SparkSession.sql.__doc__

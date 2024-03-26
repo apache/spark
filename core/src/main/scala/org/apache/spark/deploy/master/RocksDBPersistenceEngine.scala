@@ -19,7 +19,7 @@ package org.apache.spark.deploy.master
 
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, Paths}
+import java.nio.file.{FileAlreadyExistsException, Files, Paths}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -43,7 +43,12 @@ private[master] class RocksDBPersistenceEngine(
 
   RocksDB.loadLibrary()
 
-  private val path = Files.createDirectories(Paths.get(dir))
+  private val path = try {
+    Files.createDirectories(Paths.get(dir))
+  } catch {
+    case _: FileAlreadyExistsException if Files.isSymbolicLink(Paths.get(dir)) =>
+      Files.createDirectories(Paths.get(dir).toRealPath())
+  }
 
   /**
    * Use full filter.

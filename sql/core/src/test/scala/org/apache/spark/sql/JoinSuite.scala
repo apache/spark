@@ -23,6 +23,7 @@ import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
@@ -34,7 +35,7 @@ import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExch
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 
@@ -1734,6 +1735,36 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }.isEmpty, df.queryExecution)
     } finally {
       cached.unpersist()
+    }
+  }
+}
+
+class ThreadLeakInSortMergeJoinSuite
+  extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
+
+  setupTestData()
+  override protected def createSparkSession: TestSparkSession = {
+    SparkSession.cleanupAnyExistingSession()
+    new TestSparkSession(
+      sparkConf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, 20))
+  }
+
+  test("SPARK-47146: thread leak when doing SortMergeJoin (with spill)") {
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
+
+      assertSpilled(sparkContext, "inner join") {
+        sql("SELECT * FROM testData JOIN testData2 ON key = a").collect()
+      }
+
+      val readAheadThread = Thread.getAllStackTraces.keySet().asScala
+        .find {
+          _.getName.startsWith("read-ahead")
+        }
+      assert(readAheadThread.isEmpty)
     }
   }
 }

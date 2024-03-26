@@ -787,7 +787,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = None,
       parameters = Map(
         "sqlExpr" -> "\"regexp_replace(collect_list(1), 1, 2, 1)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"collect_list(1)\"",
         "inputType" -> "\"ARRAY<INT>\"",
         "requiredType" -> "\"STRING\""),

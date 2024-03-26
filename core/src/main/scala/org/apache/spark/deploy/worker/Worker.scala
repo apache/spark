@@ -18,8 +18,9 @@
 package org.apache.spark.deploy.worker
 
 import java.io.{File, IOException}
-import java.text.SimpleDateFormat
-import java.util.{Date, Locale, UUID}
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
+import java.util.{Locale, UUID}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 import java.util.function.Supplier
@@ -90,8 +91,6 @@ private[deploy] class Worker(
   private val cleanupThreadExecutor = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonSingleThreadExecutor("worker-cleanup-thread"))
 
-  // For worker and executor IDs
-  private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   private val HEARTBEAT_MILLIS = conf.get(WORKER_TIMEOUT) * 1000 / 4
 
@@ -821,7 +820,7 @@ private[deploy] class Worker(
   }
 
   private def generateWorkerId(): String = {
-    workerIdPattern.format(createDateFormat.format(new Date), host, port)
+    workerIdPattern.format(Worker.DATE_TIME_FORMATTER.format(Instant.now()), host, port)
   }
 
   override def onStop(): Unit = {
@@ -936,6 +935,12 @@ private[deploy] object Worker extends Logging {
   val SYSTEM_NAME = "sparkWorker"
   val ENDPOINT_NAME = "Worker"
   private val SSL_NODE_LOCAL_CONFIG_PATTERN = """\-Dspark\.ssl\.useNodeLocalConf\=(.+)""".r
+
+  // For worker and executor IDs
+  private val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyyMMddHHmmss", Locale.US)
+      .withZone(ZoneId.systemDefault())
 
   def main(argStrings: Array[String]): Unit = {
     Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(

@@ -20,7 +20,7 @@ import unittest
 from typing import Optional
 
 from pyspark import InheritableThread, inheritable_thread_target
-from pyspark.sql.connect.client import ChannelBuilder
+from pyspark.sql.connect.client import DefaultChannelBuilder
 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 from pyspark.testing.connectutils import should_test_connect
 
@@ -28,7 +28,7 @@ if should_test_connect:
     from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class CustomChannelBuilder(ChannelBuilder):
+class CustomChannelBuilder(DefaultChannelBuilder):
     @property
     def userId(self) -> Optional[str]:
         return "abc"

@@ -188,6 +188,15 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             },
         )
 
+    def test_warn_no_args(self):
+        with self.assertWarns(UserWarning) as w:
+            udf(lambda: print("do"), useArrow=True)
+        self.assertEqual(
+            str(w.warning),
+            "Arrow optimization for Python UDFs cannot be enabled for functions"
+            " without arguments.",
+        )
+
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod

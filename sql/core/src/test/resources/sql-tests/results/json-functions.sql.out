@@ -565,7 +565,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"2\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
     "sqlExpr" : "\"json_array_length(2)\""
   },
@@ -713,7 +713,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"200\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
     "sqlExpr" : "\"json_object_keys(200)\""
   },

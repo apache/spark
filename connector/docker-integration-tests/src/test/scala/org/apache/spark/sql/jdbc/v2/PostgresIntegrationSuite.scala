@@ -28,9 +28,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:15.1):
+ * To run this test suite for a specific version (e.g., postgres:16.2)
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:15.1
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.2
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresIntegrationSuite"
  * }}}
  */
@@ -38,7 +38,7 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:15.1-alpine")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.2-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -64,11 +64,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    var expectedSchema = new StructType()
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    expectedSchema = new StructType()
+      .add("ID", StringType, true, defaultMetadata())
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -91,7 +93,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     sql(s"CREATE TABLE $tbl (ID INT)" +
       s" TBLPROPERTIES('TABLESPACE'='pg_default')")
     val t = spark.table(tbl)
-    val expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    val expectedSchema = new StructType()
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
     assert(t.schema === expectedSchema)
   }
 

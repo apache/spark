@@ -39,6 +39,7 @@ import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
@@ -168,6 +169,8 @@ private[yarn] class YarnAllocator(
     new YarnAllocatorNodeHealthTracker(sparkConf, amClient, failureTracker)
 
   private val isPythonApp = sparkConf.get(IS_PYTHON_APP)
+
+  private val minMemoryOverhead = sparkConf.get(EXECUTOR_MIN_MEMORY_OVERHEAD)
 
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
@@ -313,7 +316,7 @@ private[yarn] class YarnAllocator(
 
       val resourcesWithDefaults =
         ResourceProfile.getResourcesForClusterManager(rp.id, rp.executorResources,
-          memoryOverheadFactor, sparkConf, isPythonApp, resourceNameMapping)
+          minMemoryOverhead, memoryOverheadFactor, sparkConf, isPythonApp, resourceNameMapping)
       val customSparkResources =
         resourcesWithDefaults.customResources.map { case (name, execReq) =>
           (name, execReq.amount.toString)
@@ -851,9 +854,6 @@ private[yarn] class YarnAllocator(
           onHostStr,
           completedContainer.getState,
           completedContainer.getExitStatus))
-        // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
-        // there are some exit status' we shouldn't necessarily count against us, but for
-        // now I think its ok as none of the containers are expected to exit.
         val exitStatus = completedContainer.getExitStatus
         val (exitCausedByApp, containerExitReason) = exitStatus match {
           case _ if shutdown =>
@@ -867,7 +867,7 @@ private[yarn] class YarnAllocator(
             // just as easily finish on any other executor. See SPARK-8167.
             (false, s"Container ${containerId}${onHostStr} was preempted.")
           // Should probably still count memory exceeded exit codes towards task failures
-          case VMEM_EXCEEDED_EXIT_CODE =>
+          case ContainerExitStatus.KILLED_EXCEEDED_VMEM =>
             val vmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX virtual memory used".r
             val diag = vmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
@@ -876,7 +876,7 @@ private[yarn] class YarnAllocator(
               s"${YarnConfiguration.NM_VMEM_PMEM_RATIO} or disabling " +
               s"${YarnConfiguration.NM_VMEM_CHECK_ENABLED} because of YARN-4714."
             (true, message)
-          case PMEM_EXCEEDED_EXIT_CODE =>
+          case ContainerExitStatus.KILLED_EXCEEDED_PMEM =>
             val pmemExceededPattern = raw"$MEM_REGEX of $MEM_REGEX physical memory used".r
             val diag = pmemExceededPattern.findFirstIn(completedContainer.getDiagnostics)
               .map(_.concat(".")).getOrElse("")
@@ -884,23 +884,26 @@ private[yarn] class YarnAllocator(
               s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
             (true, message)
           case other_exit_status =>
-            // SPARK-26269: follow YARN's behaviour(see https://github
-            // .com/apache/hadoop/blob/228156cfd1b474988bc4fedfbf7edddc87db41e3/had
-            // oop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/ap
-            // ache/hadoop/yarn/util/Apps.java#L273 for details)
+            val exitStatus = completedContainer.getExitStatus
+            // SPARK-46920: Spark defines its own exit codes, which have overlap with
+            // exit codes defined by YARN, thus diagnostics reported by YARN may be
+            // misleading.
+            val sparkExitCodeReason = ExecutorExitCode.explainExitCode(exitStatus)
+            // SPARK-26269: follow YARN's behaviour, see details in
+            // org.apache.hadoop.yarn.util.Apps#shouldCountTowardsNodeBlacklisting
             if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
-              (false, s"Container marked as failed: $containerId$onHostStr" +
-                s". Exit status: ${completedContainer.getExitStatus}" +
-                s". Diagnostics: ${completedContainer.getDiagnostics}.")
+              (false, s"Container marked as failed: $containerId$onHostStr. " +
+                s"Exit status: $exitStatus. " +
+                s"Possible causes: $sparkExitCodeReason " +
+                s"Diagnostics: ${completedContainer.getDiagnostics}.")
             } else {
               // completed container from a bad node
               allocatorNodeHealthTracker.handleResourceAllocationFailure(hostOpt)
-              (true, s"Container from a bad node: $containerId$onHostStr" +
-                s". Exit status: ${completedContainer.getExitStatus}" +
-                s". Diagnostics: ${completedContainer.getDiagnostics}.")
+              (true, s"Container from a bad node: $containerId$onHostStr. " +
+                s"Exit status: $exitStatus. " +
+                s"Possible causes: $sparkExitCodeReason " +
+                s"Diagnostics: ${completedContainer.getDiagnostics}.")
             }
-
-
         }
         if (exitCausedByApp) {
           logWarning(containerExitReason)
@@ -1025,8 +1028,6 @@ private[yarn] class YarnAllocator(
 
 private object YarnAllocator {
   val MEM_REGEX = "[0-9.]+ [KMG]B"
-  val VMEM_EXCEEDED_EXIT_CODE = -103
-  val PMEM_EXCEEDED_EXIT_CODE = -104
   val DECOMMISSIONING_NODES_CACHE_SIZE = 200
 
   val NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS = Set(

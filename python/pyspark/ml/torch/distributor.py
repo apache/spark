@@ -760,9 +760,6 @@ class TorchDistributor(Distributor):
         *args: Any,
         **kwargs: Any,
     ) -> Optional[Any]:
-        if not framework_wrapper_fn:
-            raise RuntimeError("Unknown combination of parameters")
-
         log_streaming_server = LogStreamingServer()
         self.driver_address = _get_conf(self.spark, "spark.driver.host", "")
         assert self.driver_address != ""

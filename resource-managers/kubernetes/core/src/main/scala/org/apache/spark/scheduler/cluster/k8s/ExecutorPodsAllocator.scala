@@ -366,7 +366,6 @@ class ExecutorPodsAllocator(
       // in the snapshot state. Since the messages are a little spammy, avoid them when we know
       // there are no useful updates.
       if (log.isDebugEnabled && snapshots.nonEmpty) {
-        val outstanding = pendingCountForRpId + newlyCreatedExecutorsForRpId.size
         if (currentRunningCount >= targetNum && !dynamicAllocationEnabled) {
           logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
             "equal to the number of requested executors. Not scaling up further.")

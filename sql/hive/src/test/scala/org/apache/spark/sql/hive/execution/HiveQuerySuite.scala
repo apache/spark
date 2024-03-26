@@ -73,14 +73,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   private def assertUnsupportedFeature(
       body: => Unit,
-      message: String,
+      operation: String,
       expectedContext: ExpectedContext): Unit = {
     checkError(
       exception = intercept[ParseException] {
         body
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> message),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> operation),
       context = expectedContext)
   }
 
@@ -159,28 +159,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |    SELECT explode(array(1,2,3)) FROM src LIMIT 3;
       |  SELECT key FROM gen_tmp ORDER BY key ASC;
     """.stripMargin)
-
-  test("multiple generators in projection") {
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)), explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql("SELECT explode(array(key, key)) as k1, explode(array(key, key)) FROM src").collect()
-      },
-      errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
-      parameters = Map(
-        "clause" -> "SELECT",
-        "num" -> "2",
-        "generators" -> "\"explode(array(key, key))\", \"explode(array(key, key))\""))
-  }
 
   createQueryTest("! operator",
     """

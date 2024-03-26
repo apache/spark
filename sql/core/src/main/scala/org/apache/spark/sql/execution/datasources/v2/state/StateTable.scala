@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
-import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
@@ -69,18 +69,20 @@ class StateTable(
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 
   private def isValidSchema(schema: StructType): Boolean = {
-    if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value")) {
+    if (schema.fieldNames.toImmutableArraySeq != Seq("key", "value", "partition_id")) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "key").isInstanceOf[StructType]) {
       false
     } else if (!SchemaUtil.getSchemaAsDataType(schema, "value").isInstanceOf[StructType]) {
+      false
+    } else if (!SchemaUtil.getSchemaAsDataType(schema, "partition_id").isInstanceOf[IntegerType]) {
       false
     } else {
       true
     }
   }
 
-  override def metadataColumns(): Array[MetadataColumn] = METADATA_COLUMNS.toArray
+  override def metadataColumns(): Array[MetadataColumn] = Array.empty
 }
 
 /**
@@ -89,18 +91,4 @@ class StateTable(
  */
 object StateTable {
   private val CAPABILITY = Set(TableCapability.BATCH_READ).asJava
-
-  val METADATA_COLUMNS: Seq[MetadataColumn] = Seq(PartitionId)
-
-  private object PartitionId extends MetadataColumn {
-    override def name(): String = "_partition_id"
-
-    override def dataType(): DataType = IntegerType
-
-    override def isNullable: Boolean = false
-
-    override def comment(): String = {
-      "Represents an ID for a physical state partition this row belongs to."
-    }
-  }
 }

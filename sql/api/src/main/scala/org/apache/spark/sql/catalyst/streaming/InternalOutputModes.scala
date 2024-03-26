@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.streaming
 
 import java.util.Locale
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -56,9 +57,9 @@ private[sql] object InternalOutputModes {
         OutputMode.Complete
       case "update" =>
         OutputMode.Update
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
-          "Accepted output modes are 'append', 'complete', 'update'")
+      case _ => throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3261",
+          messageParameters = Map("outputMode" -> outputMode))
     }
   }
 }

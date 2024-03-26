@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.{Timer, TimerTask}
+import java.util.TimerTask
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
@@ -135,7 +135,8 @@ private[spark] class TaskSchedulerImpl(
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
-  private val starvationTimer = new Timer("task-starvation-timer", true)
+  private val starvationTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+    "task-starvation-timer")
 
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
@@ -166,7 +167,7 @@ private[spark] class TaskSchedulerImpl(
 
   protected val executorIdToHost = new HashMap[String, String]
 
-  private val abortTimer = new Timer("task-abort-timer", true)
+  private val abortTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-abort-timer")
   // Exposed for testing
   val unschedulableTaskSetToExpiryTime = new HashMap[TaskSetManager, Long]
 
@@ -282,7 +283,7 @@ private[spark] class TaskSchedulerImpl(
               this.cancel()
             }
           }
-        }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS)
+        }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
       hasReceivedTask = true
     }
@@ -296,18 +297,31 @@ private[spark] class TaskSchedulerImpl(
     new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
   }
 
-  override def cancelTasks(
+  // Kill all the tasks in all the stage attempts of the same stage Id. Note stage attempts won't
+  // be aborted but will be marked as zombie. The stage attempt will be finished and cleaned up
+  // once all the tasks has been finished. The stage attempt could be aborted after the call of
+  // `killAllTaskAttempts` if required.
+  override def killAllTaskAttempts(
       stageId: Int,
       interruptThread: Boolean,
       reason: String): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
     // Kill all running tasks for the stage.
-    killAllTaskAttempts(stageId, interruptThread, reason = "Stage cancelled: " + reason)
-    // Cancel all attempts for the stage.
+    logInfo(s"Killing all running tasks in stage $stageId: $reason")
     taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
       attempts.foreach { case (_, tsm) =>
-        tsm.abort("Stage %s cancelled".format(stageId))
-        logInfo("Stage %d was cancelled".format(stageId))
+        // There are two possible cases here:
+        // 1. The task set manager has been created and some tasks have been scheduled.
+        //    In this case, send a kill signal to the executors to kill the task.
+        // 2. The task set manager has been created but no tasks have been scheduled. In this case,
+        //    simply continue.
+        tsm.runningTasksSet.foreach { tid =>
+          taskIdToExecutorId.get(tid).foreach { execId =>
+            backend.killTask(tid, execId, interruptThread, s"Stage cancelled: $reason")
+          }
+        }
+        tsm.suspend()
+        logInfo("Stage %s.%s was cancelled".format(stageId, tsm.taskSet.stageAttemptId))
       }
     }
   }
@@ -324,27 +338,6 @@ private[spark] class TaskSchedulerImpl(
     } else {
       logWarning(s"Could not kill task $taskId because no task with that ID was found.")
       false
-    }
-  }
-
-  override def killAllTaskAttempts(
-      stageId: Int,
-      interruptThread: Boolean,
-      reason: String): Unit = synchronized {
-    logInfo(s"Killing all running tasks in stage $stageId: $reason")
-    taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
-      attempts.foreach { case (_, tsm) =>
-        // There are two possible cases here:
-        // 1. The task set manager has been created and some tasks have been scheduled.
-        //    In this case, send a kill signal to the executors to kill the task.
-        // 2. The task set manager has been created but no tasks have been scheduled. In this case,
-        //    simply continue.
-        tsm.runningTasksSet.foreach { tid =>
-          taskIdToExecutorId.get(tid).foreach { execId =>
-            backend.killTask(tid, execId, interruptThread, reason)
-          }
-        }
-      }
     }
   }
 
@@ -745,7 +738,7 @@ private[spark] class TaskSchedulerImpl(
     logInfo(s"Waiting for $timeout ms for completely " +
       s"excluded task to be schedulable again before aborting stage ${taskSet.stageId}.")
     abortTimer.schedule(
-      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout)
+      createUnschedulableTaskSetAbortTimer(taskSet, taskIndex), timeout, TimeUnit.MILLISECONDS)
   }
 
   private def createUnschedulableTaskSetAbortTimer(
@@ -971,8 +964,8 @@ private[spark] class TaskSchedulerImpl(
         barrierCoordinator.stop()
       }
     }
-    starvationTimer.cancel()
-    abortTimer.cancel()
+    ThreadUtils.shutdown(starvationTimer)
+    ThreadUtils.shutdown(abortTimer)
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
@@ -1264,7 +1257,11 @@ private[spark] object TaskSchedulerImpl {
           numTasksPerExecCores
         } else {
           val availAddrs = resources.getOrElse(limitingResource, 0)
-          val resourceLimit = (availAddrs / taskLimit).toInt
+          val resourceLimit = if (taskLimit >= 1.0) {
+            availAddrs / taskLimit.ceil.toInt
+          } else {
+            availAddrs * Math.floor(1.0 / taskLimit).toInt
+          }
           // when executor cores config isn't set, we can't calculate the real limiting resource
           // and number of tasks per executor ahead of time, so calculate it now based on what
           // is available.

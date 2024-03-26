@@ -28,17 +28,28 @@ class SparkConnectArtifactStatusesHandler(
     val responseObserver: StreamObserver[proto.ArtifactStatusesResponse])
     extends Logging {
 
-  protected def cacheExists(userId: String, sessionId: String, hash: String): Boolean = {
+  protected def cacheExists(
+      userId: String,
+      sessionId: String,
+      previouslySeenSessionId: Option[String],
+      hash: String): Boolean = {
     val session = SparkConnectService
-      .getOrCreateIsolatedSession(userId, sessionId)
+      .getOrCreateIsolatedSession(userId, sessionId, previouslySeenSessionId)
       .session
     val blockManager = session.sparkContext.env.blockManager
     blockManager.getStatus(CacheId(session.sessionUUID, hash)).isDefined
   }
 
   def handle(request: proto.ArtifactStatusesRequest): Unit = {
+    val previousSessionId = request.hasClientObservedServerSideSessionId match {
+      case true => Some(request.getClientObservedServerSideSessionId)
+      case false => None
+    }
     val holder = SparkConnectService
-      .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
+      .getOrCreateIsolatedSession(
+        request.getUserContext.getUserId,
+        request.getSessionId,
+        previousSessionId)
 
     val builder = proto.ArtifactStatusesResponse.newBuilder()
     builder.setSessionId(holder.sessionId)
@@ -49,6 +60,7 @@ class SparkConnectArtifactStatusesHandler(
         cacheExists(
           userId = request.getUserContext.getUserId,
           sessionId = request.getSessionId,
+          previouslySeenSessionId = previousSessionId,
           hash = name.stripPrefix("cache/"))
       } else false
       builder.putStatuses(name, status.setExists(exists).build())

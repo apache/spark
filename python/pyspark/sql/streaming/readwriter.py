@@ -109,7 +109,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="format") as d:
         ...     # Write a temporary text file to read it.
         ...     spark.createDataFrame(
         ...         [("hello",), ("this",)]).write.mode("overwrite").format("text").save(d)
@@ -156,7 +156,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="schema") as d:
         ...     # Start a streaming query to read the CSV file.
         ...     spark.readStream.schema("col0 INT, col1 STRING").format("csv").load(d).printSchema()
         root
@@ -280,7 +280,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="load") as d:
         ...     # Write a temporary JSON file to read it.
         ...     spark.createDataFrame(
         ...         [(100, "Hyukjin Kwon"),], ["age", "name"]
@@ -375,7 +375,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="json") as d:
         ...     # Write a temporary JSON file to read it.
         ...     spark.createDataFrame(
         ...         [(100, "Hyukjin Kwon"),], ["age", "name"]
@@ -448,7 +448,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="orc") as d:
         ...     # Write a temporary ORC file to read it.
         ...     spark.range(10).write.mode("overwrite").format("orc").save(d)
         ...
@@ -507,7 +507,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="parquet") as d:
         ...     # Write a temporary Parquet file to read it.
         ...     spark.range(10).write.mode("overwrite").format("parquet").save(d)
         ...
@@ -577,7 +577,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="text") as d:
         ...     # Write a temporary text file to read it.
         ...     spark.createDataFrame(
         ...         [("hello",), ("this",)]).write.mode("overwrite").format("text").save(d)
@@ -673,7 +673,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="csv") as d:
         ...     # Write a temporary text file to read it.
         ...     spark.createDataFrame([(1, "2"),]).write.mode("overwrite").format("csv").save(d)
         ...
@@ -781,7 +781,7 @@ class DataStreamReader(OptionUtils):
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="xml") as d:
         ...     # Write a DataFrame into a XML file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -852,7 +852,7 @@ class DataStreamReader(OptionUtils):
         >>> import tempfile
         >>> import time
         >>> _ = spark.sql("DROP TABLE IF EXISTS my_table")
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="table") as d:
         ...     # Create a table with Rate source.
         ...     q1 = spark.readStream.format("rate").load().writeStream.toTable(
         ...         "my_table", checkpointLocation=d)
@@ -984,12 +984,13 @@ class DataStreamWriter:
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as cp:
-        ...     df = spark.readStream.format("rate").load()
-        ...     q = df.writeStream.format("csv").option("checkpointLocation", cp).start(d)
-        ...     time.sleep(5)
-        ...     q.stop()
-        ...     spark.read.schema("timestamp TIMESTAMP, value STRING").csv(d).show()
+        >>> with tempfile.TemporaryDirectory(prefix="format1") as d:
+        ...     with tempfile.TemporaryDirectory(prefix="format2") as cp:
+        ...         df = spark.readStream.format("rate").load()
+        ...         q = df.writeStream.format("csv").option("checkpointLocation", cp).start(d)
+        ...         time.sleep(5)
+        ...         q.stop()
+        ...         spark.read.schema("timestamp TIMESTAMP, value STRING").csv(d).show()
         +...---------+-----+
         |...timestamp|value|
         +...---------+-----+
@@ -1104,13 +1105,14 @@ class DataStreamWriter:
 
         >>> import tempfile
         >>> import time
-        >>> with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as cp:
-        ...     df = spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-        ...     q = df.writeStream.partitionBy(
-        ...         "timestamp").format("parquet").option("checkpointLocation", cp).start(d)
-        ...     time.sleep(5)
-        ...     q.stop()
-        ...     spark.read.schema(df.schema).parquet(d).show()
+        >>> with tempfile.TemporaryDirectory(prefix="partitionBy1") as d:
+        ...     with tempfile.TemporaryDirectory(prefix="partitionBy2") as cp:
+        ...         df = spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        ...         q = df.writeStream.partitionBy(
+        ...             "timestamp").format("parquet").option("checkpointLocation", cp).start(d)
+        ...         time.sleep(5)
+        ...         q.stop()
+        ...         spark.read.schema(df.schema).parquet(d).show()
         +...---------+-----+
         |...timestamp|value|
         +...---------+-----+
@@ -1300,7 +1302,7 @@ class DataStreamWriter:
             # row.
             def func_without_process(_: Any, iterator: Iterator) -> Iterator:
                 for x in iterator:
-                    f(x)  # type: ignore[operator]
+                    f(x)
                 return iter([])
 
             return func_without_process
@@ -1349,19 +1351,21 @@ class DataStreamWriter:
                 # Check if the data should be processed
                 should_process = True
                 if open_exists:
-                    should_process = f.open(partition_id, int_epoch_id)  # type: ignore[union-attr]
+                    should_process = f.open(  # type: ignore[attr-defined]
+                        partition_id, int_epoch_id
+                    )
 
                 error = None
 
                 try:
                     if should_process:
                         for x in iterator:
-                            cast("SupportsProcess", f).process(x)
+                            f.process(x)
                 except Exception as ex:
                     error = ex
                 finally:
                     if close_exists:
-                        f.close(error)  # type: ignore[union-attr]
+                        f.close(error)  # type: ignore[attr-defined]
                     if error:
                         raise error
 
@@ -1701,7 +1705,7 @@ class DataStreamWriter:
         >>> import tempfile
         >>> import time
         >>> _ = spark.sql("DROP TABLE IF EXISTS my_table2")
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="toTable") as d:
         ...     # Create a table with Rate source.
         ...     q = spark.readStream.format("rate").option(
         ...         "rowsPerSecond", 10).load().writeStream.toTable(

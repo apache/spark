@@ -107,6 +107,7 @@ class XmlOptions(
   // setting indent to "" disables indentation in the generated XML.
   // Each row will be written in a new line.
   val indent = parameters.getOrElse(INDENT, DEFAULT_INDENT)
+  val validateName = getBool(VALIDATE_NAME, true)
 
   /**
    * Infer columns with all valid date entries as date type (otherwise inferred as string or
@@ -210,6 +211,7 @@ object XmlOptions extends DataSourceOptions {
   val TIME_ZONE = newOption("timeZone")
   val INDENT = newOption("indent")
   val PREFERS_DECIMAL = newOption("prefersDecimal")
+  val VALIDATE_NAME = newOption("validateName")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

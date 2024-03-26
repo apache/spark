@@ -155,7 +155,7 @@ class Column(val expr: Expression) extends Logging {
     name match {
       case "*" => UnresolvedStar(None)
       case _ if name.endsWith(".*") =>
-        val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
+        val parts = UnresolvedAttribute.parseAttributeName(name.dropRight(2))
         UnresolvedStar(Some(parts))
       case _ => UnresolvedAttribute.quotedString(name)
     }

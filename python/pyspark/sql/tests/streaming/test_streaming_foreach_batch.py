@@ -77,7 +77,10 @@ class StreamingTestsForeachBatchMixin:
             q.processAllAvailable()
             self.fail("Expected a failure")
         except StreamingQueryException as e:
-            self.assertTrue("this should fail" in str(e))
+            err_msg = str(e)
+            self.assertTrue("this should fail" in err_msg)
+            # check for foreachBatch error class
+            self.assertTrue("FOREACH_BATCH_USER_FUNCTION_ERROR" in err_msg)
         finally:
             if q:
                 q.stop()

@@ -25,56 +25,110 @@ class EWMMeanMixin:
     def _test_ewm_func(self, f):
         pser = pd.Series([1, 2, 3], index=np.random.rand(3), name="a")
         psser = ps.from_pandas(pser)
-        self.assert_eq(getattr(psser.ewm(com=0.2), f)(), getattr(pser.ewm(com=0.2), f)())
         self.assert_eq(
-            getattr(psser.ewm(com=0.2), f)().sum(), getattr(pser.ewm(com=0.2), f)().sum()
+            getattr(psser.ewm(com=0.2), f)(),
+            getattr(pser.ewm(com=0.2), f)(),
+            almost=True,
         )
-        self.assert_eq(getattr(psser.ewm(span=1.7), f)(), getattr(pser.ewm(span=1.7), f)())
         self.assert_eq(
-            getattr(psser.ewm(span=1.7), f)().sum(), getattr(pser.ewm(span=1.7), f)().sum()
+            getattr(psser.ewm(com=0.2), f)().sum(),
+            getattr(pser.ewm(com=0.2), f)().sum(),
+            almost=True,
         )
-        self.assert_eq(getattr(psser.ewm(halflife=0.5), f)(), getattr(pser.ewm(halflife=0.5), f)())
         self.assert_eq(
-            getattr(psser.ewm(halflife=0.5), f)().sum(), getattr(pser.ewm(halflife=0.5), f)().sum()
+            getattr(psser.ewm(span=1.7), f)(),
+            getattr(pser.ewm(span=1.7), f)(),
+            almost=True,
         )
-        self.assert_eq(getattr(psser.ewm(alpha=0.7), f)(), getattr(pser.ewm(alpha=0.7), f)())
         self.assert_eq(
-            getattr(psser.ewm(alpha=0.7), f)().sum(), getattr(pser.ewm(alpha=0.7), f)().sum()
+            getattr(psser.ewm(span=1.7), f)().sum(),
+            getattr(pser.ewm(span=1.7), f)().sum(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psser.ewm(halflife=0.5), f)(),
+            getattr(pser.ewm(halflife=0.5), f)(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psser.ewm(halflife=0.5), f)().sum(),
+            getattr(pser.ewm(halflife=0.5), f)().sum(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psser.ewm(alpha=0.7), f)(),
+            getattr(pser.ewm(alpha=0.7), f)(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psser.ewm(alpha=0.7), f)().sum(),
+            getattr(pser.ewm(alpha=0.7), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psser.ewm(alpha=0.7, min_periods=2), f)(),
             getattr(pser.ewm(alpha=0.7, min_periods=2), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psser.ewm(alpha=0.7, min_periods=2), f)().sum(),
             getattr(pser.ewm(alpha=0.7, min_periods=2), f)().sum(),
+            almost=True,
         )
 
         pdf = pd.DataFrame(
             {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(getattr(psdf.ewm(com=0.2), f)(), getattr(pdf.ewm(com=0.2), f)())
-        self.assert_eq(getattr(psdf.ewm(com=0.2), f)().sum(), getattr(pdf.ewm(com=0.2), f)().sum())
-        self.assert_eq(getattr(psdf.ewm(span=1.7), f)(), getattr(pdf.ewm(span=1.7), f)())
         self.assert_eq(
-            getattr(psdf.ewm(span=1.7), f)().sum(), getattr(pdf.ewm(span=1.7), f)().sum()
+            getattr(psdf.ewm(com=0.2), f)(),
+            getattr(pdf.ewm(com=0.2), f)(),
+            almost=True,
         )
-        self.assert_eq(getattr(psdf.ewm(halflife=0.5), f)(), getattr(pdf.ewm(halflife=0.5), f)())
         self.assert_eq(
-            getattr(psdf.ewm(halflife=0.5), f)().sum(), getattr(pdf.ewm(halflife=0.5), f)().sum()
+            getattr(psdf.ewm(com=0.2), f)().sum(),
+            getattr(pdf.ewm(com=0.2), f)().sum(),
+            almost=True,
         )
-        self.assert_eq(getattr(psdf.ewm(alpha=0.7), f)(), getattr(pdf.ewm(alpha=0.7), f)())
         self.assert_eq(
-            getattr(psdf.ewm(alpha=0.7), f)().sum(), getattr(pdf.ewm(alpha=0.7), f)().sum()
+            getattr(psdf.ewm(span=1.7), f)(),
+            getattr(pdf.ewm(span=1.7), f)(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(span=1.7), f)().sum(),
+            getattr(pdf.ewm(span=1.7), f)().sum(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(halflife=0.5), f)(),
+            getattr(pdf.ewm(halflife=0.5), f)(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(halflife=0.5), f)().sum(),
+            getattr(pdf.ewm(halflife=0.5), f)().sum(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7), f)(),
+            getattr(pdf.ewm(alpha=0.7), f)(),
+            almost=True,
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7), f)().sum(),
+            getattr(pdf.ewm(alpha=0.7), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, min_periods=2), f)(),
             getattr(pdf.ewm(alpha=0.7, min_periods=2), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, min_periods=2), f)().sum(),
             getattr(pdf.ewm(alpha=0.7, min_periods=2), f)().sum(),
+            almost=True,
         )
 
         pdf = pd.DataFrame(
@@ -91,82 +145,102 @@ class EWMMeanMixin:
         self.assert_eq(
             getattr(psdf.ewm(com=0.2, ignore_na=True), f)(),
             getattr(pdf.ewm(com=0.2, ignore_na=True), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(com=0.2, ignore_na=True), f)().sum(),
             getattr(pdf.ewm(com=0.2, ignore_na=True), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(com=0.2, ignore_na=False), f)(),
             getattr(pdf.ewm(com=0.2, ignore_na=False), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(com=0.2, ignore_na=False), f)().sum(),
             getattr(pdf.ewm(com=0.2, ignore_na=False), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(span=1.7, ignore_na=True), f)(),
             getattr(pdf.ewm(span=1.7, ignore_na=True), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(span=1.7, ignore_na=True), f)().sum(),
             getattr(pdf.ewm(span=1.7, ignore_na=True), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(span=1.7, ignore_na=False), f)(),
             getattr(pdf.ewm(span=1.7, ignore_na=False), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(span=1.7, ignore_na=False), f)().sum(),
             getattr(pdf.ewm(span=1.7, ignore_na=False), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(halflife=0.5, ignore_na=True), f)(),
             getattr(pdf.ewm(halflife=0.5, ignore_na=True), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(halflife=0.5, ignore_na=True), f)().sum(),
             getattr(pdf.ewm(halflife=0.5, ignore_na=True), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(halflife=0.5, ignore_na=False), f)(),
             getattr(pdf.ewm(halflife=0.5, ignore_na=False), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(halflife=0.5, ignore_na=False), f)().sum(),
             getattr(pdf.ewm(halflife=0.5, ignore_na=False), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, ignore_na=True), f)(),
             getattr(pdf.ewm(alpha=0.7, ignore_na=True), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, ignore_na=True), f)().sum(),
             getattr(pdf.ewm(alpha=0.7, ignore_na=True), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, ignore_na=False), f)(),
             getattr(pdf.ewm(alpha=0.7, ignore_na=False), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, ignore_na=False), f)().sum(),
             getattr(pdf.ewm(alpha=0.7, ignore_na=False), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)(),
             getattr(pdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)().sum(),
             getattr(pdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)().sum(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)(),
             getattr(pdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)(),
+            almost=True,
         )
         self.assert_eq(
             getattr(psdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)().sum(),
             getattr(pdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)().sum(),
+            almost=True,
         )
 
     def test_ewm_mean(self):

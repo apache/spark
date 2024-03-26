@@ -169,6 +169,10 @@ private[sql] object CatalogV2Implicits {
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
       case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
+
+    def toQualifiedNameParts(catalog: CatalogPlugin): Seq[String] = {
+      (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
+    }
   }
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {

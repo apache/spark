@@ -239,6 +239,15 @@ Spark SQL uses the following `SQLSTATE` classes:
   <td><a href="sql-error-conditions.html#ambiguous_reference_to_fields">AMBIGUOUS_REFERENCE_TO_FIELDS</a>, <a href="sql-error-conditions.html#invalid_column_or_field_data_type">INVALID_COLUMN_OR_FIELD_DATA_TYPE</a>, <a href="sql-error-conditions.html#invalid_extract_base_field_type">INVALID_EXTRACT_BASE_FIELD_TYPE</a>, <a href="sql-error-conditions.html#invalid_extract_field_type">INVALID_EXTRACT_FIELD_TYPE</a>, <a href="sql-error-conditions.html#invalid_field_name">INVALID_FIELD_NAME</a>, <a href="sql-error-conditions.html#invalid_set_syntax">INVALID_SET_SYNTAX</a>, <a href="sql-error-conditions.html#invalid_sql_syntax">INVALID_SQL_SYNTAX</a>, <a href="sql-error-conditions.html#non_partition_column">NON_PARTITION_COLUMN</a>, <a href="not-null-constraint-violation-error-class.md">NOT_NULL_CONSTRAINT_VIOLATION</a>, <a href="sql-error-conditions.html#nullable_column_or_field">NULLABLE_COLUMN_OR_FIELD</a>, <a href="sql-error-conditions.html#nullable_row_id_attributes">NULLABLE_ROW_ID_ATTRIBUTES</a>
   </td>
 </tr>
+<tr>
+  <td>42001</td>
+  <td>Invalid encoder error</td>
+</tr>
+<tr>
+  <td></td>
+  <td><a href="sql-error-conditions.html#invalid_expression_encoder">INVALID_EXPRESSION_ENCODER</a>
+</td>
+</tr>
     <tr>
   <td>42601</td>
   <td>A character, token, or clause is invalid or missing.</td>
@@ -730,6 +739,3 @@ Spark SQL uses the following `SQLSTATE` classes:
 </tr>
 
 </table>
-
-
-.. include:: /shared/replacements.md

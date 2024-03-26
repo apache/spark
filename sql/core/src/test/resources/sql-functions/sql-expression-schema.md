@@ -81,6 +81,8 @@
 | org.apache.spark.sql.catalyst.expressions.Chr | char | SELECT char(65) | struct<char(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Chr | chr | SELECT chr(65) | struct<chr(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Coalesce | coalesce | SELECT coalesce(NULL, 1, NULL) | struct<coalesce(NULL, 1, NULL):int> |
+| org.apache.spark.sql.catalyst.expressions.CollateExpressionBuilder | collate | SELECT COLLATION('Spark SQL' collate UTF8_BINARY_LCASE) | struct<collation(collate(Spark SQL)):string> |
+| org.apache.spark.sql.catalyst.expressions.Collation | collation | SELECT collation('Spark SQL') | struct<collation(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Concat | concat | SELECT concat('Spark', 'SQL') | struct<concat(Spark, SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.ConcatWs | concat_ws | SELECT concat_ws(' ', 'Spark', 'SQL') | struct<concat_ws( , Spark, SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.ContainsExpressionBuilder | contains | SELECT contains('Spark SQL', 'Spark') | struct<contains(Spark SQL, Spark):boolean> |
@@ -116,6 +118,7 @@
 | org.apache.spark.sql.catalyst.expressions.DatePartExpressionBuilder | date_part | SELECT date_part('YEAR', TIMESTAMP '2019-08-12 01:00:00.123456') | struct<date_part(YEAR, TIMESTAMP '2019-08-12 01:00:00.123456'):int> |
 | org.apache.spark.sql.catalyst.expressions.DatePartExpressionBuilder | datepart | SELECT datepart('YEAR', TIMESTAMP '2019-08-12 01:00:00.123456') | struct<datepart(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456'):int> |
 | org.apache.spark.sql.catalyst.expressions.DateSub | date_sub | SELECT date_sub('2016-07-30', 1) | struct<date_sub(2016-07-30, 1):date> |
+| org.apache.spark.sql.catalyst.expressions.DayName | dayname | SELECT dayname(DATE('2008-02-20')) | struct<dayname(2008-02-20):string> |
 | org.apache.spark.sql.catalyst.expressions.DayOfMonth | day | SELECT day('2009-07-30') | struct<day(2009-07-30):int> |
 | org.apache.spark.sql.catalyst.expressions.DayOfMonth | dayofmonth | SELECT dayofmonth('2009-07-30') | struct<dayofmonth(2009-07-30):int> |
 | org.apache.spark.sql.catalyst.expressions.DayOfWeek | dayofweek | SELECT dayofweek('2009-07-30') | struct<dayofweek(2009-07-30):int> |

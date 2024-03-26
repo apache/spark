@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import scala.math.Ordering
-
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.SparkFunSuite
@@ -558,14 +556,15 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-32624: CodegenContext.addReferenceObj should work for nested Scala class") {
     // emulate TypeUtils.getInterpretedOrdering(StringType)
     val ctx = new CodegenContext
-    val comparator = implicitly[Ordering[UTF8String]]
+    val comparator = implicitly[Ordering[String]]
+
     val refTerm = ctx.addReferenceObj("comparator", comparator)
 
     // Expecting result:
-    //   "((scala.math.LowPriorityOrderingImplicits$$anon$3) references[0] /* comparator */)"
+    //   "((scala.math.Ordering) references[0] /* comparator */)"
     // Using lenient assertions to be resilient to anonymous class numbering changes
     assert(!refTerm.contains("null"))
-    assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
+    assert(refTerm.contains("scala.math.Ordering"))
   }
 
   test("SPARK-35578: final local variable bug in janino") {

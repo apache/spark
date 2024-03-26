@@ -19,12 +19,12 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.EnumSet
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.servlet.DispatcherType
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import jakarta.servlet.DispatcherType
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext

@@ -776,7 +776,7 @@ for other languages.
 
 </div>
 
-### Understanding closures <a name="ClosuresLink"></a>
+### Understanding closures
 One of the harder things about Spark is understanding the scope and life cycle of variables and methods when executing code across a cluster. RDD operations that modify variables outside of their scope can be a frequent source of confusion. In the example below we'll look at code that uses `foreach()` to increment a counter, but similar issues can occur for other operations as well.
 
 #### Example
@@ -877,10 +877,12 @@ The most common ones are distributed "shuffle" operations, such as grouping or a
 by a key.
 
 In Scala, these operations are automatically available on RDDs containing
-[Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
+[Tuple2][tuple2] objects
 (the built-in tuples in the language, created by simply writing `(a, b)`). The key-value pair operations are available in the
 [PairRDDFunctions](api/scala/org/apache/spark/rdd/PairRDDFunctions.html) class,
 which automatically wraps around an RDD of tuples.
+
+[tuple2]: https://www.scala-lang.org/api/{{site.SCALA_VERSION}}/scala/Tuple2.html
 
 For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
 many times each line of text occurs in a file:
@@ -909,7 +911,7 @@ The most common ones are distributed "shuffle" operations, such as grouping or a
 by a key.
 
 In Java, key-value pairs are represented using the
-[scala.Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) class
+[scala.Tuple2][tuple2] class
 from the Scala standard library. You can simply call `new Tuple2(a, b)` to create a tuple, and access
 its fields later with `tuple._1()` and `tuple._2()`.
 
@@ -1120,7 +1122,7 @@ for details.
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
   <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#accumulators">Accumulator</a> or interacting with external storage systems.
-  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures-a-nameclosureslinka">Understanding closures </a> for more details.</td>
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures">Understanding closures</a> for more details.</td>
 </tr>
 </table>
 

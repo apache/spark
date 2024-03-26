@@ -185,7 +185,7 @@ private[spark] class BlockManager(
     val master: BlockManagerMaster,
     val serializerManager: SerializerManager,
     val conf: SparkConf,
-    memoryManager: MemoryManager,
+    private val _memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
     private val _shuffleManager: ShuffleManager,
     val blockTransferService: BlockTransferService,
@@ -197,6 +197,12 @@ private[spark] class BlockManager(
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
   // (except for tests) and we ask for the instance from the SparkEnv.
   private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
+
+  // Similarly, we also initialize MemoryManager later after DriverPlugin is loaded, to
+  // allow the plugin to overwrite certain memory configurations. The `_memoryManager` will be
+  // null here and we ask for the instance from SparkEnv
+  private[spark] lazy val memoryManager =
+    Option(_memoryManager).getOrElse(SparkEnv.get.memoryManager)
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
@@ -224,17 +230,19 @@ private[spark] class BlockManager(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
-  private[spark] val memoryStore =
-    new MemoryStore(conf, blockInfoManager, serializerManager, memoryManager, this)
+  private[spark] lazy val memoryStore = {
+    val store = new MemoryStore(conf, blockInfoManager, serializerManager, memoryManager, this)
+    memoryManager.setMemoryStore(store)
+    store
+  }
   private[spark] val diskStore = new DiskStore(conf, diskBlockManager, securityManager)
-  memoryManager.setMemoryStore(memoryStore)
 
   // Note: depending on the memory manager, `maxMemory` may actually vary over time.
   // However, since we use this only for reporting and logging, what we actually want here is
   // the absolute maximum value that `maxMemory` can ever possibly reach. We may need
   // to revisit whether reporting this value as the "max" is intuitive to the user.
-  private val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
-  private val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
+  private lazy val maxOnHeapMemory = memoryManager.maxOnHeapStorageMemory
+  private lazy val maxOffHeapMemory = memoryManager.maxOffHeapStorageMemory
 
   private[spark] val externalShuffleServicePort = StorageUtils.externalShuffleServicePort(conf)
 
@@ -1553,8 +1561,8 @@ private[spark] class BlockManager(
           blockInfoManager.unlock(blockId)
         }
       } else {
-        removeBlockInternal(blockId, tellMaster = false)
         logWarning(s"Putting block $blockId failed")
+        removeBlockInternal(blockId, tellMaster = false)
       }
       res
     } catch {
@@ -2209,7 +2217,6 @@ private[spark] object BlockManager {
       new ConcurrentHashMap)
 
     private val POLL_TIMEOUT = 1000
-    @volatile private var stopped = false
 
     private val cleaningThread = new Thread() { override def run(): Unit = { keepCleaning() } }
     cleaningThread.setDaemon(true)
@@ -2235,13 +2242,13 @@ private[spark] object BlockManager {
     }
 
     def stop(): Unit = {
-      stopped = true
       cleaningThread.interrupt()
       cleaningThread.join()
     }
 
     private def keepCleaning(): Unit = {
-      while (!stopped) {
+      var running = true
+      while (running) {
         try {
           Option(referenceQueue.remove(POLL_TIMEOUT))
             .map(_.asInstanceOf[ReferenceWithCleanup])
@@ -2251,7 +2258,7 @@ private[spark] object BlockManager {
             }
         } catch {
           case _: InterruptedException =>
-            // no-op
+            running = false
           case NonFatal(e) =>
             logError("Error in cleaning thread", e)
         }

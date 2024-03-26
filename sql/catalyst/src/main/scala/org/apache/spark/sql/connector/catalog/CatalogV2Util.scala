@@ -22,6 +22,7 @@ import java.util.Collections
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
@@ -163,7 +164,9 @@ private[sql] object CatalogV2Util {
                     addField(parentType, fieldWithComment, add.position(), tableProvider,
                       statementType, true)))
                 case _ =>
-                  throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
+                  throw new SparkIllegalArgumentException(
+                    errorClass = "_LEGACY_ERROR_TEMP_3229",
+                    messageParameters = Map("name" -> names.init.last))
               })
           }
 
@@ -188,7 +191,9 @@ private[sql] object CatalogV2Util {
         case update: UpdateColumnPosition =>
           def updateFieldPos(struct: StructType, name: String): StructType = {
             val oldField = struct.fields.find(_.name == name).getOrElse {
-              throw new IllegalArgumentException("Field not found: " + name)
+              throw new SparkIllegalArgumentException(
+                errorClass = "_LEGACY_ERROR_TEMP_3230",
+                messageParameters = Map("name" -> name))
             }
             val withFieldRemoved = StructType(struct.fields.filter(_ != oldField))
             addField(withFieldRemoved, oldField, update.position(), tableProvider, statementType,
@@ -203,7 +208,9 @@ private[sql] object CatalogV2Util {
                 case parentType: StructType =>
                   Some(parent.copy(dataType = updateFieldPos(parentType, names.last)))
                 case _ =>
-                  throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
+                  throw new SparkIllegalArgumentException(
+                    errorClass = "_LEGACY_ERROR_TEMP_3229",
+                    messageParameters = Map("name" -> names.init.last))
               })
           }
 
@@ -244,7 +251,9 @@ private[sql] object CatalogV2Util {
       val afterCol = position.asInstanceOf[After].column()
       val fieldIndex = schema.fields.indexWhere(_.name == afterCol)
       if (fieldIndex == -1) {
-        throw new IllegalArgumentException("AFTER column not found: " + afterCol)
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3228",
+          messageParameters = Map("afterCol" -> afterCol))
       }
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
@@ -267,7 +276,9 @@ private[sql] object CatalogV2Util {
         // Currently only DROP COLUMN may pass down the IF EXISTS parameter
         return struct
       } else {
-        throw new IllegalArgumentException(s"Cannot find field: ${fieldNames.head}")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3227",
+          messageParameters = Map("fieldName" -> fieldNames.head))
       }
     }
 
@@ -283,7 +294,7 @@ private[sql] object CatalogV2Util {
 
       case (Seq("key"), map @ MapType(keyType, _, _)) =>
         val updated = update(StructField("key", keyType, nullable = false))
-            .getOrElse(throw new IllegalArgumentException(s"Cannot delete map key"))
+            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3226"))
         Some(field.copy(dataType = map.copy(keyType = updated.dataType)))
 
       case (Seq("key", names @ _*), map @ MapType(keyStruct: StructType, _, _)) =>
@@ -291,7 +302,7 @@ private[sql] object CatalogV2Util {
 
       case (Seq("value"), map @ MapType(_, mapValueType, isNullable)) =>
         val updated = update(StructField("value", mapValueType, nullable = isNullable))
-            .getOrElse(throw new IllegalArgumentException(s"Cannot delete map value"))
+            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3225"))
         Some(field.copy(dataType = map.copy(
           valueType = updated.dataType,
           valueContainsNull = updated.nullable)))
@@ -302,7 +313,7 @@ private[sql] object CatalogV2Util {
 
       case (Seq("element"), array @ ArrayType(elementType, isNullable)) =>
         val updated = update(StructField("element", elementType, nullable = isNullable))
-            .getOrElse(throw new IllegalArgumentException(s"Cannot delete array element"))
+            .getOrElse(throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3224"))
         Some(field.copy(dataType = array.copy(
           elementType = updated.dataType,
           containsNull = updated.nullable)))
@@ -313,8 +324,9 @@ private[sql] object CatalogV2Util {
 
       case (names, dataType) =>
         if (!ifExists) {
-          throw new IllegalArgumentException(
-            s"Cannot find field: ${names.head} in ${dataType.simpleString}")
+          throw new SparkIllegalArgumentException(
+            errorClass = "_LEGACY_ERROR_TEMP_3223",
+            messageParameters = Map("name" -> names.head, "dataType" -> dataType.simpleString))
         }
         None
     }

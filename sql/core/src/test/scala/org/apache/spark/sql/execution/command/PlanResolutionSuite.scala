@@ -2752,8 +2752,8 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         extractTableDesc(s4)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "STORED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'storage.handler.class.name'",
         start = 23,
@@ -2919,8 +2919,8 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query1)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query1, start = 0, stop = 72))
 
     val query2 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z'))"
@@ -2928,8 +2928,8 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query2)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query2, start = 0, stop = 96))
 
     val query3 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z')) STORED AS DIRECTORIES"
@@ -2937,8 +2937,8 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query3)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(fragment = query3, start = 0, stop = 118))
   }
 
@@ -2992,8 +2992,8 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query1)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "STORED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'org.papachi.StorageHandler'",
         start = 44,
@@ -3004,8 +3004,8 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[ParseException] {
         parsePlan(query2)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "STORED BY"),
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "STORED BY"),
       context = ExpectedContext(
         fragment = "STORED BY 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')",
         start = 44,

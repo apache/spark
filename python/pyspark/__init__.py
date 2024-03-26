@@ -47,8 +47,7 @@ Public classes:
 """
 
 from functools import wraps
-import types
-from typing import cast, Any, Callable, Optional, TypeVar, Union
+from typing import cast, Any, Callable, TypeVar, Union
 
 from pyspark.conf import SparkConf
 from pyspark.rdd import RDD, RDDBarrier
@@ -84,36 +83,6 @@ def since(version: Union[str, float]) -> Callable[[_F], _F]:
         return f
 
     return deco
-
-
-def copy_func(
-    f: _F,
-    name: Optional[str] = None,
-    sinceversion: Optional[Union[str, float]] = None,
-    doc: Optional[str] = None,
-) -> _F:
-    """
-    Returns a function with same code, globals, defaults, closure, and
-    name (or provide a new name).
-    """
-    # See
-    # http://stackoverflow.com/questions/6527633/how-can-i-make-a-deepcopy-of-a-function-in-python
-    assert isinstance(f, types.FunctionType)
-
-    fn = types.FunctionType(
-        f.__code__,
-        f.__globals__,
-        name or f.__name__,
-        f.__defaults__,
-        f.__closure__,
-    )
-    # in case f was given attrs (note this dict is a shallow copy):
-    fn.__dict__.update(f.__dict__)
-    if doc is not None:
-        fn.__doc__ = doc
-    if sinceversion is not None:
-        fn = since(sinceversion)(fn)
-    return cast(_F, fn)
 
 
 def keyword_only(func: _F) -> _F:

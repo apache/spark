@@ -29,15 +29,17 @@ import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, Express
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.OperatorStateMetadataWriter
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataV1, OperatorStateMetadataWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -72,7 +74,8 @@ class IncrementalExecution(
       FlatMapGroupsInPandasWithStateStrategy ::
       StreamingRelationStrategy ::
       StreamingDeduplicationStrategy ::
-      StreamingGlobalLimitStrategy(outputMode) :: Nil
+      StreamingGlobalLimitStrategy(outputMode) ::
+      StreamingTransformWithStateStrategy :: Nil
   }
 
   private lazy val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -264,6 +267,14 @@ class IncrementalExecution(
           hasInitialState = hasInitialState
         )
 
+      case t: TransformWithStateExec =>
+        t.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo()),
+          batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None
+        )
+
       case m: FlatMapGroupsInPandasWithStateExec =>
         m.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
@@ -333,6 +344,12 @@ class IncrementalExecution(
           eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
         )
 
+      case t: TransformWithStateExec if t.stateInfo.isDefined =>
+        t.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(t.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(t.stateInfo.get)
+        )
+
       case m: FlatMapGroupsInPandasWithStateExec if m.stateInfo.isDefined =>
         m.copy(
           eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
@@ -372,8 +389,63 @@ class IncrementalExecution(
       rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
+    private def checkOperatorValidWithMetadata(planWithStateOpId: SparkPlan): Unit = {
+      // get stateful operators for current batch
+      val opMapInPhysicalPlan: Map[Long, String] = planWithStateOpId.collect {
+        case stateStoreWriter: StateStoreWriter =>
+          stateStoreWriter.getStateInfo.operatorId -> stateStoreWriter.shortName
+      }.toMap
+
+      // A map of all (operatorId -> operatorName) in the state metadata
+      val opMapInMetadata: Map[Long, String] = {
+        var ret = Map.empty[Long, String]
+        val stateCheckpointLocation = new Path(checkpointLocation)
+
+        if (CheckpointFileManager.create(
+          stateCheckpointLocation, hadoopConf).exists(stateCheckpointLocation)) {
+          try {
+            val reader = new StateMetadataPartitionReader(
+              new Path(checkpointLocation).getParent.toString,
+              new SerializableConfiguration(hadoopConf))
+            val opMetadataList = reader.allOperatorStateMetadata
+            ret = opMetadataList.map { operatorMetadata =>
+              val metadataInfoV1 = operatorMetadata
+                .asInstanceOf[OperatorStateMetadataV1]
+                .operatorInfo
+              metadataInfoV1.operatorId -> metadataInfoV1.operatorName
+            }.toMap
+          } catch {
+            case e: Exception =>
+              // no need to throw fatal error, returns empty map
+              logWarning("Error reading metadata path for stateful operator. " +
+                s"This may due to no prior committed batch, or previously run on lower versions:" +
+                s" ${e.getMessage}")
+          }
+        }
+        ret
+      }
+
+      // If state metadata is empty, skip the check
+      if (!opMapInMetadata.isEmpty) {
+        (opMapInMetadata.keySet ++ opMapInPhysicalPlan.keySet).foreach { opId =>
+          val opInMetadata = opMapInMetadata.getOrElse(opId, "not found")
+          val opInCurBatch = opMapInPhysicalPlan.getOrElse(opId, "not found")
+          if (opInMetadata != opInCurBatch) {
+            throw QueryExecutionErrors.statefulOperatorNotMatchInStateMetadataError(
+              opMapInMetadata,
+              opMapInPhysicalPlan)
+          }
+        }
+      }
+    }
+
     override def apply(plan: SparkPlan): SparkPlan = {
       val planWithStateOpId = plan transform composedRule
+      // Need to check before write to metadata because we need to detect add operator
+      // Only check when streaming is restarting and is first batch
+      if (isFirstBatch && currentBatchId != 0) {
+        checkOperatorValidWithMetadata(planWithStateOpId)
+      }
       // The rule doesn't change the plan but cause the side effect that metadata is written
       // in the checkpoint directory of stateful operator.
       planWithStateOpId transform WriteStatefulOperatorMetadataRule.rule

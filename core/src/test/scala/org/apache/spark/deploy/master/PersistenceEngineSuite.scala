@@ -88,6 +88,21 @@ class PersistenceEngineSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-46827: RocksDBPersistenceEngine with a symbolic link") {
+    withTempDir { dir =>
+      val target = Paths.get(dir.getAbsolutePath(), "target")
+      val link = Paths.get(dir.getAbsolutePath(), "symbolic_link");
+
+      Files.createDirectories(target)
+      Files.createSymbolicLink(link, target);
+
+      val conf = new SparkConf()
+      testPersistenceEngine(conf, serializer =>
+        new RocksDBPersistenceEngine(link.toAbsolutePath.toString, serializer)
+      )
+    }
+  }
+
   test("SPARK-46205: Support KryoSerializer in FileSystemPersistenceEngine") {
     withTempDir { dir =>
       val conf = new SparkConf()

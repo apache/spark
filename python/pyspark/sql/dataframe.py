@@ -40,7 +40,7 @@ from typing import (
 
 from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark import copy_func, _NoValue
+from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
 from pyspark.errors import (
@@ -586,7 +586,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> type(df.writeStream)
         <class '...streaming.readwriter.DataStreamWriter'>
 
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="writeStream") as d:
         ...     # Create a table with Rate source.
         ...     df.writeStream.toTable(
         ...         "my_table", checkpointLocation=d)
@@ -1053,7 +1053,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         age  | 19
         name | This is a super l...
         """
+        print(self._show_string(n, truncate, vertical))
 
+    def _show_string(
+        self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False
+    ) -> str:
         if not isinstance(n, int) or isinstance(n, bool):
             raise PySparkTypeError(
                 error_class="NOT_INT",
@@ -1067,7 +1071,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             )
 
         if isinstance(truncate, bool) and truncate:
-            print(self._jdf.showString(n, 20, vertical))
+            return self._jdf.showString(n, 20, vertical)
         else:
             try:
                 int_truncate = int(truncate)
@@ -1080,7 +1084,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     },
                 )
 
-            print(self._jdf.showString(n, int_truncate, vertical))
+            return self._jdf.showString(n, int_truncate, vertical)
 
     def __repr__(self) -> str:
         if not self._support_repr_html and self.sparkSession._jconf.isReplEagerEvalEnabled():
@@ -1135,7 +1139,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> import tempfile
         >>> df = spark.createDataFrame([
         ...     (14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="checkpoint") as d:
         ...     spark.sparkContext.setCheckpointDir("/tmp/bb")
         ...     df.checkpoint(False)
         DataFrame[age: bigint, name: string]
@@ -1315,6 +1319,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     error_class="DISALLOWED_TYPE_FOR_CONTAINER",
                     message_parameters={
                         "arg_name": "parameters",
+                        "arg_type": type(parameters).__name__,
                         "allowed_types": allowed_types_repr,
                         "item_type": type(p).__name__,
                     },
@@ -1325,6 +1330,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                         error_class="DISALLOWED_TYPE_FOR_CONTAINER",
                         message_parameters={
                             "arg_name": "parameters",
+                            "arg_type": type(parameters).__name__,
                             "allowed_types": allowed_types_repr,
                             "item_type": type(p).__name__ + "[" + type(p[0]).__name__ + "]",
                         },
@@ -1705,8 +1711,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- InMemoryTableScan ...
+        InMemoryTableScan ...
         """
         self.is_cached = True
         self._jdf.cache()
@@ -1748,8 +1753,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         >>> df.explain()
         == Physical Plan ==
-        AdaptiveSparkPlan isFinalPlan=false
-        +- InMemoryTableScan ...
+        InMemoryTableScan ...
 
         Persists the data in the disk by specifying the storage level.
 
@@ -2381,7 +2385,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                         "arg_name": "fractions",
                         "arg_type": type(fractions).__name__,
                         "allowed_types": "float, int, str",
-                        "return_type": type(k).__name__,
+                        "item_type": type(k).__name__,
                     },
                 )
             fractions[k] = float(v)
@@ -3327,7 +3331,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jcols = []
         for c in cols:
             if isinstance(c, int) and not isinstance(c, bool):
-                # TODO: should introduce dedicated error class
                 # ordinal is 1-based
                 if c > 0:
                     _c = self[c - 1]
@@ -3336,7 +3339,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     _c = self[-c - 1].desc()
                 else:
                     raise PySparkIndexError(
-                        error_class="INDEX_NOT_POSITIVE", message_parameters={"index": str(c)}
+                        error_class="ZERO_INDEX",
+                        message_parameters={},
                     )
             else:
                 _c = c  # type: ignore[assignment]
@@ -3522,8 +3526,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Returns
         -------
-        If n is greater than 1, return a list of :class:`Row`.
-        If n is 1, return a single Row.
+        If n is supplied, return a list of :class:`Row` of length n
+        or less if the DataFrame has fewer elements.
+        If n is missing, return a single Row.
 
         Examples
         --------
@@ -3533,6 +3538,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Row(age=2, name='Alice')
         >>> df.head(1)
         [Row(age=2, name='Alice')]
+        >>> df.head(0)
+        []
         """
         if n is None:
             rs = self.head(1)
@@ -5835,7 +5842,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                         "arg_name": "col",
                         "arg_type": type(col).__name__,
                         "allowed_types": "str",
-                        "return_type": type(c).__name__,
+                        "item_type": type(c).__name__,
                     },
                 )
         col = _to_list(self._sc, cast(List["ColumnOrName"], col))
@@ -6704,7 +6711,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not isinstance(other, DataFrame):
             raise PySparkTypeError(
-                error_class="NOT_STR",
+                error_class="NOT_DATAFRAME",
                 message_parameters={"arg_name": "other", "arg_type": type(other).__name__},
             )
         return self._jdf.sameSemantics(other._jdf)
@@ -6759,7 +6766,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="inputFiles") as d:
         ...     # Write a single-row DataFrame into a JSON file
         ...     spark.createDataFrame(
         ...         [{"age": 100, "name": "Hyukjin Kwon"}]
@@ -6774,22 +6781,42 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return list(self._jdf.inputFiles())
 
-    where = copy_func(filter, sinceversion=1.3, doc=":func:`where` is an alias for :func:`filter`.")
+    def where(self, condition: "ColumnOrName") -> "DataFrame":
+        """
+        :func:`where` is an alias for :func:`filter`.
+
+        .. versionadded:: 1.3.0
+        """
+        return self.filter(condition)
 
     # Two aliases below were added for pandas compatibility many years ago.
     # There are too many differences compared to pandas and we cannot just
     # make it "compatible" by adding aliases. Therefore, we stop adding such
     # aliases as of Spark 3.0. Two methods below remain just
     # for legacy users currently.
-    groupby = copy_func(
-        groupBy, sinceversion=1.4, doc=":func:`groupby` is an alias for :func:`groupBy`."
-    )
+    @overload
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":
+        ...
 
-    drop_duplicates = copy_func(
-        dropDuplicates,
-        sinceversion=1.4,
-        doc=":func:`drop_duplicates` is an alias for :func:`dropDuplicates`.",
-    )
+    @overload
+    def groupby(self, __cols: Union[List[Column], List[str], List[int]]) -> "GroupedData":
+        ...
+
+    def groupby(self, *cols: "ColumnOrNameOrOrdinal") -> "GroupedData":  # type: ignore[misc]
+        """
+        :func:`groupby` is an alias for :func:`groupBy`.
+
+        .. versionadded:: 1.4.0
+        """
+        return self.groupBy(*cols)
+
+    def drop_duplicates(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        """
+        :func:`drop_duplicates` is an alias for :func:`dropDuplicates`.
+
+        .. versionadded:: 1.4.0
+        """
+        return self.dropDuplicates(subset)
 
     def writeTo(self, table: str) -> DataFrameWriterV2:
         """

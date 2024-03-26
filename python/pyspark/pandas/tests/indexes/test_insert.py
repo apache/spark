@@ -19,17 +19,10 @@ import unittest
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class IndexesInsertMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
-        )
-
     def test_insert(self):
         # Integer
         pidx = pd.Index([1, 2, 3], name="Koalas")
@@ -128,7 +121,7 @@ class IndexesInsertMixin:
 
 class IndexesInsertTests(
     IndexesInsertMixin,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     TestUtils,
 ):
     pass

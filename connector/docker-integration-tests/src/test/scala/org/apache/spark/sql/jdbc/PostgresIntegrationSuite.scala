@@ -20,19 +20,18 @@ package org.apache.spark.sql.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Connection, Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 import java.util.Properties
 
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:15.1):
+ * To run this test suite for a specific version (e.g., postgres:16.2):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:15.1
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.2
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
  * }}}
@@ -40,7 +39,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:15.1-alpine")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.2-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -149,15 +148,30 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       |('2013-04-05 18:01:02.123456')""".stripMargin).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE infinity_timestamp" +
-      "(id SERIAL PRIMARY KEY, timestamp_column TIMESTAMP);").executeUpdate()
-    conn.prepareStatement("INSERT INTO infinity_timestamp (timestamp_column)" +
-      " VALUES ('infinity'), ('-infinity');").executeUpdate()
+      "(id SERIAL PRIMARY KEY, timestamp_column TIMESTAMP, timestamp_array TIMESTAMP[])")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO infinity_timestamp (timestamp_column, timestamp_array)" +
+      " VALUES ('infinity', ARRAY[TIMESTAMP 'infinity']), " +
+        "('-infinity', ARRAY[TIMESTAMP '-infinity'])")
+      .executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE infinity_dates" +
+        "(id SERIAL PRIMARY KEY, date_column DATE, date_array DATE[])")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO infinity_dates (date_column, date_array)" +
+        " VALUES ('infinity', ARRAY[DATE 'infinity']), " +
+        "('-infinity', ARRAY[DATE '-infinity'])")
+      .executeUpdate()
 
     conn.prepareStatement("CREATE DOMAIN not_null_text AS TEXT DEFAULT ''").executeUpdate()
     conn.prepareStatement("create table custom_type(type_array not_null_text[]," +
       "type not_null_text)").executeUpdate()
     conn.prepareStatement("INSERT INTO custom_type (type_array, type) VALUES" +
       "('{1,fds,fdsa}','fdasfasdf')").executeUpdate()
+
+    conn.prepareStatement(
+      "CREATE FUNCTION test_null() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE plpgsql")
+      .executeUpdate()
 
   }
 
@@ -282,15 +296,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(schema(1).dataType == ShortType)
   }
 
-  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
-    "should be recognized") {
-    // When using JDBC to read the columns of TIMESTAMP with TIME ZONE and TIME with TIME ZONE
-    // the actual types are java.sql.Types.TIMESTAMP and java.sql.Types.TIME
-    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-    val rows = dfRead.collect()
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
+  test("SPARK-47390: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
+    Seq(true, false).foreach { prefer =>
+      val rows = sqlContext.read
+        .option("preferTimestampNTZ", prefer)
+        .jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+        .collect()
+      rows.head.toSeq.tail.foreach(c => assert(c.isInstanceOf[java.sql.Timestamp]))
+    }
   }
 
   test("SPARK-22291: Conversion error when transforming array types of " +
@@ -416,17 +429,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("SPARK-43040: timestamp_ntz roundtrip test") {
     val prop = new Properties
     prop.setProperty("preferTimestampNTZ", "true")
-
-    val sparkQuery = """
-      |select
-      |  timestamp_ntz'2020-12-10 11:22:33' as col0
-      """.stripMargin
-
-    val df_expected = sqlContext.sql(sparkQuery)
+    val df_expected = sql("select timestamp_ntz'2020-12-10 11:22:33' as col0")
     df_expected.write.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
+    val df_actual = spark.read.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
+    checkAnswer(df_actual, df_expected)
+  }
 
-    val df_actual = sqlContext.read.jdbc(jdbcUrl, "timestamp_ntz_roundtrip", prop)
-    assert(df_actual.collect()(0) == df_expected.collect()(0))
+  test("SPARK-47316: timestamp_ntz_array roundtrip test") {
+    val prop = new Properties
+    prop.setProperty("preferTimestampNTZ", "true")
+    val df_expected = sql("select array(timestamp_ntz'2020-12-10 11:22:33') as col0")
+    df_expected.write.jdbc(jdbcUrl, "timestamp_ntz_array_roundtrip", prop)
+    val df_actual = spark.read.jdbc(jdbcUrl, "timestamp_ntz_array_roundtrip", prop)
+    checkAnswer(df_actual, df_expected)
   }
 
   test("SPARK-43267: user-defined column in array test") {
@@ -445,10 +460,39 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row.length == 2)
     val infinity = row(0).getAs[Timestamp]("timestamp_column")
     val negativeInfinity = row(1).getAs[Timestamp]("timestamp_column")
-    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
-    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
-
+    val infinitySeq = row(0).getAs[scala.collection.Seq[Timestamp]]("timestamp_array")
+    val negativeInfinitySeq = row(1).getAs[scala.collection.Seq[Timestamp]]("timestamp_array")
+    val minTimeStamp = -62135596800000L
+    val maxTimestamp = 253402300799999L
     assert(infinity.getTime == maxTimestamp)
     assert(negativeInfinity.getTime == minTimeStamp)
+    assert(infinitySeq.head.getTime == maxTimestamp)
+    assert(negativeInfinitySeq.head.getTime == minTimeStamp)
+  }
+
+  test("SPARK-47501: infinity date test") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "infinity_dates", new Properties)
+    val row = df.collect()
+
+    assert(row.length == 2)
+    val infinity = row(0).getDate(1)
+    val negativeInfinity = row(1).getDate(1)
+    val infinitySeq = row(0).getAs[scala.collection.Seq[Date]]("date_array")
+    val negativeInfinitySeq = row(1).getAs[scala.collection.Seq[Date]]("date_array")
+    val minDate = -62135654400000L
+    val maxDate = 253402156800000L
+    assert(infinity.getTime == maxDate)
+    assert(negativeInfinity.getTime == minDate)
+    assert(infinitySeq.head.getTime == maxDate)
+    assert(negativeInfinitySeq.head.getTime == minDate)
+  }
+
+  test("SPARK-47407: Support java.sql.Types.NULL for NullType") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT test_null()")
+      .load()
+    assert(df.schema.head.dataType === NullType)
+    checkAnswer(df, Seq(Row(null)))
   }
 }

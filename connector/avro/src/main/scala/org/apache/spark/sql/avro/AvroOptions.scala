@@ -133,6 +133,9 @@ private[sql] class AvroOptions(
 
   val useStableIdForUnionType: Boolean =
     parameters.get(STABLE_ID_FOR_UNION_TYPE).map(_.toBoolean).getOrElse(false)
+
+  val stableIdPrefixForUnionType: String = parameters
+    .getOrElse(STABLE_ID_PREFIX_FOR_UNION_TYPE, "member_")
 }
 
 private[sql] object AvroOptions extends DataSourceOptions {
@@ -164,4 +167,7 @@ private[sql] object AvroOptions extends DataSourceOptions {
   // type name are identical regardless of case, an exception will be raised. However, in other
   // cases, the field names can be uniquely identified.
   val STABLE_ID_FOR_UNION_TYPE = newOption("enableStableIdentifiersForUnionType")
+  // When STABLE_ID_FOR_UNION_TYPE is enabled, the option allows to configure the prefix for fields
+  // of Avro Union type.
+  val STABLE_ID_PREFIX_FOR_UNION_TYPE = newOption("stableIdentifierPrefixForUnionType")
 }

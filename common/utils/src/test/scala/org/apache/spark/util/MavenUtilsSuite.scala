@@ -28,14 +28,14 @@ import scala.jdk.CollectionConverters._
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 class MavenUtilsSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
-    with BeforeAndAfterAll {
+    with BeforeAndAfterEach {
 
   private var tempIvyPath: String = _
 
@@ -55,9 +55,14 @@ class MavenUtilsSuite
     // scalastyle:on println
   }
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     tempIvyPath = SparkFileUtils.createTempDir(namePrefix = "ivy").getAbsolutePath()
+  }
+
+  override def afterEach(): Unit = {
+    SparkFileUtils.deleteRecursively(new File(tempIvyPath))
+    super.afterEach()
   }
 
   test("incorrect maven coordinate throws error") {
@@ -250,8 +255,7 @@ class MavenUtilsSuite
 
     val settingsFile = Paths.get(tempIvyPath, "ivysettings.xml")
     Files.write(settingsFile, settingsText.getBytes(StandardCharsets.UTF_8))
-    val settings = MavenUtils.loadIvySettings(settingsFile.toString, None, None)
-    settings.setDefaultIvyUserDir(new File(tempIvyPath)) // NOTE - can't set this through file
+    val settings = MavenUtils.loadIvySettings(settingsFile.toString, None, Some(tempIvyPath))
 
     val testUtilSettings = new IvySettings
     testUtilSettings.setDefaultIvyUserDir(new File(tempIvyPath))

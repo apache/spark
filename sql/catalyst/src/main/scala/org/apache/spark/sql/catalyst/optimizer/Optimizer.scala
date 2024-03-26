@@ -328,6 +328,44 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // Do not optimize DPP subquery, as it was created from optimized plan and we should not
       // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
       case d: DynamicPruningSubquery => d
+      case s @ ScalarSubquery(a @ Aggregate(group, _, child), _, _, _, _, mayHaveCountBug)
+        if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
+          mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
+        // This is a subquery with an aggregate that may suffer from a COUNT bug.
+        // Detailed COUNT bug detection is done at a later stage (e.g. in
+        // RewriteCorrelatedScalarSubquery).
+        // Make sure that the output plan always has the same aggregate node
+        // (i.e., it is not being constant folded).
+        // Note that this does not limit optimization opportunities for the subquery: after
+        // decorrelation is done, the subquery's body becomes part of the main plan and all
+        // optimization rules are applied again.
+        val projectOverAggregateChild = Project(a.references.toSeq, child)
+        val optimizedPlan = Optimizer.this.execute(Subquery.fromExpression(
+          s.withNewPlan(projectOverAggregateChild)))
+        assert(optimizedPlan.isInstanceOf[Subquery])
+        val optimizedInput = optimizedPlan.asInstanceOf[Subquery].child
+
+        assert(optimizedInput.output.size == projectOverAggregateChild.output.size)
+        // We preserve the top aggregation, but its input has been optimized via
+        // Optimizer.execute().
+        // Make sure that the attributes still have IDs expected by the Aggregate node
+        // by inserting a project if necessary.
+        val needProject = projectOverAggregateChild.output.zip(optimizedInput.output).exists {
+          case (oldAttr, newAttr) => oldAttr.exprId != newAttr.exprId
+        }
+        if (needProject) {
+          val updatedProjectList = projectOverAggregateChild.output.zip(optimizedInput.output).map {
+            case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
+          }
+          s.withNewPlan(a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput))))
+        } else {
+          // Remove the top-level project if it is trivial. We do it to minimize plan changes.
+          optimizedInput match {
+            case Project(projectList, input) if projectList.forall(_.isInstanceOf[Attribute]) =>
+              s.withNewPlan(a.withNewChildren(Seq(input)))
+            case _ => s.withNewPlan(a.withNewChildren(Seq(optimizedInput)))
+          }
+        }
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
@@ -584,10 +622,20 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         }
 
       case _ =>
+        val subQueryAttributes = if (conf.getConf(SQLConf
+          .EXCLUDE_SUBQUERY_EXP_REFS_FROM_REMOVE_REDUNDANT_ALIASES)) {
+          // Collect the references for all the subquery expressions in the plan.
+          AttributeSet.fromAttributeSets(plan.expressions.collect {
+            case e: SubqueryExpression => e.references
+          })
+        } else {
+          AttributeSet.empty
+        }
+
         // Remove redundant aliases in the subtree(s).
         val currentNextAttrPairs = mutable.Buffer.empty[(Attribute, Attribute)]
         val newNode = plan.mapChildren { child =>
-          val newChild = removeRedundantAliases(child, excluded)
+          val newChild = removeRedundantAliases(child, excluded ++ subQueryAttributes)
           currentNextAttrPairs ++= createAttributeMapping(child, newChild)
           newChild
         }
@@ -1539,10 +1587,11 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
-    // We only can combine them if and only if both are deterministic.
+    // We only can combine them if and only if both are deterministic and the outer condition is not
+    // throwable (inner can be throwable as it was going to be evaluated first anyways).
     case Filter(fc, nf @ Filter(nc, grandChild)) if nc.deterministic =>
-      val (combineCandidates, nonDeterministic) =
-        splitConjunctivePredicates(fc).partition(_.deterministic)
+      val (combineCandidates, rest) =
+        splitConjunctivePredicates(fc).partition(p => p.deterministic && !p.throwable)
       val mergedFilter = (ExpressionSet(combineCandidates) --
         ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
         case Some(ac) =>
@@ -1550,7 +1599,7 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
         case None =>
           nf
       }
-      nonDeterministic.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
+      rest.reduceOption(And).map(c => Filter(c, mergedFilter)).getOrElse(mergedFilter)
   }
 }
 
@@ -1656,9 +1705,9 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
     case Filter(Literal(null, _), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     case Filter(Literal(false, BooleanType), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>
@@ -1720,15 +1769,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (candidates, nonDeterministic) =
-        splitConjunctivePredicates(condition).partition(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+        cond.deterministic && !cond.throwable &&
+          cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
       }
-
-      val stayUp = rest ++ nonDeterministic
 
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
@@ -1894,13 +1939,14 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
+    val (pushDownCandidates, stayUp) =
+      condition.partition(cond => cond.deterministic && !cond.throwable)
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
         rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
+    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ stayUp)
   }
 
   private def canPushThrough(joinType: JoinType): Boolean = joinType match {
@@ -1923,8 +1969,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+          // don't push throwable expressions into join condition
           val (newJoinConditions, others) =
-            commonFilterCondition.partition(canEvaluateWithinJoin)
+            commonFilterCondition.partition(cond => canEvaluateWithinJoin(cond) && !cond.throwable)
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
           val join = Join(newLeft, newRight, joinType, newJoinCond, hint)
@@ -2183,11 +2230,15 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
     case d @ Deduplicate(keys, child) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
+      val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]();
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {
           attr
         } else {
-          Alias(new First(attr).toAggregateExpression(), attr.name)()
+          // Keep track of the generated aliases to avoid generating multiple aliases
+          // for the same attribute (in case the attribute is duplicated)
+          generatedAliasesMap.getOrElseUpdate(attr,
+            Alias(new First(attr).toAggregateExpression(), attr.name)())
         }
       }
       // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping

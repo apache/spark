@@ -47,12 +47,17 @@ object ParseMode extends Logging {
   /**
    * Returns the parse mode from the given string.
    */
-  def fromString(mode: String): ParseMode = mode.toUpperCase(Locale.ROOT) match {
-    case PermissiveMode.name => PermissiveMode
-    case DropMalformedMode.name => DropMalformedMode
-    case FailFastMode.name => FailFastMode
-    case _ =>
-      logWarning(s"$mode is not a valid parse mode. Using ${PermissiveMode.name}.")
-      PermissiveMode
+  def fromString(mode: String): ParseMode = Option(mode).map {
+    v => v.toUpperCase(Locale.ROOT) match {
+      case PermissiveMode.name => PermissiveMode
+      case DropMalformedMode.name => DropMalformedMode
+      case FailFastMode.name => FailFastMode
+      case _ =>
+        logWarning(s"$v is not a valid parse mode. Using ${PermissiveMode.name}.")
+        PermissiveMode
+    }
+  }.getOrElse {
+    logWarning(s"mode is null and not a valid parse mode. Using ${PermissiveMode.name}.")
+    PermissiveMode
   }
 }

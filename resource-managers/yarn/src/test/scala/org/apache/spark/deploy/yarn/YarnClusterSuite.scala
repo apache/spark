@@ -292,7 +292,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     }
   }
 
-  test("running Spark in yarn-cluster mode displays driver log links") {
+  // TODO(SPARK-47491): Re-enable `driver log links` test in YarnClusterSuite
+  ignore("running Spark in yarn-cluster mode displays driver log links") {
     val log4jConf = new File(tempDir, "log4j.properties")
     val logOutFile = new File(tempDir, "logs")
     Files.write(

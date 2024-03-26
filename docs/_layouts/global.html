@@ -1,9 +1,5 @@
-
 <!DOCTYPE html>
-<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
-<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
-<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
+<html class="no-js">
     <head>
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
@@ -53,12 +49,7 @@
 
     </head>
     <body class="global">
-        <!--[if lt IE 7]>
-            <p class="chromeframe">You are using an outdated browser. <a href="https://browsehappy.com/">Upgrade your browser today</a> or <a href="http://www.google.com/chromeframe/?redirect=true">install Google Chrome Frame</a> to better experience this site.</p>
-        <![endif]-->
-
         <!-- This code is taken from http://twitter.github.com/bootstrap/examples/hero.html -->
-
         <nav class="navbar navbar-expand-lg navbar-dark p-0 px-4 fixed-top" style="background: #1d6890;" id="topbar">
             <div class="navbar-brand"><a href="index.html">
                 <img src="img/spark-logo-rev.svg" width="141" height="72"/></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
@@ -137,25 +128,21 @@
 
         {% if page.url == "/" %}
             <section class="hero-banner position-relative">
-            <div class="bg">
-            </div>
             <div class="container position-relative">
                 <div class="row">
                   <h1 style="max-width: 680px;">Apache Spark - A Unified engine for large-scale data analytics</h1>
                 </div>
-                <div class="row mt-5">
-                  <div class="col-12 col-lg-6 no-gutters">
-                    Apache Spark is a unified analytics engine for large-scale data processing.
-                    It provides high-level APIs in Java, Scala, Python and R,
-                    and an optimized engine that supports general execution graphs.
-                    It also supports a rich set of higher-level tools including
-                    <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing,
-                    <a href="api/python/getting_started/quickstart_ps.html">pandas API on Spark</a> for pandas workloads,
-                    <a href="ml-guide.html">MLlib</a> for machine learning,
-                    <a href="graphx-programming-guide.html">GraphX</a> for graph processing,
-                     and <a href="structured-streaming-programming-guide.html">Structured Streaming</a>
-                     for incremental computation and stream processing.
-                  </div>
+                <div class="content mr-3">
+                  Apache Spark is a unified analytics engine for large-scale data processing.
+                  It provides high-level APIs in Java, Scala, Python and R,
+                  and an optimized engine that supports general execution graphs.
+                  It also supports a rich set of higher-level tools including
+                  <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing,
+                  <a href="api/python/getting_started/quickstart_ps.html">pandas API on Spark</a> for pandas workloads,
+                  <a href="ml-guide.html">MLlib</a> for machine learning,
+                  <a href="graphx-programming-guide.html">GraphX</a> for graph processing,
+                   and <a href="structured-streaming-programming-guide.html">Structured Streaming</a>
+                   for incremental computation and stream processing.
                 </div>
             </div>
           </section>

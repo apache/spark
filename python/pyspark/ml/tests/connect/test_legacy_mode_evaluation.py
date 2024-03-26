@@ -87,7 +87,7 @@ class EvaluationTestsMixin:
         np.testing.assert_almost_equal(r2_local, expected_r2)
 
         # Test save / load
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_regressor_evaluator") as tmp_dir:
             r2_evaluator.saveToLocal(f"{tmp_dir}/ev")
             loaded_evaluator = RegressionEvaluator.loadFromLocal(f"{tmp_dir}/ev")
             assert loaded_evaluator.getMetricName() == "r2"
@@ -133,7 +133,7 @@ class EvaluationTestsMixin:
             np.testing.assert_almost_equal(auprc_local, expected_auprc, decimal=2)
 
         # Test save / load
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_binary_classifier_evaluator") as tmp_dir:
             auprc_evaluator.saveToLocal(f"{tmp_dir}/ev")
             loaded_evaluator = RegressionEvaluator.loadFromLocal(f"{tmp_dir}/ev")
             assert loaded_evaluator.getMetricName() == "areaUnderPR"
@@ -170,7 +170,7 @@ class EvaluationTestsMixin:
         np.testing.assert_almost_equal(accuracy_local, expected_accuracy, decimal=2)
 
         # Test save / load
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory(prefix="test_multiclass_classifier_evaluator") as tmp_dir:
             accuracy_evaluator.saveToLocal(f"{tmp_dir}/ev")
             loaded_evaluator = RegressionEvaluator.loadFromLocal(f"{tmp_dir}/ev")
             assert loaded_evaluator.getMetricName() == "accuracy"

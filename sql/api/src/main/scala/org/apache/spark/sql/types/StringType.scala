@@ -18,14 +18,50 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.util.CollationFactory
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
  *
  * @since 1.3.0
+ * @param collationId The id of collation for this StringType.
  */
 @Stable
-class StringType private() extends AtomicType {
+class StringType private(val collationId: Int) extends AtomicType with Serializable {
+  /**
+   * Support for Binary Equality implies that strings are considered equal only if
+   * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
+   * non-binary. If this field is true, byte level operations can be used against this datatype
+   * (e.g. for equality and hashing).
+   */
+  def supportsBinaryEquality: Boolean =
+    CollationFactory.fetchCollation(collationId).supportsBinaryEquality
+  def isUTF8BinaryLcaseCollation: Boolean =
+    collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID
+
+  /**
+   * Support for Binary Ordering implies that strings are considered equal only
+   * if they are byte for byte equal. E.g. all accent or case-insensitive collations are
+   * considered non-binary. Also their ordering does not require calls to ICU library, as
+   * it follows spark internal implementation. If this field is true, byte level operations
+   * can be used against this datatype (e.g. for equality, hashing and ordering).
+   */
+  def supportsBinaryOrdering: Boolean =
+    CollationFactory.fetchCollation(collationId).supportsBinaryOrdering
+
+  /**
+   * Type name that is shown to the customer.
+   * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
+   */
+  override def typeName: String =
+    if (collationId == 0) "string"
+    else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
+
+  override def equals(obj: Any): Boolean =
+    obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
+
+  override def hashCode(): Int = collationId.hashCode()
+
   /**
    * The default size of a value of the StringType is 20 bytes.
    */
@@ -35,8 +71,11 @@ class StringType private() extends AtomicType {
 }
 
 /**
+ * Use StringType for expressions supporting only binary collation.
+ *
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType
-
+case object StringType extends StringType(0) {
+  def apply(collationId: Int): StringType = new StringType(collationId)
+}

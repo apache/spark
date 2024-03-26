@@ -21,7 +21,7 @@ name: Publish Snapshot
 
 on:
   schedule:
-  - cron: '0 0 * * *'
+  - cron: '0 0,12 * * *'
   workflow_dispatch:
     inputs:
       branch:
@@ -45,7 +45,7 @@ jobs:
       with:
         ref: ${{ matrix.branch }}
     - name: Cache Maven local repository
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.m2/repository
         key: snapshot-maven-${{ hashFiles('**/pom.xml') }}
