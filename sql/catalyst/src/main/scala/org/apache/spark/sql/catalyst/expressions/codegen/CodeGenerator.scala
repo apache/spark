@@ -715,7 +715,7 @@ class CodegenContext extends Logging {
   private def genCompMapData(
       keyType: DataType,
       valueType: DataType,
-      compareFunc : String): String = {
+      compareFunc: String): String = {
     val keyArrayA = freshName("keyArrayA")
     val keyArrayB = freshName("keyArrayB")
     val valueArrayA = freshName("valueArrayA")
