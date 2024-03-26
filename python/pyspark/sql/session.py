@@ -499,12 +499,14 @@ class SparkSession(SparkConversionMixin):
 
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
-                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                            return cast(SparkSession,
+                                        RemoteSparkSession.builder.config(map=opts).getOrCreate())
                         elif "SPARK_LOCAL_REMOTE" in os.environ:
                             url = "sc://localhost"
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
-                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                            return cast(SparkSession,
+                                        RemoteSparkSession.builder.config(map=opts).getOrCreate())
                         else:
                             raise PySparkRuntimeError(
                                 error_class="SESSION_ALREADY_EXIST",
@@ -560,7 +562,7 @@ class SparkSession(SparkConversionMixin):
                 # used in conjunction with Spark Connect mode.
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
-                return RemoteSparkSession.builder.config(map=opts).create()
+                return cast(SparkSession, RemoteSparkSession.builder.config(map=opts).create())
             else:
                 raise PySparkRuntimeError(
                     error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
@@ -578,7 +580,7 @@ class SparkSession(SparkConversionMixin):
     #
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
-    builder: Builder = classproperty(lambda cls: cls.Builder())
+    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
     """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
     .. versionchanged:: 3.4.0
