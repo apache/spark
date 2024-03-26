@@ -83,5 +83,7 @@ public interface ShuffleExecutorComponents {
    * @param mapId An ID of the map task. The ID is unique within this Spark application.
    * @return
    */
-  Optional<File> getFinalDataFile(int shuffleId, long mapId);
+  default Optional<File> getFinalDataFile(int shuffleId, long mapId) {
+    return Optional.empty();
+  }
 }
