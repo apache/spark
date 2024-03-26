@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.benchmark
 
+import scala.concurrent.duration._
+
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.CollationFactory
@@ -64,27 +66,32 @@ object CollationBenchmark extends SqlBasedBenchmark {
   def benchmarkUTFString(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
 
-    val benchmark = new Benchmark("collation unit benchmarks", utf8Strings.size, output = output)
+    val benchmark = new Benchmark(
+      "collation unit benchmarks",
+      utf8Strings.size,
+      warmupTime = 4.seconds,
+      // minNumIters = 10,
+      output = output)
     collationTypes.foreach(collationType => {
       val collation = CollationFactory.fetchCollation(collationType)
-      benchmark.addCase(s"equalsFunction - $collationType") { _ =>
+      benchmark.addCase(s"equalsFunction - $collationType", numIters = 20) { _ =>
         sublistStrings.foreach(s1 =>
           utf8Strings.foreach(s =>
-            collation.equalsFunction(s, s1).booleanValue()
-          )
+              collation.equalsFunction(s, s1).booleanValue())
         )
       }
       benchmark.addCase(s"collator.compare - $collationType") { _ =>
         sublistStrings.foreach(s1 =>
           utf8Strings.foreach(s =>
-            collation.comparator.compare(s, s1)
+              collation.comparator.compare(s, s1)
           )
         )
       }
       benchmark.addCase(s"hashFunction - $collationType") { _ =>
         sublistStrings.foreach(_ =>
           utf8Strings.foreach(s =>
-            collation.hashFunction.applyAsLong(s)
+              collation.hashFunction.applyAsLong(s)
+
           )
         )
       }
@@ -97,14 +104,18 @@ object CollationBenchmark extends SqlBasedBenchmark {
       collationTypes: Seq[String],
       dfUncollated: DataFrame): Unit = {
     val benchmark =
-      new Benchmark("filter df column with collation", dfUncollated.count(), output = output)
+      new Benchmark(
+        "filter df column with collation",
+        dfUncollated.count(),
+        warmupTime = 4.seconds,
+        output = output)
     collationTypes.foreach(collationType => {
       val dfCollated = dfUncollated.selectExpr(
         s"collate(s2, '$collationType') as k2_$collationType",
         s"collate(s1, '$collationType') as k1_$collationType")
       benchmark.addCase(s"filter df column with collation - $collationType") { _ =>
         dfCollated.where(col(s"k1_$collationType") === col(s"k2_$collationType"))
-          .queryExecution.executedPlan.executeCollect()
+          .noop()
       }
     }
     )
