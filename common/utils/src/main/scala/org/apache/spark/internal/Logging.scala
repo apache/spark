@@ -29,24 +29,25 @@ import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
-import org.apache.spark.util.SparkClassUtils
+import org.apache.spark.util.{SparkClassUtils, SparkEnvUtils}
 
 // Mapped Diagnostic Context (MDC) that will be used in log messages.
 // The values of the MDC will be inline in the log message, while the key-value pairs will be
 // part of the ThreadContext.
 case class MDC(key: LogKey.Value, value: String)
 
-class LogEntry(entry: => (String, Instance)) {
+class LogEntry(entry: => (String, Option[Instance])) {
   def msg: String = entry._1
-  def context: Instance = entry._2
+  def context: Option[Instance] = entry._2
 }
 
 // Companion object for the wrapper to enable implicit conversions
 object LogEntry {
   import scala.language.implicitConversions
 
-  implicit def from(msgWithMDC: => (String, Instance)): LogEntry =
+  implicit def from(msgWithMDC: => (String, Option[Instance])): LogEntry =
     new LogEntry(msgWithMDC)
 }
 
@@ -77,7 +78,7 @@ trait Logging {
   }
 
   implicit class LogStringContext(val sc: StringContext) {
-    def log(args: Any*): (String, Instance) = {
+    def log(args: Any*): (String, Option[Instance]) = {
       val processedParts = sc.parts.iterator
       val sb = new StringBuilder(processedParts.next())
       lazy val map = new java.util.HashMap[String, String]()
@@ -90,7 +91,11 @@ trait Logging {
               map.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
             }
           case other =>
-            throw new IllegalArgumentException(s"Argument $other is not a MDC")
+            if (SparkEnvUtils.isTesting) {
+              throw new SparkException(s"Argument $other is not a MDC")
+            } else {
+              sb.append(other.toString)
+            }
         }
         if (processedParts.hasNext) {
           sb.append(processedParts.next())
@@ -99,9 +104,9 @@ trait Logging {
 
       // Create a CloseableThreadContext and apply the context map
       val closeableContext = if (Logging.isStructuredLoggingEnabled) {
-        CloseableThreadContext.putAll(map)
+        Some(CloseableThreadContext.putAll(map))
       } else {
-        null
+        None
       }
       (sb.toString(), closeableContext)
     }
@@ -131,14 +136,14 @@ trait Logging {
   protected def logError(entry: LogEntry): Unit = {
     if (log.isErrorEnabled) {
       log.error(entry.msg)
-      Option(entry.context).map(_.close())
+      entry.context.map(_.close())
     }
   }
 
   protected def logError(entry: LogEntry, throwable: Throwable): Unit = {
     if (log.isErrorEnabled) {
       log.error(entry.msg, throwable)
-      Option(entry.context).map(_.close())
+      entry.context.map(_.close())
     }
   }
 
