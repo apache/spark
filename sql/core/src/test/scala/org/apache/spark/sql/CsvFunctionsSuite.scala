@@ -768,4 +768,32 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
     )
   }
+
+  test("SPARK-47497: to_csv support the data of nested structure as pretty strings") {
+    // The item of the Array is a Map
+    val rows = new java.util.ArrayList[Row]()
+    rows.add(Row(1L, Row(2L, "Alice",
+      Array(Map("math" -> 100L, "english" -> 200L, "science" -> null),
+        Map("math" -> 300L, "english" -> 400L, "science" -> 500L)))))
+
+    val valueSchema = StructType(Seq(
+      StructField("age", LongType),
+      StructField("name", StringType),
+      StructField("scores", ArrayType(MapType(StringType, LongType)))))
+    val schema = StructType(Seq(
+      StructField("key", LongType),
+      StructField("value", valueSchema)))
+
+    val df = spark.createDataFrame(rows, schema)
+    val actual1 = df.select(to_csv($"value"))
+    checkAnswer(actual1, Row("2,Alice," +
+      "\"[{math -> 100, english -> 200, science ->}, " +
+      "{math -> 300, english -> 400, science -> 500}]\""))
+
+    val options = Map("nullValue" -> "-")
+    val actual2 = df.select(to_csv($"value", options.asJava))
+    checkAnswer(actual2, Row("2,Alice," +
+      "\"[{math -> 100, english -> 200, science -> -}, " +
+      "{math -> 300, english -> 400, science -> 500}]\""))
+  }
 }
