@@ -716,23 +716,18 @@ class CodegenContext extends Logging {
       keyType: DataType,
       valueType: DataType,
       compareFunc: String): String = {
-    val keyArrayA = freshName("keyArrayA")
-    val keyArrayB = freshName("keyArrayB")
-    val valueArrayA = freshName("valueArrayA")
-    val valueArrayB = freshName("valueArrayB")
-    val minLength = freshName("minLength")
     s"""
        |public int $compareFunc(MapData a, MapData b) {
        |  int lengthA = a.numElements();
        |  int lengthB = b.numElements();
-       |  ArrayData $keyArrayA = a.keyArray();
-       |  ArrayData $valueArrayA = a.valueArray();
-       |  ArrayData $keyArrayB = b.keyArray();
-       |  ArrayData $valueArrayB = b.valueArray();
-       |  int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
-       |  for (int i = 0; i < $minLength; i++) {
-       |    ${genCompElementsAt(keyArrayA, keyArrayB, "i", keyType)}
-       |    ${genCompElementsAt(valueArrayA, valueArrayB, "i", valueType)}
+       |  ArrayData keyArrayA = a.keyArray();
+       |  ArrayData valueArrayA = a.valueArray();
+       |  ArrayData keyArrayB = b.keyArray();
+       |  ArrayData valueArrayB = b.valueArray();
+       |  int minLength = (lengthA > lengthB) ? lengthB : lengthA;
+       |  for (int i = 0; i < minLength; i++) {
+       |    ${genCompElementsAt("keyArrayA", "keyArrayB", "i", keyType)}
+       |    ${genCompElementsAt("valueArrayA", "valueArrayB", "i", valueType)}
        |  }
        |
        |  if (lengthA < lengthB) {
