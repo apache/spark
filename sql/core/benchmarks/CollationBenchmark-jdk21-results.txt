@@ -2,25 +2,35 @@ OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 filter df column with collation:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------
-filter df column with collation - UNICODE_CI                    48             68          25          0.0     2377015.5       1.0X
-filter df column with collation - UNICODE                       20             28           6          0.0      985946.5       2.4X
-filter df column with collation - UTF8_BINARY_LCASE             15             19           4          0.0      766053.2       3.1X
-filter df column with collation - UTF8_BINARY                   14             15           3          0.0      678785.9       3.5X
+filter df column with collation - UTF8_BINARY_LCASE             30             36           4          0.3        3038.1       1.0X
+filter df column with collation - UNICODE                       21             24           4          0.5        2098.3       1.4X
+filter df column with collation - UTF8_BINARY                   20             22           3          0.5        2023.6       1.5X
+filter df column with collation - UNICODE_CI                    25             28           4          0.4        2467.8       1.2X
 
 OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
-collation unit benchmarks:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+collation unit benchmarks - equalsFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+UTF8_BINARY_LCASE                                   29904          29937          47          0.0      299036.1       1.0X
+UNICODE                                              3886           3893          10          0.0       38863.0       7.7X
+UTF8_BINARY                                          3945           3945           0          0.0       39449.6       7.6X
+UNICODE_CI                                          45321          45330          12          0.0      453210.3       0.7X
+
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
+AMD EPYC 7763 64-Core Processor
+collation unit benchmarks - compareFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+UTF8_BINARY_LCASE                                    29807          29818          17          0.0      298065.0       1.0X
+UNICODE                                              45704          45723          27          0.0      457036.2       0.7X
+UTF8_BINARY                                           6460           6464           7          0.0       64597.9       4.6X
+UNICODE_CI                                           45498          45508          14          0.0      454977.6       0.7X
+
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
+AMD EPYC 7763 64-Core Processor
+collation unit benchmarks - hashFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-equalsFunction - UTF8_BINARY                          0              0           0          2.3         439.8       1.0X
-collator.compare - UTF8_BINARY                        1              1           0          1.2         863.5       0.5X
-hashFunction - UTF8_BINARY                            3              4           0          0.3        3271.4       0.1X
-equalsFunction - UTF8_BINARY_LCASE                   84             85           1          0.0       83734.0       0.0X
-collator.compare - UTF8_BINARY_LCASE                 81             82           1          0.0       81132.4       0.0X
-hashFunction - UTF8_BINARY_LCASE                     47             47           1          0.0       46509.5       0.0X
-equalsFunction - UNICODE                              0              0           0          2.3         437.4       1.0X
-collator.compare - UNICODE                           50             51           1          0.0       49775.5       0.0X
-hashFunction - UNICODE                              217            221           3          0.0      217053.0       0.0X
-equalsFunction - UNICODE_CI                          49             50           1          0.0       48482.7       0.0X
-collator.compare - UNICODE_CI                        49             50           1          0.0       48517.4       0.0X
-hashFunction - UNICODE_CI                           211            213           3          0.0      210795.4       0.0X
+UTF8_BINARY_LCASE                                 23553          23595          59          0.0      235531.8       1.0X
+UNICODE                                          197303         197309           8          0.0     1973034.1       0.1X
+UTF8_BINARY                                       14389          14391           2          0.0      143891.2       1.6X
+UNICODE_CI                                       166880         166885           7          0.0     1668799.5       0.1X
 
