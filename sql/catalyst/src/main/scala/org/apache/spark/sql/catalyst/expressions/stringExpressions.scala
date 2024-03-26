@@ -304,7 +304,7 @@ case class Elt(
             "inputSql" -> toSQLExpr(indexExpr),
             "inputType" -> toSQLType(indexType)))
       }
-      if (inputTypes.exists(tpe => !Seq(StringType, BinaryType).contains(tpe))) {
+      if (inputTypes.exists(tpe => !tpe.isInstanceOf[StringType] && tpe != BinaryType)) {
         return DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
@@ -503,14 +503,6 @@ abstract class StringPredicate extends BinaryExpression
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      return defaultCheck
-    }
-    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
-  }
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any =
     compare(input1.asInstanceOf[UTF8String], input2.asInstanceOf[UTF8String])
@@ -1973,7 +1965,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
   override def nullSafeEval(string: Any, pos: Any, len: Any): Any = {
     str.dataType match {
-      case StringType => string.asInstanceOf[UTF8String]
+      case _: StringType => string.asInstanceOf[UTF8String]
         .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
       case BinaryType => ByteArray.subStringSQL(string.asInstanceOf[Array[Byte]],
         pos.asInstanceOf[Int], len.asInstanceOf[Int])
@@ -1984,7 +1976,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
     defineCodeGen(ctx, ev, (string, pos, len) => {
       str.dataType match {
-        case StringType => s"$string.substringSQL($pos, $len)"
+        case _: StringType => s"$string.substringSQL($pos, $len)"
         case BinaryType => s"${classOf[ByteArray].getName}.subStringSQL($string, $pos, $len)"
       }
     })

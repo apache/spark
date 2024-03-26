@@ -1216,6 +1216,7 @@ class TypesTestsMixin:
         instances = [
             NullType(),
             StringType(),
+            StringType(-1),
             StringType(0),
             StringType(1),
             StringType(2),

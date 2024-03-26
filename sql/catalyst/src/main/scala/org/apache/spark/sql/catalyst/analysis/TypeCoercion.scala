@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts.{castStringType, getOutputCollation, hasStringType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -608,9 +609,11 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
+        val collationId = getOutputCollation(c.children, failOnIndeterminate = false)
         val newChildren = c.children.map { e =>
-          implicitCast(e, StringType).getOrElse(e)
+          implicitCast(e, StringType(collationId)).getOrElse(e)
         }
+
         c.copy(children = newChildren)
     }
   }
@@ -656,8 +659,9 @@ abstract class TypeCoercionBase {
         val newIndex = implicitCast(index, IntegerType).getOrElse(index)
         val newInputs = if (conf.eltOutputAsString ||
           !children.tail.map(_.dataType).forall(_ == BinaryType)) {
+          val collationId = getOutputCollation(children, failOnIndeterminate = false)
           children.tail.map { e =>
-            implicitCast(e, StringType).getOrElse(e)
+            implicitCast(e, StringType(collationId)).getOrElse(e)
           }
         } else {
           children.tail
@@ -702,26 +706,39 @@ abstract class TypeCoercionBase {
         }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+        val childrenBeforeCollations: Seq[Expression] = e.children.zip(e.inputTypes).map {
           // If we cannot do the implicit cast, just use the original input.
-          implicitCast(in, expected).getOrElse(in)
+          case (in, expected) => implicitCast(in, expected).getOrElse(in)
+        }
+        val collationId = getOutputCollation(e.children)
+        val children: Seq[Expression] = childrenBeforeCollations.map {
+          case in if hasStringType(in.dataType) =>
+            castStringType(in, collationId).getOrElse(in)
+          case in => in
         }
         e.withNewChildren(children)
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
         // general implicit casting.
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
+        val childrenBeforeCollations: Seq[Expression] =
+          e.children.zip(e.inputTypes).map { case (in, expected) =>
           if (in.dataType == NullType && !expected.acceptsType(NullType)) {
             Literal.create(null, expected.defaultConcreteType)
           } else {
             in
           }
         }
+        val collationId = getOutputCollation(e.children)
+        val children: Seq[Expression] = childrenBeforeCollations.map {
+          case in if hasStringType(in.dataType) =>
+            castStringType(in, collationId).getOrElse(in)
+          case in => in
+        }
         e.withNewChildren(children)
 
       case udf: ScalaUDF if udf.inputTypes.nonEmpty =>
-        val children = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
+        val childrenBeforeCollations = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
           // Currently Scala UDF will only expect `AnyDataType` at top level, so this trick works.
           // In the future we should create types like `AbstractArrayType`, so that Scala UDF can
           // accept inputs of array type of arbitrary element type.
@@ -733,7 +750,12 @@ abstract class TypeCoercionBase {
               udfInputToCastType(in.dataType, expected.asInstanceOf[DataType])
             ).getOrElse(in)
           }
-
+        }
+        val collationId = getOutputCollation(udf.children)
+        val children: Seq[Expression] = childrenBeforeCollations.map {
+          case in if hasStringType(in.dataType) =>
+            castStringType(in, collationId).getOrElse(in)
+          case in => in
         }
         udf.copy(children = children)
     }
@@ -798,7 +820,7 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case DateAdd(l, r) if r.dataType == StringType && r.foldable =>
+      case DateAdd(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
         val days = try {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
@@ -806,7 +828,7 @@ abstract class TypeCoercionBase {
             throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
         }
         DateAdd(l, Literal(days))
-      case DateSub(l, r) if r.dataType == StringType && r.foldable =>
+      case DateSub(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
         val days = try {
           Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
         } catch {
@@ -837,6 +859,7 @@ object TypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
+      CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -885,8 +908,8 @@ object TypeCoercion extends TypeCoercionBase {
 
   /** Promotes all the way to StringType. */
   private def stringPromotion(dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
-    case (StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(StringType)
-    case (t1: AtomicType, StringType) if t1 != BinaryType && t1 != BooleanType => Some(StringType)
+    case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
+    case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
     case _ => None
   }
 
@@ -909,16 +932,16 @@ object TypeCoercion extends TypeCoercionBase {
    */
   def findCommonTypeForBinaryComparison(
       dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
-    case (StringType, DateType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
-    case (DateType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(DateType)
-    case (StringType, TimestampType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
-    case (TimestampType, StringType)
-      => if (conf.castDatetimeToString) Some(StringType) else Some(TimestampType)
-    case (StringType, NullType) => Some(StringType)
-    case (NullType, StringType) => Some(StringType)
+    case (st: StringType, DateType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (DateType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(DateType)
+    case (st: StringType, TimestampType)
+      => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    case (TimestampType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    case (st: StringType, NullType) => Some(st)
+    case (NullType, st: StringType) => Some(st)
 
     // Cast to TimestampType when we compare DateType with TimestampType
     // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
@@ -974,7 +997,7 @@ object TypeCoercion extends TypeCoercionBase {
 
       // If the function accepts any numeric type and the input is a string, we follow the hive
       // convention and cast that input into a double
-      case (StringType, NumericType) => NumericType.defaultConcreteType
+      case (_: StringType, NumericType) => NumericType.defaultConcreteType
 
       // Implicit cast among numeric types. When we reach here, input type is not acceptable.
 
@@ -989,15 +1012,16 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: DatetimeType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
 
       // Implicit cast from/to string
-      case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
-      case (StringType, target: NumericType) => target
-      case (StringType, datetime: DatetimeType) => datetime
-      case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
-      case (StringType, BinaryType) => BinaryType
+      case (_: StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
+      case (_: StringType, target: NumericType) => target
+      case (_: StringType, datetime: DatetimeType) => datetime
+      case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
+      case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, StringType) if !any.isInstanceOf[StringType] => StringType
+      case (any: AtomicType, _: StringType) if !any.isInstanceOf[StringType] => StringType
       case (any: AtomicType, st: StringTypeCollated)
         if !any.isInstanceOf[StringType] => st.defaultConcreteType
+
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
@@ -1075,7 +1099,7 @@ object TypeCoercion extends TypeCoercionBase {
    */
   @tailrec
   def hasStringType(dt: DataType): Boolean = dt match {
-    case StringType => true
+    case _: StringType => true
     case ArrayType(et, _) => hasStringType(et)
     // Add StructType if we support string promotion for struct fields in the future.
     case _ => false

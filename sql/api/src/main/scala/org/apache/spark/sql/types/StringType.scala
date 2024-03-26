@@ -43,11 +43,18 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   def isLowercaseCollation: Boolean = collationId == CollationFactory.LOWERCASE_COLLATION_ID
 
   /**
+   * Returns whether the collation is indeterminate. An indeterminate collation is
+   * a result of combination of conflicting non-default implicit collations.
+   */
+  def isIndeterminateCollation: Boolean = collationId == CollationFactory.INDETERMINATE_COLLATION_ID
+
+  /**
    * Type name that is shown to the customer.
    * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
    */
   override def typeName: String =
     if (isDefaultCollation) "string"
+    else if (isIndeterminateCollation) s"string collate INDETERMINATE_COLLATION"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
   override def equals(obj: Any): Boolean =
