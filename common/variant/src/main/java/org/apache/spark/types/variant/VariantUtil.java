@@ -17,6 +17,13 @@
 
 package org.apache.spark.types.variant;
 
+import org.apache.spark.QueryContext;
+import org.apache.spark.SparkRuntimeException;
+import scala.collection.immutable.Map$;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
 /**
  * This class defines constants related to the variant format and provides functions for
  * manipulating variant binaries.
@@ -140,5 +147,296 @@ public class VariantUtil {
   public static byte arrayHeader(boolean largeSize, int offsetSize) {
     return (byte) (((largeSize ? 1 : 0) << (BASIC_TYPE_BITS + 2)) |
         ((offsetSize - 1) << BASIC_TYPE_BITS) | ARRAY);
+  }
+
+  // An exception indicating that the variant value or metadata doesn't
+  static SparkRuntimeException malformedVariant() {
+    return new SparkRuntimeException("MALFORMED_VARIANT",
+        Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
+  }
+
+  // An exception indicating that an external caller tried to call the Variant constructor with
+  // value or metadata exceeding the 16MiB size limit. We will never construct a Variant this large,
+  // so it should only be possible to encounter this exception when reading a Variant produced by
+  // another tool.
+  static SparkRuntimeException variantConstructorSizeLimit() {
+    return new SparkRuntimeException("VARIANT_CONSTRUCTOR_SIZE_LIMIT",
+        Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
+  }
+
+  // Check the validity of an array index `pos`. Throw `MALFORMED_VARIANT` if it is out of bound,
+  // meaning that the variant is malformed.
+  static void checkIndex(int pos, int length) {
+    if (pos < 0 || pos >= length) throw malformedVariant();
+  }
+
+  // Read a little-endian signed long value from `bytes[pos, pos + numBytes)`.
+  static long readLong(byte[] bytes, int pos, int numBytes) {
+    checkIndex(pos, bytes.length);
+    checkIndex(pos + numBytes - 1, bytes.length);
+    long result = 0;
+    // All bytes except the most significant byte should be unsign-extended and shifted (so we need
+    // `& 0xFF`). The most significant byte should be sign-extended and is handled after the loop.
+    for (int i = 0; i < numBytes - 1; ++i) {
+      long unsignedByteValue = bytes[pos + i] & 0xFF;
+      result |= unsignedByteValue << (8 * i);
+    }
+    long signedByteValue = bytes[pos + numBytes - 1];
+    result |= signedByteValue << (8 * (numBytes - 1));
+    return result;
+  }
+
+  // Read a little-endian unsigned int value from `bytes[pos, pos + numBytes)`. The value must fit
+  // into a non-negative int (`[0, Integer.MAX_VALUE]`).
+  static int readUnsigned(byte[] bytes, int pos, int numBytes) {
+    checkIndex(pos, bytes.length);
+    checkIndex(pos + numBytes - 1, bytes.length);
+    int result = 0;
+    // Similar to the `readLong` loop, but all bytes should be unsign-extended.
+    for (int i = 0; i < numBytes; ++i) {
+      int unsignedByteValue = bytes[pos + i] & 0xFF;
+      result |= unsignedByteValue << (8 * i);
+    }
+    if (result < 0) throw malformedVariant();
+    return result;
+  }
+
+  // The value type of variant value. It is determined by the header byte but not a 1:1 mapping
+  // (for example, INT1/2/4/8 all maps to `Type.LONG`).
+  public enum Type {
+    OBJECT,
+    ARRAY,
+    NULL,
+    BOOLEAN,
+    LONG,
+    STRING,
+    DOUBLE,
+    DECIMAL,
+  }
+
+  // Get the value type of variant value `value[pos...]`. It is only legal to call `get*` if
+  // `getType` returns this type (for example, it is only legal to call `getLong` if `getType`
+  // returns `Type.Long`).
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static Type getType(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    switch (basicType) {
+      case SHORT_STR:
+        return Type.STRING;
+      case OBJECT:
+        return Type.OBJECT;
+      case ARRAY:
+        return Type.ARRAY;
+      default:
+        switch (typeInfo) {
+          case NULL:
+            return Type.NULL;
+          case TRUE:
+          case FALSE:
+            return Type.BOOLEAN;
+          case INT1:
+          case INT2:
+          case INT4:
+          case INT8:
+            return Type.LONG;
+          case DOUBLE:
+            return Type.DOUBLE;
+          case DECIMAL4:
+          case DECIMAL8:
+          case DECIMAL16:
+            return Type.DECIMAL;
+          case LONG_STR:
+            return Type.STRING;
+          default:
+            throw malformedVariant();
+        }
+    }
+  }
+
+  static IllegalStateException unexpectedType(Type type) {
+    return new IllegalStateException("Expect type to be " + type);
+  }
+
+  // Get a boolean value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static boolean getBoolean(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || (typeInfo != TRUE && typeInfo != FALSE)) {
+      throw unexpectedType(Type.BOOLEAN);
+    }
+    return typeInfo == TRUE;
+  }
+
+  // Get a long value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static long getLong(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE) throw unexpectedType(Type.LONG);
+    switch (typeInfo) {
+      case INT1:
+        return readLong(value, pos + 1, 1);
+      case INT2:
+        return readLong(value, pos + 1, 2);
+      case INT4:
+        return readLong(value, pos + 1, 4);
+      case INT8:
+        return readLong(value, pos + 1, 8);
+      default:
+        throw unexpectedType(Type.LONG);
+    }
+  }
+
+  // Get a double value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static double getDouble(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || typeInfo != DOUBLE) throw unexpectedType(Type.DOUBLE);
+    return Double.longBitsToDouble(readLong(value, pos + 1, 8));
+  }
+
+  // Get a decimal value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static BigDecimal getDecimal(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE) throw unexpectedType(Type.DECIMAL);
+    int scale = value[pos + 1];
+    BigDecimal result;
+    switch (typeInfo) {
+      case DECIMAL4:
+        result = BigDecimal.valueOf(readLong(value, pos + 2, 4), scale);
+        break;
+      case DECIMAL8:
+        result = BigDecimal.valueOf(readLong(value, pos + 2, 8), scale);
+        break;
+      case DECIMAL16:
+        checkIndex(pos + 17, value.length);
+        byte[] bytes = new byte[16];
+        // Copy the bytes reversely because the `BigInteger` constructor expects a big-endian
+        // representation.
+        for (int i = 0; i < 16; ++i) {
+          bytes[i] = value[pos + 17 - i];
+        }
+        result = new BigDecimal(new BigInteger(bytes), scale);
+        break;
+      default:
+        throw unexpectedType(Type.DECIMAL);
+    }
+    return result.stripTrailingZeros();
+  }
+
+  // Get a string value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static String getString(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType == SHORT_STR || (basicType == PRIMITIVE && typeInfo == LONG_STR)) {
+      int start;
+      int length;
+      if (basicType == SHORT_STR) {
+        start = pos + 1;
+        length = typeInfo;
+      } else {
+        start = pos + 1 + U32_SIZE;
+        length = readUnsigned(value, pos + 1, U32_SIZE);
+      }
+      checkIndex(start + length - 1, value.length);
+      return new String(value, start, length);
+    }
+    throw unexpectedType(Type.STRING);
+  }
+
+  public interface ObjectHandler<T> {
+    /**
+     * @param size Number of object fields.
+     * @param idSize The integer size of the field id list.
+     * @param offsetSize The integer size of the offset list.
+     * @param idStart The starting index of the field id list in the variant value array.
+     * @param offsetStart The starting index of the offset list in the variant value array.
+     * @param dataStart The starting index of field data in the variant value array.
+     */
+    T apply(int size, int idSize, int offsetSize, int idStart, int offsetStart, int dataStart);
+  }
+
+  // A helper function to access a variant object. It provides `handler` with its required
+  // parameters and returns what it returns.
+  public static <T> T handleObject(byte[] value, int pos, ObjectHandler<T> handler) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != OBJECT) throw unexpectedType(Type.OBJECT);
+    // Refer to the comment of the `OBJECT` constant for the details of the object header encoding.
+    // Suppose `typeInfo` has a bit representation of 0_b4_b3b2_b1b0, the following line extracts
+    // b4 to determine whether the object uses a 1/4-byte size.
+    boolean largeSize = ((typeInfo >> 4) & 0x1) != 0;
+    int sizeBytes = (largeSize ? U32_SIZE : 1);
+    int size = readUnsigned(value, pos + 1, sizeBytes);
+    // Extracts b3b2 to determine the integer size of the field id list.
+    int idSize = ((typeInfo >> 2) & 0x3) + 1;
+    // Extracts b1b0 to determine the integer size of the offset list.
+    int offsetSize = (typeInfo & 0x3) + 1;
+    int idStart = pos + 1 + sizeBytes;
+    int offsetStart = idStart + size * idSize;
+    int dataStart = offsetStart + (size + 1) * offsetSize;
+    return handler.apply(size, idSize, offsetSize, idStart, offsetStart, dataStart);
+  }
+
+  public interface ArrayHandler<T> {
+    /**
+     * @param size Number of array elements.
+     * @param offsetSize The integer size of the offset list.
+     * @param offsetStart The starting index of the offset list in the variant value array.
+     * @param dataStart The starting index of element data in the variant value array.
+     */
+    T apply(int size, int offsetSize, int offsetStart, int dataStart);
+  }
+
+  // A helper function to access a variant array.
+  public static <T> T handleArray(byte[] value, int pos, ArrayHandler<T> handler) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != ARRAY) throw unexpectedType(Type.ARRAY);
+    // Refer to the comment of the `ARRAY` constant for the details of the object header encoding.
+    // Suppose `typeInfo` has a bit representation of 000_b2_b1b0, the following line extracts
+    // b2 to determine whether the object uses a 1/4-byte size.
+    boolean largeSize = ((typeInfo >> 2) & 0x1) != 0;
+    int sizeBytes = (largeSize ? U32_SIZE : 1);
+    int size = readUnsigned(value, pos + 1, sizeBytes);
+    // Extracts b1b0 to determine the integer size of the offset list.
+    int offsetSize = (typeInfo & 0x3) + 1;
+    int offsetStart = pos + 1 + sizeBytes;
+    int dataStart = offsetStart + (size + 1) * offsetSize;
+    return handler.apply(size, offsetSize, offsetStart, dataStart);
+  }
+
+  // Get a key at `id` in the variant metadata.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
+  // a malformed variant because it is read from the corresponding variant value.
+  public static String getMetadataKey(byte[] metadata, int id) {
+    checkIndex(0, metadata.length);
+    // Extracts the highest 2 bits in the metadata header to determine the integer size of the
+    // offset list.
+    int offsetSize = ((metadata[0] >> 6) & 0x3) + 1;
+    int dictSize = readUnsigned(metadata, 1, offsetSize);
+    if (id >= dictSize) throw malformedVariant();
+    // There are a header byte, a `dictSize` with `offsetSize` bytes, and `(dictSize + 1)` offsets
+    // before the string data.
+    int stringStart = 1 + (dictSize + 2) * offsetSize;
+    int offset = readUnsigned(metadata, 1 + (id + 1) * offsetSize, offsetSize);
+    int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
+    if (offset > nextOffset) throw malformedVariant();
+    checkIndex(stringStart + nextOffset - 1, metadata.length);
+    return new String(metadata, stringStart + offset, nextOffset - offset);
   }
 }

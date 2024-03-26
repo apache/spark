@@ -230,7 +230,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.10.0</kubernetes-client.version>
+    <kubernetes-client.version>6.11.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -647,17 +647,6 @@
         <version>${commons.collections4.version}</version>
       </dependency>
       <dependency>
-        <groupId>commons-beanutils</groupId>
-        <artifactId>commons-beanutils</artifactId>
-        <version>1.9.4</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-logging</groupId>
-        <artifactId>commons-logging</artifactId>
-        <!-- Hive uses commons-logging 1.1.3 from 0.13 to 1.2 -->
-        <version>1.1.3</version>
-      </dependency>
-      <dependency>
         <groupId>org.apache.ivy</groupId>
         <artifactId>ivy</artifactId>
         <version>${ivy.version}</version>
@@ -671,6 +660,12 @@
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpclient</artifactId>
         <version>${commons.httpclient.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
@@ -721,6 +716,12 @@
         <artifactId>htmlunit3-driver</artifactId>
         <version>${htmlunit3-driver.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- log4j -->
@@ -1347,6 +1348,12 @@
         <artifactId>hadoop-client-runtime</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
