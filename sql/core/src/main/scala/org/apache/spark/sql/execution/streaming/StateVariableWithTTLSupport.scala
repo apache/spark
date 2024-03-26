@@ -103,6 +103,7 @@ class SingleKeyTTLState(
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
+  // TODO: use range scan once Range Scan PR is merged for StateStore
   store.createColFamilyIfAbsent(ttlColumnFamilyName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
     NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA), isInternal = true)
 
