@@ -1818,6 +1818,14 @@ class PlanGenerationTestSuite
     fn.hours(Column("a"))
   }
 
+  functionTest("collate") {
+    fn.collate(fn.col("g"), "UNICODE")
+  }
+
+  functionTest("collation") {
+    fn.collation(fn.col("g"))
+  }
+
   temporalFunctionTest("convert_timezone with source time zone") {
     fn.convert_timezone(lit("\"Africa/Dakar\""), lit("\"Asia/Urumqi\""), fn.col("t"))
   }

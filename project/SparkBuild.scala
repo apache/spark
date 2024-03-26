@@ -58,10 +58,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, sqlApi, _*
+    commonUtils, sqlApi, variant, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "sql-api"
+    "tags", "sketch", "kvstore", "common-utils", "sql-api", "variant"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ Seq(connectCommon, connect, connectClient)
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
@@ -91,7 +91,7 @@ object BuildCommons {
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
   val protoVersion = "3.25.1"
   // GRPC version used for Spark Connect.
-  val grpcVersion = "1.59.0"
+  val grpcVersion = "1.62.2"
 }
 
 object SparkBuild extends PomBuild {
@@ -160,16 +160,21 @@ object SparkBuild extends PomBuild {
     val replacements = Map(
       """customId="println" level="error"""" -> """customId="println" level="warn""""
     )
-    var contents = Source.fromFile(in).getLines.mkString("\n")
-    for ((k, v) <- replacements) {
-      require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
-      contents = contents.replace(k, v)
+    val source = Source.fromFile(in)
+    try {
+      var contents = source.getLines.mkString("\n")
+      for ((k, v) <- replacements) {
+        require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
+        contents = contents.replace(k, v)
+      }
+      new PrintWriter(out) {
+        write(contents)
+        close()
+      }
+      out
+    } finally {
+      source.close()
     }
-    new PrintWriter(out) {
-      write(contents)
-      close()
-    }
-    out
   }
 
   // Return a cached scalastyle task for a given configuration (usually Compile or Test)
@@ -361,7 +366,8 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient
+      unsafe, tags, tokenProviderKafka010, sqlKafka010, connectCommon, connect, connectClient,
+      variant
     ).contains(x)
   }
 
@@ -1077,6 +1083,7 @@ object ExcludedDependencies {
     // purpose only. Here we exclude them from the whole project scope and add them w/ yarn only.
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
+      ExclusionRule(organization = "ch.qos.logback"),
       ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }

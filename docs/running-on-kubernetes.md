@@ -236,7 +236,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages org.apache.hadoop:hadoop-aws:3.2.2
+--packages org.apache.hadoop:hadoop-aws:3.4.0
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
@@ -1927,10 +1927,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.4.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.5.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.4.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.5.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

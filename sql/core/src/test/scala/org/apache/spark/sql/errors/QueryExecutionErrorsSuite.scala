@@ -889,7 +889,7 @@ class QueryExecutionErrorsSuite
       query.awaitTermination()
     }
     assert(e.getErrorClass === "STREAM_FAILED")
-    assert(e.getCause.getCause.isInstanceOf[NullPointerException])
+    assert(e.getCause.isInstanceOf[NullPointerException])
   }
 
   test("CONCURRENT_QUERY: streaming query is resumed from many sessions") {

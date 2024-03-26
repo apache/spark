@@ -102,7 +102,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
    */
-  final def missingInput: AttributeSet = references -- inputSet
+  final def missingInput: AttributeSet = {
+    if (references.isEmpty) {
+      AttributeSet.empty
+    } else {
+      references -- inputSet
+    }
+  }
 
   /**
    * Runs [[transformExpressionsDown]] with `rule` on all expressions present

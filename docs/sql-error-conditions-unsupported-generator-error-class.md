@@ -32,7 +32,7 @@ This error class has the following derived error classes:
 
 ## MULTI_GENERATOR
 
-only one generator allowed per `<clause>` clause but found `<num>`: `<generators>`.
+only one generator allowed per SELECT clause but found `<num>`: `<generators>`.
 
 ## NESTED_IN_EXPRESSIONS
 

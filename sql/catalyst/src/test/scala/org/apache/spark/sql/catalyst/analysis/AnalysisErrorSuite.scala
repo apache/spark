@@ -295,11 +295,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) FILTER (WHERE c > 1)", 7, 76)))
   }
 
-  errorTest(
-    "non-deterministic filter predicate in aggregate functions",
-    CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
-    "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
-
   test("function don't support ignore nulls") {
     assertAnalysisErrorClass(
       CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
@@ -393,11 +388,6 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "inputSql" -> "\"true\"",
       "inputType" -> "\"BOOLEAN\"",
       "requiredType" -> "\"INT\""))
-
-  errorTest(
-    "too many generators",
-    listRelation.select(Explode($"list").as("a"), Explode($"list").as("b")),
-    "only one generator" :: "explode" :: Nil)
 
   errorClassTest(
     "unresolved attributes",
@@ -805,35 +795,12 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
     Map("limit" -> "1000000000", "offset" -> "2000000000"))
 
   errorTest(
-    "more than one generators in SELECT",
-    listRelation.select(Explode($"list"), Explode($"list")),
-    "The generator is not supported: only one generator allowed per select clause but found 2: " +
-      """"explode(list)", "explode(list)"""" :: Nil
-  )
-
-  errorTest(
     "more than one generators for aggregates in SELECT",
     testRelation.select(Explode(CreateArray(min($"a") :: Nil)),
       Explode(CreateArray(max($"a") :: Nil))),
-    "The generator is not supported: only one generator allowed per select clause but found 2: " +
+    "The generator is not supported: only one generator allowed per SELECT clause but found 2: " +
       """"explode(array(min(a)))", "explode(array(max(a)))"""" :: Nil
   )
-
-  errorTest(
-    "SPARK-38666: non-boolean aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where e) FROM TaBlE2"),
-    "FILTER expression is not of type boolean" :: Nil)
-
-  errorTest(
-    "SPARK-38666: aggregate in aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where max(e) > 1) FROM TaBlE2"),
-    "FILTER expression contains aggregate" :: Nil)
-
-  errorTest(
-    "SPARK-38666: window function in aggregate filter",
-    CatalystSqlParser.parsePlan("SELECT sum(c) " +
-       "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
-    "FILTER expression contains window function" :: Nil)
 
   errorClassTest(
     "EXEC IMMEDIATE - nested execute immediate not allowed",
@@ -862,6 +829,19 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
         "varType" -> "\"INT\""
       ))
   }
+
+  test("EXEC IMMEDIATE - Null string as sqlString parameter") {
+    val execImmediatePlan = ExecuteImmediateQuery(
+      Seq.empty,
+      scala.util.Right(UnresolvedAttribute("testVarNull")),
+      Seq(UnresolvedAttribute("testVarNull")))
+
+    assertAnalysisErrorClass(
+      inputPlan = execImmediatePlan,
+      expectedErrorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+      expectedMessageParameters = Map("varName" -> "`testVarNull`"))
+  }
+
 
   test("EXEC IMMEDIATE - Unsupported expr for parameter") {
     val execImmediatePlan: LogicalPlan = ExecuteImmediateQuery(

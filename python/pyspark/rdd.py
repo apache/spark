@@ -1128,7 +1128,7 @@ class RDD(Generic[T_co]):
 
         Parameters
         ----------
-        withReplacement : list
+        withReplacement : bool
             whether sampling is done with replacement
         num : int
             size of the returned sample

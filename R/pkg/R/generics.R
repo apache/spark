@@ -921,6 +921,14 @@ setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
 #' @name NULL
 setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
+#' @rdname column_string_functions
+#' @name NULL
+setGeneric("collate", function(x, collation) { standardGeneric("collate") })
+
+#' @rdname column_string_functions
+#' @name NULL
+setGeneric("collation", function(x) { standardGeneric("collation") })
+
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("collect_list", function(x) { standardGeneric("collect_list") })

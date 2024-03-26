@@ -53,11 +53,12 @@ private[sql] class RocksDBStateStoreProvider
         keySchema: StructType,
         numColsPrefixKey: Int,
         valueSchema: StructType,
-        useMultipleValuesPerKey: Boolean = false): Unit = {
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
         s"Failed to create column family with reserved_name=$colFamilyName")
       verify(useColumnFamilies, "Column families are not supported in this store")
-      rocksDB.createColFamilyIfAbsent(colFamilyName)
+      rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
@@ -101,14 +102,14 @@ private[sql] class RocksDBStateStoreProvider
 
     override def merge(key: UnsafeRow, value: UnsafeRow,
         colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
-      verify(state == UPDATING, "Cannot put after already committed or aborted")
+      verify(state == UPDATING, "Cannot merge after already committed or aborted")
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val keyEncoder = kvEncoder._1
       val valueEncoder = kvEncoder._2
       verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
         " which supports multiple values for a single key")
       verify(key != null, "Key cannot be null")
-      require(value != null, "Cannot put a null value")
+      require(value != null, "Cannot merge a null value")
       rocksDB.merge(keyEncoder.encodeKey(key), valueEncoder.encodeValue(value), colFamilyName)
     }
 

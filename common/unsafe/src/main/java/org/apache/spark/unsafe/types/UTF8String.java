@@ -22,7 +22,6 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -31,7 +30,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import org.apache.spark.SparkException;
+import com.ibm.icu.text.StringSearch;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -343,19 +342,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return false;
   }
 
-  public boolean contains(final UTF8String substring, int collationId) throws SparkException {
+  public boolean contains(final UTF8String substring, int collationId) {
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.contains(substring);
     }
     if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
       return this.toLowerCase().contains(substring.toLowerCase());
     }
-    // TODO: enable ICU collation support for "contains" (SPARK-47248)
-    Map<String, String> params = new HashMap<>();
-    params.put("functionName", "contains");
-    params.put("collationName", CollationFactory.fetchCollation(collationId).collationName);
-    throw new SparkException("UNSUPPORTED_COLLATION.FOR_FUNCTION",
-            SparkException.constructMessageParams(params), null);
+    return collatedContains(substring, collationId);
+  }
+
+  private boolean collatedContains(final UTF8String substring, int collationId) {
+    if (substring.numBytes == 0) return true;
+    if (this.numBytes == 0) return false;
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
+    while (stringSearch.next() != StringSearch.DONE) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -373,10 +379,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private boolean matchAt(final UTF8String s, int pos, int collationId) {
-    if (s.numBytes + pos > numBytes || pos < 0) {
+    if (s.numChars() + pos > this.numChars() || pos < 0) {
       return false;
     }
-    return this.substring(pos, pos + s.numBytes).semanticCompare(s, collationId) == 0;
+    if (s.numBytes == 0 || this.numBytes == 0) {
+      return s.numBytes == 0;
+    }
+    return CollationFactory.getStringSearch(this.substring(pos, pos + s.numChars()),
+      s, collationId).last() == 0;
   }
 
   public boolean startsWith(final UTF8String prefix) {
@@ -1450,7 +1460,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Binary comparison of two UTF8String. Can only be used for default UCS_BASIC collation.
+   * Binary comparison of two UTF8String. Can only be used for default UTF8_BINARY collation.
    */
   public int binaryCompare(final UTF8String other) {
     return ByteArray.compareBinary(

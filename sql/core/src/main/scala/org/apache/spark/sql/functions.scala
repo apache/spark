@@ -3945,6 +3945,22 @@ object functions {
   def octet_length(e: Column): Column = Column.fn("octet_length", e)
 
   /**
+   * Marks a given column with specified collation.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collate(e: Column, collation: String): Column = Column.fn("collate", e, lit(collation))
+
+  /**
+   * Returns the collation name of a given column.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def collation(e: Column): Column = Column.fn("collation", e)
+
+  /**
    * Returns true if `str` matches `regexp`, or false otherwise.
    *
    * @group predicate_funcs

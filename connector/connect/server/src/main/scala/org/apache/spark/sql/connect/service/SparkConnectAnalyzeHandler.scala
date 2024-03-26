@@ -34,9 +34,14 @@ private[connect] class SparkConnectAnalyzeHandler(
     extends Logging {
 
   def handle(request: proto.AnalyzePlanRequest): Unit = {
+    val previousSessionId = request.hasClientObservedServerSideSessionId match {
+      case true => Some(request.getClientObservedServerSideSessionId)
+      case false => None
+    }
     val sessionHolder = SparkConnectService.getOrCreateIsolatedSession(
       request.getUserContext.getUserId,
-      request.getSessionId)
+      request.getSessionId,
+      previousSessionId)
     // `withSession` ensures that session-specific artifacts (such as JARs and class files) are
     // available during processing (such as deserialization).
     sessionHolder.withSession { _ =>

@@ -1054,6 +1054,8 @@ class SparkConnectClient(object):
             client_type=self._builder.userAgent,
             tags=list(self.get_tags()),
         )
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -1061,6 +1063,8 @@ class SparkConnectClient(object):
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1381,6 +1385,8 @@ class SparkConnectClient(object):
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1416,6 +1422,8 @@ class SparkConnectClient(object):
         The result of the config call.
         """
         req = self._config_request_with_metadata()
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.operation.CopyFrom(operation)
         try:
             for attempt in self._retrying():
@@ -1432,6 +1440,8 @@ class SparkConnectClient(object):
     ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if interrupt_type == "all":
             req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
@@ -1591,6 +1601,8 @@ class SparkConnectClient(object):
             client_type=self._builder.userAgent,
             error_id=info.metadata["errorId"],
         )
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
 

@@ -375,6 +375,11 @@ class FunctionsTestsMixin:
                 df.select(getattr(F, name)(F.col("name"))).first()[0],
             )
 
+    def test_collation(self):
+        df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
+        self.assertEqual([Row("UNICODE")], actual)
+
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
         df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])

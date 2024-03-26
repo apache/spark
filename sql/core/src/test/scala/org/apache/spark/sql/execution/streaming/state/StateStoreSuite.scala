@@ -134,6 +134,69 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  private def verifyStoreOperationUnsupported(operationName: String)(testFn: => Unit): Unit = {
+    if (operationName != "merge") {
+      val ex = intercept[SparkUnsupportedOperationException] {
+        testFn
+      }
+      checkError(
+        ex,
+        errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+        parameters = Map(
+          "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+    } else {
+      val ex = intercept[SparkUnsupportedOperationException] {
+        testFn
+      }
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+        parameters = Map(
+          "operationType" -> operationName,
+          "entity" -> "HDFSBackedStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+
+    }
+  }
+
+  test("get, put, remove etc operations on non-default col family should fail") {
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
+      minDeltasForSnapshot = 5)) { provider =>
+      val store = provider.getStore(0)
+      val keyRow = dataToKeyRow("a", 0)
+      val valueRow = dataToValueRow(1)
+      val colFamilyName = "test"
+      verifyStoreOperationUnsupported("put") {
+        store.put(keyRow, valueRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("remove") {
+        store.remove(keyRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("get") {
+        store.get(keyRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("merge") {
+        store.merge(keyRow, valueRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("iterator") {
+        store.iterator(colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("prefixScan") {
+        store.prefixScan(keyRow, colFamilyName)
+      }
+    }
+  }
+
   test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
     tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
       numOfVersToRetainInMemory = 1)) { provider =>

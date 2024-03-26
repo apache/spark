@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.python
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -27,9 +28,27 @@ class PythonScan(
      ds: PythonDataSourceV2,
      shortName: String,
      outputSchema: StructType,
-     options: CaseInsensitiveStringMap) extends Batch with Scan {
+     options: CaseInsensitiveStringMap) extends Scan {
 
-  private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
+
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+    new PythonMicroBatchStream(ds, shortName, outputSchema, options)
+
+  override def description: String = "(Python)"
+
+  override def readSchema(): StructType = outputSchema
+
+  override def supportedCustomMetrics(): Array[CustomMetric] =
+    ds.source.createPythonMetrics()
+}
+
+class PythonBatch(
+    ds: PythonDataSourceV2,
+    shortName: String,
+    outputSchema: StructType,
+    options: CaseInsensitiveStringMap) extends Batch {
+  private val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
 
   private lazy val infoInPython: PythonDataSourceReadInfo = {
     ds.source.createReadInfoInPython(
@@ -45,13 +64,4 @@ class PythonScan(
     new PythonPartitionReaderFactory(
       ds.source, readerFunc, outputSchema, jobArtifactUUID)
   }
-
-  override def toBatch: Batch = this
-
-  override def description: String = "(Python)"
-
-  override def readSchema(): StructType = outputSchema
-
-  override def supportedCustomMetrics(): Array[CustomMetric] =
-    ds.source.createPythonMetrics()
 }

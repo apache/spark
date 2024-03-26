@@ -71,7 +71,7 @@ Column or field `<name>` is ambiguous and has `<n>` matches.
 [SQLSTATE: 42702](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Column `<name>` is ambiguous. It's because you joined several DataFrame together, and some of these DataFrames are the same.
-This column points to one of the DataFrame but Spark is unable to figure out which one.
+This column points to one of the DataFrames but Spark is unable to figure out which one.
 Please alias the DataFrames with different names via `DataFrame.alias` before joining them,
 and specify the column using qualified name, e.g. `df.alias("a").join(df.alias("b"), col("a.id") > col("b.id"))`.
 
@@ -756,6 +756,12 @@ SQLSTATE: 58030
 
 Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename returned false.
 
+### FAILED_ROW_TO_JSON
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the row value `<value>` of the class `<class>` to the target SQL type `<sqlType>` in the JSON format.
+
 ### FIELDS_ALREADY_EXISTS
 
 [SQLSTATE: 42710](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -778,7 +784,7 @@ The operation `<statement>` is not allowed on the `<objectType>`: `<objectName>`
 
 [SQLSTATE: 39000](sql-error-conditions-sqlstates.html#class-39-external-routine-invocation-exception)
 
-An error occurred in the user provided function in foreach batch sink.
+An error occurred in the user provided function in foreach batch sink. Reason: `<reason>`
 
 ### FOUND_MULTIPLE_DATA_SOURCES
 
@@ -1050,6 +1056,14 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 
 Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
 
+### [INVALID_AGGREGATE_FILTER](sql-error-conditions-invalid-aggregate-filter-error-class.html)
+
+[SQLSTATE: 42903](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The FILTER expression `<filterExpr>` in an aggregate function is invalid.
+
+For more details see [INVALID_AGGREGATE_FILTER](sql-error-conditions-invalid-aggregate-filter-error-class.html)
+
 ### INVALID_ARRAY_INDEX
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1075,6 +1089,12 @@ The 0-indexed bitmap position `<bitPosition>` is out of bounds. The bitmap has `
 The boundary `<boundary>` is invalid: `<invalidValue>`.
 
 For more details see [INVALID_BOUNDARY](sql-error-conditions-invalid-boundary-error-class.html)
+
+### INVALID_BUCKET_COLUMN_DATA_TYPE
+
+[SQLSTATE: 42601](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot use `<type>` for bucket column. Collated data types are not supported for bucketing.
 
 ### INVALID_BUCKET_FILE
 
@@ -1116,6 +1136,14 @@ The cursor is invalid.
 
 For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-class.html)
 
+### [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
+
+[SQLSTATE: 22007](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Unrecognized datetime pattern: `<pattern>`.
+
+For more details see [INVALID_DATETIME_PATTERN](sql-error-conditions-invalid-datetime-pattern-error-class.html)
+
 ### [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
 
 [SQLSTATE: 42623](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1123,6 +1151,14 @@ For more details see [INVALID_CURSOR](sql-error-conditions-invalid-cursor-error-
 Failed to execute `<statement>` command because the destination column or variable `<colName>` has a DEFAULT value `<defaultValue>`,
 
 For more details see [INVALID_DEFAULT_VALUE](sql-error-conditions-invalid-default-value-error-class.html)
+
+### [INVALID_DELIMITER_VALUE](sql-error-conditions-invalid-delimiter-value-error-class.html)
+
+[SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Invalid value for delimiter.
+
+For more details see [INVALID_DELIMITER_VALUE](sql-error-conditions-invalid-delimiter-value-error-class.html)
 
 ### INVALID_DRIVER_MEMORY
 
@@ -1212,7 +1248,10 @@ For more details see [INVALID_HANDLE](sql-error-conditions-invalid-handle-error-
 
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-The identifier `<ident>` is invalid. Please, consider quoting it with back-quotes as ``<ident>``.
+The unquoted identifier `<ident>` is invalid and must be back quoted as: ``<ident>``.
+Unquoted identifiers can only contain ASCII letters ('a' - 'z', 'A' - 'Z'), digits ('0' - '9'), and underbar ('_').
+Unquoted identifiers must also not start with a digit.
+Different data sources and meta stores may impose additional restrictions on valid identifiers.
 
 ### INVALID_INDEX_OF_ZERO
 
@@ -1228,6 +1267,14 @@ Invalid inline table.
 
 For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-table-error-class.html)
 
+### [INVALID_INTERVAL_FORMAT](sql-error-conditions-invalid-interval-format-error-class.html)
+
+[SQLSTATE: 22006](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Error parsing '`<input>`' to interval. Please ensure that the value provided is in a valid format for defining an interval. You can reference the documentation for the correct format.
+
+For more details see [INVALID_INTERVAL_FORMAT](sql-error-conditions-invalid-interval-format-error-class.html)
+
 ### [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
 
 [SQLSTATE: 42K0K](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -1235,6 +1282,12 @@ For more details see [INVALID_INLINE_TABLE](sql-error-conditions-invalid-inline-
 Invalid inverse distribution function `<funcName>`.
 
 For more details see [INVALID_INVERSE_DISTRIBUTION_FUNCTION](sql-error-conditions-invalid-inverse-distribution-function-error-class.html)
+
+### INVALID_JSON_DATA_TYPE
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Failed to convert the JSON string '`<invalidType>`' to a data type. Please enter a valid data type.
 
 ### INVALID_JSON_ROOT_FIELD
 
@@ -1544,6 +1597,12 @@ Parse Mode: `<failFastMode>`. To process malformed records as null result, try s
 
 For more details see [MALFORMED_RECORD_IN_PARSING](sql-error-conditions-malformed-record-in-parsing-error-class.html)
 
+### MALFORMED_VARIANT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Variant binary is malformed. Please check the data source is valid.
+
 ### MERGE_CARDINALITY_VIOLATION
 
 [SQLSTATE: 23K01](sql-error-conditions-sqlstates.html#class-23-integrity-constraint-violation)
@@ -1621,6 +1680,12 @@ It is not allowed to use an aggregate function in the argument of another aggreg
 SQLSTATE: 07501
 
 Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (`<sqlString>`) does not contain another EXECUTE IMMEDIATE command.
+
+### NONEXISTENT_FIELD_NAME_IN_LIST
+
+SQLSTATE: HV091
+
+Field(s) `<nonExistFields>` do(es) not exist. Available fields: `<fieldNames>`
 
 ### NON_FOLDABLE_ARGUMENT
 
@@ -1775,6 +1840,12 @@ Row ID attributes cannot be nullable: `<nullableRowIdAttrs>`.
 
 Cannot use null as map key.
 
+### NULL_QUERY_STRING_EXECUTE_IMMEDIATE
+
+[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Execute immediate requires a non-null variable as the query string, but the provided variable `<varName>` is null.
+
 ### NUMERIC_OUT_OF_SUPPORTED_RANGE
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1916,6 +1987,12 @@ Protobuf type not yet supported: `<protobufType>`.
 [SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
 
 Failed to `<action>` Python data source `<type>`: `<msg>`
+
+### PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR
+
+[SQLSTATE: 38000](sql-error-conditions-sqlstates.html#class-38-external-routine-exception)
+
+Failed when Python streaming data source perform `<action>`: `<msg>`
 
 ### RECURSIVE_PROTOBUF_SCHEMA
 
@@ -2085,11 +2162,29 @@ The SQL config `<sqlConf>` cannot be found. Please verify that the config exists
 
 Star (*) is not allowed in a select list when GROUP BY an ordinal position is used.
 
-### STATE_STORE_CANNOT_REMOVE_DEFAULT_COLUMN_FAMILY
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Failed to remove default column family with reserved name=`<colFamilyName>`.
+Failed to perform stateful processor operation=`<operationType>` with invalid handle state=`<handleState>`.
+
+### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIMEOUT_MODE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
+
+### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to create column family with unsupported starting character and name=`<colFamilyName>`.
+
+### STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Failed to perform column family operation=`<operationName>` with invalid name=`<colFamilyName>`. Column family name cannot be empty or include leading/trailing spaces or use the reserved keyword=default
 
 ### STATE_STORE_HANDLE_NOT_INITIALIZED
 
@@ -2098,17 +2193,17 @@ Failed to remove default column family with reserved name=`<colFamilyName>`.
 The handle has not been initialized for this StatefulProcessor.
 Please only use the StatefulProcessor within the transformWithState operator.
 
-### STATE_STORE_MULTIPLE_VALUES_PER_KEY
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-Store does not support multiple values per key
-
 ### STATE_STORE_UNSUPPORTED_OPERATION
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
 
 `<operationType>` operation not supported with `<entity>`
+
+### STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+State store operation=`<operationType>` not supported on missing column family=`<colFamilyName>`.
 
 ### STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST
 
@@ -2254,12 +2349,6 @@ Choose a different name, drop or replace the existing view,  or add the IF NOT E
 [SQLSTATE: 428EK](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: `<actualName>`.
-
-### TWS_VALUE_SHOULD_NOT_BE_NULL
-
-[SQLSTATE: 22004](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-New value should be non-null for `<typeOfState>`
 
 ### UDTF_ALIAS_NUMBER_MISMATCH
 
@@ -2656,6 +2745,19 @@ Choose a different name, or drop or replace the existing variable.
 The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP VARIABLE IF EXISTS.
+
+### VARIANT_CONSTRUCTOR_SIZE_LIMIT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB.
+
+### VARIANT_SIZE_LIMIT
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot build variant bigger than `<sizeLimit>` in `<functionName>`.
+Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big).
 
 ### VIEW_ALREADY_EXISTS
 
