@@ -74,8 +74,8 @@ class CollationStringExpressionsSuite extends QueryTest
   }
 
   test("REPLACE check result on explicitly collated strings") {
-    def testReplace(expected: String, collationId: Integer,
-                    source: String, search: String, replace: String): Unit = {
+    def testReplace(source: String, search: String, replace: String,
+        collationId: Integer, expected: String): Unit = {
       val sourceLiteral = Literal.create(source, StringType(collationId))
       val searchLiteral = Literal.create(search, StringType(collationId))
       val replaceLiteral = Literal.create(replace, StringType(collationId))
@@ -85,31 +85,31 @@ class CollationStringExpressionsSuite extends QueryTest
 
     // scalastyle:off
     // UTF8_BINARY
-    testReplace("r世e123ace", 0, "r世eplace", "pl", "123")
-    testReplace("reace", 0, "replace", "pl", "")
-    testReplace("repl世ace", 0, "repl世ace", "Pl", "")
-    testReplace("replace", 0, "replace", "", "123")
-    testReplace("a12ca12c", 0, "abcabc", "b", "12")
-    testReplace("adad", 0, "abcdabcd", "bc", "")
+    testReplace("r世eplace", "pl", "123", 0, "r世e123ace")
+    testReplace("replace", "pl", "", 0, "reace")
+    testReplace("repl世ace", "Pl", "", 0, "repl世ace")
+    testReplace("replace", "", "123", 0, "replace")
+    testReplace("abcabc", "b", "12", 0, "a12ca12c")
+    testReplace("abcdabcd", "bc", "", 0, "adad")
     // UTF8_BINARY_LCASE
-    testReplace("r世exxace", 1, "r世eplace", "pl", "xx")
-    testReplace("reAB世ace", 1, "repl世ace", "PL", "AB")
-    testReplace("Replace", 1, "Replace", "", "123")
-    testReplace("rexplace", 1, "re世place", "世", "x")
-    testReplace("a12ca12c", 1, "abcaBc", "B", "12")
-    testReplace("Adad", 1, "AbcdabCd", "Bc", "")
+    testReplace("r世eplace", "pl", "xx", 1, "r世exxace")
+    testReplace("repl世ace", "PL", "AB", 1, "reAB世ace")
+    testReplace("Replace", "", "123", 1, "Replace")
+    testReplace("re世place", "世", "x", 1, "rexplace")
+    testReplace("abcaBc", "B", "12", 1, "a12ca12c")
+    testReplace("AbcdabCd", "Bc", "", 1, "Adad")
     // UNICODE
-    testReplace("re世place", 2, "re世place", "plx", "123")
-    testReplace("世Replace", 2, "世Replace", "re", "")
-    testReplace("replace世", 2, "replace世", "", "123")
-    testReplace("aBc世a12c", 2, "aBc世abc", "b", "12")
-    testReplace("adad", 2, "abcdabcd", "bc", "")
+    testReplace("re世place", "plx", "123", 2, "re世place")
+    testReplace("世Replace", "re", "", 2, "世Replace")
+    testReplace("replace世", "", "123", 2, "replace世")
+    testReplace("aBc世abc", "b", "12", 2, "aBc世a12c")
+    testReplace("abcdabcd", "bc", "", 2, "adad")
     // UNICODE_CI
-    testReplace("replace", 3, "replace", "plx", "123")
-    testReplace("place", 3, "Replace", "re", "")
-    testReplace("replace", 3, "replace", "", "123")
-    testReplace("a12c世a12c", 3, "aBc世abc", "b", "12")
-    testReplace("a世dad", 3, "a世Bcdabcd", "bC", "")
+    testReplace("replace", "plx", "123", 3, "replace")
+    testReplace("Replace", "re", "", 3, "place")
+    testReplace("replace", "", "123", 3, "replace")
+    testReplace("aBc世abc", "b", "12", 3, "a12c世a12c")
+    testReplace("a世Bcdabcd", "bC", "", 3, "a世dad")
     // scalastyle:on
   }
 
