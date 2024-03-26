@@ -673,14 +673,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"CREATE VIEW v AS SELECT c1 || c3 FROM $tableName")
+          sql(s"CREATE VIEW v AS SELECT c1 || c2 FROM $tableName")
         },
         errorClass = "INDETERMINATE_COLLATION"
       )
 
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t2 AS SELECT c1 || c3 FROM $tableName")
+          sql(s"CREATE TABLE t2 AS SELECT c1 || c2 FROM $tableName")
         },
         errorClass = "INDETERMINATE_COLLATION"
       )
