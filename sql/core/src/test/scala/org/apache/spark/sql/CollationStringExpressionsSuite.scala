@@ -74,14 +74,10 @@ class CollationStringExpressionsSuite extends QueryTest
   }
 
   test("SUBSTRING_INDEX check result on explicitly collated strings") {
-    def testSubstringIndex(str: String,
-                  delim: String,
-                  cnt: Integer,
-                  stringType: Integer,
-                  expected: String,
-                  ): Unit = {
-      val string = Literal.create(str, StringType(stringType))
-      val delimiter = Literal.create(delim, StringType(stringType))
+    def testSubstringIndex(str: String, delim: String, cnt: Integer,
+                           collationId: Integer, expected: String): Unit = {
+      val string = Literal.create(str, StringType(collationId))
+      val delimiter = Literal.create(delim, StringType(collationId))
       val count = Literal(cnt)
 
       checkEvaluation(SubstringIndex(string, delimiter, count), expected)
@@ -154,7 +150,7 @@ class CollationStringExpressionsSuite extends QueryTest
     // scalastyle:on
     testSubstringIndex("www||APACHE||org", "||", 2, 3, "www||APACHE")
   }
-    
+
   test("REPEAT check output type on explicitly collated string") {
     def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
       val s = Literal.create(input, StringType(collationId))

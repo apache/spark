@@ -1056,6 +1056,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       byte[] bytes = new byte[idx];
       copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, idx);
       return fromBytes(bytes);
+
     } else {
       int idx = numBytes - delim.numBytes + 1;
       count = -count;
