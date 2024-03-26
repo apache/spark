@@ -835,6 +835,30 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  private int charPosToByte(int charPos) {
+    if(charPos < 0) {
+      return -1;
+    }
+
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && c < charPos) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    return i;
+  }
+
+  private int bytePosToChar(int bytePos) {
+    int i = 0;
+    int c = 0;
+    while (i < numBytes && i < bytePos) {
+      i += numBytesForFirstByte(getByte(i));
+      c += 1;
+    }
+    return c;
+  }
+
   /**
    * Find the `str` from left to right.
    */
@@ -856,35 +880,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.find(str, start);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
-      return findLowercase(str, start);
+    if(collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return charPosToByte(this.toLowerCase().indexOf(str.toLowerCase(), bytePosToChar(start)));
     }
     return collatedFind(str, start, collationId);
-  }
-
-  /**
-   * Find the `str` from left to right considering UTF8_BINARY_LCASE collation.
-   */
-  private int findLowercase(UTF8String str, int start) {
-    assert (str.numBytes > 0);
-
-    UTF8String lowercaseThis = this.toLowerCase();
-    UTF8String lowercaseStr = str.toLowerCase();
-
-    int matchStart = lowercaseThis.indexOf(lowercaseStr, start);
-    if (matchStart == -1) {
-      return -1;
-    }
-
-    int c = 0;
-    int byteStart = 0;
-    // Calculate byte position of matchStart
-    while (byteStart < numBytes && c < matchStart) {
-      byteStart += numBytesForFirstByte(getByte(byteStart));
-      c += 1;
-    }
-
-    return byteStart;
   }
 
   /**
@@ -896,21 +895,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
     // Set search start position (start from character at start position)
     stringSearch.setIndex(start);
-    // Find next occurrence of str in this
-    int matchStart = stringSearch.next();
-    if (matchStart == StringSearch.DONE) {
-      return -1;
-    }
 
-    int c = 0;
-    int byteStart = 0;
-    // Calculate byte position of matchStart
-    while (byteStart < numBytes && c < matchStart) {
-      byteStart += numBytesForFirstByte(getByte(byteStart));
-      c += 1;
-    }
-
-    return byteStart;
+    // Return either the byte position or -1 if not found
+    return charPosToByte(stringSearch.next());
   }
 
   /**
@@ -925,6 +912,52 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       start -= 1;
     }
     return -1;
+  }
+
+  private int rfind(UTF8String str, int start, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      return this.rfind(str, start);
+    }
+    if(collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+      return rfindLowercase(str, start);
+    }
+    return collatedRFind(str, start, collationId);
+  }
+
+  private int rfindLowercase(UTF8String str, int start) {
+    if(numBytes == 0 || str.numBytes == 0) {
+      return -1;
+    }
+
+    UTF8String lowercaseThis = this.toLowerCase();
+    UTF8String lowercaseStr = str.toLowerCase();
+
+    int prevStart = -1;
+    int matchStart = lowercaseThis.indexOf(lowercaseStr, 0);
+    while(charPosToByte(matchStart) < start) {
+      if(matchStart != -1) {
+        // Found a match, update the start position
+        prevStart = matchStart;
+        matchStart = lowercaseThis.indexOf(lowercaseStr, matchStart + 1);
+      } else {
+        return prevStart;
+      }
+    }
+
+    return prevStart;
+  }
+
+  private int collatedRFind(UTF8String str, int start, int collationId) {
+    if(numBytes == 0 || str.numBytes == 0) {
+      return -1;
+    }
+
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
+    // Set search start position (start from character at start position)
+    stringSearch.setIndex(start);
+
+    // Return either the position or -1 if not found
+    return charPosToByte(stringSearch.previous());
   }
 
   /**
@@ -981,9 +1014,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return subStringIndex(delim, count);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
-      return this.toLowerCase().subStringIndex(delim.toLowerCase(), count);
-    }
     return collatedSubStringIndex(delim, count, collationId);
   }
 
@@ -994,10 +1024,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (count > 0) {
       int idx = -1;
       while (count > 0) {
-        StringSearch stringSearch = CollationFactory.getStringSearch(this, delim, collationId);
-
-        idx = stringSearch.next();
-        if (idx != StringSearch.DONE) {
+        idx = find(delim, idx + 1, collationId);
+        if (idx >= 0) {
           count --;
         } else {
           // can not find enough delim
@@ -1007,8 +1035,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (idx == 0) {
         return EMPTY_UTF8;
       }
-      return substring(0, idx);
-
+      byte[] bytes = new byte[idx];
+      copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, idx);
+      return fromBytes(bytes);
     } else {
       int idx = numBytes - delim.numBytes + 1;
       count = -count;
@@ -1024,7 +1053,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (idx + delim.numBytes == numBytes) {
         return EMPTY_UTF8;
       }
-      return substring(idx + delim.numBytes, numChars());
+      int size = numBytes - delim.numBytes - idx;
+      byte[] bytes = new byte[size];
+      copyMemory(base, offset + idx + delim.numBytes, bytes, BYTE_ARRAY_OFFSET, size);
+      return fromBytes(bytes);
     }
   }
 

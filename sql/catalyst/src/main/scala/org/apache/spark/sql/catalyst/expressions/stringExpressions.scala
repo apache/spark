@@ -1437,7 +1437,14 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
+    val collationId = first.dataType.asInstanceOf[StringType].collationId
+
+    if(CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+      defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
+    } else {
+      defineCodeGen(ctx, ev, (str, delim, count) =>
+        s"$str.subStringIndex($delim, $count, $collationId)")
+    }
   }
 
   override protected def withNewChildrenInternal(
