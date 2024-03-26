@@ -108,7 +108,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     "LOG_FILES" -> "log",
     "APP_ID" -> applicationId(),
     "KUBERNETES_NAMESPACE" -> namespace,
-    "KUBERNETES_POD_NAME" -> System.getenv(ENV_DRIVER_POD_NAME)
+    "KUBERNETES_POD_NAME" -> Option(System.getenv(ENV_DRIVER_POD_NAME)).getOrElse("[null]")
   ))
 
   override def start(): Unit = {
