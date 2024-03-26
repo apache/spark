@@ -894,7 +894,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
     // Set search start position (start from character at start position)
-    stringSearch.setIndex(start);
+    stringSearch.setIndex(bytePosToChar(start));
 
     // Return either the byte position or -1 if not found
     return charPosToByte(stringSearch.next());
@@ -940,7 +940,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int prevStart = -1;
     int matchStart = lowercaseThis.indexOf(lowercaseStr, 0);
-    while(charPosToByte(matchStart) < start) {
+    while(charPosToByte(matchStart) <= start) {
       if(matchStart != -1) {
         // Found a match, update the start position
         prevStart = matchStart;
@@ -962,11 +962,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
-    // Set search start position (start from character at start position)
-    stringSearch.setIndex(bytePosToChar(start));
 
-    // Return either the position or -1 if not found
-    return charPosToByte(stringSearch.previous());
+    int prevStart = -1;
+    int matchStart = stringSearch.next();
+    while(charPosToByte(matchStart) <= start) {
+      if(matchStart != StringSearch.DONE) {
+        // Found a match, update the start position
+        prevStart = matchStart;
+        matchStart = stringSearch.next();
+      } else {
+        return charPosToByte(prevStart);
+      }
+    }
+
+    return charPosToByte(prevStart);
   }
 
   /**
