@@ -204,6 +204,7 @@
 This project bundles some components that are also licensed under the Apache
 License Version 2.0:
 
+commons-beanutils:commons-beanutils
 org.apache.zookeeper:zookeeper
 oro:oro
 commons-configuration:commons-configuration
