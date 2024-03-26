@@ -27,7 +27,7 @@ import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLI
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.SQLContext
@@ -56,6 +56,7 @@ object HiveThriftServer2 extends Logging {
    *                    the call logs the error and exits the JVM with exit code -1. When false, the
    *                    call throws an exception instead.
    */
+  @Since("3.5.2")
   @DeveloperApi
   def startWithContext(sqlContext: SQLContext, exitOnError: Boolean): HiveThriftServer2 = {
     systemExitOnError.set(exitOnError)
@@ -81,6 +82,7 @@ object HiveThriftServer2 extends Logging {
    *
    * @param sqlContext SQLContext to use for the server
    */
+  @Since("2.0.0")
   @DeveloperApi
   def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
     startWithContext(sqlContext, exitOnError)
