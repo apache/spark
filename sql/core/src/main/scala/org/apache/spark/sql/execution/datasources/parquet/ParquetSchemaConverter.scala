@@ -402,7 +402,7 @@ class ParquetToSparkSchemaConverter(
   }
 
   private def convertVariantField(groupColumn: GroupColumnIO): ParquetColumn = {
-    if (groupColumn.getChildrenCount != 2 ) {
+    if (groupColumn.getChildrenCount != 2) {
       // We may allow more than two children in the future, so consider this unsupported.
       throw QueryCompilationErrors.
         parquetTypeUnsupportedYetError("variant with more than two fields")
@@ -417,8 +417,8 @@ class ParquetToSparkSchemaConverter(
       val child = groupColumn.getChild(idx.get)
       // The value and metadata cannot be individually null, only the full struct can.
       if (child.getType.getRepetition != REQUIRED ||
-        !child.isInstanceOf[PrimitiveColumnIO] ||
-        child.asInstanceOf[PrimitiveColumnIO].getPrimitive != BINARY) {
+          !child.isInstanceOf[PrimitiveColumnIO] ||
+          child.asInstanceOf[PrimitiveColumnIO].getPrimitive != BINARY) {
         throw QueryCompilationErrors.illegalParquetTypeError(
           s"variant $colName must be a non-nullable binary")
       }

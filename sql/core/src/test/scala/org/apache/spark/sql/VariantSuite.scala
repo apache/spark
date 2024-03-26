@@ -193,7 +193,7 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("invalid variant binary") {
+  test("SPARK-47546: invalid variant binary") {
     // Write a struct-of-binary that looks like a Variant, but with minor variations that may make
     // it invalid to read.
     // Test cases:
