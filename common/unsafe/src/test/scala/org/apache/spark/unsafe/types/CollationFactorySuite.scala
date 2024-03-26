@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.types
 
+import scala.collection.parallel.immutable.ParSeq
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.SparkException
@@ -31,19 +32,19 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
   test("collationId stability") {
     val utf8Binary = fetchCollation(0)
     assert(utf8Binary.collationName == "UTF8_BINARY")
-    assert(utf8Binary.isBinaryCollation)
+    assert(utf8Binary.supportsBinaryEquality)
 
     val utf8BinaryLcase = fetchCollation(1)
     assert(utf8BinaryLcase.collationName == "UTF8_BINARY_LCASE")
-    assert(!utf8BinaryLcase.isBinaryCollation)
+    assert(!utf8BinaryLcase.supportsBinaryEquality)
 
     val unicode = fetchCollation(2)
     assert(unicode.collationName == "UNICODE")
-    assert(unicode.isBinaryCollation);
+    assert(unicode.supportsBinaryEquality);
 
     val unicodeCi = fetchCollation(3)
     assert(unicodeCi.collationName == "UNICODE_CI")
-    assert(!unicodeCi.isBinaryCollation)
+    assert(!unicodeCi.supportsBinaryEquality)
   }
 
   test("fetch invalid collation name") {
@@ -136,6 +137,19 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
         }
       }
       assert(result == testCase.expectedResult)
+    })
+  }
+
+  test("test concurrently generating collation keys") {
+    // generating ICU sort keys is not thread-safe by default so this should fail
+    // if we don't handle the concurrency properly on Collator level
+
+    (0 to 10).foreach(_ => {
+      val collator = fetchCollation("UNICODE").collator
+
+      ParSeq(0 to 100).foreach { _ =>
+        collator.getCollationKey("aaa")
+      }
     })
   }
 }

@@ -43,6 +43,7 @@ from typing import (
     NoReturn,
     cast,
     TYPE_CHECKING,
+    Type,
     Sequence,
 )
 
@@ -81,7 +82,9 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
+    CommonInlineUserDefinedDataSource,
     PythonUDTF,
+    PythonDataSource,
 )
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
@@ -94,6 +97,7 @@ from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotI
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark.sql.datasource import DataSource
 
 
 class ChannelBuilder:
@@ -788,6 +792,23 @@ class SparkConnectClient(object):
         self._execute(req)
         return name
 
+    def register_data_source(self, dataSource: Type["DataSource"]) -> None:
+        """
+        Register a data source in the session catalog.
+        """
+        data_source = PythonDataSource(
+            data_source=dataSource,
+            python_ver=get_python_ver(),
+        )
+        proto = CommonInlineUserDefinedDataSource(
+            name=dataSource.name(),
+            data_source=data_source,
+        ).to_data_source_proto(self)
+
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_data_source.CopyFrom(proto)
+        self._execute(req)
+
     def register_java(
         self,
         name: str,
@@ -1054,6 +1075,8 @@ class SparkConnectClient(object):
             client_type=self._builder.userAgent,
             tags=list(self.get_tags()),
         )
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -1061,6 +1084,8 @@ class SparkConnectClient(object):
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1381,6 +1406,8 @@ class SparkConnectClient(object):
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -1416,6 +1443,8 @@ class SparkConnectClient(object):
         The result of the config call.
         """
         req = self._config_request_with_metadata()
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.operation.CopyFrom(operation)
         try:
             for attempt in self._retrying():
@@ -1432,6 +1461,8 @@ class SparkConnectClient(object):
     ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         req.client_type = self._builder.userAgent
         if interrupt_type == "all":
             req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
@@ -1591,6 +1622,8 @@ class SparkConnectClient(object):
             client_type=self._builder.userAgent,
             error_id=info.metadata["errorId"],
         )
+        if self._server_session_id is not None:
+            req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
 

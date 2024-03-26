@@ -75,7 +75,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       val errorId = UUID.randomUUID().toString()
 
       val sessionHolder = SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId)
+        .getOrCreateIsolatedSession(userId, sessionId, None)
 
       sessionHolder.errorIdToError.put(errorId, testError)
 
@@ -125,7 +125,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     val errorId = UUID.randomUUID().toString()
 
     SparkConnectService
-      .getOrCreateIsolatedSession(userId, sessionId)
+      .getOrCreateIsolatedSession(userId, sessionId, None)
       .errorIdToError
       .put(errorId, testError)
 
@@ -138,7 +138,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
 
     assert(
       SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId)
+        .getOrCreateIsolatedSession(userId, sessionId, None)
         .errorIdToError
         .size() == 0)
   }
@@ -149,7 +149,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
       val errorId = UUID.randomUUID().toString()
 
       SparkConnectService
-        .getOrCreateIsolatedSession(userId, sessionId)
+        .getOrCreateIsolatedSession(userId, sessionId, None)
         .errorIdToError
         .put(errorId, testError)
 
@@ -175,7 +175,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     val errorId = UUID.randomUUID().toString()
 
     SparkConnectService
-      .getOrCreateIsolatedSession(userId, sessionId)
+      .getOrCreateIsolatedSession(userId, sessionId, None)
       .errorIdToError
       .put(errorId, testError)
 
@@ -192,7 +192,7 @@ class FetchErrorDetailsHandlerSuite extends SharedSparkSession with ResourceHelp
     val errorId = UUID.randomUUID().toString()
 
     SparkConnectService
-      .getOrCreateIsolatedSession(userId, sessionId)
+      .getOrCreateIsolatedSession(userId, sessionId, None)
       .errorIdToError
       .put(errorId, testError)
 

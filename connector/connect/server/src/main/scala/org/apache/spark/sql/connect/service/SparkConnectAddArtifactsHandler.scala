@@ -53,9 +53,14 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
   override def onNext(req: AddArtifactsRequest): Unit = try {
     if (this.holder == null) {
+      val previousSessionId = req.hasClientObservedServerSideSessionId match {
+        case true => Some(req.getClientObservedServerSideSessionId)
+        case false => None
+      }
       this.holder = SparkConnectService.getOrCreateIsolatedSession(
         req.getUserContext.getUserId,
-        req.getSessionId)
+        req.getSessionId,
+        previousSessionId)
     }
 
     if (req.hasBeginChunk) {

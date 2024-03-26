@@ -20,12 +20,12 @@ package org.apache.spark.sql.jdbc
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Connection, Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.{ArrayType, DecimalType, FloatType, ShortType}
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -155,11 +155,23 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
         "('-infinity', ARRAY[TIMESTAMP '-infinity'])")
       .executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE infinity_dates" +
+        "(id SERIAL PRIMARY KEY, date_column DATE, date_array DATE[])")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO infinity_dates (date_column, date_array)" +
+        " VALUES ('infinity', ARRAY[DATE 'infinity']), " +
+        "('-infinity', ARRAY[DATE '-infinity'])")
+      .executeUpdate()
+
     conn.prepareStatement("CREATE DOMAIN not_null_text AS TEXT DEFAULT ''").executeUpdate()
     conn.prepareStatement("create table custom_type(type_array not_null_text[]," +
       "type not_null_text)").executeUpdate()
     conn.prepareStatement("INSERT INTO custom_type (type_array, type) VALUES" +
       "('{1,fds,fdsa}','fdasfasdf')").executeUpdate()
+
+    conn.prepareStatement(
+      "CREATE FUNCTION test_null() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE plpgsql")
+      .executeUpdate()
 
   }
 
@@ -450,11 +462,37 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val negativeInfinity = row(1).getAs[Timestamp]("timestamp_column")
     val infinitySeq = row(0).getAs[scala.collection.Seq[Timestamp]]("timestamp_array")
     val negativeInfinitySeq = row(1).getAs[scala.collection.Seq[Timestamp]]("timestamp_array")
-    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC)
-    val maxTimestamp = LocalDateTime.of(9999, 12, 31, 23, 59, 59).toEpochSecond(ZoneOffset.UTC)
+    val minTimeStamp = -62135596800000L
+    val maxTimestamp = 253402300799999L
     assert(infinity.getTime == maxTimestamp)
     assert(negativeInfinity.getTime == minTimeStamp)
     assert(infinitySeq.head.getTime == maxTimestamp)
     assert(negativeInfinitySeq.head.getTime == minTimeStamp)
+  }
+
+  test("SPARK-47501: infinity date test") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "infinity_dates", new Properties)
+    val row = df.collect()
+
+    assert(row.length == 2)
+    val infinity = row(0).getDate(1)
+    val negativeInfinity = row(1).getDate(1)
+    val infinitySeq = row(0).getAs[scala.collection.Seq[Date]]("date_array")
+    val negativeInfinitySeq = row(1).getAs[scala.collection.Seq[Date]]("date_array")
+    val minDate = -62135654400000L
+    val maxDate = 253402156800000L
+    assert(infinity.getTime == maxDate)
+    assert(negativeInfinity.getTime == minDate)
+    assert(infinitySeq.head.getTime == maxDate)
+    assert(negativeInfinitySeq.head.getTime == minDate)
+  }
+
+  test("SPARK-47407: Support java.sql.Types.NULL for NullType") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT test_null()")
+      .load()
+    assert(df.schema.head.dataType === NullType)
+    checkAnswer(df, Seq(Row(null)))
   }
 }

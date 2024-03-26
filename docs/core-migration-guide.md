@@ -40,6 +40,8 @@ license: |
 
 - Since Spark 4.0, Spark uses `~/.ivy2.5.2` as Ivy user directory by default to isolate the existing systems from Apache Ivy's incompatibility. To restore the legacy behavior, you can set `spark.jars.ivy` to `~/.ivy2`.
 
+- Since Spark 4.0, Spark uses the external shuffle service for deleting shuffle blocks for deallocated executors when the shuffle is no longer needed. To restore the legacy behavior, you can set `spark.shuffle.service.removeShuffle` to `false`.
+
 ## Upgrading from Core 3.4 to 3.5
 
 - Since Spark 3.5, `spark.yarn.executor.failuresValidityInterval` is deprecated. Use `spark.executor.failuresValidityInterval` instead.

@@ -31,7 +31,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -47,14 +46,17 @@ private[spark] class PythonWorkerFactory(
     pythonExec: String,
     workerModule: String,
     daemonModule: String,
-    envVars: Map[String, String])
+    envVars: Map[String, String],
+    val useDaemonEnabled: Boolean)
   extends Logging { self =>
 
   def this(
       pythonExec: String,
       workerModule: String,
-      envVars: Map[String, String]) =
-    this(pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
+      envVars: Map[String, String],
+      useDaemonEnabled: Boolean) =
+    this(pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule,
+      envVars, useDaemonEnabled)
 
   import PythonWorkerFactory._
 
@@ -63,8 +65,6 @@ private[spark] class PythonWorkerFactory(
   // currently only works on UNIX-based systems now because it uses signals for child management,
   // so we can also fall back to launching workers, pyspark/worker.py (by default) directly.
   private val useDaemon = {
-    val useDaemonEnabled = SparkEnv.get.conf.get(PYTHON_USE_DAEMON)
-
     // This flag is ignored on Windows as it's unable to fork.
     !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
   }

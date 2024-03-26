@@ -1152,7 +1152,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.service.removeShuffle</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to use the ExternalShuffleService for deleting shuffle blocks for
     deallocated executors when the shuffle is no longer needed. Without this enabled,

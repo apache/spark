@@ -53,11 +53,24 @@ class SparkConnectSessionManager extends Logging {
   /** Executor for the periodic maintenance */
   private var scheduledExecutor: Option[ScheduledExecutorService] = None
 
+  private def validateSessionId(
+      key: SessionKey,
+      sessionUUID: String,
+      previouslyObservedSessionId: String) = {
+    if (sessionUUID != previouslyObservedSessionId) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.SESSION_CHANGED",
+        messageParameters = Map("handle" -> key.sessionId))
+    }
+  }
+
   /**
    * Based on the userId and sessionId, find or create a new SparkSession.
    */
-  private[connect] def getOrCreateIsolatedSession(key: SessionKey): SessionHolder = {
-    getSession(
+  private[connect] def getOrCreateIsolatedSession(
+      key: SessionKey,
+      previouslyObservedSesssionId: Option[String]): SessionHolder = {
+    val holder = getSession(
       key,
       Some(() => {
         // Executed under sessionsState lock in getSession,  to guard against concurrent removal
@@ -67,13 +80,18 @@ class SparkConnectSessionManager extends Logging {
         holder.initializeSession()
         holder
       }))
+    previouslyObservedSesssionId.foreach(sessionId =>
+      validateSessionId(key, holder.session.sessionUUID, sessionId))
+    holder
   }
 
   /**
    * Based on the userId and sessionId, find an existing SparkSession or throw error.
    */
-  private[connect] def getIsolatedSession(key: SessionKey): SessionHolder = {
-    getSession(
+  private[connect] def getIsolatedSession(
+      key: SessionKey,
+      previouslyObservedSesssionId: Option[String]): SessionHolder = {
+    val holder = getSession(
       key,
       Some(() => {
         logDebug(s"Session not found: $key")
@@ -87,6 +105,9 @@ class SparkConnectSessionManager extends Logging {
             messageParameters = Map("handle" -> key.sessionId))
         }
       }))
+    previouslyObservedSesssionId.foreach(sessionId =>
+      validateSessionId(key, holder.session.sessionUUID, sessionId))
+    holder
   }
 
   /**

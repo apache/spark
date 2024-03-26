@@ -1162,6 +1162,11 @@ ERROR_CLASSES_JSON = '''
     "message": [
       "Function `<func_name>` should take at least <num_cols> columns."
     ]
+  },
+  "ZERO_INDEX": {
+    "message": [
+      "Index must be non-zero."
+    ]
   }
 }
 '''

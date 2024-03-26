@@ -185,29 +185,21 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("SPARK-36182: can't read TimestampLTZ as TimestampNTZ") {
-    val data = (1 to 1000).map { i =>
-      val ts = new java.sql.Timestamp(i)
-      Row(ts)
-    }
-    val actualSchema = StructType(Seq(StructField("time", TimestampType, false)))
+  test("SPARK-47447: read TimestampLTZ as TimestampNTZ") {
     val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
 
     Seq("INT96", "TIMESTAMP_MICROS", "TIMESTAMP_MILLIS").foreach { tsType =>
       Seq(true, false).foreach { dictionaryEnabled =>
         withSQLConf(
-            SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType,
-            ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString) {
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType,
+          ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
           withTempPath { file =>
-            val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
+            val df = sql("select timestamp'2021-02-02 16:00:00' as time")
             df.write.parquet(file.getCanonicalPath)
             withAllParquetReaders {
-              val e = intercept[SparkException] {
-                spark.read.schema(providedSchema).parquet(file.getCanonicalPath).collect()
-              }
-              assert(e.getErrorClass == "FAILED_READ_FILE")
-              assert(e.getCause.getMessage.contains(
-                "Unable to create Parquet converter for data type \"timestamp_ntz\""))
+              val df2 = spark.read.schema(providedSchema).parquet(file.getCanonicalPath)
+              checkAnswer(df2, Row(LocalDateTime.parse("2021-02-03T00:00:00")))
             }
           }
         }
