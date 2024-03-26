@@ -3561,6 +3561,24 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN" : {
+    "message" : [
+      "Incorrect number of ordering columns=<numOrderingCols> for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN" : {
+    "message" : [
+      "Incorrect number of prefix columns=<numPrefixCols> for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -3570,6 +3588,12 @@
   "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
     "message" : [
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Variable size ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
   },

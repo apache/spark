@@ -51,8 +51,8 @@ private[sql] class RocksDBStateStoreProvider
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
-        numColsPrefixKey: Int,
         valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
       verify(colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME,
@@ -60,7 +60,7 @@ private[sql] class RocksDBStateStoreProvider
       verify(useColumnFamilies, "Column families are not supported in this store")
       rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
       keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
+        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec),
          RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
     }
 
@@ -263,7 +263,7 @@ private[sql] class RocksDBStateStoreProvider
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
@@ -275,19 +275,13 @@ private[sql] class RocksDBStateStoreProvider
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
 
-    require((keySchema.length == 0 && numColsPrefixKey == 0) ||
-      (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
-      "greater than the number of columns for prefix key!")
-
     if (useMultipleValuesPerKey) {
-      require(numColsPrefixKey == 0, "Both multiple values per key, and prefix key are not " +
-        "supported simultaneously.")
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
         " enabled in RocksDBStateStore.")
     }
 
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(keySchema, numColsPrefixKey),
+      (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec),
        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
 
     rocksDB // lazy initialization

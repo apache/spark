@@ -431,7 +431,7 @@ case class StateStoreRestoreExec(
       getStateInfo,
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
-      numColsPrefixKey = 0,
+      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
       val hasInput = iter.hasNext
@@ -495,7 +495,7 @@ case class StateStoreSaveExec(
       getStateInfo,
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
-      numColsPrefixKey = 0,
+      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
         val numOutputRows = longMetric("numOutputRows")
@@ -697,7 +697,8 @@ case class SessionWindowStateStoreRestoreExec(
       getStateInfo,
       stateManager.getStateKeySchema,
       stateManager.getStateValueSchema,
-      numColsPrefixKey = stateManager.getNumColsForPrefixKey,
+      PrefixKeyScanStateEncoderSpec(stateManager.getStateKeySchema,
+        stateManager.getNumColsForPrefixKey),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
 
@@ -782,7 +783,8 @@ case class SessionWindowStateStoreSaveExec(
       getStateInfo,
       stateManager.getStateKeySchema,
       stateManager.getStateValueSchema,
-      numColsPrefixKey = stateManager.getNumColsForPrefixKey,
+      PrefixKeyScanStateEncoderSpec(stateManager.getStateKeySchema,
+        stateManager.getNumColsForPrefixKey),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
 
@@ -971,7 +973,7 @@ abstract class BaseStreamingDeduplicateExec
       getStateInfo,
       keyExpressions.toStructType,
       schemaForValueRow,
-      numColsPrefixKey = 0,
+      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
       extraOptions = extraOptionOnStateStore) { (store, iter) =>
