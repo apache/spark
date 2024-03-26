@@ -87,59 +87,53 @@ class CollationStringExpressionsSuite extends QueryTest
       checkEvaluation(SubstringIndex(string, delimiter, count), expected)
     }
 
-    // UTF8_BINARY_LCASE
-    testSubstringIndex("www.apache.org", ".", 3, 0, "www.apache.org")
-    testSubstringIndex("www.apache.org", ".", 3, 0, "www.apache.org")
-    testSubstringIndex("www.apache.org", ".", 2, 0, "www.apache")
-    testSubstringIndex("www.apache.org", ".", 1, 0, "www")
-    testSubstringIndex("www.apache.org", ".", 0, 0, "")
-    testSubstringIndex("www.apache.org", ".", -3, 0, "www.apache.org")
-    testSubstringIndex("www.apache.org", ".", -2, 0, "apache.org")
-    testSubstringIndex("www.apache.org", ".", -1, 0, "org")
-    testSubstringIndex("", ".", -2, 0, "")
-    // scalastyle:off
-    testSubstringIndex("大千世界大千世界", "千", 2, 0, "大千世界大")
-    // scalastyle:on
     testSubstringIndex("www||apache||org", "||", 2, 0, "www||apache")
     // UTF8_BINARY_LCASE
     testSubstringIndex("www.apache.org", ".", 3, 1, "www.apache.org")
-    testSubstringIndex("www.apache.org", ".", 2, 1, "www.apache")
-    testSubstringIndex("www.apache.org", ".", 1, 1, "www")
+    testSubstringIndex("wwwXapachexorg", "x", 2, 1, "wwwXapache")
+    testSubstringIndex("wwwxapacheXorg", "X", 1, 1, "www")
     testSubstringIndex("www.apache.org", ".", 0, 1, "")
-    testSubstringIndex("www.apache.org", ".", -3, 1, "www.apache.org")
-    testSubstringIndex("www.apache.org", ".", -2, 1, "apache.org")
+    testSubstringIndex("www.apache.ORG", ".", -3, 1, "www.apache.ORG")
+    testSubstringIndex("wwwmapacheMorg", "M", -2, 1, "apacheMorg")
     testSubstringIndex("www.apache.org", ".", -1, 1, "org")
     testSubstringIndex("", ".", -2, 1, "")
     // scalastyle:off
-    testSubstringIndex("大千世界大千世界", "千", 2, 1, "大千世界大")
+    testSubstringIndex("test大千世界X大千世界", "x", -1, 1, "大千世界")
+    testSubstringIndex("test大千世界X大千世界", "X", 1, 1, "test大千世界")
+    testSubstringIndex("test大千世界大千世界", "千", 2, 1, "test大千世界大")
     // scalastyle:on
-    testSubstringIndex("www||apache||org", "||", 2, 1, "www||apache")
+    testSubstringIndex("www||APACHE||org", "||", 2, 1, "www||APACHE")
+    testSubstringIndex("www||APACHE||org", "||", -1, 1, "org")
     // UNICODE
-    testSubstringIndex("www.apache.org", ".", 3, 2, "www.apache.org")
+    testSubstringIndex("wwwYapacheyorg", "y", 3, 2, "wwwYapacheyorg")
     testSubstringIndex("www.apache.org", ".", 2, 2, "www.apache")
-    testSubstringIndex("www.apache.org", ".", 1, 2, "www")
+    testSubstringIndex("wwwYapacheYorg", "Y", 1, 2, "www")
+    testSubstringIndex("wwwYapacheYorg", "y", 1, 2, "wwwYapacheYorg")
     testSubstringIndex("www.apache.org", ".", 0, 2, "")
     testSubstringIndex("www.apache.org", ".", -3, 2, "www.apache.org")
     testSubstringIndex("www.apache.org", ".", -2, 2, "apache.org")
     testSubstringIndex("www.apache.org", ".", -1, 2, "org")
     testSubstringIndex("", ".", -2, 2, "")
     // scalastyle:off
+    testSubstringIndex("大x千世界大千世x界", "x", -1, 2, "界")
     testSubstringIndex("大千世界大千世界", "千", 2, 2, "大千世界大")
     // scalastyle:on
     testSubstringIndex("www||apache||org", "||", 2, 2, "www||apache")
     // UNICODE_CI
     testSubstringIndex("www.apache.org", ".", 3, 3, "www.apache.org")
-    testSubstringIndex("www.apache.org", ".", 2, 3, "www.apache")
-    testSubstringIndex("www.apache.org", ".", 1, 3, "www")
+    testSubstringIndex("wwwXapachexorg", "x", 2, 3, "wwwXapache")
+    testSubstringIndex("wwwxapacheXorg", "X", 1, 3, "www")
     testSubstringIndex("www.apache.org", ".", 0, 3, "")
-    testSubstringIndex("www.apache.org", ".", -3, 3, "www.apache.org")
-    testSubstringIndex("www.apache.org", ".", -2, 3, "apache.org")
+    testSubstringIndex("www.apache.ORG", ".", -3, 3, "www.apache.ORG")
+    testSubstringIndex("wwwmapacheMorg", "M", -2, 3, "apacheMorg")
     testSubstringIndex("www.apache.org", ".", -1, 3, "org")
     testSubstringIndex("", ".", -2, 3, "")
     // scalastyle:off
-    testSubstringIndex("大千世界大千世界", "千", 2, 3, "大千世界大")
+    testSubstringIndex("test大千世界X大千世界", "X", -1, 3, "大千世界")
+    testSubstringIndex("test大千世界X大千世界", "X", 1, 3, "test大千世界")
+    testSubstringIndex("test大千世界大千世界", "千", 2, 3, "test大千世界大")
     // scalastyle:on
-    testSubstringIndex("www||apache||org", "||", 2, 3, "www||apache")
+    testSubstringIndex("www||APACHE||org", "||", 2, 3, "www||APACHE")
   }
 
   // TODO: Add more tests for other string expressions

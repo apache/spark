@@ -914,6 +914,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  /**
+   * Find the `str` from right to left considering different collations.
+   */
   private int rfind(UTF8String str, int start, int collationId) {
     if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
       return this.rfind(str, start);
@@ -924,6 +927,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return collatedRFind(str, start, collationId);
   }
 
+  /**
+   * Find the `str` from left to right considering binary lowercase collation.
+   */
   private int rfindLowercase(UTF8String str, int start) {
     if(numBytes == 0 || str.numBytes == 0) {
       return -1;
@@ -940,13 +946,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         prevStart = matchStart;
         matchStart = lowercaseThis.indexOf(lowercaseStr, matchStart + 1);
       } else {
-        return prevStart;
+        return charPosToByte(prevStart);
       }
     }
 
-    return prevStart;
+    return charPosToByte(prevStart);
   }
 
+  /**
+   * Find the `str` from left to right considering non-binary collations.
+   */
   private int collatedRFind(UTF8String str, int start, int collationId) {
     if(numBytes == 0 || str.numBytes == 0) {
       return -1;
@@ -954,7 +963,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
     // Set search start position (start from character at start position)
-    stringSearch.setIndex(start);
+    stringSearch.setIndex(bytePosToChar(start));
 
     // Return either the position or -1 if not found
     return charPosToByte(stringSearch.previous());
