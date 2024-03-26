@@ -71,11 +71,11 @@ case class ParseJson(child: Expression) extends UnaryExpression
     copy(child = newChild)
 }
 
-// A path segment in the `VariantGet` expression. It represents either an object key access (when
-// `key` is not null) or an array index access (when `key` is null).
-case class PathSegment(key: String, index: Int)
-
 object VariantPathParser extends RegexParsers {
+  // A path segment in the `VariantGet` expression represents either an object key access or an
+  // array index access.
+  type PathSegment = Either[String, Int]
+
   private def root: Parser[Char] = '$'
 
   // Parse index segment like `[123]`.
@@ -83,7 +83,7 @@ object VariantPathParser extends RegexParsers {
     for {
       index <- '[' ~> "\\d+".r <~ ']'
     } yield {
-      PathSegment(null, index.toInt)
+      scala.util.Right(index.toInt)
     }
 
   // Parse key segment like `.name`, `['name']`, or `["name"]`.
@@ -92,7 +92,7 @@ object VariantPathParser extends RegexParsers {
       key <- '.' ~> "[^\\.\\[]+".r | "['" ~> "[^\\'\\?]+".r <~ "']" |
         "[\"" ~> "[^\\\"\\?]+".r <~ "\"]"
     } yield {
-      PathSegment(key, 0)
+      scala.util.Left(key)
     }
 
   private val parser: Parser[List[PathSegment]] = phrase(root ~> rep(key | index))
@@ -110,7 +110,7 @@ object VariantPathParser extends RegexParsers {
  * value according to a path and cast it into a concrete data type.
  * @param child The source variant value to extract from.
  * @param path A literal path expression. It has the same format as the JSON path.
- * @param schema The target data type to cast into.
+ * @param targetType The target data type to cast into. Any non-nullable annotations are ignored.
  * @param failOnError Controls whether the expression should throw an exception or return null if
  *                    the cast fails.
  * @param timeZoneId A string identifier of a time zone. It is required by timestamp-related casts.
@@ -118,7 +118,7 @@ object VariantPathParser extends RegexParsers {
 case class VariantGet(
     child: Expression,
     path: Expression,
-    schema: DataType,
+    targetType: DataType,
     failOnError: Boolean,
     timeZoneId: Option[String] = None)
     extends BinaryExpression
@@ -140,12 +140,12 @@ case class VariantGet(
           "inputExpr" -> toSQLExpr(path)
         )
       )
-    } else if (!VariantGet.checkDataType(schema)) {
+    } else if (!VariantGet.checkDataType(targetType)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
         messageParameters = Map(
           "srcType" -> toSQLType(VariantType),
-          "targetType" -> toSQLType(schema)
+          "targetType" -> toSQLType(targetType)
         )
       )
     } else {
@@ -153,7 +153,7 @@ case class VariantGet(
     }
   }
 
-  override lazy val dataType: DataType = schema.asNullable
+  override lazy val dataType: DataType = targetType.asNullable
 
   @transient private lazy val parsedPath = {
     val pathValue = path.eval().toString
@@ -174,9 +174,9 @@ case class VariantGet(
     var v = new Variant(
       input.asInstanceOf[VariantVal].getValue, input.asInstanceOf[VariantVal].getMetadata)
     for (path <- parsedPath) {
-      v = v.getType match {
-        case Type.OBJECT if path.key != null => v.getFieldByKey(path.key)
-        case Type.ARRAY if path.key == null => v.getElementAtIndex(path.index)
+      v = path match {
+        case scala.util.Left(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
+        case scala.util.Right(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
         case _ => null
       }
       if (v == null) return null
