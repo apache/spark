@@ -75,22 +75,22 @@ class CollationStringExpressionsSuite extends QueryTest
   }
 
   test("INSTR check result on explicitly collated strings") {
-    def testInStr(expected: Integer, stringType: Integer, str: String, substr: String): Unit = {
-      val string = Literal.create(str, StringType(stringType))
-      val substring = Literal.create(substr, StringType(stringType))
+    def testInStr(str: String, substr: String, collationId: Integer, expected: Integer): Unit = {
+      val string = Literal.create(str, StringType(collationId))
+      val substring = Literal.create(substr, StringType(collationId))
 
       checkEvaluation(StringInstr(string, substring), expected)
     }
 
     // UTF8_BINARY_LCASE
-    testInStr(1, 1, "aaads", "Aa")
-    testInStr(0, 1, "aaaDs", "de")
+    testInStr("aaads", "Aa", 1, 1)
+    testInStr("aaaDs", "de", 1, 0)
     // UNICODE
-    testInStr(0, 2, "aaads", "Aa")
-    testInStr(0, 2, "aaads", "de")
+    testInStr("aaads", "Aa", 2, 0)
+    testInStr("aaads", "de", 2, 0)
     // UNICODE_CI
-    testInStr(3, 3, "aaads", "AD")
-    testInStr(4, 3, "aaads", "dS")
+    testInStr("aaads", "AD", 3, 3)
+    testInStr("aaads", "dS", 3, 4)
   }
 
   test("INSTR fail mismatched collation types") {
