@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.util.UUID
+
 import scala.collection.mutable.Map
 
 import org.apache.spark.executor.ExecutorMetrics
@@ -35,7 +37,7 @@ import org.apache.spark.util.AccumulatorV2
  */
 private[spark] trait TaskScheduler {
 
-  private val appId = "spark-application-" + System.currentTimeMillis
+  private val appId = "spark-application-" + System.currentTimeMillis + "-" + UUID.randomUUID().substring(16)
 
   def rootPool: Pool
 
