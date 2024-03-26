@@ -748,7 +748,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationId = first.dataType.asInstanceOf[StringType].collationId
 
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       nullSafeCodeGen(ctx, ev, (src, search, replace) => {
         s"""${ev.value} = $src.replace($search, $replace);"""
       })

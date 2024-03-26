@@ -1137,10 +1137,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String replace(UTF8String search, UTF8String replace, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.replace(search, replace);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return lowercaseReplace(search, replace);
     }
     return collatedReplace(search, replace, collationId);
