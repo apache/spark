@@ -317,7 +317,7 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
    }
   }
 
-  override def convertDateToDate(d: Date): Date = {
+  override def convertJavaDateToDate(d: Date): Date = {
     d.getTime match {
       case 9223372036825200000L =>
         new Date(LocalDateTime.of(9999, 12, 31, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)

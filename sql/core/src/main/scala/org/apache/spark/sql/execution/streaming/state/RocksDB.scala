@@ -40,6 +40,16 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.{NextIterator, Utils}
 
+// RocksDB operations that could acquire/release the instance lock
+sealed abstract class RocksDBOpType(name: String) {
+  override def toString: String = name
+}
+case object LoadStore extends RocksDBOpType("load_store")
+case object RollbackStore extends RocksDBOpType("rollback_store")
+case object CloseStore extends RocksDBOpType("close_store")
+case object ReportStoreMetrics extends RocksDBOpType("report_store_metrics")
+case object StoreTaskCompletionListener extends RocksDBOpType("store_task_completion_listener")
+
 /**
  * Class representing a RocksDB instance that checkpoints version of data to DFS.
  * After a set of updates, a new version can be committed by calling `commit()`.
@@ -163,7 +173,7 @@ class RocksDB(
    */
   def load(version: Long, readOnly: Boolean = false): RocksDB = {
     assert(version >= 0)
-    acquire()
+    acquire(LoadStore)
     recordedMetrics = None
     logInfo(s"Loading $version")
     try {
@@ -607,7 +617,7 @@ class RocksDB(
     } finally {
       // reset resources as either 1) we already pushed the changes and it has been committed or
       // 2) commit has failed and the current version is "invalidated".
-      release()
+      release(LoadStore)
     }
   }
 
@@ -646,13 +656,13 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    acquire()
+    acquire(RollbackStore)
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     loadedVersion = -1L
     changelogWriter.foreach(_.abort())
     // Make sure changelogWriter gets recreated next time.
     changelogWriter = None
-    release()
+    release(RollbackStore)
     logInfo(s"Rolled back to $loadedVersion")
   }
 
@@ -670,7 +680,7 @@ class RocksDB(
   def close(): Unit = {
     try {
       // Acquire DB instance lock and release at the end to allow for synchronized access
-      acquire()
+      acquire(CloseStore)
       closeDB()
 
       readOptions.close()
@@ -686,7 +696,7 @@ class RocksDB(
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
     } finally {
-      release()
+      release(CloseStore)
     }
   }
 
@@ -759,18 +769,24 @@ class RocksDB(
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
     try {
-      acquire()
+      acquire(ReportStoreMetrics)
       rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
         logInfo(s"Failed to acquire metrics with exception=$ex")
     } finally {
-      release()
+      release(ReportStoreMetrics)
     }
     rocksDBMetricsOpt
   }
 
-  private def acquire(): Unit = acquireLock.synchronized {
+  /**
+   * Function to acquire RocksDB instance lock that allows for synchronized access to the state
+   * store instance
+   *
+   * @param opType - operation type requesting the lock
+   */
+  private def acquire(opType: RocksDBOpType): Unit = acquireLock.synchronized {
     val newAcquiredThreadInfo = AcquiredThreadInfo()
     val waitStartTime = System.currentTimeMillis
     def timeWaitedMs = System.currentTimeMillis - waitStartTime
@@ -783,17 +799,27 @@ class RocksDB(
     }
     if (isAcquiredByDifferentThread) {
       val stackTraceOutput = acquiredThreadInfo.threadRef.get.get.getStackTrace.mkString("\n")
-      throw QueryExecutionErrors.unreleasedThreadError(loggingId, newAcquiredThreadInfo.toString(),
-        acquiredThreadInfo.toString(), timeWaitedMs, stackTraceOutput)
+      throw QueryExecutionErrors.unreleasedThreadError(loggingId, opType.toString,
+        newAcquiredThreadInfo.toString(), acquiredThreadInfo.toString(), timeWaitedMs,
+        stackTraceOutput)
     } else {
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ => this.release() })
-      logInfo(s"RocksDB instance was acquired by $acquiredThreadInfo")
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
+        _ => this.release(StoreTaskCompletionListener)
+      })
+      logInfo(s"RocksDB instance was acquired by $acquiredThreadInfo for opType=${opType.toString}")
     }
   }
 
-  private def release(): Unit = acquireLock.synchronized {
+  /**
+   * Function to release RocksDB instance lock that allows for synchronized access to the state
+   * store instance
+   *
+   * @param opType - operation type releasing the lock
+   */
+  private def release(opType: RocksDBOpType): Unit = acquireLock.synchronized {
+    logInfo(s"RocksDB instance was released by $acquiredThreadInfo for opType=${opType.toString}")
     acquiredThreadInfo = null
     acquireLock.notifyAll()
   }

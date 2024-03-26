@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+import java.util.UUID
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -648,6 +652,101 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("1", "1"), ("3", "1"), ("4", "1"), ("5", "1")),
         StopStream
       )
+    }
+  }
+
+  /** Create a text file with a single data item */
+  private def createFile(data: String, srcDir: File): File =
+    stringToFile(new File(srcDir, s"${UUID.randomUUID()}.txt"), data)
+
+  private def createFileStream(srcDir: File): Dataset[(String, String)] = {
+    spark
+      .readStream
+      .option("maxFilesPerTrigger", "1")
+      .text(srcDir.getCanonicalPath)
+      .select("value").as[String]
+      .groupByKey(x => x)
+      .transformWithState(new RunningCountStatefulProcessor(),
+        TimeoutMode.NoTimeouts(),
+        OutputMode.Update())
+  }
+
+  test("transformWithState - availableNow trigger mode, rate limit is respected") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+
+        // Set up a query to read text files one at a time
+        val df = createFileStream(srcDir)
+
+        testStream(df)(
+          StartStream(trigger = Trigger.AvailableNow()),
+          ProcessAllAvailable(),
+          CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
+          StopStream,
+          Execute { _ =>
+            createFile("a", srcDir)
+          },
+          StartStream(trigger = Trigger.AvailableNow()),
+          ProcessAllAvailable(),
+          CheckNewAnswer(("a", "2"))
+        )
+
+        var index = 0
+        val foreachBatchDf = df.writeStream
+          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+            index += 1
+          })
+          .trigger(Trigger.AvailableNow())
+          .start()
+
+        try {
+          foreachBatchDf.awaitTermination()
+          assert(index == 4)
+        } finally {
+          foreachBatchDf.stop()
+        }
+      }
+    }
+  }
+
+  test("transformWithState - availableNow trigger mode, multiple restarts") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+        val df = createFileStream(srcDir)
+
+        var index = 0
+
+        def startTriggerAvailableNowQueryAndCheck(expectedIdx: Int): Unit = {
+          val q = df.writeStream
+            .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+              index += 1
+            })
+            .trigger(Trigger.AvailableNow)
+            .start()
+          try {
+            assert(q.awaitTermination(streamingTimeout.toMillis))
+            assert(index == expectedIdx)
+          } finally {
+            q.stop()
+          }
+        }
+        // start query for the first time
+        startTriggerAvailableNowQueryAndCheck(3)
+
+        // add two files and restart
+        createFile("a", srcDir)
+        createFile("b", srcDir)
+        startTriggerAvailableNowQueryAndCheck(8)
+
+        // try restart again
+        createFile("d", srcDir)
+        startTriggerAvailableNowQueryAndCheck(14)
+      }
     }
   }
 }

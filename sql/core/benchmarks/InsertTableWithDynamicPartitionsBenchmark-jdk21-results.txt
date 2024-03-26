@@ -1,8 +1,8 @@
-OpenJDK 64-Bit Server VM 21.0.1+12-LTS on Linux 5.15.0-1053-azure
+OpenJDK 64-Bit Server VM 21.0.2+13-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
 dynamic insert table benchmark, totalRows = 200000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------
-one partition column, 100 partitions                         4866           4874          12          0.0       24329.3       1.0X
-two partition columns, 500 partitions                       12420          12598         253          0.0       62098.8       0.4X
-three partition columns, 2000 partitions                    34886          34910          34          0.0      174429.0       0.1X
+one partition column, 100 partitions                         8818           8868          71          0.0       44088.8       1.0X
+two partition columns, 500 partitions                       24601          24662          86          0.0      123006.4       0.4X
+three partition columns, 2000 partitions                    66361          66397          51          0.0      331804.1       0.1X
 
