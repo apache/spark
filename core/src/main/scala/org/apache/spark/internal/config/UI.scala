@@ -221,7 +221,7 @@ private[spark] object UI {
     .createOptional
 
   val CUSTOM_DRIVER_LOG_URL = ConfigBuilder("spark.ui.custom.driver.log.url")
-    .doc("Specifies custom spark driver log url for supporting external log service instead of " +
+    .doc("Specifies custom Spark driver log url for supporting external log service instead of " +
       "using cluster managers' application log urls in the Spark UI. Spark will support " +
       "some path variables via patterns which can vary on cluster manager. Please check the " +
       "documentation for your cluster manager to see which patterns are supported, if any. " +
@@ -233,7 +233,7 @@ private[spark] object UI {
     .createOptional
 
   val CUSTOM_EXECUTOR_LOG_URL = ConfigBuilder("spark.ui.custom.executor.log.url")
-    .doc("Specifies custom spark executor log url for supporting external log service instead of " +
+    .doc("Specifies custom Spark executor log url for supporting external log service instead of " +
       "using cluster managers' application log urls in the Spark UI. Spark will support " +
       "some path variables via patterns which can vary on cluster manager. Please check the " +
       "documentation for your cluster manager to see which patterns are supported, if any. " +
