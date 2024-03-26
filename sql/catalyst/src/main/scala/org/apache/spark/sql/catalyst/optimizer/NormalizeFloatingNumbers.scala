@@ -94,7 +94,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case _ => needNormalize(expr.dataType)
   }
 
-  def needNormalize(dt: DataType): Boolean = dt match {
+  private def needNormalize(dt: DataType): Boolean = dt match {
     case FloatType | DoubleType => true
     case StructType(fields) => fields.exists(f => needNormalize(f.dataType))
     case ArrayType(et, _) => needNormalize(et)
