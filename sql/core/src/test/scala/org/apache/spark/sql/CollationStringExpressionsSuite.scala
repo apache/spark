@@ -112,7 +112,7 @@ class CollationStringExpressionsSuite extends QueryTest
     testReplace("a世Bcdabcd", "bC", "", 3, "a世dad")
     // scalastyle:on
   }
-    
+  
   test("REPEAT check output type on explicitly collated string") {
     def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
       val s = Literal.create(input, StringType(collationId))
