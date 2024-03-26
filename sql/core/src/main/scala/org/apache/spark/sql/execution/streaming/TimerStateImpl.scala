@@ -187,17 +187,20 @@ class TimerStateImpl(
 
   /**
    * Function to get all the registered timers for all grouping keys
+   * @param expiryTimestampMs - threshold for expired timestamp in milliseconds, this function
+   *                          will return every timers that is before this threshold
    * @return - iterator of all the registered timers for all grouping keys
    */
-  def getExpiredTimers(): Iterator[(Any, Long)] = {
+  def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
+    // this iter is increasingly sorted on timestamp
     val iter = store.iterator(tsToKeyCFName)
 
     new NextIterator[(Any, Long)] {
       override protected def getNext(): (Any, Long) = {
-        if (iter.hasNext) {
-          val rowPair = iter.next()
-          val keyRow = rowPair.key
-          val result = getTimerRowFromSecIndex(keyRow)
+        val rowPair = if (iter.hasNext) iter.next() else null
+        val result: (Any, Long) =
+          if (rowPair != null) getTimerRowFromSecIndex(rowPair.key) else null
+        if (result != null && result._2 < expiryTimestampMs) {
           result
         } else {
           finished = true

@@ -48,7 +48,8 @@ class TimerSuite extends StateVariableSuiteBase {
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
       timerState.registerTimer(1L * 1000)
       assert(timerState.listTimers().toSet === Set(1000L))
-      assert(timerState.getExpiredTimers().toSet === Set(("test_key", 1000L)))
+      assert(timerState.getExpiredTimers(Long.MaxValue).toSeq === Seq(("test_key", 1000L)))
+      assert(timerState.getExpiredTimers(Long.MinValue).toSeq === Seq.empty[Long])
 
       timerState.registerTimer(20L * 1000)
       assert(timerState.listTimers().toSet === Set(20000L, 1000L))
@@ -69,8 +70,10 @@ class TimerSuite extends StateVariableSuiteBase {
       timerState1.registerTimer(1L * 1000)
       timerState2.registerTimer(15L * 1000)
       assert(timerState1.listTimers().toSet === Set(15000L, 1000L))
-      assert(timerState1.getExpiredTimers().toSet ===
-        Set(("test_key", 15000L), ("test_key", 1000L)))
+      assert(timerState1.getExpiredTimers(Long.MaxValue).toSeq ===
+        Seq(("test_key", 1000L), ("test_key", 15000L)))
+      // if timestamp equals to expiryTimestampsMs, will not considered expired
+      assert(timerState1.getExpiredTimers(15000L).toSeq === Seq(("test_key", 1000L)))
       assert(timerState1.listTimers().toSet === Set(15000L, 1000L))
 
       timerState1.registerTimer(20L * 1000)
@@ -99,15 +102,16 @@ class TimerSuite extends StateVariableSuiteBase {
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
-      assert(timerState1.getExpiredTimers().toSet ===
-        Set(("test_key2", 15000L), ("test_key1", 2000L), ("test_key1", 1000L)))
+      assert(timerState1.getExpiredTimers(Long.MaxValue).toSeq ===
+        Seq(("test_key1", 1000L), ("test_key1", 2000L), ("test_key2", 15000L)))
+      assert(timerState1.getExpiredTimers(10000L).toSeq ===
+        Seq(("test_key1", 1000L), ("test_key1", 2000L)))
       assert(timerState1.listTimers().toSet === Set(1000L, 2000L))
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key2")
       assert(timerState2.listTimers().toSet === Set(15000L))
-      assert(timerState2.getExpiredTimers().toSet ===
-        Set(("test_key2", 15000L), ("test_key1", 2000L), ("test_key1", 1000L)))
+      assert(timerState2.getExpiredTimers(1500L).toSeq === Seq(("test_key1", 1000L)))
     }
   }
 
@@ -122,8 +126,10 @@ class TimerSuite extends StateVariableSuiteBase {
       val timerTimerstamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
       // register/put unordered timestamp into rocksDB
       timerTimerstamps.foreach(timerState.registerTimer)
-      // getExpiredTimers() is calling iterator() from rocksDB
-      assert(timerState.getExpiredTimers().toSeq.map(_._2) === timerTimerstamps.sorted)
+      assert(timerState.getExpiredTimers(Long.MaxValue).toSeq.map(_._2) === timerTimerstamps.sorted)
+      assert(timerState.getExpiredTimers(4200L).toSeq.map(_._2) ===
+        timerTimerstamps.sorted.takeWhile(_ < 4200L))
+      assert(timerState.getExpiredTimers(Long.MinValue).toSeq === Seq.empty)
       ImplicitGroupingKeyTracker.removeImplicitKey()
     }
   }
@@ -153,8 +159,11 @@ class TimerSuite extends StateVariableSuiteBase {
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
-      assert(timerState1.getExpiredTimers().toSeq.map(_._2) ===
+      assert(timerState1.getExpiredTimers(Long.MaxValue).toSeq.map(_._2) ===
         (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted)
+      assert(timerState1.getExpiredTimers(Long.MinValue).toSeq === Seq.empty)
+      assert(timerState1.getExpiredTimers(8000L).toSeq.map(_._2) ===
+        (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted.takeWhile(_ < 8000L))
       ImplicitGroupingKeyTracker.removeImplicitKey()
     }
   }

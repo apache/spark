@@ -160,22 +160,18 @@ case class TransformWithStateExec(
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
-        val procTimeIter = processorHandle.getExpiredTimers()
-        procTimeIter
-          // procTimeIter are sorted increasingly on timestamp
-          .takeWhile { case (_, expiryTimestampMs) => expiryTimestampMs < batchTimestamp }
+        processorHandle.getExpiredTimers()
           .flatMap { case (keyObj, expiryTimestampMs) =>
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
+          }
 
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        val eventTimeIter = processorHandle.getExpiredTimers()
-        eventTimeIter
-          // procTimeIter are sorted increasingly on timestamp
-          .takeWhile { case (_, expiryTimestampMs) => expiryTimestampMs < watermark }
+        processorHandle.getExpiredTimers()
           .flatMap { case (keyObj, expiryTimestampMs) =>
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
+          }
 
       case _ => Iterator.empty
     }
