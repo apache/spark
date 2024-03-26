@@ -197,28 +197,49 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     // Write a struct-of-binary that looks like a Variant, but with minor variations that may make
     // it invalid to read.
     // Test cases:
-    // 1) A binary that has the correct parquet structure for Variant.
-    // 2) A binary that has the correct parquet structure in unexpected order. This is valid.
-    // 3) A binary that is almost correct, but contains an extra field "paths"
-    // 4,5) A binary with incorrect field names
-    // 6) Incorrect data typea
-    // 7,8) Nullable value or metdata
+    // 1) A binary that is almost correct, but contains an extra field "paths"
+    // 2,3) A binary with incorrect field names
+    // 4) Incorrect data typea
+    // 5,6) Nullable value or metdata
 
     // Binary value of empty metadata
     val m = "X'010000'"
     // Binary value of a literal "false"
     val v = "X'8'"
     val cases = Seq(
-        (true, s"named_struct('value', $v, 'metadata', $m)"),
-        (true, s"named_struct('metadata', $m, 'value', $v)"),
-        (false, s"named_struct('value', $v, 'metadata', $m, 'paths', $v)"),
-        (false, s"named_struct('value', $v, 'dictionary', $m)"),
-        (false, s"named_struct('val', $v, 'metadata', $m)"),
-        (false, s"named_struct('value', 8, 'metadata', $m)"),
-        (false, s"named_struct('value', cast(null as binary), 'metadata', $m)"),
-        (false, s"named_struct('value', $v, 'metadata', cast(null as binary))")
+        s"named_struct('value', $v, 'metadata', $m, 'paths', $v)",
+        s"named_struct('value', $v, 'dictionary', $m)",
+        s"named_struct('val', $v, 'metadata', $m)",
+        s"named_struct('value', 8, 'metadata', $m)",
+        s"named_struct('value', cast(null as binary), 'metadata', $m)",
+        s"named_struct('value', $v, 'metadata', cast(null as binary))"
     )
-    cases.foreach { case (expectValid, structDef) =>
+    cases.foreach { structDef =>
+      withTempDir { dir =>
+        val file = new File(dir, "dir").getCanonicalPath
+        val df = spark.sql(s"select $structDef as v from range(10)")
+        df.write.parquet(file)
+        val schema = StructType(Seq(StructField("v", VariantType)))
+        val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
+        val e = intercept[org.apache.spark.SparkException](result.collect())
+        assert(e.getCause.isInstanceOf[AnalysisException], e.printStackTrace)
+      }
+    }
+  }
+
+  test("SPARK-47546: valid variant binary") {
+    // Test valid struct-of-binary formats. We don't expect anybody to construct a Variant in this
+    // way, but it lets us validate slight variations that could be produced by a different writer.
+
+    // Binary value of empty metadata
+    val m = "X'010000'"
+    // Binary value of a literal "false"
+    val v = "X'8'"
+    val cases = Seq(
+        s"named_struct('value', $v, 'metadata', $m)",
+        s"named_struct('metadata', $m, 'value', $v)"
+    )
+    cases.foreach { structDef =>
       withTempDir { dir =>
         val file = new File(dir, "dir").getCanonicalPath
         val df = spark.sql(s"select $structDef as v from range(10)")
@@ -226,13 +247,7 @@ class VariantSuite extends QueryTest with SharedSparkSession {
         val schema = StructType(Seq(StructField("v", VariantType)))
         val result = spark.read.schema(schema).parquet(file)
             .selectExpr("to_json(v)")
-        if (expectValid) {
-          checkAnswer(result, Seq.fill(10)(Row("false")))
-        } else {
-          val e = intercept[org.apache.spark.SparkException](result.collect())
-          assert(
-            e.getCause.isInstanceOf[AnalysisException], e.printStackTrace)
-        }
+        checkAnswer(result, Seq.fill(10)(Row("false")))
       }
     }
   }
