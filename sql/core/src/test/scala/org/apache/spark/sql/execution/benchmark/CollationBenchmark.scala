@@ -83,7 +83,9 @@ object CollationBenchmark extends SqlBasedBenchmark {
       benchmark.addCase(s"collator.compare - $collationType") { _ =>
         sublistStrings.foreach(s1 =>
           utf8Strings.foreach(s =>
-            collation.comparator.compare(s, s1)
+            (0 to 10).foreach(_ =>
+              collation.comparator.compare(s, s1)
+            )
           )
         )
       }
