@@ -617,9 +617,9 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
   def keyString(): String = key.toArray.mkString("/")
 
   override def partitionKey(): InternalRow = PartitionInternalRow(key.toArray)
-  override def partitionSizeInBytes(): OptionalLong = OptionalLong.of(100L)
-  override def partitionNumRows(): OptionalLong = OptionalLong.of(rows.size)
-  override def partitionFilesCount(): OptionalLong = OptionalLong.of(100L)
+  override def sizeInBytes(): OptionalLong = OptionalLong.of(100L)
+  override def numRows(): OptionalLong = OptionalLong.of(rows.size)
+  override def filesCount(): OptionalLong = OptionalLong.of(100L)
 
   def clear(): Unit = rows.clear()
 }

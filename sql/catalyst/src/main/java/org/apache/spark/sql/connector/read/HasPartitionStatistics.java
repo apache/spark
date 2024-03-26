@@ -32,7 +32,7 @@ public interface HasPartitionStatistics extends InputPartition {
   /**
    * Returns the value of the partition statistics associated to this partition.
    */
-  OptionalLong partitionSizeInBytes();
-  OptionalLong partitionNumRows();
-  OptionalLong partitionFilesCount();
+  OptionalLong sizeInBytes();
+  OptionalLong numRows();
+  OptionalLong filesCount();
 }
