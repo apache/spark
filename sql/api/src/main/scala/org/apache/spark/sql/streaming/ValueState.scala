@@ -43,8 +43,12 @@ private[sql] trait ValueState[S] extends Serializable {
   /** Get the state if it exists as an option and None otherwise */
   def getOption(): Option[S]
 
-  /** Update the value of the state. */
-  // TODO(sahnib) confirm if this should be scala or Java type of Duration
+  /**
+   * Update the value of the state.
+   * @param newState the new value
+   * @param ttlDuration set the ttl to current batch processing time (for processing time TTL mode)
+   *                    or current watermark (for event time ttl mode) plus ttlDuration
+   */
   def update(newState: S, ttlDuration: Duration = Duration.ZERO): Unit
 
   /** Remove this state. */

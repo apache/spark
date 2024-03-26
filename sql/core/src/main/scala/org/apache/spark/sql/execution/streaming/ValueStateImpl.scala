@@ -106,7 +106,7 @@ class ValueStateImpl[S](
     }
 
     var expirationMs: Long = -1
-    if (ttlDuration != Duration.ZERO) {
+    if (ttlDuration != null && ttlDuration != Duration.ZERO) {
       expirationMs = StateTTL.calculateExpirationTimeForDuration(
         ttlMode, ttlDuration, batchTimestampMs, eventTimeWatermarkMs)
     }
@@ -140,5 +140,78 @@ class ValueStateImpl[S](
       StateTTL.isExpired(ttlMode, _, batchTimestampMs, eventTimeWatermarkMs))
 
     isExpired.isDefined && isExpired.get
+  }
+
+  /*
+   * Internal methods to probe state for testing. The below methods exist for unit tests
+   * to read the state ttl values, and ensure that values are persisted correctly in
+   * the underlying  state store.
+   */
+
+  /**
+   * Retrieves the value from State even if its expired. This method is used
+   * in tests to read the state store value, and ensure if its cleaned up at the
+   * end of the micro-batch.
+   */
+  private[sql] def getWithoutEnforcingTTL(): Option[S] = {
+    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
+    val retRow = store.get(encodedGroupingKey, stateName)
+
+    if (retRow != null) {
+      val resState = stateTypesEncoder.decodeValue(retRow)
+      Some(resState)
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Read the ttl value associated with the grouping key.
+   */
+  private[sql] def getTTLValue(): Option[Long] = {
+    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
+    val retRow = store.get(encodedGroupingKey, stateName)
+
+    if (retRow != null) {
+      stateTypesEncoder.decodeTtlExpirationMs(retRow)
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Get all ttl values stored in ttl state for current implicit
+   * grouping key.
+   */
+  private[sql] def getValuesInTTLState(): Iterator[Long] = {
+    if (ttlState.isEmpty) {
+      Iterator.empty
+    }
+
+    val ttlIterator = ttlState.get.iterator()
+    val implicitGroupingKey = stateTypesEncoder.serializeGroupingKey()
+    var nextValue: Option[Long] = None
+
+    new Iterator[Long] {
+      override def hasNext: Boolean = {
+        while (nextValue.isEmpty && ttlIterator.hasNext) {
+          val nextTtlValue = ttlIterator.next()
+          val groupingKey = nextTtlValue.groupingKey
+
+          if (groupingKey sameElements implicitGroupingKey) {
+            nextValue = Some(nextTtlValue.expirationMs)
+          }
+        }
+
+        nextValue.isDefined
+      }
+
+      override def next(): Long = {
+        val result = nextValue.get
+        nextValue = None
+
+        result
+      }
+    }
   }
 }

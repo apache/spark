@@ -33,19 +33,19 @@ public class TTLMode {
      * Specifies that there is no TTL for the user state. User state would not
      * be cleaned up by Spark automatically.
      */
-    public static TTLMode NoTTL() {
+    public static final TTLMode NoTTL() {
         return NoTTL$.MODULE$;
     }
 
     /**
      * Specifies that all ttl durations for user state are in processing time.
      */
-    public static TTLMode ProcessingTimeTTL() {
+    public static final TTLMode ProcessingTimeTTL() {
         return ProcessingTimeTTL$.MODULE$;
     }
 
     /**
      * Specifies that all ttl durations for user state are in event time.
      */
-    public static TTLMode EventTimeTTL() { return EventTimeTTL$.MODULE$; }
+    public static final TTLMode EventTimeTTL() { return EventTimeTTL$.MODULE$; }
 }

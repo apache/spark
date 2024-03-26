@@ -34,6 +34,15 @@ object StateTTLSchema {
 }
 
 /**
+ * Encapsulates the ttl row information stored in [[SingleKeyTTLState]].
+ * @param groupingKey grouping key for which ttl is set
+ * @param expirationMs expiration time for the grouping key
+ */
+case class SingleKeyTTLRow(
+    groupingKey: Array[Byte],
+    expirationMs: Long)
+
+/**
  * Represents a State variable which supports TTL.
  */
 trait StateVariableWithTTLSupport {
@@ -114,7 +123,6 @@ class SingleKeyTTLState(
         val groupingKey = kv.key.getBinary(1)
         state.clearIfExpired(groupingKey)
 
-        // TODO(sahnib) ; validate its safe to update inside iterator
         store.remove(kv.key, ttlColumnFamilyName)
       }
     }
@@ -123,6 +131,22 @@ class SingleKeyTTLState(
   private[sql] def setStateVariable(
       state: StateVariableWithTTLSupport): Unit = {
     this.state = state
+  }
+
+  private[sql] def iterator(): Iterator[SingleKeyTTLRow] = {
+    val ttlIterator = store.iterator(ttlColumnFamilyName)
+
+    new Iterator[SingleKeyTTLRow] {
+      override def hasNext: Boolean = ttlIterator.hasNext
+
+      override def next(): SingleKeyTTLRow = {
+        val kv = ttlIterator.next()
+        SingleKeyTTLRow(
+          expirationMs = kv.key.getLong(0),
+          groupingKey = kv.key.getBinary(1)
+        )
+      }
+    }
   }
 }
 
@@ -151,9 +175,9 @@ object StateTTL {
       batchTimestampMs: Option[Long],
       eventTimeWatermarkMs: Option[Long]): Boolean = {
     if (ttlMode == TTLMode.ProcessingTimeTTL()) {
-      batchTimestampMs.get > expirationMs
+      batchTimestampMs.get >= expirationMs
     } else if (ttlMode == TTLMode.EventTimeTTL()) {
-      eventTimeWatermarkMs.get > expirationMs
+      eventTimeWatermarkMs.get >= expirationMs
     } else {
       throw new IllegalStateException(s"cannot evaluate expiry condition for" +
         s" unknown ttl Mode $ttlMode")
