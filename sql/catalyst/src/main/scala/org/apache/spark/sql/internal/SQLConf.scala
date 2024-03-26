@@ -5000,7 +5000,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def collationEnabled: Boolean = getConf(COLLATION_ENABLED)
 
   override def defaultStringType: StringType = {
-    if (getConf(DEFAULT_COLLATION) == "UTF8_BINARY") {
+    if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
       StringType
     } else {
       StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))

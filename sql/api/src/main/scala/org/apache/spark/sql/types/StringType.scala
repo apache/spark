@@ -42,9 +42,9 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
   /**
    * Support for Binary Ordering implies that strings are considered equal only
    * if they are byte for byte equal. E.g. all accent or case-insensitive collations are
-   * considered non-binary. Also their comparison does not require ICU library calls, as
-   * ordering follows spark internal implementation. If this field is true, byte level operations
-   * can be used against this datatype (e.g. for equality, hashing and sorting).
+   * considered non-binary. Also their ordering does not require calls to ICU library, as
+   * it follows spark internal implementation. If this field is true, byte level operations
+   * can be used against this datatype (e.g. for equality, hashing and ordering).
    */
   def supportsBinaryOrdering: Boolean =
     CollationFactory.fetchCollation(collationId).supportsBinaryOrdering
