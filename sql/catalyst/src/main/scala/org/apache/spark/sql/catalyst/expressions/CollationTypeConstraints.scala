@@ -55,7 +55,7 @@ abstract class StringTypeCollated extends AbstractDataType {
 case object StringTypeBinary extends StringTypeCollated {
   override private[sql] def simpleString: String = "string_binary"
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isBinaryCollation
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality
 }
 
 /**
@@ -64,8 +64,8 @@ case object StringTypeBinary extends StringTypeCollated {
 case object StringTypeBinaryLcase extends StringTypeCollated {
   override private[sql] def simpleString: String = "string_binary_lcase"
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].isBinaryCollation ||
-      other.asInstanceOf[StringType].isLowercaseCollation)
+    other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
+      other.asInstanceOf[StringType].isUTF8BinaryLcaseCollation)
 }
 
 /**

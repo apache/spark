@@ -1746,6 +1746,34 @@
     ],
     "sqlState" : "22012"
   },
+  "INVALID_AGGREGATE_FILTER" : {
+    "message" : [
+      "The FILTER expression <filterExpr> in an aggregate function is invalid."
+    ],
+    "subClass" : {
+      "CONTAINS_AGGREGATE" : {
+        "message" : [
+          "Expected a FILTER expression without an aggregation, but found <aggExpr>."
+        ]
+      },
+      "CONTAINS_WINDOW_FUNCTION" : {
+        "message" : [
+          "Expected a FILTER expression without a window function, but found <windowExpr>."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Expected a deterministic FILTER expression."
+        ]
+      },
+      "NOT_BOOLEAN" : {
+        "message" : [
+          "Expected a FILTER expression of the BOOLEAN type."
+        ]
+      }
+    },
+    "sqlState" : "42903"
+  },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
       "The index <indexValue> is out of bounds. The array has <arraySize> elements. Use the SQL function `get()` to tolerate accessing element at invalid index and return NULL instead. If necessary set <ansiConfig> to \"false\" to bypass this error."
@@ -3533,6 +3561,24 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN" : {
+    "message" : [
+      "Incorrect number of ordering columns=<numOrderingCols> for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN" : {
+    "message" : [
+      "Incorrect number of prefix columns=<numPrefixCols> for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -3542,6 +3588,12 @@
   "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
     "message" : [
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Variable size ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
   },
@@ -4468,6 +4520,11 @@
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: <sqlExprs>."
         ]
       },
+      "HIGHER_ORDER_FUNCTION" : {
+        "message" : [
+          "Subquery expressions are not supported within higher-order functions. Please remove all subquery expressions from higher-order functions and then try the query again."
+        ]
+      },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
         "message" : [
           "Lateral join condition cannot be non-deterministic: <condition>."
@@ -4888,26 +4945,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1024" : {
-    "message" : [
-      "FILTER expression is non-deterministic, it cannot be used in aggregate functions."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1025" : {
-    "message" : [
-      "FILTER expression is not of type boolean. It cannot be used in an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1026" : {
-    "message" : [
-      "FILTER expression contains aggregate. It cannot be used in an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1027" : {
-    "message" : [
-      "FILTER expression contains window function. It cannot be used in an aggregate function."
     ]
   },
   "_LEGACY_ERROR_TEMP_1030" : {
