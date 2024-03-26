@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DoubleType, IntegerType, StructType}
 import org.apache.spark.unsafe.Platform
 
 class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
@@ -56,6 +56,40 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       errorClass = "DUPLICATED_MAP_KEY",
       parameters = Map(
         "key" -> "1",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
+  }
+
+  test("apply key normalization when creating") {
+    val builderDouble = new ArrayBasedMapBuilder(DoubleType, IntegerType)
+    builderDouble.put(-0.0, 1)
+    checkError(
+      exception = intercept[SparkRuntimeException](builderDouble.put(0.0, 2)),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "0.0",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
+
+    val builderArray = new ArrayBasedMapBuilder(ArrayType(DoubleType), IntegerType)
+    builderArray.put(new GenericArrayData(Seq(-0.0)), 1)
+    checkError(
+      exception = intercept[SparkRuntimeException](
+        builderArray.put(new GenericArrayData(Seq(0.0)), 1)),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "[0.0]",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
+
+    val builderStruct = new ArrayBasedMapBuilder(new StructType().add("i", "double"), IntegerType)
+    builderStruct.put(InternalRow(-0.0), 1)
+    // By default duplicated map key fails the query.
+    checkError(
+      exception = intercept[SparkRuntimeException](builderStruct.put(InternalRow(0.0), 3)),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "[0.0]",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
   }
