@@ -32,6 +32,8 @@ import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
 class VariantSuite extends QueryTest with SharedSparkSession {
+  import testImplicits._
+
   test("basic tests") {
     def verifyResult(df: DataFrame): Unit = {
       val result = df.collect()
@@ -297,5 +299,27 @@ class VariantSuite extends QueryTest with SharedSparkSession {
         "select t1.v from t as t1 join t as t2 on t1.v = t2.v")
     }
     assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+  }
+
+  test("variant_explode") {
+    def check(input: String, expected: Seq[Row]): Unit = {
+      val df = Seq(input).toDF("json")
+      checkAnswer(df.selectExpr("variant_explode(parse_json(json))")
+        .selectExpr("pos", "key", "to_json(value)"), expected)
+      val expectedOuter = if (expected.isEmpty) Seq(Row(null, null, null)) else expected
+      checkAnswer(df.selectExpr("variant_explode_outer(parse_json(json))")
+        .selectExpr("pos", "key", "to_json(value)"), expectedOuter)
+    }
+
+    Seq("true", "false").foreach { codegenEnabled =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled) {
+        check(null, Nil)
+        check("1", Nil)
+        check("null", Nil)
+        check("""{"a": [1, 2, 3], "b": true}""", Seq(Row(0, "a", "[1,2,3]"), Row(1, "b", "true")))
+        check("""[null, "hello", {}]""",
+          Seq(Row(0, null, "null"), Row(1, null, "\"hello\""), Row(2, null, "{}")))
+      }
+    }
   }
 }
