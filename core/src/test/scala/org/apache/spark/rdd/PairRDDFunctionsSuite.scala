@@ -614,7 +614,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     val e = intercept[SparkException] {
       pairs.saveAsNewAPIHadoopFile[NewFakeFormatWithCallback]("ignored")
     }
-    assert(e.getCause.getMessage contains "failed to write")
+    assert(e.getCause.getMessage contains "Task failed while writing rows")
 
     assert(FakeWriterWithCallback.calledBy === "write,callback,close")
     assert(FakeWriterWithCallback.exception != null, "exception should be captured")
@@ -631,7 +631,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       pairs.saveAsHadoopFile(
         "ignored", pairs.keyClass, pairs.valueClass, classOf[FakeFormatWithCallback], conf)
     }
-    assert(e.getCause.getMessage contains "failed to write")
+    assert(e.getCause.getMessage contains "Task failed while writing rows")
 
     assert(FakeWriterWithCallback.calledBy === "write,callback,close")
     assert(FakeWriterWithCallback.exception != null, "exception should be captured")
