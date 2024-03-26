@@ -426,9 +426,8 @@ class SparkSession:
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
-                session = SparkSession.active()
                 infer_pandas_dict_as_map = (
-                    str(session.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower()
+                    str(self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower()
                     == "true"
                 )
                 if infer_pandas_dict_as_map:
