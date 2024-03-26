@@ -26,36 +26,16 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 # Listeners that has spark commands in callback handler functions
-# V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
-# `onQueryProgress`, `onQueryTerminated`. It is prior to Spark 3.5.
-class TestListenerSparkV1(StreamingQueryListener):
+class TestListenerSpark(StreamingQueryListener):
     def onQueryStarted(self, event):
         e = pyspark.cloudpickle.dumps(event)
         df = self.spark.createDataFrame(data=[(e,)])
-        df.write.mode("append").saveAsTable("listener_start_events_v1")
+        df.write.mode("append").saveAsTable("listener_start_events")
 
     def onQueryProgress(self, event):
         e = pyspark.cloudpickle.dumps(event)
         df = self.spark.createDataFrame(data=[(e,)])
-        df.write.mode("append").saveAsTable("listener_progress_events_v1")
-
-    def onQueryTerminated(self, event):
-        e = pyspark.cloudpickle.dumps(event)
-        df = self.spark.createDataFrame(data=[(e,)])
-        df.write.mode("append").saveAsTable("listener_terminated_events_v1")
-
-
-# V2: The interface after the method `onQueryIdle` is added. It is Spark 3.5+.
-class TestListenerSparkV2(StreamingQueryListener):
-    def onQueryStarted(self, event):
-        e = pyspark.cloudpickle.dumps(event)
-        df = self.spark.createDataFrame(data=[(e,)])
-        df.write.mode("append").saveAsTable("listener_start_events_v2")
-
-    def onQueryProgress(self, event):
-        e = pyspark.cloudpickle.dumps(event)
-        df = self.spark.createDataFrame(data=[(e,)])
-        df.write.mode("append").saveAsTable("listener_progress_events_v2")
+        df.write.mode("append").saveAsTable("listener_progress_events")
 
     def onQueryIdle(self, event):
         pass
@@ -63,10 +43,28 @@ class TestListenerSparkV2(StreamingQueryListener):
     def onQueryTerminated(self, event):
         e = pyspark.cloudpickle.dumps(event)
         df = self.spark.createDataFrame(data=[(e,)])
-        df.write.mode("append").saveAsTable("listener_terminated_events_v2")
+        df.write.mode("append").saveAsTable("listener_terminated_events")
 
 
-class TestListenerLocal(StreamingQueryListener):
+# V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
+# `onQueryProgress`, `onQueryTerminated`. It is prior to Spark 3.5.
+class TestListenerLocalV1(StreamingQueryListener):
+    def __init__(self):
+        self.start = []
+        self.progress = []
+        self.terminated = []
+
+    def onQueryStarted(self, event):
+        self.start.append(event)
+
+    def onQueryProgress(self, event):
+        self.progress.append(event)
+
+    def onQueryTerminated(self, event):
+        self.terminated.append(event)
+
+
+class TestListenerLocalV2(StreamingQueryListener):
     def __init__(self):
         self.start = []
         self.progress = []
@@ -87,19 +85,29 @@ class TestListenerLocal(StreamingQueryListener):
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):
     def test_listener_management(self):
-        listener1 = TestListenerLocal()
-        listener2 = TestListenerLocal()
+        listener1 = TestListenerLocalV1()
+        listener2 = TestListenerLocalV2()
 
         try:
             self.spark.streams.addListener(listener1)
             self.spark.streams.addListener(listener2)
-            q = self.spark.readStream.format("rate").load().writeStream.format("noop").start()
+            q = (
+                self.spark.readStream.format("rate")
+                .load()
+                .writeStream.format("noop")
+                .queryName("test_local")
+                .start()
+            )
 
             # Both listeners should have listener events already because onQueryStarted
             # is always called before DataStreamWriter.start() returns
             self.assertEqual(len(listener1.start), 1)
             self.assertEqual(len(listener2.start), 1)
+            self.check_start_event(listener1.start[0])
+            self.check_start_event(listener2.start[0])
 
+            while q.lastProgress is None:
+                q.awaitTermination(0.5)
             # removeListener is a blocking call, resources are cleaned up by the time it returns
             self.spark.streams.removeListener(listener1)
             self.spark.streams.removeListener(listener2)
@@ -109,12 +117,13 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             q.stop()
 
             # need to wait a while before QueryTerminatedEvent reaches client
-            time.sleep(15)
+            while len(listener1.terminated) == 0:
+                time.sleep(1)
+
             self.assertEqual(len(listener1.terminated), 1)
 
-            self.check_start_event(listener1.start[0])
             for event in listener1.progress:
-                self.check_progress_event(event)
+                self.check_progress_event(event, is_stateful=False)
             self.check_terminated_event(listener1.terminated[0])
 
         finally:
@@ -125,7 +134,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
     def test_slow_query(self):
         try:
-            listener = TestListenerLocal()
+            listener = TestListenerLocalV2()
             self.spark.streams.addListener(listener)
 
             slow_query = (
@@ -177,7 +186,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 raise Exception("I'm so sorry!")
 
         try:
-            listener_good = TestListenerLocal()
+            listener_good = TestListenerLocalV2()
             listener_bad = UselessListener()
             self.spark.streams.addListener(listener_good)
             self.spark.streams.addListener(listener_bad)
@@ -200,8 +209,14 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 q.stop()
 
     def test_listener_events_spark_command(self):
-        def verify(test_listener, table_postfix):
-            try:
+        test_listener = TestListenerSpark()
+
+        try:
+            with self.table(
+                    "listener_start_events",
+                    "listener_progress_events",
+                    "listener_terminated_events",
+            ):
                 self.spark.streams.addListener(test_listener)
 
                 # This ensures the read socket on the server won't crash (i.e. because of timeout)
@@ -214,56 +229,38 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                 q = (
                     df_stateful.writeStream.format("noop")
                     .queryName("test")
-                    .outputMode("complete")
+                    .outputMode("update")
+                    .trigger(processingTime="5 seconds")
                     .start()
                 )
 
                 self.assertTrue(q.isActive)
                 # ensure at least one batch is ran
                 while q.lastProgress is None or q.lastProgress["batchId"] == 0:
-                    q.awaitTermination(5)
+                    time.sleep(0.5)
                 q.stop()
                 self.assertFalse(q.isActive)
 
-                # Sleep to make sure listener_terminated_events is written successfully
-                time.sleep(60)
-
-                start_table_name = "listener_start_events" + table_postfix
-                progress_tbl_name = "listener_progress_events" + table_postfix
-                terminated_tbl_name = "listener_terminated_events" + table_postfix
+                time.sleep(60)  # Sleep to make sure listener_terminated_events is written successfully
 
                 start_event = pyspark.cloudpickle.loads(
-                    self.spark.read.table(start_table_name).collect()[0][0]
+                    self.spark.read.table("listener_start_events").collect()[0][0]
                 )
 
                 progress_event = pyspark.cloudpickle.loads(
-                    self.spark.read.table(progress_tbl_name).collect()[0][0]
+                    self.spark.read.table("listener_progress_events").collect()[0][0]
                 )
 
                 terminated_event = pyspark.cloudpickle.loads(
-                    self.spark.read.table(terminated_tbl_name).collect()[0][0]
+                    self.spark.read.table("listener_terminated_events").collect()[0][0]
                 )
 
                 self.check_start_event(start_event)
-                self.check_progress_event(progress_event)
+                self.check_progress_event(progress_event, is_stateful=True)
                 self.check_terminated_event(terminated_event)
 
-            finally:
-                self.spark.streams.removeListener(test_listener)
-
-                # Remove again to verify this won't throw any error
-                self.spark.streams.removeListener(test_listener)
-
-        with self.table(
-            "listener_start_events_v1",
-            "listener_progress_events_v1",
-            "listener_terminated_events_v1",
-            "listener_start_events_v2",
-            "listener_progress_events_v2",
-            "listener_terminated_events_v2",
-        ):
-            verify(TestListenerSparkV1(), "_v1")
-            verify(TestListenerSparkV2(), "_v2")
+        finally:
+            self.spark.streams.removeListener(test_listener)
 
 
 if __name__ == "__main__":
