@@ -77,20 +77,20 @@ object CollationBenchmark extends SqlBasedBenchmark {
       benchmark.addCase(s"equalsFunction - $collationType", numIters = 20) { _ =>
         sublistStrings.foreach(s1 =>
           utf8Strings.foreach(s =>
-              collation.equalsFunction(s, s1).booleanValue())
+            collation.equalsFunction(s, s1).booleanValue())
         )
       }
       benchmark.addCase(s"collator.compare - $collationType") { _ =>
         sublistStrings.foreach(s1 =>
           utf8Strings.foreach(s =>
-              collation.comparator.compare(s, s1)
+            collation.comparator.compare(s, s1)
           )
         )
       }
       benchmark.addCase(s"hashFunction - $collationType") { _ =>
         sublistStrings.foreach(_ =>
           utf8Strings.foreach(s =>
-              collation.hashFunction.applyAsLong(s)
+            collation.hashFunction.applyAsLong(s)
 
           )
         )
