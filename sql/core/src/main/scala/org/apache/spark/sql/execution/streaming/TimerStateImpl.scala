@@ -186,9 +186,11 @@ class TimerStateImpl(
   }
 
   /**
-   * Function to get all the registered timers for all grouping keys
+   * Function to get all the expired registered timers for all grouping keys.
+   * Perform a range scan on timestamp and will stop iterating once the key row timestamp equals or
+   * exceeds the limit (as timestamp key is increasingly sorted).
    * @param expiryTimestampMs Threshold for expired timestamp in milliseconds, this function
-   *                          will return all timers that have timestamp less than passed threshold
+   *                          will return all timers that have timestamp less than passed threshold.
    * @return - iterator of all the registered timers for all grouping keys
    */
   def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
