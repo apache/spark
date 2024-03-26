@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
