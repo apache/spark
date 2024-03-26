@@ -555,16 +555,18 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
             )
 
     def test_schema_inference_from_pandas_with_dict(self):
-        from pyspark.sql.connect import functions as CF
-        from pyspark.sql import functions as F
-
+        # SPARK-47543: test for verifying if inferring `dict` as `MapType` work properly.
         pdf = pd.DataFrame({"str_col": ["second"], "dict_col": [{"first": 0.7, "second": 0.3}]})
 
+        infer_pandas_dict_as_map = self.connect.conf.get(
+            "spark.sql.execution.pandas.inferPandasDictAsMap"
+        )
         self.connect.conf.set("spark.sql.execution.pandas.inferPandasDictAsMap", True)
+
         sdf = self.spark.createDataFrame(pdf)
         cdf = self.connect.createDataFrame(pdf)
         self.assertEqual(
-            sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
+            sdf.withColumn("test", SF.col("dict_col")[SF.col("str_col")]).collect(),
             cdf.withColumn("test", CF.col("dict_col")[CF.col("str_col")]).collect(),
         )
 
@@ -577,6 +579,9 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
             exception=pe.exception,
             error_class="CANNOT_INFER_EMPTY_SCHEMA",
             message_parameters={},
+        )
+        self.connect.conf.set(
+            "spark.sql.execution.pandas.inferPandasDictAsMap", infer_pandas_dict_as_map
         )
 
     def test_schema_has_nullable(self):
