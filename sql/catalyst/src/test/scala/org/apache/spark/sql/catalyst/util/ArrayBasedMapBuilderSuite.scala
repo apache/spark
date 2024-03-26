@@ -104,7 +104,14 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
         "key" -> "[[0.0]]",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
+  }
 
+  test("successful map normalization on build") {
+    val builder = new ArrayBasedMapBuilder(DoubleType, IntegerType)
+    builder.put(-0.0, 1)
+    val map = builder.build()
+    assert(map.numElements() == 1)
+    assert(ArrayBasedMapData.toScalaMap(map) == Map(0.0 -> 1))
   }
 
   test("remove duplicated keys with last wins policy") {
