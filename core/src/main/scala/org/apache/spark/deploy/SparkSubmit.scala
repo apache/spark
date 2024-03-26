@@ -228,6 +228,11 @@ private[spark] class SparkSubmit extends Logging {
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
     if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
+    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+      Logging.enableStructuredLogging()
+    } else {
+      Logging.disableStructuredLogging()
+    }
     var childMainClass = ""
 
     // Set the cluster manager

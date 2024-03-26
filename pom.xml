@@ -758,6 +758,11 @@
         <version>${log4j.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-layout-template-json</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+      <dependency>
         <!-- API bridge between log4j 1 and 2 -->
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-1.2-api</artifactId>
