@@ -92,6 +92,19 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
         "key" -> "[0.0]",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
+
+    val builderStructWithArray = new ArrayBasedMapBuilder(
+      new StructType().add("array", ArrayType(DoubleType) ), IntegerType)
+    builderStructWithArray.put(InternalRow(new GenericArrayData(Seq(-0.0))), 1)
+    checkError(
+      exception = intercept[SparkRuntimeException](
+        builderStructWithArray.put(InternalRow(new GenericArrayData(Seq(0.0))), 1)),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "[[0.0]]",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
+
   }
 
   test("remove duplicated keys with last wins policy") {
