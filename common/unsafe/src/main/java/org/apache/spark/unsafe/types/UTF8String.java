@@ -877,10 +877,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Find the `str` from left to right considering different collations.
    */
   private int find(UTF8String str, int start, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.find(str, start);
     }
-    if(collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if(collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return charPosToByte(this.toLowerCase().indexOf(str.toLowerCase(), bytePosToChar(start)));
     }
     return collatedFind(str, start, collationId);
@@ -918,10 +918,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Find the `str` from right to left considering different collations.
    */
   private int rfind(UTF8String str, int start, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.rfind(str, start);
     }
-    if(collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if(collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return rfindLowercase(str, start);
     }
     return collatedRFind(str, start, collationId);
@@ -1029,7 +1029,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String subStringIndex(UTF8String delim, int count, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return subStringIndex(delim, count);
     }
     return collatedSubStringIndex(delim, count, collationId);
