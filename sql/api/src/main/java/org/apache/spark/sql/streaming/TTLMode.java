@@ -40,9 +40,7 @@ public class TTLMode {
     /**
      * Specifies that all ttl durations for user state are in processing time.
      */
-    public static final TTLMode ProcessingTimeTTL() {
-        return ProcessingTimeTTL$.MODULE$;
-    }
+    public static final TTLMode ProcessingTimeTTL() { return ProcessingTimeTTL$.MODULE$; }
 
     /**
      * Specifies that all ttl durations for user state are in event time.
