@@ -91,7 +91,7 @@ class TimerStateImpl(
 
   val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
   store.createColFamilyIfAbsent(tsToKeyCFName, keySchemaForSecIndex,
-    schemaForValueRow, NoPrefixKeyStateEncoderSpec(keySchemaForSecIndex),
+    schemaForValueRow, RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, 1),
     useMultipleValuesPerKey = false, isInternal = true)
 
   private def getGroupingKey(cfName: String): Any = {
@@ -110,7 +110,6 @@ class TimerStateImpl(
 
   // We maintain a secondary index that inverts the ordering of the timestamp
   // and grouping key
-  // TODO: use range scan encoder to encode the secondary index key
   private def encodeSecIndexKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
     val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
     val keyRow = secIndexKeyEncoder(InternalRow(expiryTimestampMs, keyByteArr))

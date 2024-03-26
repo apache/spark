@@ -110,4 +110,52 @@ class TimerSuite extends StateVariableSuiteBase {
         Set(("test_key2", 15000L), ("test_key1", 2000L), ("test_key1", 1000L)))
     }
   }
+
+  testWithTimeOutMode("Range scan on second index timer key - " +
+    "verify timestamp is sorted for single instance") { timeoutMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      val timerState = new TimerStateImpl(store, timeoutMode,
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+      val timerTimerstamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
+      // register/put unordered timestamp into rocksDB
+      timerTimerstamps.foreach(timerState.registerTimer)
+      // getExpiredTimers() is calling iterator() from rocksDB
+      assert(timerState.getExpiredTimers().toSeq.map(_._2) === timerTimerstamps.sorted)
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+    }
+  }
+
+  testWithTimeOutMode("test range scan on second index timer key - " +
+    "verify timestamp is sorted for multiple instances") { timeoutMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
+      val timerState1 = new TimerStateImpl(store, timeoutMode,
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+      val timerTimestamps1 = Seq(64L, 32L, 1024L, 4096L, 0L, 1L)
+      timerTimestamps1.foreach(timerState1.registerTimer)
+
+      val timerState2 = new TimerStateImpl(store, timeoutMode,
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+      val timerTimestamps2 = Seq(931L, 8000L, 452300L, 4200L)
+      timerTimestamps2.foreach(timerState2.registerTimer)
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key3")
+      val timerState3 = new TimerStateImpl(store, timeoutMode,
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]])
+      val timerTimerStamps3 = Seq(1L, 2L, 8L, 3L)
+      timerTimerStamps3.foreach(timerState3.registerTimer)
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
+      assert(timerState1.getExpiredTimers().toSeq.map(_._2) ===
+        (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted)
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+    }
+  }
 }
