@@ -3435,25 +3435,11 @@ class Dataset[T] private[sql] (
     sparkSession.analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
   }
 
-  def collectResult(): SparkResult[T] = {
-    val results = sparkSession.execute(plan, agnosticEncoder)
+  def collectResult(): SparkResult[T] =
+    sparkSession.execute(plan, agnosticEncoder, getObservationsMapOpt)
 
-    results.observedMetrics.map { case (name, metric) =>
-      observationsOpt.map {
-        _.get(name) match {
-          case Some(observation) =>
-            observation.setMetricsAndNotify(Some(metric))
-          case None =>
-          // The observation is not registered using an Observation object.
-        }
-      }
-    }
-    results
-  }
-
-  def collectObservations(): Map[String, Map[String, Any]] = {
-    collectResult().observedMetrics.toMap
-  }
+  def collectObservations(): Map[String, Map[String, Any]] =
+    collectResult().getObservedMetrics
 
   private[sql] def withResult[E](f: SparkResult[T] => E): E = {
     val result = collectResult()

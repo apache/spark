@@ -542,9 +542,12 @@ class SparkSession private[sql] (
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
-  private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
+  private[sql] def execute[T](
+      plan: proto.Plan,
+      encoder: AgnosticEncoder[T],
+      observationsOpt: Option[Map[String, Observation]] = None): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder, timeZoneId)
+    val result = new SparkResult(value, allocator, encoder, timeZoneId, observationsOpt)
     result
   }
 
