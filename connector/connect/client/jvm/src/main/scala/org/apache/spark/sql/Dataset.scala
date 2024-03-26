@@ -132,7 +132,7 @@ class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
     @DeveloperApi val plan: proto.Plan,
     val encoder: Encoder[T],
-    @DeveloperApi carryOverObservations: Option[Map[String, Observation]] = None)
+    @DeveloperApi carryOverObservationsOpt: Option[Map[String, Observation]] = None)
     extends Serializable {
   // Make sure we don't forget to set plan id.
   assert(plan.getRoot.getCommon.hasPlanId)
@@ -140,7 +140,7 @@ class Dataset[T] private[sql] (
   private[sql] val agnosticEncoder: AgnosticEncoder[T] = encoderFor(encoder)
 
   private var observationsOpt: Option[mutable.Map[String, Observation]] = {
-    carryOverObservations match {
+    carryOverObservationsOpt match {
       case Some(observations) =>
         Some(mutable.Map.newBuilder[String, Observation].addAll(observations).result())
       case None => None

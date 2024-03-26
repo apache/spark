@@ -20,5 +20,27 @@ package org.apache.spark.sql
 import java.util.UUID
 
 class Observation(name: String) extends ObservationBase(name) {
+
+  /**
+   * Create an Observation instance without providing a name. This generates a random name.
+   */
   def this() = this(UUID.randomUUID().toString)
+}
+
+/**
+ * (Scala-specific) Create instances of Observation via Scala `apply`.
+ * @since 3.3.0
+ */
+object Observation {
+
+  /**
+   * Observation constructor for creating an anonymous observation.
+   */
+  def apply(): Observation = new Observation()
+
+  /**
+   * Observation constructor for creating a named observation.
+   */
+  def apply(name: String): Observation = new Observation(name)
+
 }
