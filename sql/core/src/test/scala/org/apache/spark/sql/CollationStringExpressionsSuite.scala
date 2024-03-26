@@ -118,7 +118,7 @@ class CollationStringExpressionsSuite extends QueryTest
     testFindInSet(5, 3, "DeF", "abc,b,ab,c,dEf")
     testFindInSet(0, 3, "DEFG", "abc,b,ab,c,def")
   }
-    
+  
   test("REPEAT check output type on explicitly collated string") {
     def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
       val s = Literal.create(input, StringType(collationId))
