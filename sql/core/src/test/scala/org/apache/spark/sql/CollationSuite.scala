@@ -652,31 +652,24 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-47431: Default collation set to UNICODE, column type test") {
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      sql(
-        s"""
-           |CREATE TABLE t(c1 STRING)
-           |USING PARQUET
-           |""".stripMargin)
-      sql("INSERT INTO t VALUES ('a')")
-      checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UNICODE")))
+    withTable("t") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+        sql(s"CREATE TABLE t(c1 STRING) USING PARQUET")
+        sql(s"INSERT INTO t VALUES ('a')")
+        checkAnswer(sql(s"SELECT collation(c1) FROM t"), Seq(Row("UNICODE")))
+      }
     }
   }
 
   test("SPARK-47431: Create table with UTF8_BINARY, make sure collation persists on read") {
-    val tableName = "t"
-    withTable(tableName) {
+    withTable("t") {
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY") {
-        sql(
-          s"""
-             |CREATE TABLE $tableName(c1 STRING)
-             |USING PARQUET
-             |""".stripMargin)
-        sql(s"INSERT INTO $tableName VALUES ('a')")
-        checkAnswer(sql(s"SELECT collation(c1) FROM $tableName"), Seq(Row("UTF8_BINARY")))
-        checkAnswer(sql("SET spark.sql.session.collation.default=UNICODE"),
-          Seq(Row("spark.sql.session.collation.default", "UNICODE")))
-        checkAnswer(sql(s"SELECT collation(c1) FROM $tableName"), Seq(Row("UTF8_BINARY")))
+        sql("CREATE TABLE t(c1 STRING) USING PARQUET")
+        sql("INSERT INTO t VALUES ('a')")
+        checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
+      }
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+        checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
       }
     }
   }
