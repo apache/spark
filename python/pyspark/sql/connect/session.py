@@ -95,6 +95,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark.sql.connect.datasource import DataSourceRegistration
 
 
 try:
@@ -742,6 +743,14 @@ class SparkSession:
         return UDTFRegistration(self)
 
     udtf.__doc__ = PySparkSession.udtf.__doc__
+
+    @property
+    def dataSource(self) -> "DataSourceRegistration":
+        from pyspark.sql.connect.datasource import DataSourceRegistration
+
+        return DataSourceRegistration(self)
+
+    dataSource.__doc__ = PySparkSession.dataSource.__doc__
 
     @property
     def version(self) -> str:

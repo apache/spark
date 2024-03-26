@@ -1736,7 +1736,10 @@ class DataFrame:
 
                 # validate the column name
                 if not hasattr(self._session, "is_mock_session"):
-                    self.select(item).isLocal()
+                    # Different from __getattr__, the name here can be quoted like df['`id`'].
+                    # Only validate the name when it is not in the cached schema.
+                    if item not in self.columns:
+                        self.select(item).isLocal()
 
                 return Column(
                     ColumnReference(
