@@ -205,6 +205,17 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
 
     ex = intercept[AnalysisException] {
+      spark.sql("select parse_json('') sort by 1")
+    }
+    assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+
+    ex = intercept[AnalysisException] {
+      spark.sql("with t as (select 1 as a, parse_json('') as v) " +
+        "select rank() over (partition by a order by v) from t")
+    }
+    assert(ex.getErrorClass == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+
+    ex = intercept[AnalysisException] {
       spark.sql("with t as (select parse_json('') as v) " +
         "select t1.v from t as t1 join t as t2 on t1.v = t2.v")
     }
