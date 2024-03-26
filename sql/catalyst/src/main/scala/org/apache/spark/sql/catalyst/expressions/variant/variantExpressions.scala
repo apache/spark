@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.variant
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types._
 )
 // scalastyle:on line.size.limit
 case class ParseJson(child: Expression) extends UnaryExpression
-  with NullIntolerant with ExpectsInputTypes with CodegenFallback {
+  with NullIntolerant with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def dataType: DataType = VariantType
@@ -56,10 +56,16 @@ case class ParseJson(child: Expression) extends UnaryExpression
         throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json")
       case NonFatal(e) =>
         throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-        input.toString, BadRecordException(() => input.asInstanceOf[UTF8String], cause = e))
+          input.toString, BadRecordException(() => input.asInstanceOf[UTF8String], cause = e))
     }
   }
 
   override protected def withNewChildInternal(newChild: Expression): ParseJson =
     copy(child = newChild)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val parseJson = ctx.addReferenceObj("parseJson", this)
+    nullSafeCodeGen(ctx, ev,
+      eval => s"${ev.value} = (VariantVal) $parseJson.nullSafeEval($eval);")
+  }
 }
