@@ -657,6 +657,36 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("create table on indeterminate result should fail") {
+    val tableName = "t1"
+    withTable(tableName) {
+      spark.sql(
+        s"""
+           | CREATE TABLE $tableName(c1 STRING COLLATE UTF8_BINARY,
+           | c2 STRING COLLATE UTF8_BINARY_LCASE)
+           | USING PARQUET
+           |""".stripMargin)
+      sql(s"INSERT INTO $tableName VALUES ('aaa', 'aaa')")
+      sql(s"INSERT INTO $tableName VALUES ('AAA', 'AAA')")
+      sql(s"INSERT INTO $tableName VALUES ('bbb', 'bbb')")
+      sql(s"INSERT INTO $tableName VALUES ('BBB', 'BBB')")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE VIEW v AS SELECT c1 || c3 FROM $tableName")
+        },
+        errorClass = "INDETERMINATE_COLLATION"
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t2 AS SELECT c1 || c3 FROM $tableName")
+        },
+        errorClass = "INDETERMINATE_COLLATION"
+      )
+    }
+  }
+
   test("create v2 table with collation column") {
     val tableName = "testcat.table_name"
     val collationName = "UTF8_BINARY_LCASE"
