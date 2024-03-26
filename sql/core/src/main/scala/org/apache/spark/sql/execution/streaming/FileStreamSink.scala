@@ -140,8 +140,7 @@ class FileStreamSink(
 
   private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    new BasicWriteJobStatsTracker(serializableHadoopConf, BasicWriteJobStatsTracker.metrics,
-      BasicWriteJobStatsTracker.partitionMetrics)
+    new BasicWriteJobStatsTracker(serializableHadoopConf, BasicWriteJobStatsTracker.metrics)
   }
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {

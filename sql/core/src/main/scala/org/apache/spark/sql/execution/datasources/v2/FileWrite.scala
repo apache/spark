@@ -128,8 +128,7 @@ trait FileWrite extends Write {
     val partitionMetrics: mutable.Map[String, PartitionTaskStats]
         = BasicWriteJobStatsTracker.partitionMetrics
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics,
-      partitionMetrics)
+    val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
     // TODO: after partitioning is supported in V2:
     //       1. filter out partition columns in `dataColumns`.
     //       2. Don't use Seq.empty for `partitionColumns`.

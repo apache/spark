@@ -229,16 +229,15 @@ class BasicWriteTaskStatsTracker(
 class BasicWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
     @transient val driverSideMetrics: Map[String, SQLMetric],
-    @transient val driverSidePartitionMetrics: mutable.Map[String, PartitionTaskStats],
     taskCommitTimeMetric: SQLMetric)
   extends WriteJobStatsTracker {
 
+  val partitionMetrics: PartitionMetricsWriteInfo = new PartitionMetricsWriteInfo()
+
   def this(
       serializableHadoopConf: SerializableConfiguration,
-      metrics: Map[String, SQLMetric],
-      partitionMetrics: mutable.Map[String, PartitionTaskStats]) = {
-    this(serializableHadoopConf, metrics - TASK_COMMIT_TIME, partitionMetrics,
-      metrics(TASK_COMMIT_TIME))
+      metrics: Map[String, SQLMetric]) = {
+    this(serializableHadoopConf, metrics - TASK_COMMIT_TIME, metrics(TASK_COMMIT_TIME))
   }
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
@@ -265,12 +264,7 @@ class BasicWriteJobStatsTracker(
         // Check if we know the mapping of the internal row to a partition path
         if (partitionsMap.contains(s._1)) {
           val path = partitionsMap(s._1)
-          val current = partitionMetrics(path)
-          driverSidePartitionMetrics(path) = BasicWritePartitionTaskStats(
-            current.numFiles + s._2.numFiles,
-            current.numBytes + s._2.numBytes,
-            current.numRows + s._2.numRows
-          )
+          partitionMetrics.update(path, s._2.numBytes, s._2.numRows, s._2.numFiles)
         }
       })
     }
@@ -284,14 +278,8 @@ class BasicWriteJobStatsTracker(
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverSideMetrics.values.toList)
 
-    val partitionMetricsWriteInfo = new PartitionMetricsWriteInfo()
-    driverSidePartitionMetrics.foreach(entry => {
-      val key = entry._1
-      val value = entry._2
-      partitionMetricsWriteInfo.update(key, value.numBytes, value.numRows, value.numFiles)
-    })
     SQLPartitionMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      partitionMetricsWriteInfo)
+      partitionMetrics)
   }
 }
 
