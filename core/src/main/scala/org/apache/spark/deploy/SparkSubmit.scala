@@ -406,11 +406,10 @@ private[spark] class SparkSubmit extends Logging {
         // is high
         val workingDirectory = "."
         childClasspath += workingDirectory
-
-        def downloadResourcesToCurrentDirectory(uris: String,
-                                                isArchive: Boolean = false,
-                                                avoidDownload: String => Boolean = _ => false):
-        String = {
+        def downloadResourcesToCurrentDirectory(
+            uris: String,
+            isArchive: Boolean = false,
+            avoidDownload: String => Boolean = _ => false): String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
           val (avoidDownloads, toDownloads) =
             resolvedUris.partition(uri => avoidDownload(uri.getScheme))
