@@ -499,14 +499,18 @@ class SparkSession(SparkConversionMixin):
 
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
-                            return cast(SparkSession,
-                                        RemoteSparkSession.builder.config(map=opts).getOrCreate())
+                            return cast(
+                                SparkSession,
+                                RemoteSparkSession.builder.config(map=opts).getOrCreate(),
+                            )
                         elif "SPARK_LOCAL_REMOTE" in os.environ:
                             url = "sc://localhost"
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
-                            return cast(SparkSession,
-                                        RemoteSparkSession.builder.config(map=opts).getOrCreate())
+                            return cast(
+                                SparkSession,
+                                RemoteSparkSession.builder.config(map=opts).getOrCreate(),
+                            )
                         else:
                             raise PySparkRuntimeError(
                                 error_class="SESSION_ALREADY_EXIST",
