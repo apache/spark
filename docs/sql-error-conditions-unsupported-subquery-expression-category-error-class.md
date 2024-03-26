@@ -50,7 +50,7 @@ A correlated outer name reference within a subquery expression body was not foun
 
 Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: `<sqlExprs>`.
 
-## LAMBDA_OR_HIGHER_ORDER_FUNCTION
+## HIGHER_ORDER_FUNCTION
 
 Subquery expressions are not supported within higher-order functions. Please remove all subquery expressions from higher-order functions and then try the query again.
 

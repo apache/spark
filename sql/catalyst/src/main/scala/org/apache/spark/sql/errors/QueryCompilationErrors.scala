@@ -622,7 +622,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def subqueryExpressionInLambdaOrHigherOrderFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.LAMBDA_OR_HIGHER_ORDER_FUNCTION",
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
       messageParameters = Map.empty)
   }
 

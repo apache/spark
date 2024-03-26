@@ -296,7 +296,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorClass(
       inputPlan = lambdaPlanScanFromTable,
       expectedErrorClass =
-        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.LAMBDA_OR_HIGHER_ORDER_FUNCTION",
+        "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
       expectedMessageParameters = Map.empty[String, String])
   }
 }

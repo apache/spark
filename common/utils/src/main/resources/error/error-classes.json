@@ -4496,7 +4496,7 @@
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: <sqlExprs>."
         ]
       },
-      "LAMBDA_OR_HIGHER_ORDER_FUNCTION" : {
+      "HIGHER_ORDER_FUNCTION" : {
         "message" : [
           "Subquery expressions are not supported within higher-order functions. Please remove all subquery expressions from higher-order functions and then try the query again."
         ]
