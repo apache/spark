@@ -568,6 +568,17 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
             cdf.withColumn("test", CF.col("dict_col")[CF.col("str_col")]).collect(),
         )
 
+        pdf_empty_struct = pd.DataFrame({"str_col": ["second"], "dict_col": [{}]})
+
+        with self.assertRaises(PySparkValueError) as pe:
+            self.connect.createDataFrame(pdf_empty_struct)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_INFER_EMPTY_SCHEMA",
+            message_parameters={},
+        )
+
     def test_schema_has_nullable(self):
         schema_false = StructType().add("id", IntegerType(), False)
         cdf1 = self.connect.createDataFrame([[1]], schema=schema_false)

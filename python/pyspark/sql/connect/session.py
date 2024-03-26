@@ -72,7 +72,6 @@ from pyspark.sql.pandas.types import (
     to_arrow_type,
     _deduplicate_field_names,
     from_arrow_type,
-    to_spark_type,
 )
 from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -88,6 +87,7 @@ from pyspark.sql.types import (
     TimestampType,
     StructField,
     MapType,
+    StringType,
 )
 from pyspark.sql.utils import to_str
 from pyspark.errors import (
@@ -432,24 +432,19 @@ class SparkSession:
                     == "true"
                 )
                 if infer_pandas_dict_as_map:
-                    if data.empty:
-                        raise PySparkValueError(
-                            error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                            message_parameters={},
-                        )
                     fields = []
                     pa_schema = pa.Schema.from_pandas(data)
                     spark_type: Union[MapType, DataType]
                     for field in pa_schema:
                         field_type = field.type
                         if isinstance(field_type, pa.StructType):
-                            pandas_dict_col = data[field.name]
-                            first_item = pandas_dict_col.iloc[0]
-                            first_key = next(iter(first_item))
-                            first_value = first_item[first_key]
-                            key_type = type(first_key)
-                            value_type = type(first_value)
-                            spark_type = MapType(to_spark_type(key_type), to_spark_type(value_type))
+                            if len(field_type) == 0:
+                                raise PySparkValueError(
+                                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                                    message_parameters={},
+                                )
+                            arrow_type = field_type.field(0).type
+                            spark_type = MapType(StringType(), from_arrow_type(arrow_type))
                         else:
                             spark_type = from_arrow_type(field_type)
                         fields.append(StructField(field.name, spark_type, nullable=field.nullable))
