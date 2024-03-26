@@ -1458,7 +1458,7 @@ package object config {
       .doubleConf
       .createWithDefault(1.5)
 
-  private[spark] val KUBERNETES_AVOID_JAR_DOWNLOAD_SCHEMES =
+  private[spark] val KUBERNETES_JARS_AVOID_DOWNLOAD_SCHEMES =
     ConfigBuilder("spark.kubernetes.jars.avoidDownloadSchemes")
       .doc("Comma-separated list of schemes for which jars will NOT be downloaded to the " +
         "driver local disk prior to be distributed to executors, only for kubernetes deployment. " +

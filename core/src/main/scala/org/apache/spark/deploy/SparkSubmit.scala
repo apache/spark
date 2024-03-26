@@ -438,7 +438,7 @@ private[spark] class SparkSubmit extends Logging {
           } ++ avoidDownloads.map(_.toString)).mkString(",")
         }
 
-        val avoidJarDownloadSchemes = sparkConf.get(KUBERNETES_AVOID_JAR_DOWNLOAD_SCHEMES)
+        val avoidJarDownloadSchemes = sparkConf.get(KUBERNETES_JARS_AVOID_DOWNLOAD_SCHEMES)
 
         def avoidJarDownload(scheme: String): Boolean =
           avoidJarDownloadSchemes.contains("*") || avoidJarDownloadSchemes.contains(scheme)
