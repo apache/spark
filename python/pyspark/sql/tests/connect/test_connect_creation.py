@@ -566,6 +566,7 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
         with self.sql_conf(
             {
                 "spark.sql.execution.arrow.pyspark.enabled": True,
+                "spark.sql.execution.arrow.pyspark.fallback.enabled": False,
                 "spark.sql.execution.pandas.inferPandasDictAsMap": True,
             }
         ):
@@ -574,6 +575,38 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
             self.assertEqual(
                 sdf.withColumn("test", SF.col("dict_col")[SF.col("str_col")]).collect(),
                 cdf.withColumn("test", CF.col("dict_col")[CF.col("str_col")]).collect(),
+            )
+
+            # Empty dict should fail
+            pdf_empty_struct = pd.DataFrame({"str_col": ["second"], "dict_col": [{}]})
+
+            with self.assertRaises(PySparkValueError) as pe:
+                self.connect.createDataFrame(pdf_empty_struct)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
+
+            with self.assertRaises(PySparkValueError) as pe:
+                self.spark.createDataFrame(pdf_empty_struct)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
+
+            # Dict has different types of values should fail
+            pdf_different_type = pd.DataFrame(
+                {"str_col": ["second"], "dict_col": [{"first": 0.7, "second": "0.3"}]}
+            )
+            self.assertRaises(
+                PySparkValueError, lambda: self.connect.createDataFrame(pdf_different_type)
+            )
+            self.assertRaises(
+                PySparkValueError, lambda: self.spark.createDataFrame(pdf_different_type)
             )
 
         with self.sql_conf(
@@ -588,17 +621,6 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
                 sdf.withColumn("test", SF.col("dict_col")[SF.col("str_col")]).collect(),
                 cdf.withColumn("test", CF.col("dict_col")[CF.col("str_col")]).collect(),
             )
-
-        pdf_empty_struct = pd.DataFrame({"str_col": ["second"], "dict_col": [{}]})
-
-        with self.assertRaises(PySparkValueError) as pe:
-            self.connect.createDataFrame(pdf_empty_struct)
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="CANNOT_INFER_EMPTY_SCHEMA",
-            message_parameters={},
-        )
 
         # Reset config
         self.connect.conf.set(
