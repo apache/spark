@@ -253,7 +253,7 @@ object ShuffleExchangeExec {
       } else {
         // Spark's SortShuffleManager uses `ExternalSorter` to buffer records in memory, so we must
         // copy.
-        true
+        false
       }
     } else {
       // Catch-all case to safely handle any future ShuffleManager implementations.
