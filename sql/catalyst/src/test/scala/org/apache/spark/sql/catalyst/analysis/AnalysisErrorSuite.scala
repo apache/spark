@@ -1387,4 +1387,19 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       )
     }
   }
+
+  errorClassTest(
+    "SPARK-47572: Enforce Window partitionSpec is orderable",
+    testRelation2.select(
+      WindowExpression(
+        new Rank(),
+        WindowSpecDefinition(
+          CreateMap(Literal("key") :: UnresolvedAttribute("a") :: Nil) :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          UnspecifiedFrame)).as("window")),
+    errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+    messageParameters = Map(
+      "functionName" -> "`attributereference`",
+      "dataType" -> "\"MAP<STRING, STRING>\"",
+      "sqlExpr" -> "\"_w0\""))
 }
