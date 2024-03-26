@@ -1221,8 +1221,7 @@ private[spark] class DAGScheduler(
       }
     }
     if (activeInGroup.isEmpty && !cancelFutureJobs) {
-      logWarning(s"Cancel job group $groupId failed due to " +
-        "find failure the corresponding active job of the group.")
+      logWarning(s"Failed to cancel job group $groupId. Cannot find active jobs for it.")
     }
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_,
