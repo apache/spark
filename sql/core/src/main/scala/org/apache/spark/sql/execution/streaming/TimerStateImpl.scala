@@ -85,16 +85,14 @@ class TimerStateImpl(
   }
 
   val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-  store.createColFamilyIfAbsent(keyToTsCFName,
-    schemaForKeyRow, numColsPrefixKey = 1,
-    schemaForValueRow, useMultipleValuesPerKey = false,
-    isInternal = true)
+  store.createColFamilyIfAbsent(keyToTsCFName, schemaForKeyRow,
+    schemaForValueRow, PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1),
+    useMultipleValuesPerKey = false, isInternal = true)
 
   val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
-  store.createColFamilyIfAbsent(tsToKeyCFName,
-    keySchemaForSecIndex, numColsPrefixKey = 0,
-    schemaForValueRow, useMultipleValuesPerKey = false,
-    isInternal = true)
+  store.createColFamilyIfAbsent(tsToKeyCFName, keySchemaForSecIndex,
+    schemaForValueRow, NoPrefixKeyStateEncoderSpec(keySchemaForSecIndex),
+    useMultipleValuesPerKey = false, isInternal = true)
 
   private def getGroupingKey(cfName: String): Any = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption

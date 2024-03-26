@@ -2334,6 +2334,45 @@ class CommonInlineUserDefinedTableFunction(LogicalPlan):
         return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
 
 
+class PythonDataSource:
+    """Represents a user-defined Python data source."""
+
+    def __init__(self, data_source: Type, python_ver: str):
+        self._data_source = data_source
+        self._python_ver = python_ver
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.PythonDataSource:
+        ds = proto.PythonDataSource()
+        ds.command = CloudPickleSerializer().dumps(self._data_source)
+        ds.python_ver = self._python_ver
+        return ds
+
+
+class CommonInlineUserDefinedDataSource(LogicalPlan):
+    """Logical plan object for a user-defined data source"""
+
+    def __init__(self, name: str, data_source: PythonDataSource) -> None:
+        super().__init__(None)
+        self._name = name
+        self._data_source = data_source
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.common_inline_user_defined_data_source.name = self._name
+        plan.common_inline_user_defined_data_source.python_data_source.CopyFrom(
+            self._data_source.to_plan(session)
+        )
+        return plan
+
+    def to_data_source_proto(
+        self, session: "SparkConnectClient"
+    ) -> "proto.CommonInlineUserDefinedDataSource":
+        plan = proto.CommonInlineUserDefinedDataSource()
+        plan.name = self._name
+        plan.python_data_source.CopyFrom(self._data_source.to_plan(session))
+        return plan
+
+
 class CachedRelation(LogicalPlan):
     def __init__(self, plan: proto.Relation) -> None:
         super(CachedRelation, self).__init__(None)

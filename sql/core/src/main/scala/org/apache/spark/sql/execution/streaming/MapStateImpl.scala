@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreErrors, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.{BinaryType, StructType}
 
@@ -40,8 +40,8 @@ class MapStateImpl[K, V](
   private val stateTypesEncoder = new CompositeKeyStateEncoder(
     keySerializer, userKeyEnc, valEncoder, schemaForCompositeKeyRow, stateName)
 
-  store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, numColsPrefixKey = 1,
-    schemaForValueRow)
+  store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, schemaForValueRow,
+    PrefixKeyScanStateEncoderSpec(schemaForCompositeKeyRow, 1))
 
   /** Whether state exists or not. */
   override def exists(): Boolean = {

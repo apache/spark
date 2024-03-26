@@ -76,9 +76,29 @@ object StateStoreErrors {
       messageParameters = Map("stateName" -> stateName))
   }
 
+  def incorrectNumOrderingColsForPrefixScan(numPrefixCols: String):
+    StateStoreIncorrectNumOrderingColsForPrefixScan = {
+    new StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols)
+  }
+
+  def incorrectNumOrderingColsForRangeScan(numOrderingCols: String):
+    StateStoreIncorrectNumOrderingColsForRangeScan = {
+    new StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols)
+  }
+
+  def nullTypeOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreNullTypeOrderingColsNotSupported = {
+    new StateStoreNullTypeOrderingColsNotSupported(fieldName, index)
+  }
+
+  def variableSizeOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreVariableSizeOrderingColsNotSupported = {
+    new StateStoreVariableSizeOrderingColsNotSupported(fieldName, index)
+  }
+
   def cannotCreateColumnFamilyWithReservedChars(colFamilyName: String):
     StateStoreCannotCreateColumnFamilyWithReservedChars = {
-      new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
+    new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
   }
 
   def cannotPerformOperationWithInvalidTimeoutMode(
@@ -142,3 +162,23 @@ class StateStoreUnsupportedOperationOnMissingColumnFamily(
     colFamilyName: String) extends SparkUnsupportedOperationException(
   errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
   messageParameters = Map("operationType" -> operationType, "colFamilyName" -> colFamilyName))
+
+class StateStoreIncorrectNumOrderingColsForPrefixScan(numPrefixCols: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN",
+    messageParameters = Map("numPrefixCols" -> numPrefixCols))
+
+class StateStoreIncorrectNumOrderingColsForRangeScan(numOrderingCols: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN",
+    messageParameters = Map("numOrderingCols" -> numOrderingCols))
+
+class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))
