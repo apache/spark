@@ -21,7 +21,6 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, FindInSet, Literal, StringInstr, StringRepeat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -118,45 +117,6 @@ class CollationStringExpressionsSuite extends QueryTest
     testFindInSet(4, 3, "C", "abc,b,ab,c,def")
     testFindInSet(5, 3, "DeF", "abc,b,ab,c,dEf")
     testFindInSet(0, 3, "DEFG", "abc,b,ab,c,def")
-  }
-
-  test("FIND_IN_SET fail mismatched collation types") {
-    // UNICODE and UNICODE_CI
-    val expr1 = FindInSet(Collate(Literal("a"), "UNICODE"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI"))
-    assert(expr1.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> "UNICODE",
-          "collationNameRight" -> "UNICODE_CI"
-        )
-      )
-    )
-    // DEFAULT(UTF8_BINARY) and UTF8_BINARY_LCASE
-    val expr2 = FindInSet(Collate(Literal("a"), "UTF8_BINARY"),
-      Collate(Literal("abc,b,ab,c,def"), "UTF8_BINARY_LCASE"))
-    assert(expr2.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> "UTF8_BINARY",
-          "collationNameRight" -> "UTF8_BINARY_LCASE"
-        )
-      )
-    )
-    // UTF8_BINARY_LCASE and UNICODE_CI
-    val expr3 = FindInSet(Collate(Literal("a"), "UTF8_BINARY_LCASE"),
-      Collate(Literal("abc,b,ab,c,def"), "UNICODE_CI"))
-    assert(expr3.checkInputDataTypes() ==
-      DataTypeMismatch(
-        errorSubClass = "COLLATION_MISMATCH",
-        messageParameters = Map(
-          "collationNameLeft" -> "UTF8_BINARY_LCASE",
-          "collationNameRight" -> "UNICODE_CI"
-        )
-      )
-    )
   }
     
   test("REPEAT check output type on explicitly collated string") {

@@ -550,10 +550,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public int findInSet(UTF8String match, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.findInSet(match);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().findInSet(match.toLowerCase());
     }
     return collatedFindInSet(match, collationId);
@@ -877,10 +877,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public int indexOf(UTF8String substring, int start, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.indexOf(substring, start);
     }
-    if (collationId == CollationFactory.LOWERCASE_COLLATION_ID) {
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().indexOf(substring.toLowerCase(), start);
     }
     return collatedIndexOf(substring, collationId);

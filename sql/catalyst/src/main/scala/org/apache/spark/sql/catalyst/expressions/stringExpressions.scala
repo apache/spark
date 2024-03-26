@@ -1013,7 +1013,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationId = left.dataType.asInstanceOf[StringType].collationId
 
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       nullSafeCodeGen(ctx, ev, (word, set) => s"${ev.value} = $set.findInSet($word);")
     } else {
       nullSafeCodeGen(ctx, ev, (word, set) => s"${ev.value} = $set.findInSet($word, $collationId);")
@@ -1417,7 +1417,7 @@ case class StringInstr(str: Expression, substr: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val collationId = left.dataType.asInstanceOf[StringType].collationId
 
-    if (CollationFactory.fetchCollation(collationId).isBinaryCollation) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       defineCodeGen(ctx, ev, (l, r) => s"($l).indexOf($r, 0) + 1")
     } else {
       defineCodeGen(ctx, ev, (l, r) => s"($l).indexOf($r, 0, $collationId) + 1")
