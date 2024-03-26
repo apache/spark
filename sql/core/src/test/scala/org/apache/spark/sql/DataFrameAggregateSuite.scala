@@ -2155,8 +2155,8 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  private def assertAggregateOnDataframe(dfSeq: Seq[DataFrame],
-    expected: Seq[Int], aggregateColumn: String): Unit = {
+  private def assertAggregateOnDataframe(df: DataFrame,
+    expected: Int, aggregateColumn: String): Unit = {
     val configurations = Seq(
       Seq.empty[(String, String)], // hash aggregate is used by default
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
@@ -2168,11 +2168,9 @@ class DataFrameAggregateSuite extends QueryTest
       Seq("spark.sql.test.forceApplySortAggregate" -> "true")
     )
 
-    for ((df, index) <- dfSeq.zipWithIndex) {
-      for (conf <- configurations) {
-        withSQLConf(conf: _*) {
-          assert(createAggregate(df).count() == expected(index))
-        }
+    for (conf <- configurations) {
+      withSQLConf(conf: _*) {
+        assert(createAggregate(df).count() == expected)
       }
     }
 
@@ -2185,16 +2183,17 @@ class DataFrameAggregateSuite extends QueryTest
     val dfSameInt = (0 until numRows)
       .map(_ => Tuple1(Map(1 -> 1)))
       .toDF("m0")
+    assertAggregateOnDataframe(dfSameInt, 1, "m0")
 
     val dfSameFloat = (0 until numRows)
       .map(i => Tuple1(Map(if (i % 2 == 0) 1 -> 0.0 else 1 -> -0.0 )))
       .toDF("m0")
+    assertAggregateOnDataframe(dfSameInt, 1, "m0")
 
     val dfDifferent = (0 until numRows)
       .map(i => Tuple1(Map(i -> i)))
       .toDF("m0")
-
-    assertAggregateOnDataframe(Seq(dfSameInt, dfSameFloat, dfDifferent), Seq(1, 1, numRows), "m0")
+    assertAggregateOnDataframe(dfSameInt, numRows, "m0")
   }
 
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
@@ -2203,12 +2202,12 @@ class DataFrameAggregateSuite extends QueryTest
     val dfSame = (0 until numRows)
       .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
       .toDF("c0")
+    assertAggregateOnDataframe(dfSame, 1, "c0")
 
     val dfDifferent = (0 until numRows)
       .map(i => Tuple1(new CalendarInterval(i, i, i)))
       .toDF("c0")
-
-    assertAggregateOnDataframe(Seq(dfSame, dfDifferent), Seq(1, numRows), "c0")
+    assertAggregateOnDataframe(dfDifferent, numRows, "c0")
   }
 
   test("SPARK-46779: Group by subquery with a cached relation") {
