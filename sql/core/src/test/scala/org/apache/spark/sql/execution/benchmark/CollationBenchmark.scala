@@ -67,16 +67,17 @@ object CollationBenchmark extends SqlBasedBenchmark {
 
     val benchmark = new Benchmark(
       "collation unit benchmarks - equalsFunction",
-      utf8Strings.size,
+      utf8Strings.size * 10,
       warmupTime = 4.seconds,
-      // minNumIters = 10,
       output = output)
     collationTypes.foreach(collationType => {
       val collation = CollationFactory.fetchCollation(collationType)
-      benchmark.addCase(s"$collationType", numIters = 20) { _ =>
+      benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach(s1 =>
           utf8Strings.foreach(s =>
-            collation.equalsFunction(s, s1).booleanValue())
+            (0 to 10).foreach(_ =>
+              collation.equalsFunction(s, s1).booleanValue())
+          )
         )
       }
     }
@@ -88,9 +89,8 @@ object CollationBenchmark extends SqlBasedBenchmark {
 
     val benchmark = new Benchmark(
       "collation unit benchmarks - compareFunction",
-      utf8Strings.size,
+      utf8Strings.size * 10,
       warmupTime = 4.seconds,
-      // minNumIters = 10,
       output = output)
     collationTypes.foreach(collationType => {
       val collation = CollationFactory.fetchCollation(collationType)
@@ -115,17 +115,17 @@ object CollationBenchmark extends SqlBasedBenchmark {
 
     val benchmark = new Benchmark(
       "collation unit benchmarks - hashFunction",
-      utf8Strings.size,
+      utf8Strings.size * 10,
       warmupTime = 4.seconds,
-      // minNumIters = 10,
       output = output)
     collationTypes.foreach(collationType => {
       val collation = CollationFactory.fetchCollation(collationType)
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach(_ =>
           utf8Strings.foreach(s =>
-            collation.hashFunction.applyAsLong(s)
-
+            (0 to 10).foreach(_ =>
+              collation.hashFunction.applyAsLong(s)
+            )
           )
         )
       }
