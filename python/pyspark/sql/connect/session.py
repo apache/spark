@@ -85,7 +85,6 @@ from pyspark.sql.types import (
     StructType,
     AtomicType,
     TimestampType,
-    StructField,
     MapType,
     StringType,
 )
@@ -431,7 +430,7 @@ class SparkSession:
                     == "true"
                 )
                 if infer_pandas_dict_as_map:
-                    fields = []
+                    struct = StructType()
                     pa_schema = pa.Schema.from_pandas(data)
                     spark_type: Union[MapType, DataType]
                     for field in pa_schema:
@@ -446,8 +445,8 @@ class SparkSession:
                             spark_type = MapType(StringType(), from_arrow_type(arrow_type))
                         else:
                             spark_type = from_arrow_type(field_type)
-                        fields.append(StructField(field.name, spark_type, nullable=field.nullable))
-                    schema = StructType(fields)
+                        struct.add(field.name, spark_type, nullable=field.nullable)
+                    schema = struct
             elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
                 assert isinstance(_cols, list)
                 _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])

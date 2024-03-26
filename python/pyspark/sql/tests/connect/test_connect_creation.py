@@ -563,12 +563,31 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
         )
         self.connect.conf.set("spark.sql.execution.pandas.inferPandasDictAsMap", True)
 
-        sdf = self.spark.createDataFrame(pdf)
-        cdf = self.connect.createDataFrame(pdf)
-        self.assertEqual(
-            sdf.withColumn("test", SF.col("dict_col")[SF.col("str_col")]).collect(),
-            cdf.withColumn("test", CF.col("dict_col")[CF.col("str_col")]).collect(),
-        )
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+                "spark.sql.execution.pandas.inferPandasDictAsMap": True,
+            }
+        ):
+            sdf = self.spark.createDataFrame(pdf)
+            cdf = self.connect.createDataFrame(pdf)
+            self.assertEqual(
+                sdf.withColumn("test", SF.col("dict_col")[SF.col("str_col")]).collect(),
+                cdf.withColumn("test", CF.col("dict_col")[CF.col("str_col")]).collect(),
+            )
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": False,
+                "spark.sql.execution.pandas.inferPandasDictAsMap": True,
+            }
+        ):
+            sdf = self.spark.createDataFrame(pdf)
+            cdf = self.connect.createDataFrame(pdf)
+            self.assertEqual(
+                sdf.withColumn("test", SF.col("dict_col")[SF.col("str_col")]).collect(),
+                cdf.withColumn("test", CF.col("dict_col")[CF.col("str_col")]).collect(),
+            )
 
         pdf_empty_struct = pd.DataFrame({"str_col": ["second"], "dict_col": [{}]})
 
@@ -580,6 +599,8 @@ class SparkConnectCreationTests(SparkConnectSQLTestCase):
             error_class="CANNOT_INFER_EMPTY_SCHEMA",
             message_parameters={},
         )
+
+        # Reset config
         self.connect.conf.set(
             "spark.sql.execution.pandas.inferPandasDictAsMap", infer_pandas_dict_as_map
         )
