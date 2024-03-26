@@ -158,13 +158,11 @@ class TimerSuite extends StateVariableSuiteBase {
       timerTimerStamps3.foreach(timerState3.registerTimer)
       ImplicitGroupingKeyTracker.removeImplicitKey()
 
-      ImplicitGroupingKeyTracker.setImplicitKey("test_key1")
       assert(timerState1.getExpiredTimers(Long.MaxValue).toSeq.map(_._2) ===
         (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted)
       assert(timerState1.getExpiredTimers(Long.MinValue).toSeq === Seq.empty)
       assert(timerState1.getExpiredTimers(8000L).toSeq.map(_._2) ===
         (timerTimestamps1 ++ timerTimestamps2 ++ timerTimerStamps3).sorted.takeWhile(_ < 8000L))
-      ImplicitGroupingKeyTracker.removeImplicitKey()
     }
   }
 }
