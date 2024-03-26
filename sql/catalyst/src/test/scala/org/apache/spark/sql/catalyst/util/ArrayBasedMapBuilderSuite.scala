@@ -70,40 +70,6 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
         "key" -> "0.0",
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
-
-    val builderArray = new ArrayBasedMapBuilder(ArrayType(DoubleType), IntegerType)
-    builderArray.put(new GenericArrayData(Seq(-0.0)), 1)
-    checkError(
-      exception = intercept[SparkRuntimeException](
-        builderArray.put(new GenericArrayData(Seq(0.0)), 1)),
-      errorClass = "DUPLICATED_MAP_KEY",
-      parameters = Map(
-        "key" -> "[0.0]",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
-    )
-
-    val builderStruct = new ArrayBasedMapBuilder(new StructType().add("i", "double"), IntegerType)
-    builderStruct.put(InternalRow(-0.0), 1)
-    // By default duplicated map key fails the query.
-    checkError(
-      exception = intercept[SparkRuntimeException](builderStruct.put(InternalRow(0.0), 3)),
-      errorClass = "DUPLICATED_MAP_KEY",
-      parameters = Map(
-        "key" -> "[0.0]",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
-    )
-
-    val builderStructWithArray = new ArrayBasedMapBuilder(
-      new StructType().add("array", ArrayType(DoubleType) ), IntegerType)
-    builderStructWithArray.put(InternalRow(new GenericArrayData(Seq(-0.0))), 1)
-    checkError(
-      exception = intercept[SparkRuntimeException](
-        builderStructWithArray.put(InternalRow(new GenericArrayData(Seq(0.0))), 1)),
-      errorClass = "DUPLICATED_MAP_KEY",
-      parameters = Map(
-        "key" -> "[[0.0]]",
-        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
-    )
   }
 
   test("successful map normalization on build") {

@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -54,21 +53,12 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   private val mapKeyDedupPolicy = SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY)
 
-  private lazy val keyNeedNormalize = NormalizeFloatingNumbers.needNormalize(keyType)
+  private lazy val keyNeedNormalize =
+    keyType.isInstanceOf[FloatType] || keyType.isInstanceOf[DoubleType]
 
-  def normalize(value: Any, dataType: DataType): Any = dataType match {
-    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER(value)
-    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER(value)
-    case ArrayType(dt, _) =>
-      new GenericArrayData(value.asInstanceOf[GenericArrayData].array.map { element =>
-        normalize(element, dt)
-      })
-    case StructType(sf) =>
-      new GenericInternalRow(
-        value.asInstanceOf[GenericInternalRow].values.zipWithIndex.map { element =>
-        normalize(element._1, sf(element._2).dataType)
-      })
-    case _ => value
+  def normalize(dataType: DataType): Any => Any = dataType match {
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
   }
 
   def put(key: Any, value: Any): Unit = {
@@ -76,7 +66,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
     }
 
-    val keyNormalized = if (keyNeedNormalize) normalize(key, keyType) else key
+    val keyNormalized = if (keyNeedNormalize) normalize(keyType)(key) else key
     val index = keyToIndex.getOrDefault(keyNormalized, -1)
     if (index == -1) {
       if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
