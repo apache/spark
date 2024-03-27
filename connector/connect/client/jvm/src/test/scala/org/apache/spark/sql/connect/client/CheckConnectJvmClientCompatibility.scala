@@ -361,6 +361,8 @@ object CheckConnectJvmClientCompatibility {
       ), // developer API
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.Dataset.collectResult"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.Dataset.collectObservations"),
 
       // RuntimeConfig
       ProblemFilters.exclude[MissingTypesProblem](
