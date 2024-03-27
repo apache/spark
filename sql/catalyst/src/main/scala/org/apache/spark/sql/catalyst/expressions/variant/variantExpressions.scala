@@ -34,14 +34,15 @@ import org.apache.spark.sql.types._
 )
 // scalastyle:on line.size.limit
 case class ParseJson(child: Expression)
-  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+  extends UnaryExpression with NullIntolerant with ExpectsInputTypes with RuntimeReplaceable {
 
   override lazy val replacement: Expression = StaticInvoke(
-    VariantEvaluator.getClass,
+    VariantExpressionEvalUtils.getClass,
     VariantType,
-    "evaluate",
+    "parseJson",
     Seq(child),
-    inputTypes)
+    inputTypes,
+    returnNullable = false)
 
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
