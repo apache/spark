@@ -43,6 +43,7 @@ message Command {
     StreamingQueryManagerCommand streaming_query_manager_command = 9;
     CommonInlineUserDefinedTableFunction register_table_function = 10;
     StreamingQueryListenerBusCommand streaming_query_listener_bus_command = 11;
+    CommonInlineUserDefinedDataSource register_data_source = 12;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.

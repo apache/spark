@@ -18,7 +18,19 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import Any, List, Optional, Type, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
+from typing import (
+    Any,
+    List,
+    Optional,
+    Type,
+    Sequence,
+    Union,
+    cast,
+    TYPE_CHECKING,
+    Mapping,
+    Dict,
+    Tuple,
+)
 import functools
 import json
 import pickle
@@ -37,11 +49,9 @@ from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     Expression,
     SortOrder,
-    LiteralExpression,
 )
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
-    PySparkTypeError,
     PySparkValueError,
     PySparkPicklingError,
     IllegalArgumentException,
@@ -546,32 +556,30 @@ class CachedRemoteRelation(LogicalPlan):
 class Hint(LogicalPlan):
     """Logical plan object for a Hint operation."""
 
-    def __init__(self, child: Optional["LogicalPlan"], name: str, parameters: List[Any]) -> None:
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        name: str,
+        parameters: Sequence[Column],
+    ) -> None:
         super().__init__(child)
 
         assert isinstance(name, str)
 
         self._name = name
 
+        assert parameters is not None and isinstance(parameters, List)
         for param in parameters:
-            assert isinstance(param, (list, str, float, int, Column))
-            if isinstance(param, list):
-                assert all(isinstance(p, (str, float, int)) for p in param)
+            assert isinstance(param, Column)
 
         self._parameters = parameters
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        from pyspark.sql.connect.functions import array, lit
-
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.hint.input.CopyFrom(self._child.plan(session))
         plan.hint.name = self._name
-        for param in self._parameters:
-            if isinstance(param, list):
-                plan.hint.parameters.append(array(*[lit(p) for p in param]).to_plan(session))
-            else:
-                plan.hint.parameters.append(lit(param).to_plan(session))
+        plan.hint.parameters.extend([param.to_plan(session) for param in self._parameters])
         return plan
 
 
@@ -744,7 +752,7 @@ class Aggregate(LogicalPlan):
         grouping_cols: Sequence[Column],
         aggregate_cols: Sequence[Column],
         pivot_col: Optional[Column],
-        pivot_values: Optional[Sequence[Any]],
+        pivot_values: Optional[Sequence[Column]],
         grouping_sets: Optional[Sequence[Sequence[Column]]],
     ) -> None:
         super().__init__(child)
@@ -781,8 +789,6 @@ class Aggregate(LogicalPlan):
         self._grouping_sets = grouping_sets
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        from pyspark.sql.connect.functions import lit
-
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.aggregate.input.CopyFrom(self._child.plan(session))
@@ -805,7 +811,7 @@ class Aggregate(LogicalPlan):
             plan.aggregate.pivot.col.CopyFrom(self._pivot_col.to_plan(session))
             if self._pivot_values is not None and len(self._pivot_values) > 0:
                 plan.aggregate.pivot.values.extend(
-                    [lit(v).to_plan(session).literal for v in self._pivot_values]
+                    [v.to_plan(session).literal for v in self._pivot_values]
                 )
         elif self._group_type == "grouping_sets":
             plan.aggregate.group_type = proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS
@@ -1120,53 +1126,48 @@ class SubqueryAlias(LogicalPlan):
 
 
 class SQL(LogicalPlan):
-    def __init__(self, query: str, args: Optional[Union[Dict[str, Any], List]] = None) -> None:
+    def __init__(
+        self,
+        query: str,
+        args: Optional[List[Column]] = None,
+        named_args: Optional[Dict[str, Column]] = None,
+    ) -> None:
         super().__init__(None)
 
         if args is not None:
-            if isinstance(args, Dict):
-                for k, v in args.items():
-                    assert isinstance(k, str)
-            elif not isinstance(args, List):
-                raise PySparkTypeError(
-                    error_class="INVALID_TYPE",
-                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
-                )
+            assert isinstance(args, List)
+            assert all(isinstance(arg, Column) for arg in args)
+
+        if named_args is not None:
+            assert isinstance(named_args, Dict)
+            for k, arg in named_args.items():
+                assert isinstance(k, str)
+                assert isinstance(arg, Column)
 
         self._query = query
         self._args = args
-
-    def _to_expr(self, session: "SparkConnectClient", v: Any) -> proto.Expression:
-        if isinstance(v, Column):
-            return v.to_plan(session)
-        else:
-            return LiteralExpression._from_value(v).to_plan(session)
+        self._named_args = named_args
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
         plan.sql.query = self._query
 
         if self._args is not None and len(self._args) > 0:
-            if isinstance(self._args, Dict):
-                for k, v in self._args.items():
-                    plan.sql.named_arguments[k].CopyFrom(self._to_expr(session, v))
-            else:
-                for v in self._args:
-                    plan.sql.pos_arguments.append(self._to_expr(session, v))
-
+            plan.sql.pos_arguments.extend([arg.to_plan(session) for arg in self._args])
+        if self._named_args is not None and len(self._named_args) > 0:
+            for k, arg in self._named_args.items():
+                plan.sql.named_arguments[k].CopyFrom(arg.to_plan(session))
         return plan
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
         cmd.sql_command.sql = self._query
-        if self._args is not None and len(self._args) > 0:
-            if isinstance(self._args, Dict):
-                for k, v in self._args.items():
-                    cmd.sql_command.named_arguments[k].CopyFrom(self._to_expr(session, v))
-            else:
-                for v in self._args:
-                    cmd.sql_command.pos_arguments.append(self._to_expr(session, v))
 
+        if self._args is not None and len(self._args) > 0:
+            cmd.sql_command.pos_arguments.extend([arg.to_plan(session) for arg in self._args])
+        if self._named_args is not None and len(self._named_args) > 0:
+            for k, arg in self._named_args.items():
+                cmd.sql_command.named_arguments[k].CopyFrom(arg.to_plan(session))
         return cmd
 
 
@@ -1361,25 +1362,16 @@ class NAReplace(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         cols: Optional[List[str]],
-        replacements: Dict[Any, Any],
+        replacements: Sequence[Tuple[Column, Column]],
     ) -> None:
         super().__init__(child)
-
-        for old_value, new_value in replacements.items():
-            if old_value is not None:
-                assert isinstance(old_value, (bool, int, float, str))
-            if new_value is not None:
-                assert isinstance(new_value, (bool, int, float, str))
-
         self.cols = cols
-        self.replacements = replacements
 
-    def _convert_int_to_float(self, v: Any) -> Any:
-        # a bool is also an int
-        if v is not None and not isinstance(v, bool) and isinstance(v, int):
-            return float(v)
-        else:
-            return v
+        assert replacements is not None and isinstance(replacements, List)
+        for k, v in replacements:
+            assert k is not None and isinstance(k, Column)
+            assert v is not None and isinstance(v, Column)
+        self.replacements = replacements
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -1388,18 +1380,10 @@ class NAReplace(LogicalPlan):
         if self.cols is not None and len(self.cols) > 0:
             plan.replace.cols.extend(self.cols)
         if len(self.replacements) > 0:
-            for old_value, new_value in self.replacements.items():
+            for old_value, new_value in self.replacements:
                 replacement = proto.NAReplace.Replacement()
-                replacement.old_value.CopyFrom(
-                    LiteralExpression._from_value(self._convert_int_to_float(old_value))
-                    .to_plan(session)
-                    .literal
-                )
-                replacement.new_value.CopyFrom(
-                    LiteralExpression._from_value(self._convert_int_to_float(new_value))
-                    .to_plan(session)
-                    .literal
-                )
+                replacement.old_value.CopyFrom(old_value.to_plan(session).literal)
+                replacement.new_value.CopyFrom(new_value.to_plan(session).literal)
                 plan.replace.replacements.append(replacement)
         return plan
 
@@ -1508,15 +1492,16 @@ class StatSampleBy(LogicalPlan):
         self,
         child: Optional["LogicalPlan"],
         col: Column,
-        fractions: Dict[Any, float],
+        fractions: Sequence[Tuple[Column, float]],
         seed: Optional[int],
     ) -> None:
         super().__init__(child)
 
         assert col is not None and isinstance(col, (Column, str))
 
-        assert fractions is not None and isinstance(fractions, dict)
-        for k, v in fractions.items():
+        assert fractions is not None and isinstance(fractions, List)
+        for k, v in fractions:
+            assert k is not None and isinstance(k, Column)
             assert v is not None and isinstance(v, float)
 
         assert seed is None or isinstance(seed, int)
@@ -1531,9 +1516,9 @@ class StatSampleBy(LogicalPlan):
         plan.sample_by.input.CopyFrom(self._child.plan(session))
         plan.sample_by.col.CopyFrom(self._col._expr.to_plan(session))
         if len(self._fractions) > 0:
-            for k, v in self._fractions.items():
+            for k, v in self._fractions:
                 fraction = proto.StatSampleBy.Fraction()
-                fraction.stratum.CopyFrom(LiteralExpression._from_value(k).to_plan(session).literal)
+                fraction.stratum.CopyFrom(k.to_plan(session).literal)
                 fraction.fraction = float(v)
                 plan.sample_by.fractions.append(fraction)
         if self._seed is not None:
@@ -2332,6 +2317,45 @@ class CommonInlineUserDefinedTableFunction(LogicalPlan):
 
     def __repr__(self) -> str:
         return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
+
+
+class PythonDataSource:
+    """Represents a user-defined Python data source."""
+
+    def __init__(self, data_source: Type, python_ver: str):
+        self._data_source = data_source
+        self._python_ver = python_ver
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.PythonDataSource:
+        ds = proto.PythonDataSource()
+        ds.command = CloudPickleSerializer().dumps(self._data_source)
+        ds.python_ver = self._python_ver
+        return ds
+
+
+class CommonInlineUserDefinedDataSource(LogicalPlan):
+    """Logical plan object for a user-defined data source"""
+
+    def __init__(self, name: str, data_source: PythonDataSource) -> None:
+        super().__init__(None)
+        self._name = name
+        self._data_source = data_source
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.common_inline_user_defined_data_source.name = self._name
+        plan.common_inline_user_defined_data_source.python_data_source.CopyFrom(
+            self._data_source.to_plan(session)
+        )
+        return plan
+
+    def to_data_source_proto(
+        self, session: "SparkConnectClient"
+    ) -> "proto.CommonInlineUserDefinedDataSource":
+        plan = proto.CommonInlineUserDefinedDataSource()
+        plan.name = self._name
+        plan.python_data_source.CopyFrom(self._data_source.to_plan(session))
+        return plan
 
 
 class CachedRelation(LogicalPlan):

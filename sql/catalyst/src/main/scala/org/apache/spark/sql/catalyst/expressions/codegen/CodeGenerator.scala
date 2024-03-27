@@ -622,7 +622,7 @@ class CodegenContext extends Logging {
       s"((java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2)"
     case DoubleType =>
       s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
-    case st: StringType if st.isDefaultCollation => s"$c1.binaryEquals($c2)"
+    case st: StringType if st.supportsBinaryOrdering => s"$c1.binaryEquals($c2)"
     case st: StringType => s"$c1.semanticEquals($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
@@ -652,7 +652,7 @@ class CodegenContext extends Logging {
     case FloatType =>
       val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
       s"$clsName.compareFloats($c1, $c2)"
-    case st: StringType if st.isDefaultCollation => s"$c1.binaryCompare($c2)"
+    case st: StringType if st.supportsBinaryOrdering => s"$c1.binaryCompare($c2)"
     case st: StringType => s"$c1.semanticCompare($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
