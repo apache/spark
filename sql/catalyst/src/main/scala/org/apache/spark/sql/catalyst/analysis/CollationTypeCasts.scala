@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, CreateArray, ExpectsInputTypes, Expression, Predicate, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, CreateArray, ExpectsInputTypes, Expression, Predicate, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
@@ -30,8 +30,8 @@ object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
     // Case when we do not fail if resulting collation is indeterminate
-    case checkCastWithIndeterminate @ (_: ComplexTypeMergingExpression | _: CreateArray)
-      if shouldCast(checkCastWithIndeterminate.children) =>
+    case checkCastWithIndeterminate @ (_: ComplexTypeMergingExpression
+                                       | _: CreateArray) =>
       val newChildren =
         collateToSingleType(checkCastWithIndeterminate.children, failOnIndeterminate = false)
       checkCastWithIndeterminate.withNewChildren(newChildren)
@@ -43,11 +43,19 @@ object CollationTypeCasts extends TypeCoercionRule {
       if shouldCast(checkCastWithoutIndeterminate.children) =>
       val newChildren = collateToSingleType(checkCastWithoutIndeterminate.children)
       checkCastWithoutIndeterminate.withNewChildren(newChildren)
+    // Case if casting is not needed, but we only have indeterminate
+    // collations and we do not want to fail
+    case checkIndeterminateWithoutFail@(_: Invoke)
+      if hasIndeterminate(checkIndeterminateWithoutFail.children
+      .filter(e => hasStringType(e.dataType))
+      .map(e => extractStringType(e.dataType))) =>
+      checkIndeterminateWithoutFail
     // Case if casting is not needed, but we only have indeterminate collations
     case checkIndeterminate@(_: BinaryExpression
                              | _: Predicate
                              | _: SortOrder
-                             | _: ExpectsInputTypes)
+                             | _: ExpectsInputTypes
+                             | _: Alias)
       if hasIndeterminate(checkIndeterminate.children
         .filter(e => hasStringType(e.dataType))
         .map(e => extractStringType(e.dataType))) =>

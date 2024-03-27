@@ -543,7 +543,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       // concat of columns of different collations is allowed
       // as long as we don't use the result in an unsupported function
-      sql(s"SELECT c1 || c3 from $tableName")
+      checkAnswer(sql(s"SELECT c1 || c2 FROM $tableName"), Seq(Row("aa"), Row("AA")))
 
       // concat + in
       checkAnswer(sql(s"SELECT c1 FROM $tableName where c1 || 'a' " +
@@ -657,12 +657,13 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("create table on indeterminate result should fail") {
+  test("indeterminate collation checks") {
     val tableName = "t1"
+    val newTableName = "t2"
     withTable(tableName) {
       spark.sql(
         s"""
-           | CREATE TABLE $tableName(c1 STRING COLLATE UTF8_BINARY,
+           | CREATE TABLE $tableName(c1 STRING COLLATE UNICODE,
            | c2 STRING COLLATE UTF8_BINARY_LCASE)
            | USING PARQUET
            |""".stripMargin)
@@ -671,19 +672,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"INSERT INTO $tableName VALUES ('bbb', 'bbb')")
       sql(s"INSERT INTO $tableName VALUES ('BBB', 'BBB')")
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"CREATE VIEW v AS SELECT c1 || c2 FROM $tableName")
-        },
-        errorClass = "INDETERMINATE_COLLATION"
-      )
+      sql(s"SET spark.sql.legacy.createHiveTableByDefault=false")
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t2 AS SELECT c1 || c2 FROM $tableName")
-        },
-        errorClass = "INDETERMINATE_COLLATION"
-      )
+      withTable(newTableName) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE $newTableName AS SELECT c1 || c2 FROM $tableName")
+          },
+          errorClass = "INDETERMINATE_COLLATION")
+      }
     }
   }
 
