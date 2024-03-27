@@ -29,14 +29,17 @@ import java.util.OptionalLong;
  * @since 4.0.0
  */
 public interface HasPartitionStatistics extends InputPartition {
+
   /**
    * Returns the size in bytes of the partition statistics associated to this partition.
    */
   OptionalLong sizeInBytes();
+
   /**
    * Returns the number of rows in the partition statistics associated to this partition.
    */
   OptionalLong numRows();
+
   /**
    * Returns the count of files in the partition statistics associated to this partition.
    */
