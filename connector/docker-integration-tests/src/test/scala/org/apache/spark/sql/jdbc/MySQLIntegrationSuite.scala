@@ -329,7 +329,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     }
   }
 
-  test("GEOMETRY") {
+  test("SPARK-47616: Read GEOMETRY from MySQL") {
     val df = spark.read.jdbc(jdbcUrl, "TBL_GEOMETRY", new Properties)
     checkAnswer(df,
       Row(Array[Byte](0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
