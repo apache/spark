@@ -303,8 +303,13 @@ object SparkConnectService extends Logging {
   /**
    * Based on the userId and sessionId, find or create a new SparkSession.
    */
-  def getOrCreateIsolatedSession(userId: String, sessionId: String): SessionHolder = {
-    sessionManager.getOrCreateIsolatedSession(SessionKey(userId, sessionId))
+  def getOrCreateIsolatedSession(
+      userId: String,
+      sessionId: String,
+      previoslyObservedSessionId: Option[String]): SessionHolder = {
+    sessionManager.getOrCreateIsolatedSession(
+      SessionKey(userId, sessionId),
+      previoslyObservedSessionId)
   }
 
   /**

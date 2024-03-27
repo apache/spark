@@ -1346,7 +1346,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create an Unpivot column.
    */
   override def visitUnpivotColumn(ctx: UnpivotColumnContext): NamedExpression = withOrigin(ctx) {
-    UnresolvedAlias(UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier)))
+    UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier))
   }
 
   /**

@@ -160,6 +160,8 @@ String Functions
     char
     char_length
     character_length
+    collate
+    collation
     concat_ws
     contains
     decode

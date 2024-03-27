@@ -77,9 +77,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new OracleDatabaseOnDocker
 
-  override val defaultMetadata: Metadata = new MetadataBuilder()
+  override def defaultMetadata(dataType: DataType): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
+    .putBoolean("isSigned", dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])
     .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "varchar(255)")
     .build()
 
@@ -101,11 +102,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", DecimalType(10, 0), true, super.defaultMetadata)
+    var expectedSchema = new StructType()
+      .add("ID", DecimalType(10, 0), true, super.defaultMetadata(DecimalType(10, 0)))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE LONG")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", DecimalType(19, 0), true, super.defaultMetadata)
+    expectedSchema = new StructType()
+      .add("ID", DecimalType(19, 0), true, super.defaultMetadata(DecimalType(19, 0)))
     assert(t.schema === expectedSchema)
     // Update column type from LONG to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"

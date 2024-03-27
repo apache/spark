@@ -40,8 +40,6 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       assert(result == expected)
     }
 
-    // At this point, JSON parsing logic is not really implemented. We just construct some number
-    // inputs that are also valid JSON. This exercises passing VariantVal throughout the system.
     val query = spark.sql("select parse_json(repeat('1', id)) as v from range(1, 10)")
     verifyResult(query)
 

@@ -30,9 +30,16 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
     extends Logging {
 
   def handle(request: proto.ConfigRequest): Unit = {
+    val previousSessionId = request.hasClientObservedServerSideSessionId match {
+      case true => Some(request.getClientObservedServerSideSessionId)
+      case false => None
+    }
     val holder =
       SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
+        .getOrCreateIsolatedSession(
+          request.getUserContext.getUserId,
+          request.getSessionId,
+          previousSessionId)
     val session = holder.session
 
     val builder = request.getOperation.getOpTypeCase match {

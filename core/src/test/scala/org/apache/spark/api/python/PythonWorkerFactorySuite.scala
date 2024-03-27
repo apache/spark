@@ -38,7 +38,7 @@ class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
     // E.g. the worker might fail at the beginning before it tries to connect back.
 
     val workerFactory = new PythonWorkerFactory(
-      "python3", "pyspark.testing.non_existing_worker_module", Map.empty
+      "python3", "pyspark.testing.non_existing_worker_module", Map.empty, false
     )
 
     // Create the worker in a separate thread so that if there is a bug where it does not

@@ -33,10 +33,11 @@ import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark._
+import org.apache.spark.TestUtils.createTempScriptWithExpectedOutput
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.rdd.RDD
-import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation, ResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -134,6 +135,47 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       }
     } finally {
       sc.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-47458 compute max number of concurrent tasks with resources limiting") {
+    withTempDir { dir =>
+      val discoveryScript = createTempScriptWithExpectedOutput(
+        dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
+      val conf = new SparkConf()
+        .set(CPUS_PER_TASK, 1)
+        .setMaster("local-cluster[1, 20, 1024]")
+        .setAppName("test")
+        .set(WORKER_GPU_ID.amountConf, "4")
+        .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
+        .set(EXECUTOR_GPU_ID.amountConf, "4")
+        .set(TASK_GPU_ID.amountConf, "0.2")
+      sc = new SparkContext(conf)
+      eventually(timeout(executorUpTimeout)) {
+        // Ensure all executors have been launched.
+        assert(sc.getExecutorIds().length == 1)
+      }
+      // The concurrent tasks should be min of {20/1, 4 * (1/0.2)}
+      assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 20)
+
+      val gpuTaskAmountToExpectedTasks = Map(
+        0.3 -> 12,  // 4 * (1/0.3).toInt
+        0.4 -> 8,   // 4 * (1/0.4).toInt
+        0.5 -> 8,   // 4 * (1/0.5).toInt
+        0.8 -> 4,   // 4 * (1/0.8).toInt
+        1.0 -> 4,   // 4 / 1
+        2.0 -> 2,   // 4 / 2
+        3.0 -> 1,   // 4 / 3
+        4.0 -> 1    // 4 / 4
+      )
+
+      // It's the GPU resource that limits the concurrent number
+      gpuTaskAmountToExpectedTasks.keys.foreach { taskGpu =>
+        val treqs = new TaskResourceRequests().cpus(1).resource(GPU, taskGpu)
+        val rp: ResourceProfile = new ResourceProfileBuilder().require(treqs).build()
+        sc.resourceProfileManager.addResourceProfile(rp)
+        assert(sc.maxNumConcurrentTasks(rp) == gpuTaskAmountToExpectedTasks(taskGpu))
+      }
     }
   }
 

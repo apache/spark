@@ -39,7 +39,18 @@ license: |
 - Since Spark 4.0, the default value of `spark.sql.orc.compression.codec` is changed from `snappy` to `zstd`. To restore the previous behavior, set `spark.sql.orc.compression.codec` to `snappy`.
 - Since Spark 4.0, `SELECT (*)` is equivalent to `SELECT struct(*)` instead of `SELECT *`. To restore the previous behavior, set `spark.sql.legacy.ignoreParenthesesAroundStar` to `true`.
 - Since Spark 4.0, the SQL config `spark.sql.legacy.allowZeroIndexInFormatString` is deprecated. Consider to change `strfmt` of the `format_string` function to use 1-based indexes. The first argument must be referenced by "1$", the second by "2$", etc.
-- Since Spark 4.0, the function `to_csv` no longer supports input with the data type `STRUCT`, `ARRAY`, `MAP`, `VARIANT` and `BINARY` (because the `CSV specification` does not have standards for these data types and cannot be read back using `from_csv`), Spark will throw `DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE` exception.
+- Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert Postgres TIMESTAMP WITH TIME ZONE and TIME WITH TIME ZONE data types to TimestampNTZType, which is available in Spark 3.5. 
+- Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert MySQL TIMESTAMP to TimestampNTZType, which is available in Spark 3.5. MySQL DATETIME is not affected.
+- Since Spark 4.0, MySQL JDBC datasource will read SMALLINT as ShortType, while in Spark 3.5 and previous, it was read as IntegerType. MEDIUMINT UNSIGNED is read as IntegerType, while in Spark 3.5 and previous, it was read as LongType. To restore the previous behavior, you can cast the column to the old type.
+- Since Spark 4.0, MySQL JDBC datasource will read FLOAT as FloatType, while in Spark 3.5 and previous, it was read as DoubleType. To restore the previous behavior, you can cast the column to the old type.
+
+## Upgrading from Spark SQL 3.5.1 to 3.5.2
+
+- Since 3.5.2, MySQL JDBC datasource will read TINYINT UNSIGNED as ShortType, while in 3.5.1, it was wrongly read as ByteType.
+
+## Upgrading from Spark SQL 3.5.0 to 3.5.1
+
+- Since Spark 3.5.1, MySQL JDBC datasource will read TINYINT(n > 1) and TINYINT UNSIGNED as ByteType, while in Spark 3.5.0 and below, they were read as IntegerType. To restore the previous behavior, you can cast the column to the old type.
 
 ## Upgrading from Spark SQL 3.4 to 3.5
 
@@ -117,6 +128,8 @@ license: |
   - Since Spark 3.3, the precision of the return type of round-like functions has been fixed. This may cause Spark throw `AnalysisException` of the `CANNOT_UP_CAST_DATATYPE` error class when using views created by prior versions. In such cases, you need to recreate the views using ALTER VIEW AS or CREATE OR REPLACE VIEW AS with newer Spark versions.
 
   - Since Spark 3.3, the `unbase64` function throws error for a malformed `str` input. Use `try_to_binary(<str>, 'base64')` to tolerate malformed input and return NULL instead. In Spark 3.2 and earlier, the `unbase64` function returns a best-efforts result for a malformed `str` input.
+
+  - Since Spark 3.3, when reading Parquet files that were not produced by Spark, Parquet timestamp columns with annotation `isAdjustedToUTC = false` are inferred as TIMESTAMP_NTZ type during schema inference. In Spark 3.2 and earlier, these columns are inferred as TIMESTAMP type. To restore the behavior before Spark 3.3, you can set `spark.sql.parquet.inferTimestampNTZ.enabled` to `false`.
 
   - Since Spark 3.3.1 and 3.2.3, for `SELECT ... GROUP BY a GROUPING SETS (b)`-style SQL statements, `grouping__id` returns different values from Apache Spark 3.2.0, 3.2.1, 3.2.2, and 3.3.0. It computes based on user-given group-by expressions plus grouping set columns. To restore the behavior before 3.3.1 and 3.2.3, you can set `spark.sql.legacy.groupingIdWithAppendedUserGroupBy`. For details, see [SPARK-40218](https://issues.apache.org/jira/browse/SPARK-40218) and [SPARK-40562](https://issues.apache.org/jira/browse/SPARK-40562).
 

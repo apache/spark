@@ -138,6 +138,7 @@ options for deployment:
 
 * [Configuration](configuration.html): customize Spark via its configuration system
 * [Monitoring](monitoring.html): track the behavior of your applications
+* [Web UI](web-ui.html): view useful information about your applications
 * [Tuning Guide](tuning.html): best practices to optimize performance and memory use
 * [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Security](security.html): Spark security support
@@ -145,7 +146,7 @@ options for deployment:
 * Integration with other storage systems:
   * [Cloud Infrastructures](cloud-integration.html)
   * [OpenStack Swift](storage-openstack-swift.html)
-* [Migration Guide](migration-guide.html): Migration guides for Spark components
+* [Migration Guide](migration-guide.html): migration guides for Spark components
 * [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](https://spark.apache.org/contributing.html)
 * [Third Party Projects](https://spark.apache.org/third-party-projects.html): related third party Spark projects
