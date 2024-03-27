@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
 )
 // scalastyle:on line.size.limit
 case class ParseJson(child: Expression)
-  extends UnaryExpression with NullIntolerant with ExpectsInputTypes with RuntimeReplaceable {
+  extends UnaryExpression with ExpectsInputTypes with RuntimeReplaceable {
 
   override lazy val replacement: Expression = StaticInvoke(
     VariantExpressionEvalUtils.getClass,
