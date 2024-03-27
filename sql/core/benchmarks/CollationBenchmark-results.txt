@@ -1,14 +1,5 @@
 OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
 AMD EPYC 7763 64-Core Processor
-filter df column with collation:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
------------------------------------------------------------------------------------------------------------------------------------
-filter df column with collation - UTF8_BINARY_LCASE             33             39           4          0.3        3323.1       1.0X
-filter df column with collation - UNICODE                       23             27           4          0.4        2320.3       1.4X
-filter df column with collation - UTF8_BINARY                   22             25           3          0.5        2199.7       1.5X
-filter df column with collation - UNICODE_CI                    27             29           3          0.4        2678.7       1.2X
-
-OpenJDK 64-Bit Server VM 17.0.10+7-LTS on Linux 6.5.0-1016-azure
-AMD EPYC 7763 64-Core Processor
 collation unit benchmarks - equalsFunction:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
 UTF8_BINARY_LCASE                                   34122          34152          42          0.0      341224.2       1.0X
