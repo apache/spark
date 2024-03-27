@@ -2007,15 +2007,15 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
 
   override lazy val replacement: Expression = If(
     IsNull(str),
-    Literal(null, StringType),
+    Literal(null, str.dataType),
     If(
       LessThanOrEqual(len, Literal(0)),
-      Literal(UTF8String.EMPTY_UTF8, StringType),
+      Literal(UTF8String.EMPTY_UTF8, str.dataType),
       new Substring(str, UnaryMinus(len))
     )
   )
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation, IntegerType)
   override def left: Expression = str
   override def right: Expression = len
   override protected def withNewChildrenInternal(
@@ -2044,9 +2044,8 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] {
 
   override lazy val replacement: Expression = Substring(str, Literal(1), len)
-
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(StringType, BinaryType), IntegerType)
+    Seq(TypeCollection(StringTypeAnyCollation, BinaryType), IntegerType)
   }
 
   override def left: Expression = str

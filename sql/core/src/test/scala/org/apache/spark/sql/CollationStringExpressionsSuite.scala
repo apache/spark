@@ -17,21 +17,24 @@
 
 package org.apache.spark.sql
 
-import scala.collection.immutable.Seq
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.dsl.expressions.DslExpression
 import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, ExpressionEvalHelper, Literal, StringRepeat}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class CollationStringExpressionsSuite
   extends QueryTest
   with SharedSparkSession
   with ExpressionEvalHelper {
 
+  case class UnaryCollationTestCase[R](
+      expression1: String,
+      expectedResult: R,
+      expectedCollation: String)
   case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
   case class CollationTestFail[R](s1: String, s2: String, collation: String)
 
@@ -89,6 +92,43 @@ class CollationStringExpressionsSuite
     testRepeat("UNICODE_CI", 3, "abc", 2)
   }
 
+  test("substring check output type on explicitly collated string") {
+    val checks = Seq(
+      CollationTestCase("Spark", "2", "UTF8_BINARY", "park"),
+      CollationTestCase("Spark", "2", "UTF8_BINARY_LCASE", "park")
+    )
+    checks.foreach(ct => {
+      checkAnswer(sql(s"SELECT substr(collate('${ct.s1}', '${ct.collation}'), 2)"),
+        Row(ct.expectedResult))
+    })
+    def testSubstring(
+        expected: String,
+        collationId: Int,
+        input: String,
+        pos: Int): Unit = {
+      val s = Literal.create(input, StringType(collationId))
+      val l = Literal.create(pos, IntegerType)
+
+      checkEvaluation(Collation(s.substring(s, l)).replacement, expected)
+    }
+
+    testSubstring("UTF8_BINARY", 0, "abc", 1)
+  }
+
+  test("left/right check output type on explicitly collated string") {
+    val checks = Seq(
+      UnaryCollationTestCase("left(collate('Spark', 'UTF8_BINARY'), 2)", "Sp", "UTF8_BINARY"),
+      UnaryCollationTestCase("right(collate('Spark', 'UTF8_BINARY'), 2)", "rk", "UTF8_BINARY"),
+      UnaryCollationTestCase(
+        "right(collate('Spark', 'UTF8_BINARY_LCASE'), 2)",
+        "rk",
+        "UTF8_BINARY_LCASE")
+    )
+    checks.foreach(ct => {
+      checkAnswer(sql(s"SELECT ${ct.expression1}"),
+        Row(ct.expectedResult))
+    })
+  }
   // TODO: Add more tests for other string expressions
 
 }
