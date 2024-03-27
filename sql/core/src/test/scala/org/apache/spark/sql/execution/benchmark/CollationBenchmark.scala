@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.benchmark
 
 import scala.concurrent.duration._
 
-import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * }}}
  */
 
-object CollationBenchmark extends SqlBasedBenchmark {
+object CollationBenchmark extends BenchmarkBase {
   private val collationTypes = Seq("UTF8_BINARY_LCASE", "UNICODE", "UTF8_BINARY", "UNICODE_CI")
 
   def generateSeqInput(n: Long): Seq[UTF8String] = {
