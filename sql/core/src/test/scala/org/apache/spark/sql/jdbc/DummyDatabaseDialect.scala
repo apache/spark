@@ -15,11 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.variant;
+package org.apache.spark.sql.jdbc
 
-/**
- * An exception indicating that we are attempting to build a variant with it value or metadata
- * exceeding the 16MiB size limit.
- */
-public class VariantSizeLimitException extends RuntimeException {
+class DummyDatabaseDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:dummy")
 }

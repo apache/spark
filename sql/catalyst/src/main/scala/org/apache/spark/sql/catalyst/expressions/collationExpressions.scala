@@ -82,7 +82,7 @@ case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
   private val collationId = CollationFactory.collationNameToId(collationName)
   override def dataType: DataType = StringType(collationId)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override protected def withNewChildInternal(
     newChild: Expression): Expression = copy(newChild)

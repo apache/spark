@@ -160,26 +160,18 @@ case class TransformWithStateExec(
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
-        val procTimeIter = processorHandle.getExpiredTimers()
-        procTimeIter.flatMap { case (keyObj, expiryTimestampMs) =>
-          if (expiryTimestampMs < batchTimestamp) {
+        processorHandle.getExpiredTimers(batchTimestamp)
+          .flatMap { case (keyObj, expiryTimestampMs) =>
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
-          } else {
-            Iterator.empty
           }
-        }
 
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        val eventTimeIter = processorHandle.getExpiredTimers()
-        eventTimeIter.flatMap { case (keyObj, expiryTimestampMs) =>
-          if (expiryTimestampMs < watermark) {
+        processorHandle.getExpiredTimers(watermark)
+          .flatMap { case (keyObj, expiryTimestampMs) =>
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
-          } else {
-            Iterator.empty
           }
-        }
 
       case _ => Iterator.empty
     }
@@ -276,7 +268,7 @@ case class TransformWithStateExec(
         getStateInfo,
         schemaForKeyRow,
         schemaForValueRow,
-        numColsPrefixKey = 0,
+        NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
         session.sqlContext.sessionState,
         Some(session.sqlContext.streams.stateStoreCoordinator),
         useColumnFamilies = true,
@@ -308,7 +300,7 @@ case class TransformWithStateExec(
             providerId,
             schemaForKeyRow,
             schemaForValueRow,
-            numColsPrefixKey = 0,
+            NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
             useColumnFamilies = true,
             storeConf = storeConf,
             hadoopConf = broadcastedHadoopConf.value,

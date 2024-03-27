@@ -95,6 +95,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark.sql.connect.datasource import DataSourceRegistration
 
 
 try:
@@ -235,10 +236,9 @@ class SparkSession:
 
     _client: SparkConnectClient
 
-    @classproperty
-    def builder(cls) -> Builder:
-        return cls.Builder()
-
+    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
+    # If changing, make sure this bug is not reintroduced.
+    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
     builder.__doc__ = PySparkSession.builder.__doc__
 
     def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):
@@ -744,6 +744,14 @@ class SparkSession:
     udtf.__doc__ = PySparkSession.udtf.__doc__
 
     @property
+    def dataSource(self) -> "DataSourceRegistration":
+        from pyspark.sql.connect.datasource import DataSourceRegistration
+
+        return DataSourceRegistration(self)
+
+    dataSource.__doc__ = PySparkSession.dataSource.__doc__
+
+    @property
     def version(self) -> str:
         result = self._client._analyze(method="spark_version").spark_version
         assert result is not None
@@ -968,8 +976,6 @@ def _test() -> None:
     # Spark Connect does not support to set master together.
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-    # RDD API is not supported in Spark Connect.
-    del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
 
     # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
     del pyspark.sql.connect.session.SparkSession.sql.__doc__

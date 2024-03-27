@@ -99,6 +99,7 @@ class Command(google.protobuf.message.Message):
     STREAMING_QUERY_MANAGER_COMMAND_FIELD_NUMBER: builtins.int
     REGISTER_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_LISTENER_BUS_COMMAND_FIELD_NUMBER: builtins.int
+    REGISTER_DATA_SOURCE_FIELD_NUMBER: builtins.int
     CREATE_RESOURCE_PROFILE_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
@@ -128,6 +129,10 @@ class Command(google.protobuf.message.Message):
     @property
     def streaming_query_listener_bus_command(self) -> global___StreamingQueryListenerBusCommand: ...
     @property
+    def register_data_source(
+        self,
+    ) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource: ...
+    @property
     def create_resource_profile_command(self) -> global___CreateResourceProfileCommand: ...
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
@@ -151,6 +156,8 @@ class Command(google.protobuf.message.Message):
         | None = ...,
         streaming_query_listener_bus_command: global___StreamingQueryListenerBusCommand
         | None = ...,
+        register_data_source: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource
+        | None = ...,
         create_resource_profile_command: global___CreateResourceProfileCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
@@ -167,6 +174,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "register_data_source",
+            b"register_data_source",
             "register_function",
             b"register_function",
             "register_table_function",
@@ -200,6 +209,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "register_data_source",
+            b"register_data_source",
             "register_function",
             b"register_function",
             "register_table_function",
@@ -235,6 +246,7 @@ class Command(google.protobuf.message.Message):
             "streaming_query_manager_command",
             "register_table_function",
             "streaming_query_listener_bus_command",
+            "register_data_source",
             "create_resource_profile_command",
             "extension",
         ]
