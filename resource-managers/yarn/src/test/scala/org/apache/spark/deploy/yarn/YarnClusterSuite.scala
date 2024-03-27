@@ -29,13 +29,10 @@ import scala.io.Source
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.logging.log4j.LogManager
-import org.apache.logging.slf4j.Log4jLogger
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
-import org.slf4j.bridge.SLF4JBridgeHandler
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonUtils
@@ -316,30 +313,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     Files.write(s"-Dlog4j.configurationFile=file://$log4jConf\n", javaOptsFile,
       StandardCharsets.UTF_8)
 
-    System.err.println(
-      classOf[org.apache.log4j.Appender].getProtectionDomain().getCodeSource().getLocation()
-        .toString)
-    System.err.println(
-      classOf[LogManager].getProtectionDomain().getCodeSource().getLocation().toString)
-    System.err.println(
-        classOf[Log4jLogger].getProtectionDomain().getCodeSource().getLocation().toString)
-    System.err.println(
-        classOf[SLF4JBridgeHandler].getProtectionDomain().getCodeSource().getLocation().toString)
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
       mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath),
-      extraJars = Seq(
-        classOf[org.apache.log4j.Appender].getProtectionDomain().getCodeSource().getLocation()
-          .toString,
-        classOf[LogManager].getProtectionDomain().getCodeSource().getLocation().toString,
-        classOf[Log4jLogger].getProtectionDomain().getCodeSource().getLocation().toString,
-        classOf[SLF4JBridgeHandler].getProtectionDomain().getCodeSource().getLocation().toString),
       extraEnv = Map("SPARK_CONF_DIR" -> confDir.getAbsolutePath),
       extraConf = Map(CLIENT_INCLUDE_DRIVER_LOGS_LINK.key -> true.toString))
     checkResult(finalState, result)
     val logOutput = Files.toString(logOutFile, StandardCharsets.UTF_8)
-    System.err.println(logOutput)
     val logFilePattern = raw"""(?s).+\sDriver Logs \(<NAME>\): https?://.+/<NAME>(\?\S+)?\s.+"""
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stdout")
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stderr")
