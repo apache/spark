@@ -33,22 +33,36 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.{SparkClassUtils, SparkEnvUtils}
 
-// Mapped Diagnostic Context (MDC) that will be used in log messages.
-// The values of the MDC will be inline in the log message, while the key-value pairs will be
-// part of the ThreadContext.
+/**
+ * Mapped Diagnostic Context (MDC) that will be used in log messages.
+ * The values of the MDC will be inline in the log message, while the key-value pairs will be
+ * part of the ThreadContext.
+ */
 case class MDC(key: LogKey.Value, value: String)
 
-class LogEntry(entry: => (String, Option[Instance])) {
-  def msg: String = entry._1
-  def context: Option[Instance] = entry._2
+/**
+ * Wrapper class for log messages that include a logging context.
+ * This is used as the return type of the string interpolator `LogStringContext`.
+ */
+case class MessageWithContext(message: String, context: Option[Instance])
+
+/**
+ * Companion class for lazy evaluation of the MessageWithContext instance.
+ */
+class LogEntry(messageWithContext: => MessageWithContext) {
+  def message: String = messageWithContext.message
+
+  def context: Option[Instance] = messageWithContext.context
 }
 
-// Companion object for the wrapper to enable implicit conversions
+/**
+ * Companion object for the wrapper to enable implicit conversions
+ */
 object LogEntry {
   import scala.language.implicitConversions
 
-  implicit def from(msgWithMDC: => (String, Option[Instance])): LogEntry =
-    new LogEntry(msgWithMDC)
+  implicit def from(msgWithCtx: => MessageWithContext): LogEntry =
+    new LogEntry(msgWithCtx)
 }
 
 /**
@@ -78,7 +92,7 @@ trait Logging {
   }
 
   implicit class LogStringContext(val sc: StringContext) {
-    def log(args: Any*): (String, Option[Instance]) = {
+    def log(args: Any*): MessageWithContext = {
       val processedParts = sc.parts.iterator
       val sb = new StringBuilder(processedParts.next())
       lazy val map = new java.util.HashMap[String, String]()
@@ -110,7 +124,7 @@ trait Logging {
       } else {
         None
       }
-      (sb.toString(), closeableContext)
+      MessageWithContext(sb.toString(), closeableContext)
     }
   }
 
@@ -137,14 +151,14 @@ trait Logging {
 
   protected def logError(entry: LogEntry): Unit = {
     if (log.isErrorEnabled) {
-      log.error(entry.msg)
+      log.error(entry.message)
       entry.context.map(_.close())
     }
   }
 
   protected def logError(entry: LogEntry, throwable: Throwable): Unit = {
     if (log.isErrorEnabled) {
-      log.error(entry.msg, throwable)
+      log.error(entry.message, throwable)
       entry.context.map(_.close())
     }
   }

@@ -16,6 +16,10 @@
  */
 package org.apache.spark.internal
 
+/**
+ * Various keys used for mapped diagnostic contexts(MDC) in logging.
+ * All structured logging keys should be defined here for standardization.
+ */
 object LogKey extends Enumeration {
   val EXECUTOR_ID = Value
 }
