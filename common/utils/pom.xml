@@ -67,6 +67,7 @@
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j-slf4j2-impl</artifactId>
+<!--&lt;!&ndash;      <optional>True</optional>&ndash;&gt; it should be optional-->
     </dependency>
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>
@@ -75,6 +76,7 @@
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j-core</artifactId>
+<!--      <optional>True</optional>-->
     </dependency>
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>

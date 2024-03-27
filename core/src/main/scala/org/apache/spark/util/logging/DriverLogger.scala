@@ -26,10 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream
-import org.apache.logging.log4j._
-import org.apache.logging.log4j.core.Logger
-import org.apache.logging.log4j.core.appender.{FileAppender => Log4jFileAppender}
-import org.apache.logging.log4j.core.layout.PatternLayout
+import org.apache.logging.log4j.LogManager
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -54,29 +51,10 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   addLogAppender()
 
   private def addLogAppender(): Unit = {
-    val logger = LogManager.getRootLogger().asInstanceOf[Logger]
-    val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
-      PatternLayout.newBuilder().withPattern(conf.get(DRIVER_LOG_LAYOUT).get).build()
-    } else {
-      PatternLayout.newBuilder().withPattern(DEFAULT_LAYOUT).build()
+    if (Logging.isLog4j2()) {
+      Log4j2Utils.addAppender()
     }
-    val config = logger.getContext.getConfiguration()
-    def log4jFileAppender() = {
-      // SPARK-37853: We can't use the chained API invocation mode because
-      // `AbstractFilterable.Builder.asBuilder()` method will return `Any` in Scala.
-      val builder: Log4jFileAppender.Builder[_] = Log4jFileAppender.newBuilder()
-      builder.withAppend(false)
-      builder.setBufferedIo(false)
-      builder.setConfiguration(config)
-      builder.withFileName(localLogFile)
-      builder.setIgnoreExceptions(false)
-      builder.setLayout(layout)
-      builder.setName(DriverLogger.APPENDER_NAME)
-      builder.build()
-    }
-    val fa = log4jFileAppender()
-    logger.addAppender(fa)
-    fa.start()
+
     logInfo(s"Added a local log appender at: $localLogFile")
   }
 
@@ -92,19 +70,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
   }
 
   def stop(): Unit = {
-    try {
-      val logger = LogManager.getRootLogger().asInstanceOf[Logger]
-      val fa = logger.getAppenders.get(DriverLogger.APPENDER_NAME)
-      logger.removeAppender(fa)
-      Utils.tryLogNonFatalError(fa.stop())
-      writer.foreach(_.closeWriter())
-    } catch {
-      case e: Exception =>
-        logError(s"Error in persisting driver logs", e)
-    } finally {
-      Utils.tryLogNonFatalError {
-        JavaUtils.deleteRecursively(FileUtils.getFile(localLogFile).getParentFile())
-      }
+    if (Logging.isLog4j2()) {
+      Log4j2Utils.stopAppender()
     }
   }
 
@@ -201,6 +168,57 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
     }
   }
 
+  private object Log4j2Utils {
+    def addAppender(): Unit = {
+      import org.apache.logging.log4j.core.Logger
+      import org.apache.logging.log4j.core.layout.PatternLayout
+
+      val logger = LogManager.getRootLogger().asInstanceOf[Logger]
+      val layout = if (conf.contains(DRIVER_LOG_LAYOUT)) {
+        PatternLayout.newBuilder().withPattern(conf.get(DRIVER_LOG_LAYOUT).get).build()
+      } else {
+        PatternLayout.newBuilder().withPattern(DEFAULT_LAYOUT).build()
+      }
+      val config = logger.getContext.getConfiguration()
+
+      def log4jFileAppender() = {
+        import org.apache.logging.log4j.core.appender.{FileAppender => Log4jFileAppender}
+        // SPARK-37853: We can't use the chained API invocation mode because
+        // `AbstractFilterable.Builder.asBuilder()` method will return `Any` in Scala.
+        val builder: Log4jFileAppender.Builder[_] = Log4jFileAppender.newBuilder()
+        builder.withAppend(false)
+        builder.setBufferedIo(false)
+        builder.setConfiguration(config)
+        builder.withFileName(localLogFile)
+        builder.setIgnoreExceptions(false)
+        builder.setLayout(layout)
+        builder.setName(DriverLogger.APPENDER_NAME)
+        builder.build()
+      }
+
+      val fa = log4jFileAppender()
+      logger.addAppender(fa)
+      fa.start()
+    }
+
+    def stopAppender(): Unit = {
+      import org.apache.logging.log4j.core.Logger
+      try {
+        val logger = LogManager.getRootLogger().asInstanceOf[Logger]
+        val fa = logger.getAppenders.get(DriverLogger.APPENDER_NAME)
+        logger.removeAppender(fa)
+        Utils.tryLogNonFatalError(fa.stop())
+        writer.foreach(_.closeWriter())
+      } catch {
+        case e: Exception =>
+          logError(s"Error in persisting driver logs", e)
+      } finally {
+        Utils.tryLogNonFatalError {
+          JavaUtils.deleteRecursively(FileUtils.getFile(localLogFile).getParentFile())
+        }
+      }
+    }
+  }
 }
 
 private[spark] object DriverLogger extends Logging {
