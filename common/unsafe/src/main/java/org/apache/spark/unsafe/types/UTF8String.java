@@ -698,6 +698,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       UTF8String searchChar = copyUTF8String(
           searchIdx, searchIdx + numBytesForFirstByte(this.getByte(searchIdx)) - 1);
       int searchCharBytes = searchChar.numBytes;
+
       // try to find the matching for the searchChar in the trimString set
       if (trimString.find(searchChar, 0) >= 0) {
         trimIdx += searchCharBytes;
@@ -707,6 +708,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       searchIdx += searchCharBytes;
     }
+
     if (searchIdx == 0) {
       // Nothing trimmed
       return this;
@@ -730,14 +732,88 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return collatedTrimLeft(trimString, collationId);
   }
 
-  public UTF8String lowercaseTrimLeft(UTF8String trimString) {
-    // TODO
-    return EMPTY_UTF8;
+  private UTF8String lowercaseTrimLeft(UTF8String trimString) {
+    if (trimString == null) {
+      return null;
+    }
+
+    // The searching byte position in the lowercase source string
+    int searchIdx = 0;
+    // The byte position of a first non-matching character in the lowercase source string
+    int trimByteIdx = 0;
+
+    // Convert trimString to lowercase so it can be searched properly
+    trimString = trimString.toLowerCase();
+
+    while (searchIdx < numBytes) {
+      UTF8String searchChar = copyUTF8String(
+        searchIdx,
+        searchIdx + numBytesForFirstByte(getByte(searchIdx)) - 1);
+      int searchCharBytes = searchChar.numBytes;
+
+      // Try to find the matching for the lowercase searchChar in the trimString
+      if (trimString.find(searchChar.toLowerCase(), 0) >= 0) {
+        trimByteIdx += searchCharBytes;
+        searchIdx += searchCharBytes;
+      }
+      else {
+        // No matching, exit the search
+        break;
+      }
+    }
+
+    if (searchIdx == 0) {
+      // Nothing trimmed - return original string (not converted to lowercase)
+      return this;
+    }
+    if (trimByteIdx  >= numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(trimByteIdx, numBytes - 1);
   }
 
-  public UTF8String collatedTrimLeft(UTF8String trimString, int collationId) {
-    // TODO
-    return EMPTY_UTF8;
+  private UTF8String collatedTrimLeft(UTF8String trimString, int collationId) {
+    if (trimString == null) {
+      return null;
+    }
+
+    // The searching byte position in the source string
+    int searchIdx = 0;
+    // The byte position of a first non-matching character in the source string
+    int trimByteIdx = 0;
+
+    while (searchIdx < numBytes) {
+      UTF8String searchChar = copyUTF8String(
+        searchIdx,
+        searchIdx + numBytesForFirstByte(getByte(searchIdx)) - 1);
+      int searchCharBytes = searchChar.numBytes;
+
+      // Try to find the matching for the searchChar in the trimString
+      StringSearch stringSearch = CollationFactory.getStringSearch(
+        trimString, searchChar, collationId);
+      int searchCharIdx = stringSearch.next();
+
+      if (searchCharIdx != StringSearch.DONE
+          && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        trimByteIdx += searchCharBytes;
+        searchIdx += searchCharBytes;
+      }
+      else {
+        // No matching, exit the search
+        break;
+      }
+    }
+
+    if (searchIdx == 0) {
+      // Nothing trimmed - return original string (not converted to lowercase)
+      return this;
+    }
+    if (trimByteIdx >= numBytes) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(trimByteIdx, numBytes - 1);
   }
 
   /**
@@ -797,27 +873,30 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int[] stringCharLen = new int[numBytes];
     // array of the first byte position for each character in the source string
     int[] stringCharPos = new int[numBytes];
+
     // build the position and length array
     while (charIdx < numBytes) {
       stringCharPos[numChars] = charIdx;
       stringCharLen[numChars] = numBytesForFirstByte(getByte(charIdx));
       charIdx += stringCharLen[numChars];
-      numChars ++;
+      numChars++;
     }
 
     // index trimEnd points to the first no matching byte position from the right side of
     // the source string.
     int trimEnd = numBytes - 1;
+
     while (numChars > 0) {
       UTF8String searchChar = copyUTF8String(
           stringCharPos[numChars - 1],
           stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
+
       if (trimString.find(searchChar, 0) >= 0) {
         trimEnd -= stringCharLen[numChars - 1];
       } else {
         break;
       }
-      numChars --;
+      numChars--;
     }
 
     if (trimEnd == numBytes - 1) {
@@ -843,14 +922,116 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return collatedTrimRight(trimString, collationId);
   }
 
-  public UTF8String lowercaseTrimRight(UTF8String trimString) {
-    // TODO
-    return EMPTY_UTF8;
+  private UTF8String lowercaseTrimRight(UTF8String trimString) {
+    if (trimString == null) {
+      return null;
+    }
+
+    // Convert trimString to lowercase so it can be searched properly
+    trimString = trimString.toLowerCase();
+
+    // Number of bytes iterated from the source string
+    int byteIdx = 0;
+    // Number of characters iterated from the source string
+    int numChars = 0;
+    // Array of character length for the source string
+    int[] stringCharLen = new int[numBytes];
+    // Array of the first byte position for each character in the source string
+    int[] stringCharPos = new int[numBytes];
+
+    // Build the position and length array
+    while (byteIdx < numBytes) {
+      stringCharPos[numChars] = byteIdx;
+      stringCharLen[numChars] = numBytesForFirstByte(getByte(byteIdx));
+      byteIdx += stringCharLen[numChars];
+      numChars++;
+    }
+
+    // Index trimEnd points to the first no matching byte position from the right side of
+    //  the source string.
+    int trimByteIdx = numBytes - 1;
+
+    while (numChars > 0) {
+      UTF8String searchChar = copyUTF8String(
+        stringCharPos[numChars - 1],
+        stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
+
+      // Try to find the matching for the lowercase searchChar in the trimString
+      if (trimString.find(searchChar.toLowerCase(), 0) >= 0) {
+        trimByteIdx -= stringCharLen[numChars - 1];
+        numChars--;
+      }
+      else {
+        break;
+      }
+    }
+
+    if (trimByteIdx == numBytes - 1) {
+      // Nothing trimmed
+      return this;
+    }
+    if (trimByteIdx < 0) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(0, trimByteIdx);
   }
 
-  public UTF8String collatedTrimRight(UTF8String trimString, int collationId) {
-    // TODO
-    return EMPTY_UTF8;
+  private UTF8String collatedTrimRight(UTF8String trimString, int collationId) {
+    if (trimString == null) {
+      return null;
+    }
+
+    // Number of bytes iterated from the source string
+    int byteIdx = 0;
+    // Number of characters iterated from the source string
+    int numChars = 0;
+    // Array of character length for the source string
+    int[] stringCharLen = new int[numBytes];
+    // Array of the first byte position for each character in the source string
+    int[] stringCharPos = new int[numBytes];
+
+    // Build the position and length array
+    while (byteIdx < numBytes) {
+      stringCharPos[numChars] = byteIdx;
+      stringCharLen[numChars] = numBytesForFirstByte(getByte(byteIdx));
+      byteIdx += stringCharLen[numChars];
+      numChars++;
+    }
+
+    // Index trimEnd points to the first no matching byte position from the right side of
+    //  the source string.
+    int trimByteIdx = numBytes - 1;
+
+    while (numChars > 0) {
+      UTF8String searchChar = copyUTF8String(
+        stringCharPos[numChars - 1],
+        stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
+
+      // Try to find the matching for the searchChar in the trimString
+      StringSearch stringSearch = CollationFactory.getStringSearch(
+        trimString, searchChar, collationId);
+      int searchCharIdx = stringSearch.next();
+
+      if (searchCharIdx != StringSearch.DONE
+          && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        trimByteIdx -= stringCharLen[numChars - 1];
+        numChars--;
+      }
+      else {
+        break;
+      }
+    }
+
+    if (trimByteIdx == numBytes - 1) {
+      // Nothing trimmed
+      return this;
+    }
+    if (trimByteIdx < 0) {
+      // Everything trimmed
+      return EMPTY_UTF8;
+    }
+    return copyUTF8String(0, trimByteIdx);
   }
 
   public UTF8String reverse() {
