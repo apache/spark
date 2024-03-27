@@ -201,7 +201,9 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more details.
     final Tuple2<TempShuffleBlockId, File> spilledFileInfo =
-      finalDataFileDir.map(blockManager.diskBlockManager()::createTempShuffleBlockInDir)
+      finalDataFileDir
+        .filter(v -> spills.isEmpty())
+        .map(blockManager.diskBlockManager()::createTempShuffleBlockInDir)
         .orElseGet(blockManager.diskBlockManager()::createTempShuffleBlock);
     final File file = spilledFileInfo._2();
     final TempShuffleBlockId blockId = spilledFileInfo._1();
