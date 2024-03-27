@@ -2188,12 +2188,12 @@ class DataFrameAggregateSuite extends QueryTest
     val dfSameFloat = (0 until numRows)
       .map(i => Tuple1(Map(if (i % 2 == 0) 1 -> 0.0 else 1 -> -0.0 )))
       .toDF("m0")
-    assertAggregateOnDataframe(dfSameInt, 1, "m0")
+    assertAggregateOnDataframe(dfSameFloat, 1, "m0")
 
     val dfDifferent = (0 until numRows)
       .map(i => Tuple1(Map(i -> i)))
       .toDF("m0")
-    assertAggregateOnDataframe(dfSameInt, numRows, "m0")
+    assertAggregateOnDataframe(dfDifferent, numRows, "m0")
   }
 
   test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
