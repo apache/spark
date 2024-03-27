@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
-
+import org.apache.spark.sql.execution.{ProjectExec, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.functions._
@@ -244,15 +244,27 @@ class DatasetCacheSuite extends QueryTest
       case i: InMemoryRelation => i.cacheBuilder.cachedPlan
     }
     assert(df1LimitInnerPlan.isDefined && df1LimitInnerPlan.get == df1InnerPlan)
-
-    // Verify that df2's cache has been re-cached, with a new physical plan rid of dependency
-    // on df, since df2's cache had not been loaded before df.unpersist().
     val df2Limit = df2.limit(2)
     val df2LimitInnerPlan = df2Limit.queryExecution.withCachedData.collectFirst {
       case i: InMemoryRelation => i.cacheBuilder.cachedPlan
     }
+    // The assertion below is incorrect in context of bug SPARK-47609.
+    // as df2 is derivable from df1 ( which is an InMemoryRelation)
+
+    /*
+    // Verify that df2's cache has been re-cached, with a new physical plan rid of dependency
+    // on df, since df2's cache had not been loaded before df.unpersist().
     assert(df2LimitInnerPlan.isDefined &&
       !df2LimitInnerPlan.get.exists(_.isInstanceOf[InMemoryTableScanExec]))
+   */
+    assert(df2LimitInnerPlan.isDefined)
+    val innerImr = df2LimitInnerPlan.get.collectFirst {
+      case imrExec: InMemoryTableScanExec => imrExec.relation
+    }
+    assert(innerImr.isDefined)
+    assert(innerImr.get.cacheBuilder.cachedPlan.asInstanceOf[UnaryExecNode].
+      child.isInstanceOf[ProjectExec])
+
   }
 
   test("SPARK-27739 Save stats from optimized plan") {
