@@ -90,6 +90,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE collections (" +
         "a SET('cap', 'hat', 'helmet'), b ENUM('S', 'M', 'L', 'XL'))").executeUpdate()
     conn.prepareStatement("INSERT INTO collections VALUES ('cap,hat', 'M')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE TBL_GEOMETRY (col0 GEOMETRY)").executeUpdate()
+    conn.prepareStatement("INSERT INTO TBL_GEOMETRY VALUES (ST_GeomFromText('POINT(0 0)'))")
+      .executeUpdate()
   }
 
   def testConnection(): Unit = {
@@ -191,6 +195,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
       assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
     }
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "select yr from dates")
+      .option("yearIsDateType", false)
+      .load()
+    checkAnswer(df, Row(2001))
   }
 
   test("SPARK-47406: MySQL datetime types with preferTimestampNTZ") {
@@ -317,6 +327,12 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       checkAnswer(spark.read.jdbc(jdbcUrl, "collections", new Properties),
         Row("cap,hat", "M") :: Row("cap,hat", "M") :: Nil)
     }
+  }
+
+  test("SPARK-47616: Read GEOMETRY from MySQL") {
+    val df = spark.read.jdbc(jdbcUrl, "TBL_GEOMETRY", new Properties)
+    checkAnswer(df,
+      Row(Array[Byte](0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
   }
 }
 
