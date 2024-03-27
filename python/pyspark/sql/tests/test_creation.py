@@ -159,9 +159,9 @@ class DataFrameCreationTestsMixin:
         )
 
     def test_schema_inference_from_pandas_with_dict(self):
+        # SPARK-47543: test for verifying if inferring `dict` as `MapType` work properly.
         import pandas as pd
 
-        # SPARK-47543: test for verifying if inferring `dict` as `MapType` work properly.
         pdf = pd.DataFrame({"str_col": ["second"], "dict_col": [{"first": 0.7, "second": 0.3}]})
 
         with self.sql_conf(
