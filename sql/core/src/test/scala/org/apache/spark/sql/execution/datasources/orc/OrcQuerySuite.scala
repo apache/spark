@@ -604,32 +604,31 @@ abstract class OrcQueryTest extends OrcTest {
       val e1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }
-      assert(e1.getErrorClass == "FAILED_READ_FILE" ||
-        // Hive ORC table scan uses a different code path and reports a different error.
-        e1.getErrorClass == "CANNOT_READ_FILE_FOOTER")
-      assert(e1.getCause.getMessage.contains("Malformed ORC file"))
+      assert(e1.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e1.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e1.getCause.getCause.getMessage.contains("Malformed ORC file"))
       val e2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
-      assert(e2.getErrorClass == "FAILED_READ_FILE" ||
-        // Hive ORC table scan uses a different code path and reports a different error.
-        e2.getErrorClass == "CANNOT_READ_FILE_FOOTER")
-      assert(e2.getCause.getMessage.contains("Malformed ORC file"))
-      checkError(
+      assert(e2.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e2.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e2.getCause.getCause.getMessage.contains("Malformed ORC file"))
+      checkErrorMatchPVals(
         exception = intercept[SparkException] {
           testAllCorruptFiles()
         },
-        errorClass = "CANNOT_READ_FILE_FOOTER",
-        parameters = Map("file" -> "file:.*"),
-        matchPVals = true
+        errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        parameters = Map("path" -> "file:.*")
       )
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }
-      assert(e4.getErrorClass == "FAILED_READ_FILE" ||
-        // Hive ORC table scan uses a different code path and reports a different error.
-        e1.getErrorClass == "CANNOT_READ_FILE_FOOTER")
-      assert(e4.getCause.getMessage.contains("Malformed ORC file"))
+      assert(e4.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e4.getCause.getMessage.contains("Malformed ORC file") ||
+        // Hive ORC table scan uses a different code path and has one more error stack
+        e4.getCause.getCause.getMessage.contains("Malformed ORC file"))
     }
   }
 

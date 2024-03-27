@@ -267,14 +267,6 @@ Error parsing descriptor bytes into Protobuf FileDescriptorSet.
 
 `<message>`. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
-### CANNOT_READ_FILE_FOOTER
-
-SQLSTATE: KD001
-
-Could not read footer for file: `<file>`. Please ensure that the file is in either ORC or Parquet format.
-If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.
-If it is, you can choose to either ignore it or fix the corruption.
-
 ### CANNOT_RECOGNIZE_HIVE_TYPE
 
 [SQLSTATE: 429BB](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -732,11 +724,13 @@ For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.
 
 Failed parsing struct: `<raw>`.
 
-### FAILED_READ_FILE
+### [FAILED_READ_FILE](sql-error-conditions-failed-read-file-error-class.html)
 
 SQLSTATE: KD001
 
 Encountered error while reading file `<path>`.
+
+For more details see [FAILED_READ_FILE](sql-error-conditions-failed-read-file-error-class.html)
 
 ### FAILED_REGISTER_CLASS_WITH_KRYO
 
@@ -851,12 +845,6 @@ GROUP BY `<index>` refers to an expression `<aggExpr>` that contains an aggregat
 [SQLSTATE: 42805](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 GROUP BY position `<index>` is not in select list (valid range is [1, `<size>`]).
-
-### GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE
-
-[SQLSTATE: 42822](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-The expression `<sqlExpr>` cannot be used as a grouping expression because its data type `<dataType>` is not an orderable data type.
 
 ### HLL_INVALID_INPUT_SKETCH_BUFFER
 
@@ -1055,6 +1043,14 @@ For more details see [INTERNAL_ERROR_METADATA_CATALOG](sql-error-conditions-inte
 [SQLSTATE: 22012](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead.
+
+### [INVALID_AGGREGATE_FILTER](sql-error-conditions-invalid-aggregate-filter-error-class.html)
+
+[SQLSTATE: 42903](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The FILTER expression `<filterExpr>` in an aggregate function is invalid.
+
+For more details see [INVALID_AGGREGATE_FILTER](sql-error-conditions-invalid-aggregate-filter-error-class.html)
 
 ### INVALID_ARRAY_INDEX
 
@@ -2185,6 +2181,24 @@ Failed to perform column family operation=`<operationName>` with invalid name=`<
 The handle has not been initialized for this StatefulProcessor.
 Please only use the StatefulProcessor within the transformWithState operator.
 
+### STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Incorrect number of ordering columns=`<numOrderingCols>` for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns.
+
+### STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Incorrect number of prefix columns=`<numPrefixCols>` for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns.
+
+### STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Null type ordering column with name=`<fieldName>` at index=`<index>` is not supported for range scan encoder.
+
 ### STATE_STORE_UNSUPPORTED_OPERATION
 
 [SQLSTATE: XXKST](sql-error-conditions-sqlstates.html#class-XX-internal-error)
@@ -2196,6 +2210,12 @@ Please only use the StatefulProcessor within the transformWithState operator.
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 State store operation=`<operationType>` not supported on missing column family=`<colFamilyName>`.
+
+### STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Variable size ordering column with name=`<fieldName>` at index=`<index>` is not supported for range scan encoder.
 
 ### STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST
 
