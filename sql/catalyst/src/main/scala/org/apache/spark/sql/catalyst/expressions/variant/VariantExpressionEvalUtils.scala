@@ -24,6 +24,9 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.types.variant.{VariantBuilder, VariantSizeLimitException, VariantUtil}
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
+/**
+ * A utility class for constructing variant expressions.
+ */
 object VariantExpressionEvalUtils {
 
   def parseJson(input: UTF8String): VariantVal = {
