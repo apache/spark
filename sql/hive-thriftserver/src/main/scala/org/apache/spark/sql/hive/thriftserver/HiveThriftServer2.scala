@@ -56,7 +56,7 @@ object HiveThriftServer2 extends Logging {
    *                    the call logs the error and exits the JVM with exit code -1. When false, the
    *                    call throws an exception instead.
    */
-  @Since("3.5.2")
+  @Since("4.0.0")
   @DeveloperApi
   def startWithContext(sqlContext: SQLContext, exitOnError: Boolean): HiveThriftServer2 = {
     systemExitOnError.set(exitOnError)
