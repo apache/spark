@@ -753,11 +753,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("message" -> e.getMessage))
   }
 
-  def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
+  def saveModeUnsupportedError(saveMode: Any): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = s"UNSUPPORTED_SAVE_MODE.WITHOUT_SUGGESTION",
+      messageParameters = Map("saveMode" -> toSQLValue(saveMode, StringType)))
+  }
+
+  def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean, path: Path): Throwable = {
     val errorSubClass = if (pathExists) "EXISTENT_PATH" else "NON_EXISTENT_PATH"
     new SparkIllegalArgumentException(
       errorClass = s"UNSUPPORTED_SAVE_MODE.$errorSubClass",
-      messageParameters = Map("saveMode" -> toSQLValue(saveMode, StringType)))
+      messageParameters = Map(
+        "saveMode" -> toSQLValue(saveMode, StringType),
+        "path" -> path.toString))
   }
 
   def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
