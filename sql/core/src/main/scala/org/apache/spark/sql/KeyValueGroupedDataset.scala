@@ -652,10 +652,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * invocations.
    *
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
-   * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
-   *                          operator.
-   * @param timeoutMode The timeout mode of the stateful processor.
-   * @param outputMode The output mode of the stateful processor.
+   * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked
+   *                          by the operator.
+   * @param timeoutMode       The timeout mode of the stateful processor.
+   * @param ttlMode           The ttlMode to evict user state on ttl expiration
+   * @param outputMode        The output mode of the stateful processor.
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    */
@@ -691,6 +692,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
    *                          operator.
    * @param timeoutMode The timeout mode of the stateful processor.
+   * @param ttlMode The ttlMode to evict user state on ttl expiration
    * @param outputMode The output mode of the stateful processor.
    * @param outputEncoder Encoder for the output type.
    *
@@ -715,6 +717,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param statefulProcessor Instance of statefulProcessor whose functions will
    *                          be invoked by the operator.
    * @param timeoutMode       The timeout mode of the stateful processor.
+   * @param ttlMode           The ttlMode to evict user state on ttl expiration
    * @param outputMode        The output mode of the stateful processor.
    * @param initialState      User provided initial state that will be used to initiate state for
    *                          the query in the first batch.
@@ -754,6 +757,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param statefulProcessor Instance of statefulProcessor whose functions will
    *                          be invoked by the operator.
    * @param timeoutMode       The timeout mode of the stateful processor.
+   * @param ttlMode           The ttlMode to evict user state on ttl expiration
    * @param outputMode        The output mode of the stateful processor.
    * @param initialState      User provided initial state that will be used to initiate state for
    *                          the query in the first batch.
