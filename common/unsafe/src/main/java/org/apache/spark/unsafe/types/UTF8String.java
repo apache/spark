@@ -585,6 +585,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(s, e);
   }
 
+  public UTF8String trim(int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
+        || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
+      return trim();
+    }
+    else {
+      return trim(UTF8String.fromString(" "), collationId);
+    }
+  }
+
   /**
    * Trims whitespace ASCII characters from both ends of this string.
    *
@@ -628,6 +638,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
   }
 
+  public UTF8String trim(UTF8String trimString, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return trim(trimString);
+    }
+
+    if (CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
+      return lowercaseTrimLeft(trimString).lowercaseTrimRight(trimString);
+    }
+
+    return trimLeft(trimString, collationId).trimRight(trimString, collationId);
+  }
+
   /**
    * Trims space characters (ASCII 32) from the start of this string.
    *
@@ -646,6 +668,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
     return copyUTF8String(s, this.numBytes - 1);
+  }
+
+  public UTF8String trimLeft(int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
+        || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
+      return trimLeft();
+    }
+    else {
+      return trimLeft(UTF8String.fromString(" "), collationId);
+    }
   }
 
   /**
@@ -686,6 +718,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(trimIdx, numBytes - 1);
   }
 
+  public UTF8String trimLeft(UTF8String trimString, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return trimLeft(trimString);
+    }
+
+    if (CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
+      return lowercaseTrimLeft(trimString);
+    }
+
+    return collatedTrimLeft(trimString, collationId);
+  }
+
+  public UTF8String lowercaseTrimLeft(UTF8String trimString) {
+    // TODO
+    return EMPTY_UTF8;
+  }
+
+  public UTF8String collatedTrimLeft(UTF8String trimString, int collationId) {
+    // TODO
+    return EMPTY_UTF8;
+  }
+
   /**
    * Trims space characters (ASCII 32) from the end of this string.
    *
@@ -704,6 +758,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
     return copyUTF8String(0, e);
+  }
+
+  public UTF8String trimRight(int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
+        || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
+      return trimRight();
+    }
+    else {
+      return trimRight(UTF8String.fromString(" "), collationId);
+    }
   }
 
   /**
@@ -765,6 +829,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
     return copyUTF8String(0, trimEnd);
+  }
+
+  public UTF8String trimRight(UTF8String trimString, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return trimRight(trimString);
+    }
+
+    if (CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
+      return lowercaseTrimRight(trimString);
+    }
+
+    return collatedTrimRight(trimString, collationId);
+  }
+
+  public UTF8String lowercaseTrimRight(UTF8String trimString) {
+    // TODO
+    return EMPTY_UTF8;
+  }
+
+  public UTF8String collatedTrimRight(UTF8String trimString, int collationId) {
+    // TODO
+    return EMPTY_UTF8;
   }
 
   public UTF8String reverse() {

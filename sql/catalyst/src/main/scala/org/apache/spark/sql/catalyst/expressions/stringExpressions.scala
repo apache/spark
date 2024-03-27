@@ -1028,14 +1028,31 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   protected def direction: String
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
+  override def dataType: DataType = srcStr.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+
+  final lazy val collationId: Int = srcStr.dataType.asInstanceOf[StringType].collationId
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
   protected def doEval(srcString: UTF8String): UTF8String
   protected def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheckResult = super.checkInputDataTypes()
+    if (defaultCheckResult.isFailure) {
+      return defaultCheckResult
+    }
+
+    trimStr match {
+      case None => TypeCheckResult.TypeCheckSuccess
+      case Some(trimChars) =>
+        val collationId = srcStr.dataType.asInstanceOf[StringType].collationId
+        CollationTypeConstraints.checkCollationCompatibility(collationId, Seq(trimChars.dataType))
+    }
+  }
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
@@ -1054,32 +1071,64 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     val evals = children.map(_.genCode(ctx))
     val srcString = evals(0)
 
-    if (evals.length == 1) {
-      ev.copy(code = code"""
-         |${srcString.code}
-         |boolean ${ev.isNull} = false;
-         |UTF8String ${ev.value} = null;
-         |if (${srcString.isNull}) {
-         |  ${ev.isNull} = true;
-         |} else {
-         |  ${ev.value} = ${srcString.value}.$trimMethod();
-         |}""".stripMargin)
-    } else {
-      val trimString = evals(1)
-      ev.copy(code = code"""
-         |${srcString.code}
-         |boolean ${ev.isNull} = false;
-         |UTF8String ${ev.value} = null;
-         |if (${srcString.isNull}) {
-         |  ${ev.isNull} = true;
-         |} else {
-         |  ${trimString.code}
-         |  if (${trimString.isNull}) {
-         |    ${ev.isNull} = true;
-         |  } else {
-         |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
-         |  }
-         |}""".stripMargin)
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      if (evals.length == 1) {
+        ev.copy(code = code"""
+          |${srcString.code}
+          |boolean ${ev.isNull} = false;
+          |UTF8String ${ev.value} = null;
+          |if (${srcString.isNull}) {
+          |  ${ev.isNull} = true;
+          |} else {
+          |  ${ev.value} = ${srcString.value}.$trimMethod();
+          |}""".stripMargin)
+      } else {
+        val trimString = evals(1)
+        ev.copy(code = code"""
+          |${srcString.code}
+          |boolean ${ev.isNull} = false;
+          |UTF8String ${ev.value} = null;
+          |if (${srcString.isNull}) {
+          |  ${ev.isNull} = true;
+          |} else {
+          |  ${trimString.code}
+          |  if (${trimString.isNull}) {
+          |    ${ev.isNull} = true;
+          |  } else {
+          |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
+          |  }
+          |}""".stripMargin)
+      }
+    }
+    else {
+      if (evals.length == 1) {
+        ev.copy(code = code"""
+          |${srcString.code}
+          |boolean ${ev.isNull} = false;
+          |UTF8String ${ev.value} = null;
+          |if (${srcString.isNull}) {
+          |  ${ev.isNull} = true;
+          |} else {
+          |  ${ev.value} = ${srcString.value}.$trimMethod($collationId);
+          |}""".stripMargin)
+      } else {
+        val trimString = evals(1)
+        ev.copy(code = code"""
+          |${srcString.code}
+          |boolean ${ev.isNull} = false;
+          |UTF8String ${ev.value} = null;
+          |if (${srcString.isNull}) {
+          |  ${ev.isNull} = true;
+          |} else {
+          |  ${trimString.code}
+          |  if (${trimString.isNull}) {
+          |    ${ev.isNull} = true;
+          |  } else {
+          |    ${ev.value} =
+          |      ${srcString.value}.$trimMethod(${trimString.value}, $collationId);
+          |  }
+          |}""".stripMargin)
+      }
     }
   }
 
@@ -1170,12 +1219,25 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
 
   override protected def direction: String = "BOTH"
 
-  override def doEval(srcString: UTF8String): UTF8String = srcString.trim()
-
-  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
-    srcString.trim(trimString)
-
   override val trimMethod: String = "trim"
+
+  override def doEval(srcString: UTF8String): UTF8String = {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      srcString.trim()
+    }
+    else {
+      srcString.trim(collationId)
+    }
+  }
+
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String = {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      srcString.trim(trimString)
+    }
+    else {
+      srcString.trim(trimString, collationId)
+    }
+  }
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
@@ -1278,12 +1340,25 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
 
   override protected def direction: String = "LEADING"
 
-  override def doEval(srcString: UTF8String): UTF8String = srcString.trimLeft()
-
-  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
-    srcString.trimLeft(trimString)
-
   override val trimMethod: String = "trimLeft"
+
+  override def doEval(srcString: UTF8String): UTF8String = {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      srcString.trimLeft()
+    }
+    else {
+      srcString.trimLeft(collationId)
+    }
+  }
+
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String = {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      srcString.trimLeft(trimString)
+    }
+    else {
+      srcString.trimLeft(trimString, collationId)
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimLeft =
@@ -1339,12 +1414,25 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
 
   override protected def direction: String = "TRAILING"
 
-  override def doEval(srcString: UTF8String): UTF8String = srcString.trimRight()
-
-  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
-    srcString.trimRight(trimString)
-
   override val trimMethod: String = "trimRight"
+
+  override def doEval(srcString: UTF8String): UTF8String = {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      srcString.trimRight()
+    }
+    else {
+      srcString.trimRight(collationId)
+    }
+  }
+
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String = {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      srcString.trimRight(trimString)
+    }
+    else {
+      srcString.trimRight(trimString, collationId)
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimRight =
