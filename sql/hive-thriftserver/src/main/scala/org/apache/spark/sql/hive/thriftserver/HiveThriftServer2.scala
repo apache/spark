@@ -85,7 +85,7 @@ object HiveThriftServer2 extends Logging {
   @Since("2.0.0")
   @DeveloperApi
   def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
-    startWithContext(sqlContext, exitOnError)
+    startWithContext(sqlContext, exitOnError = true)
   }
 
   private def createListenerAndUI(server: HiveThriftServer2, sc: SparkContext): Unit = {
