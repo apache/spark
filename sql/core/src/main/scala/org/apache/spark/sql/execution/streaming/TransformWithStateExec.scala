@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -96,7 +97,7 @@ case class TransformWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-    newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
+                                                  newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
     copy(child = newLeft, initialState = newRight)
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
@@ -238,7 +239,7 @@ case class TransformWithStateExec(
       iter: Iterator[InternalRow],
       store: StateStore,
       processorHandle: StatefulProcessorHandleImpl):
-    CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+  CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
     val timeoutLatencyMs = longMetric("allRemovalsTimeMs")
@@ -349,28 +350,9 @@ case class TransformWithStateExec(
 
             processDataWithInitialState(store, childDataIterator, initStateIterator)
           } else {
-            val providerId = {
-              val tempDirPath = Utils.createTempDir().getAbsolutePath
-              new StateStoreProviderId(
-                StateStoreId(tempDirPath, 0, partitionId), getStateInfo.queryRunId)
+            initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
+              processDataWithInitialState(store, childDataIterator, initStateIterator)
             }
-            val sqlConf = new SQLConf()
-            sqlConf.setConfString(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
-              classOf[RocksDBStateStoreProvider].getName)
-
-            // Create StateStoreProvider for this partition
-            val stateStoreProvider = StateStoreProvider.createAndInit(
-              providerId,
-              schemaForKeyRow,
-              schemaForValueRow,
-              NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
-              useColumnFamilies = true,
-              storeConf = new StateStoreConf(sqlConf),
-              hadoopConf = hadoopConfBroadcast.value.value,
-              useMultipleValuesPerKey = true)
-            val store = stateStoreProvider.getStore(0)
-
-            processDataWithInitialState(store, childDataIterator, initStateIterator)
           }
       }
     } else {
@@ -393,39 +375,54 @@ case class TransformWithStateExec(
         val hadoopConfBroadcast = sparkContext.broadcast(
           new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
         child.execute().mapPartitionsWithIndex[InternalRow](
-          (i, iter) => {
-            val providerId = {
-              val tempDirPath = Utils.createTempDir().getAbsolutePath
-              new StateStoreProviderId(
-                StateStoreId(tempDirPath, 0, i), getStateInfo.queryRunId)
+          (i: Int, iter: Iterator[InternalRow]) => {
+            initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>
+              processData(store, iter)
             }
-
-            val sqlConf = new SQLConf()
-            sqlConf.setConfString(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
-              classOf[RocksDBStateStoreProvider].getName)
-            val storeConf = new StateStoreConf(sqlConf)
-
-            // Create StateStoreProvider for this partition
-            val stateStoreProvider = StateStoreProvider.createAndInit(
-              providerId,
-              schemaForKeyRow,
-              schemaForValueRow,
-              NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
-              useColumnFamilies = true,
-              storeConf = storeConf,
-              hadoopConf = hadoopConfBroadcast.value.value,
-              useMultipleValuesPerKey = true)
-
-            val store = stateStoreProvider.getStore(0)
-            val outputIterator = processData(store, iter)
-            CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
-              stateStoreProvider.close()
-              statefulProcessor.close()
-            })
           }
         )
       }
     }
+  }
+
+  /**
+   * Create a new StateStore for given partitionId and instantiate a temp directory
+   * on the executors. Process data and close the stateStore provider afterwards.
+   */
+  private def initNewStateStoreAndProcessData(
+      partitionId: Int,
+      hadoopConfBroadcast: Broadcast[SerializableConfiguration])
+    (f: StateStore => CompletionIterator[InternalRow, Iterator[InternalRow]]):
+    CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+
+    val providerId = {
+      val tempDirPath = Utils.createTempDir().getAbsolutePath
+      new StateStoreProviderId(
+        StateStoreId(tempDirPath, 0, partitionId), getStateInfo.queryRunId)
+    }
+
+    val sqlConf = new SQLConf()
+    sqlConf.setConfString(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
+      classOf[RocksDBStateStoreProvider].getName)
+    val storeConf = new StateStoreConf(sqlConf)
+
+    // Create StateStoreProvider for this partition
+    val stateStoreProvider = StateStoreProvider.createAndInit(
+      providerId,
+      schemaForKeyRow,
+      schemaForValueRow,
+      NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
+      useColumnFamilies = true,
+      storeConf = storeConf,
+      hadoopConf = hadoopConfBroadcast.value.value,
+      useMultipleValuesPerKey = true)
+
+    val store = stateStoreProvider.getStore(0)
+    val outputIterator = f(store)
+    CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
+      stateStoreProvider.close()
+      statefulProcessor.close()
+    })
   }
 
   /**
