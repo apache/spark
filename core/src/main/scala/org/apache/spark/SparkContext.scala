@@ -470,6 +470,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
 
+    Thread.setDefaultUncaughtExceptionHandler(new SparkUncaughtExceptionHandler(false))
     _listenerBus = new LiveListenerBus(_conf)
     _resourceProfileManager = new ResourceProfileManager(_conf, _listenerBus)
 
