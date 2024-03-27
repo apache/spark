@@ -20,6 +20,7 @@ import org.apache.spark.SparkException;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.junit.jupiter.api.Test;
 
+import static org.apache.spark.unsafe.types.UTF8String.fromString;
 import static org.junit.jupiter.api.Assertions.*;
 
 
@@ -100,4 +101,82 @@ public class UTF8StringWithCollationSuite {
     assertEndsWith("abcde", "cde", "UNICODE_CI", true);
     assertEndsWith("abcde", "BCD", "UNICODE_CI", false);
   }
+
+  private void assertSubStringIndex(String string, String delimiter, int count, int collationId, String expected)
+          throws SparkException {
+    assertEquals(UTF8String.fromString(string).subStringIndex(UTF8String.fromString(delimiter), count,
+            collationId), UTF8String.fromString(expected));
+  }
+
+  @Test
+  public void subStringIndex() throws SparkException {
+    assertSubStringIndex("wwwgapachegorg", "g", -3, 0, "apachegorg");
+    assertSubStringIndex("www||apache||org", "||", 2, 0, "www||apache");
+    // UTF8_BINARY_LCASE
+    assertSubStringIndex("AaAaAaAaAa", "aa", 2, 1, "A");
+    assertSubStringIndex("www.apache.org", ".", 3, 1, "www.apache.org");
+    assertSubStringIndex("wwwXapachexorg", "x", 2, 1, "wwwXapache");
+    assertSubStringIndex("wwwxapacheXorg", "X", 1, 1, "www");
+    assertSubStringIndex("www.apache.org", ".", 0, 1, "");
+    assertSubStringIndex("www.apache.ORG", ".", -3, 1, "www.apache.ORG");
+    assertSubStringIndex("wwwGapacheGorg", "g", 1, 1, "www");
+    assertSubStringIndex("wwwGapacheGorg", "g", 3, 1, "wwwGapacheGor");
+    assertSubStringIndex("gwwwGapacheGorg", "g", 3, 1, "gwwwGapache");
+    assertSubStringIndex("wwwGapacheGorg", "g", -3, 1, "apacheGorg");
+    assertSubStringIndex("wwwmapacheMorg", "M", -2, 1, "apacheMorg");
+    assertSubStringIndex("www.apache.org", ".", -1, 1, "org");
+    assertSubStringIndex("", ".", -2, 1, "");
+    // scalastyle:off
+    assertSubStringIndex("test大千世界X大千世界", "x", -1, 1, "大千世界");
+    assertSubStringIndex("test大千世界X大千世界", "X", 1, 1, "test大千世界");
+    assertSubStringIndex("test大千世界大千世界", "千", 2, 1, "test大千世界大");
+    // scalastyle:on
+    assertSubStringIndex("www||APACHE||org", "||", 2, 1, "www||APACHE");
+    assertSubStringIndex("www||APACHE||org", "||", -1, 1, "org");
+    // UNICODE
+    assertSubStringIndex("AaAaAaAaAa", "Aa", 2, 2, "Aa");
+    assertSubStringIndex("wwwYapacheyorg", "y", 3, 2, "wwwYapacheyorg");
+    assertSubStringIndex("www.apache.org", ".", 2, 2, "www.apache");
+    assertSubStringIndex("wwwYapacheYorg", "Y", 1, 2, "www");
+    assertSubStringIndex("wwwYapacheYorg", "y", 1, 2, "wwwYapacheYorg");
+    assertSubStringIndex("wwwGapacheGorg", "g", 1, 2, "wwwGapacheGor");
+    assertSubStringIndex("GwwwGapacheGorG", "G", 3, 2, "GwwwGapache");
+    assertSubStringIndex("wwwGapacheGorG", "G", -3, 2, "apacheGorG");
+    assertSubStringIndex("www.apache.org", ".", 0, 2, "");
+    assertSubStringIndex("www.apache.org", ".", -3, 2, "www.apache.org");
+    assertSubStringIndex("www.apache.org", ".", -2, 2, "apache.org");
+    assertSubStringIndex("www.apache.org", ".", -1, 2, "org");
+    assertSubStringIndex("", ".", -2, 2, "");
+    // scalastyle:off
+    assertSubStringIndex("test大千世界X大千世界", "X", -1, 2, "大千世界");
+    assertSubStringIndex("test大千世界X大千世界", "X", 1, 2, "test大千世界");
+    assertSubStringIndex("大x千世界大千世x界", "x", 1, 2, "大");
+    assertSubStringIndex("大x千世界大千世x界", "x", -1, 2, "界");
+    assertSubStringIndex("大x千世界大千世x界", "x", -2, 2, "千世界大千世x界");
+    assertSubStringIndex("大千世界大千世界", "千", 2, 2, "大千世界大");
+    // scalastyle:on
+    assertSubStringIndex("www||apache||org", "||", 2, 2, "www||apache");
+    // UNICODE_CI
+    assertSubStringIndex("AaAaAaAaAa", "aa", 2, 3, "A");
+    assertSubStringIndex("www.apache.org", ".", 3, 3, "www.apache.org");
+    assertSubStringIndex("wwwXapachexorg", "x", 2, 3, "wwwXapache");
+    assertSubStringIndex("wwwxapacheXorg", "X", 1, 3, "www");
+    assertSubStringIndex("www.apache.org", ".", 0, 3, "");
+    assertSubStringIndex("wwwGapacheGorg", "g", 1, 3, "www");
+    assertSubStringIndex("wwwGapacheGorg", "g", 3, 3, "wwwGapacheGor");
+    assertSubStringIndex("gwwwGapacheGorg", "g", 3, 3, "gwwwGapache");
+    assertSubStringIndex("wwwGapacheGorg", "g", -3, 3, "apacheGorg");
+    assertSubStringIndex("www.apache.ORG", ".", -3, 3, "www.apache.ORG");
+    assertSubStringIndex("wwwmapacheMorg", "M", -2, 3, "apacheMorg");
+    assertSubStringIndex("www.apache.org", ".", -1, 3, "org");
+    assertSubStringIndex("", ".", -2, 3, "");
+    // scalastyle:off
+    assertSubStringIndex("test大千世界X大千世界", "X", -1, 3, "大千世界");
+    assertSubStringIndex("test大千世界X大千世界", "X", 1, 3, "test大千世界");
+    assertSubStringIndex("test大千世界大千世界", "千", 2, 3, "test大千世界大");
+    // scalastyle:on
+    assertSubStringIndex("www||APACHE||org", "||", 2, 3, "www||APACHE");
+  }
+
+
 }
