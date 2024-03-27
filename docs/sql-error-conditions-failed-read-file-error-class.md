@@ -47,6 +47,6 @@ You can explicitly invalidate the cache in Spark by running 'REFRESH TABLE table
 
 ## PARQUET_COLUMN_DATA_TYPE_MISMATCH
 
-Data type mismatches when reading Parquet column `<column>`: Expected: `<expectedType>`, Found: `<actualType>`.
+Data type mismatches when reading Parquet column `<column>`. Expected Spark type `<expectedType>`, actual Parquet type `<actualType>`.
 
 
