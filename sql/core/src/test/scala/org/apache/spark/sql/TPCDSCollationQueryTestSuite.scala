@@ -50,17 +50,6 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
     }
   }
 
-  protected val baseResourcePath: String = {
-    getWorkspaceFilePath(
-      "sql",
-      "core",
-      "src",
-      "test",
-      "resources",
-      "tpcds-query-collated-results"
-    ).toFile.getAbsolutePath
-  }
-
   private def withDB[T](dbName: String)(fun: => T): T = {
     Utils.tryWithSafeFinally({
       spark.sql(s"USE `$dbName`")
@@ -70,19 +59,56 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
     }
   }
 
-  case class CollationCheck(dbName: String,
-                            collation: String,
-                            columnTransform: String,
-                            queryTransform: String => String)
+  abstract class CollationCheck(val dbName: String,
+                                val collation: String,
+                                val columnTransform: String) {
+    def queryTransform: String => String
+  }
 
-  val checks: Seq[CollationCheck] = Seq(
-    CollationCheck("tpcds_collated_none", "UTF8_BINARY", "LOWER", x => x.toLowerCase(Locale.ROOT)),
-    CollationCheck("tpcds_collated_lower", "UTF8_BINARY_LCASE", "LOWER", x => x),
-    CollationCheck("tpcds_collated_upper", "UTF8_BINARY_LCASE", "UPPER", x => x)
+  case class CaseInsensitiveCollationCheck(override val dbName: String,
+                                           override val collation: String,
+                                           override val columnTransform: String)
+    extends CollationCheck(dbName, collation, columnTransform) {
+    def queryTransform: String => String = identity
+  }
+
+  case class CaseSensitiveCollationCheck(override val dbName: String,
+                                         override val collation: String,
+                                         override val columnTransform: String)
+    extends CollationCheck(dbName, collation, columnTransform) {
+    override def queryTransform: String => String = _.toLowerCase(Locale.ROOT)
+  }
+
+  val randomizeCase = "RANDOMIZE_CASE"
+
+  // List of batches of runs which should yield the same result when run on a query
+  val checks: Seq[Seq[CollationCheck]] = Seq(
+    Seq(
+      CaseSensitiveCollationCheck("tpcds_utf8", "UTF8_BINARY", "LOWER"),
+      CaseInsensitiveCollationCheck("tpcds_utf8_lower", "UTF8_BINARY_LCASE", "LOWER"),
+      CaseInsensitiveCollationCheck("tpcds_utf8_upper", "UTF8_BINARY_LCASE", "UPPER"),
+      CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_BINARY_LCASE", randomizeCase)
+    ),
+    Seq(
+      CaseSensitiveCollationCheck("tpcds_unicode", "UNICODE", "LOWER"),
+      CaseInsensitiveCollationCheck("tpcds_unicode_lower", "UNICODE_CI", "LOWER"),
+      CaseInsensitiveCollationCheck("tpcds_unicode_upper", "UNICODE_CI", "UPPER"),
+      CaseInsensitiveCollationCheck("tpcds_unicode_random", "UNICODE_CI", randomizeCase)
+    )
   )
 
   override def createTables(): Unit = {
-    checks.foreach(check => {
+    spark.udf.register(
+      randomizeCase,
+      functions.udf((s: String) => {
+        s match {
+          case null => null
+          case _ =>
+            val random = new scala.util.Random()
+            s.map(c => if (random.nextBoolean()) c.toUpper else c.toLower)
+        }
+      }).asNondeterministic())
+    checks.flatten.foreach(check => {
       spark.sql(s"CREATE DATABASE `${check.dbName}`")
       withDB(check.dbName) {
         tableNames.foreach(tableName => {
@@ -123,7 +149,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   }
 
   override def dropTables(): Unit =
-    checks.foreach(check => {
+    checks.flatten.foreach(check => {
       withDB(check.dbName)(super.dropTables())
       spark.sql(s"DROP DATABASE `${check.dbName}`")
     })
@@ -149,9 +175,11 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   private def runQuery(query: String, conf: Map[String, String]): Unit = {
     withSQLConf(conf.toSeq: _*) {
       try {
-        val res = checks.map(check =>
-          withDB(check.dbName)(getQueryOutput(check.queryTransform(query)).toLowerCase()))
-        if (res.nonEmpty) res.foreach(currRes => assertResult(currRes)(res.head))
+        checks.foreach(batch => {
+          val res = batch.map(check =>
+            withDB(check.dbName)(getQueryOutput(check.queryTransform(query)).toLowerCase()))
+          if (res.nonEmpty) res.foreach(currRes => assertResult(currRes)(res.head))
+        })
       } catch {
         case e: Throwable =>
           val configs = conf.map { case (k, v) =>
@@ -166,6 +194,9 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
     val (_, output) = handleExceptions(getNormalizedQueryExecutionResult(spark, query))
     output.mkString("\n").replaceAll("\\s+$", "")
   }
+
+  // skip q91 due to use of like expression which is not supported with collations yet
+  override def excludedTpcdsQueries: Set[String] = super.excludedTpcdsQueries ++ Set("q91")
 
   if (tpcdsDataPath.nonEmpty) {
     tpcdsQueries.foreach { name =>
