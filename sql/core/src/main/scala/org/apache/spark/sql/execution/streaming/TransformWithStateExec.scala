@@ -390,8 +390,8 @@ case class TransformWithStateExec(
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
         // a temp directory on the executors in mapPartitionsWithIndex.
-        val broadcastedHadoopConf =
-        new SerializableConfiguration(session.sessionState.newHadoopConf())
+        val hadoopConfBroadcast = sparkContext.broadcast(
+          new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i, iter) => {
             val providerId = {
@@ -413,7 +413,7 @@ case class TransformWithStateExec(
               NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
               useColumnFamilies = true,
               storeConf = storeConf,
-              hadoopConf = broadcastedHadoopConf.value,
+              hadoopConf = hadoopConfBroadcast.value.value,
               useMultipleValuesPerKey = true)
 
             val store = stateStoreProvider.getStore(0)

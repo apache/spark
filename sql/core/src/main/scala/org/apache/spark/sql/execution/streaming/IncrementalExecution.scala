@@ -268,7 +268,7 @@ class IncrementalExecution(
         )
 
       case t: TransformWithStateExec =>
-        val hasInitialState = (isFirstBatch && t.hasInitialState)
+        val hasInitialState = (currentBatchId == 0L && t.hasInitialState)
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),

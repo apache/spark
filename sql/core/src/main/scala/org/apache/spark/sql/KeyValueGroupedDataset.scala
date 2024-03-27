@@ -683,8 +683,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
    * @tparam S The type of initial state objects. Must be encodable to Spark SQL types.
-   * @param StatefulProcessorWithInitialState Instance of statefulProcessor whose functions will
-   *                                          be invoked by the operator.
+   * @param statefulProcessor Instance of statefulProcessor whose functions will
+   *                          be invoked by the operator.
    * @param timeoutMode       The timeout mode of the stateful processor.
    * @param outputMode        The output mode of the stateful processor. Defaults to APPEND mode.
    * @param initialState      User provided initial state that will be used to initiate state for
@@ -707,7 +707,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         child = logicalPlan,
         initialState.groupingAttributes,
         initialState.dataAttributes,
-        initialState.queryExecution.logical
+        initialState.queryExecution.analyzed
       )
     )
   }
