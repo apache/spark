@@ -70,6 +70,7 @@ object CollationBenchmark extends SqlBasedBenchmark {
     )
     benchmark.run()
   }
+
   def benchmarkUTFStringCompare(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
     val sublistStrings = utf8Strings
 
