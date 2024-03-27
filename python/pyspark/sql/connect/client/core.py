@@ -44,7 +44,6 @@ from typing import (
     cast,
     TYPE_CHECKING,
     Sequence,
-    Callable,
 )
 
 import pandas as pd
@@ -694,7 +693,7 @@ class SparkConnectClient(object):
 
         self._progress_handlers: List[ProgressHandler] = []
 
-    def register_progress_handler(self, handler: Callable) -> None:
+    def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
         Register a progress handler to be called when a progress message is received.
         Parameters
@@ -709,7 +708,7 @@ class SparkConnectClient(object):
     def clear_progress_handlers(self) -> None:
         self._progress_handlers.clear()
 
-    def remove_progress_handler(self, handler: Callable) -> None:
+    def remove_progress_handler(self, handler: ProgressHandler) -> None:
         """
         Remove a progress handler from the list of registered handlers.
         Parameters

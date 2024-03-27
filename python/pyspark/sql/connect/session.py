@@ -326,7 +326,8 @@ class SparkSession:
 
         Examples
         --------
-        >>> handler = lambda **kwargs: print(kwargs)
+        >>> import os
+        >>> handler = lambda **kwargs: os.write(str(kwargs))
         >>> spark.registerProgressHandler(handler)
         """
         self._client.register_progress_handler(handler)
@@ -338,7 +339,8 @@ class SparkSession:
 
         Examples
         --------
-        >>> handler = lambda **kwargs: print(kwargs)
+        >>> import os
+        >>> handler = lambda **kwargs: os.write(str(kwargs))
         >>> spark.registerProgressHandler(handler)
         >>> spark.removeProgressHandler(handler)
         """

@@ -26,7 +26,7 @@ try:
     from IPython.utils.terminal import get_terminal_size
 except ImportError:
 
-    def get_terminal_size(x: Any = None, y: Any = None) -> tuple[int, int]:
+    def get_terminal_size(defaultx: Any = None, defaulty: Any = None) -> Any:
         return (80, 25)
 
 
