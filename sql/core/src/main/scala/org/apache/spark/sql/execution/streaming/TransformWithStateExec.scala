@@ -97,7 +97,7 @@ case class TransformWithStateExec(
   override def right: SparkPlan = initialState
 
   override protected def withNewChildrenInternal(
-                                                  newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
+      newLeft: SparkPlan, newRight: SparkPlan): TransformWithStateExec =
     copy(child = newLeft, initialState = newRight)
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
@@ -239,7 +239,7 @@ case class TransformWithStateExec(
       iter: Iterator[InternalRow],
       store: StateStore,
       processorHandle: StatefulProcessorHandleImpl):
-  CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
     val timeoutLatencyMs = longMetric("allRemovalsTimeMs")
