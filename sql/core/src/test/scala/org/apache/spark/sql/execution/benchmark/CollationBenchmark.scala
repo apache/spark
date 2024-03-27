@@ -19,9 +19,7 @@ package org.apache.spark.sql.execution.benchmark
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.functions._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -48,18 +46,6 @@ object CollationBenchmark extends SqlBasedBenchmark {
       .map(UTF8String.fromString)
     val inputLong: Seq[UTF8String] = (0L until n).map(i => input(i.toInt % input.size))
     inputLong
-  }
-
-  private def getDataFrame(strings: Seq[String]): DataFrame = {
-    val asPairs = strings.sliding(2, 1).toSeq.map {
-      case Seq(s1, s2) => (s1, s2)
-    }
-    val d = spark.createDataFrame(asPairs).toDF("s1", "s2")
-    d
-  }
-
-  private def generateDataframeInput(l: Long): DataFrame = {
-    getDataFrame(generateSeqInput(l).map(_.toString))
   }
 
   def benchmarkUTFStringEquals(collationTypes: Seq[String], utf8Strings: Seq[UTF8String]): Unit = {
@@ -134,30 +120,7 @@ object CollationBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
-  def benchmarkFilterEqual(
-      collationTypes: Seq[String],
-      dfUncollated: DataFrame): Unit = {
-    val benchmark =
-      new Benchmark(
-        "filter df column with collation",
-        dfUncollated.count(),
-        warmupTime = 4.seconds,
-        output = output)
-    collationTypes.foreach(collationType => {
-      val dfCollated = dfUncollated.selectExpr(
-        s"collate(s2, '$collationType') as k2_$collationType",
-        s"collate(s1, '$collationType') as k1_$collationType")
-      benchmark.addCase(s"filter df column with collation - $collationType") { _ =>
-        dfCollated.where(col(s"k1_$collationType") === col(s"k2_$collationType"))
-          .noop()
-      }
-    }
-    )
-    benchmark.run()
-  }
-
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    benchmarkFilterEqual(collationTypes, generateDataframeInput(10000L))
     benchmarkUTFStringEquals(collationTypes, generateSeqInput(10000L))
     benchmarkUTFStringCompare(collationTypes, generateSeqInput(10000L))
     benchmarkUTFStringHashFunction(collationTypes, generateSeqInput(10000L))
