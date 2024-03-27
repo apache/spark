@@ -215,14 +215,19 @@ class VariantSuite extends QueryTest with SharedSparkSession {
         s"named_struct('value', $v, 'metadata', cast(null as binary))"
     )
     cases.foreach { structDef =>
-      withTempDir { dir =>
-        val file = new File(dir, "dir").getCanonicalPath
-        val df = spark.sql(s"select $structDef as v from range(10)")
-        df.write.parquet(file)
-        val schema = StructType(Seq(StructField("v", VariantType)))
-        val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
-        val e = intercept[org.apache.spark.SparkException](result.collect())
-        assert(e.getCause.isInstanceOf[AnalysisException], e.printStackTrace)
+      Seq(false, true).foreach { vectorizedReader =>
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key ->
+                vectorizedReader.toString) {
+          withTempDir { dir =>
+            val file = new File(dir, "dir").getCanonicalPath
+            val df = spark.sql(s"select $structDef as v from range(10)")
+            df.write.parquet(file)
+            val schema = StructType(Seq(StructField("v", VariantType)))
+            val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
+            val e = intercept[org.apache.spark.SparkException](result.collect())
+            assert(e.getCause.isInstanceOf[AnalysisException], e.printStackTrace)
+          }
+        }
       }
     }
   }
