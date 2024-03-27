@@ -17,15 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.util.BadRecordException
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.{VariantBuilder, VariantSizeLimitException, VariantUtil}
-import org.apache.spark.unsafe.types._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -39,33 +33,22 @@ import org.apache.spark.unsafe.types._
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit
-case class ParseJson(child: Expression) extends UnaryExpression
-  with NullIntolerant with ExpectsInputTypes {
+case class ParseJson(child: Expression)
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantEvaluator.getClass,
+    VariantType,
+    "evaluate",
+    Seq(child),
+    inputTypes)
+
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def dataType: DataType = VariantType
 
   override def prettyName: String = "parse_json"
 
-  protected override def nullSafeEval(input: Any): Any = {
-    try {
-      val v = VariantBuilder.parseJson(input.toString)
-      new VariantVal(v.getValue, v.getMetadata)
-    } catch {
-      case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json")
-      case NonFatal(e) =>
-        throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-          input.toString, BadRecordException(() => input.asInstanceOf[UTF8String], cause = e))
-    }
-  }
-
   override protected def withNewChildInternal(newChild: Expression): ParseJson =
     copy(child = newChild)
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val parseJson = ctx.addReferenceObj("parseJson", this)
-    nullSafeCodeGen(ctx, ev,
-      eval => s"${ev.value} = (VariantVal) $parseJson.nullSafeEval($eval);")
-  }
 }
