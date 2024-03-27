@@ -81,13 +81,15 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       provider: String,
       inputSchema: StructType,
       options: CaseInsensitiveStringMap,
-      overwrite: Boolean): PythonDataSourceWriteInfo = {
+      overwrite: Boolean,
+      isStreaming: Boolean): PythonDataSourceWriteInfo = {
     new UserDefinedPythonDataSourceWriteRunner(
       dataSourceCls,
       provider,
       inputSchema,
       options.asCaseSensitiveMap().asScala.toMap,
-      overwrite).runInPython()
+      overwrite,
+      isStreaming).runInPython()
   }
 
   /**
@@ -369,7 +371,8 @@ private class UserDefinedPythonDataSourceWriteRunner(
     provider: String,
     inputSchema: StructType,
     options: Map[String, String],
-    overwrite: Boolean) extends PythonPlannerRunner[PythonDataSourceWriteInfo](dataSourceCls) {
+    overwrite: Boolean,
+    isStreaming: Boolean) extends PythonPlannerRunner[PythonDataSourceWriteInfo](dataSourceCls) {
 
   override val workerModule: String = "pyspark.sql.worker.write_into_data_source"
 
@@ -395,6 +398,8 @@ private class UserDefinedPythonDataSourceWriteRunner(
 
     // Send the `overwrite` flag
     dataOut.writeBoolean(overwrite)
+
+    dataOut.writeBoolean(isStreaming)
   }
 
   override protected def receiveFromPython(
