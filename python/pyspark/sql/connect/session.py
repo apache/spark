@@ -62,6 +62,7 @@ from pyspark.sql.connect.plan import (
     CachedRelation,
     CachedRemoteRelation,
 )
+from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
@@ -575,7 +576,22 @@ class SparkSession:
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
     def sql(self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None) -> "DataFrame":
-        cmd = SQL(sqlQuery, args)
+        _args = []
+        _named_args = {}
+        if args is not None:
+            if isinstance(args, Dict):
+                for k, v in args.items():
+                    assert isinstance(k, str)
+                    _named_args[k] = F.lit(v)
+            elif isinstance(args, List):
+                _args = [F.lit(v) for v in args]
+            else:
+                raise PySparkTypeError(
+                    error_class="INVALID_TYPE",
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
+                )
+
+        cmd = SQL(sqlQuery, _args, _named_args)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
             return DataFrame(CachedRelation(properties["sql_command_result"]), self)
