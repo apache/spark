@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.execution.{ProjectExec, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
@@ -264,7 +265,6 @@ class DatasetCacheSuite extends QueryTest
     assert(innerImr.isDefined)
     assert(innerImr.get.cacheBuilder.cachedPlan.asInstanceOf[UnaryExecNode].
       child.isInstanceOf[ProjectExec])
-
   }
 
   test("SPARK-27739 Save stats from optimized plan") {
