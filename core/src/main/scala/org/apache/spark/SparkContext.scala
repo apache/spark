@@ -423,8 +423,8 @@ class SparkContext(config: SparkConf) extends Logging {
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
-    SparkContext.supplementJavaModuleOptions(_conf)
-    SparkContext.supplementJavaIPv6Options(_conf)
+    SparkContext.supplementJVMRuntimeOptions(_conf)
+    SparkContext.supplementJVMRuntimeIPv6Options(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -3294,7 +3294,7 @@ object SparkContext extends Logging {
    * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
-  private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
+  private def supplementJVMRuntimeOptions(conf: SparkConf): Unit = {
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       val v = conf.get(key) match {
         case Some(opts) => s"${JVMRuntimeOptions.defaultOptions()} $opts"
@@ -3306,7 +3306,7 @@ object SparkContext extends Logging {
     supplement(EXECUTOR_JAVA_OPTIONS)
   }
 
-  private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
+  private def supplementJVMRuntimeIPv6Options(conf: SparkConf): Unit = {
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       val v = conf.get(key) match {
         case Some(opts) => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} $opts"
