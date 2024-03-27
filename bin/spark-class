@@ -47,7 +47,7 @@ if [ ! -d "$SPARK_JARS_DIR" ] && [ -z "$SPARK_TESTING$SPARK_SQL_TESTING" ]; then
   echo "You need to build Spark with the target \"package\" before running this program." 1>&2
   exit 1
 else
-  LAUNCH_CLASSPATH="$SPARK_JARS_DIR/*"
+  LAUNCH_CLASSPATH="$SPARK_JARS_DIR/slf4j-api-2.0.12.jar:$SPARK_JARS_DIR/*"
 fi
 
 # Add the launcher build dir to the classpath if requested.
