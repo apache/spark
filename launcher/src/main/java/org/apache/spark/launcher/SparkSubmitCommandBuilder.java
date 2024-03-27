@@ -310,7 +310,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     // SPARK-36796: Always add default `--add-opens` to submit command
-    addOptionString(cmd, JavaModuleOptions.defaultModuleOptions());
+    addOptionString(cmd, JVMRuntimeOptions.defaultOptions());
     addOptionString(cmd, "-Dderby.connection.requireAuthentication=false");
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());

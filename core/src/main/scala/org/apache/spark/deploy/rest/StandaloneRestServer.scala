@@ -25,7 +25,7 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.internal.config
-import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
+import org.apache.spark.launcher.{JVMRuntimeOptions, SparkLauncher}
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.ArrayImplicits._
@@ -227,7 +227,7 @@ private[rest] class StandaloneSubmitRequestServlet(
       .getOrElse(Seq.empty)
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
-    val javaModuleOptions = JavaModuleOptions.defaultModuleOptionArray().toImmutableArraySeq
+    val javaModuleOptions = JVMRuntimeOptions.defaultOptionArray().toImmutableArraySeq
     val javaOpts = javaModuleOptions ++ sparkJavaOpts ++ defaultJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",

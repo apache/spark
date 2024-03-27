@@ -18,14 +18,14 @@
 package org.apache.spark.launcher;
 
 /**
- * This helper class is used to place the all `--add-opens` options
- * required by Spark when using Java 17. `DEFAULT_MODULE_OPTIONS` has added
+ * This helper class is used to place some JVM runtime options(eg: `--add-opens`)
+ * required by Spark when using Java 17. `DEFAULT_OPTIONS` has added
  * `-XX:+IgnoreUnrecognizedVMOptions` to be robust.
  *
  * @since 3.3.0
  */
-public class JavaModuleOptions {
-    private static final String[] DEFAULT_MODULE_OPTIONS = {
+public class JVMRuntimeOptions {
+    private static final String[] DEFAULT_OPTIONS = {
       "-XX:+IgnoreUnrecognizedVMOptions",
       "--add-opens=java.base/java.lang=ALL-UNNAMED",
       "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
@@ -46,18 +46,16 @@ public class JavaModuleOptions {
       "-Dio.netty.tryReflectionSetAccessible=true"};
 
     /**
-     * Returns the default Java options related to `--add-opens' and
-     * `-XX:+IgnoreUnrecognizedVMOptions` used by Spark.
+     * Returns the default JVM runtime options used by Spark.
      */
-    public static String defaultModuleOptions() {
-      return String.join(" ", DEFAULT_MODULE_OPTIONS);
+    public static String defaultOptions() {
+      return String.join(" ", DEFAULT_OPTIONS);
     }
 
     /**
-     * Returns the default Java option array related to `--add-opens' and
-     * `-XX:+IgnoreUnrecognizedVMOptions` used by Spark.
+     * Returns the default JVM runtime option array used by Spark.
      */
-    public static String[] defaultModuleOptionArray() {
-      return DEFAULT_MODULE_OPTIONS;
+    public static String[] defaultOptionArray() {
+      return DEFAULT_OPTIONS;
     }
 }
