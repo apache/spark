@@ -424,7 +424,7 @@ class SparkContext(config: SparkConf) extends Logging {
       throw new SparkException("An application name must be set in your configuration")
     }
     // This should be set as early as possible.
-    SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
+    SparkContext.enableMagicCommitterIfNeeded(_conf)
 
     SparkContext.supplementJavaModuleOptions(_conf)
     SparkContext.supplementJavaIPv6Options(_conf)
@@ -3378,16 +3378,10 @@ object SparkContext extends Logging {
   }
 
   /**
-   * This is a helper function to complete the missing S3A magic committer configurations
-   * based on a single conf: `spark.hadoop.fs.s3a.bucket.<bucket>.committer.magic.enabled`
+   * Enable Magic Committer by default for all S3 buckets if hadoop-cloud module exists.
    */
-  private def fillMissingMagicCommitterConfsIfNeeded(conf: SparkConf): Unit = {
-    val magicCommitterConfs = conf
-      .getAllWithPrefix("spark.hadoop.fs.s3a.bucket.")
-      .filter(_._1.endsWith(".committer.magic.enabled"))
-      .filter(_._2.equalsIgnoreCase("true"))
-    if (magicCommitterConfs.nonEmpty) {
-      // Try to enable S3 magic committer if missing
+  private def enableMagicCommitterIfNeeded(conf: SparkConf): Unit = {
+    if (Utils.classIsLoadable("org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")) {
       conf.setIfMissing("spark.hadoop.fs.s3a.committer.magic.enabled", "true")
       if (conf.get("spark.hadoop.fs.s3a.committer.magic.enabled").equals("true")) {
         conf.setIfMissing("spark.hadoop.fs.s3a.committer.name", "magic")
