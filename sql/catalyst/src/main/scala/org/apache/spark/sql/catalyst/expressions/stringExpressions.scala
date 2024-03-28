@@ -2469,21 +2469,34 @@ case class Chr(child: Expression)
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class Base64(child: Expression)
+case class Base64(child: Expression, chunkBase64: Boolean = SQLConf.get.chunkBase64StringEnabled)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  lazy val encoder: JBase64.Encoder = if (chunkBase64) {
+    JBase64.getMimeEncoder
+  } else {
+    JBase64.getMimeEncoder(-1, Array())
+  }
 
   override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(bytes: Any): Any = {
-    UTF8String.fromBytes(JBase64.getMimeEncoder.encode(bytes.asInstanceOf[Array[Byte]]))
+    UTF8String.fromBytes(encoder.encode(bytes.asInstanceOf[Array[Byte]]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
-      s"""${ev.value} = UTF8String.fromBytes(
-            ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
-       """})
+      if (chunkBase64) {
+        s"""${ev.value} = UTF8String.fromBytes(
+             ${classOf[JBase64].getName}.getMimeEncoder().encode($child));
+        """
+      } else {
+        s"""${ev.value} = UTF8String.fromBytes(
+             ${classOf[JBase64].getName}.getMimeEncoder(-1, new byte[0]).encode($child));
+        """
+      }
+    })
   }
 
   override protected def withNewChildInternal(newChild: Expression): Base64 = copy(child = newChild)

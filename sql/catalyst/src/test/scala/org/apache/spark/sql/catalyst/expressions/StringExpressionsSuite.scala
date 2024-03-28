@@ -506,6 +506,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(StringDecode(b, Literal("\"quote")) :: Nil)
   }
 
+  test("SPARK-47307: base64 encoding without chunking") {
+    val longString = "a" * 58
+    val encoded = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ=="
+
+    checkEvaluation(Base64(Literal(longString.getBytes), false), encoded, create_row("abcdefgh"))
+  }
+
   test("initcap unit test") {
     checkEvaluation(InitCap(Literal.create(null, StringType)), null)
     checkEvaluation(InitCap(Literal("a b")), "A B")
