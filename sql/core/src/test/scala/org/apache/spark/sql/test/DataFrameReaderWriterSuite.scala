@@ -899,6 +899,65 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
+  test("SPARK-46617: saveAsTable with mode Ignore should not overwrite existing paths") {
+    withTable("test_table") {
+      withTempDir { src =>
+        val path = src.toString
+
+        spark.range(1, 2).write.format("json").option("path", path).mode(SaveMode.Overwrite)
+          .saveAsTable("test_table")
+
+        spark.sql("DROP TABLE IF EXISTS test_table")
+
+        spark.range(3, 4).write.format("json").option("path", path).mode(SaveMode.Ignore)
+          .saveAsTable("test_table")
+
+        checkAnswer(spark.read.json(path), spark.range(1, 2).toDF())
+      }
+    }
+  }
+
+  test("saveAsTable with mode Overwrite should overwrite existing paths") {
+    withTable("test_table") {
+      withTempDir { src =>
+        val path = src.toString
+
+        spark.range(1, 2).write.format("json").option("path", path).mode(SaveMode.Overwrite)
+          .saveAsTable("test_table")
+
+        spark.sql("DROP TABLE IF EXISTS test_table")
+
+        spark.range(3, 4).write.format("json").option("path", path).mode(SaveMode.Overwrite)
+          .saveAsTable("test_table")
+
+        checkAnswer(spark.read.json(path), spark.range(3, 4).toDF())
+      }
+    }
+  }
+
+  test("saveAsTable with mode ErrorIfExists should not overwrite existing paths") {
+    withTable("test_table") {
+      withTempDir { src =>
+        val path = src.toString
+
+        spark.range(1, 2).write.format("json").option("path", path).mode(SaveMode.Overwrite)
+          .saveAsTable("test_table")
+
+        spark.sql("DROP TABLE IF EXISTS test_table")
+
+        val e = intercept[AnalysisException] {
+          spark.range(3, 4)
+            .write.format("json").option("path", path).mode(SaveMode.ErrorIfExists)
+            .saveAsTable("test_table")
+        }
+        assert(e.message.contains("To allow overwriting the existing non-empty directory," +
+                              " set 'spark.sql.legacy.allowNonEmptyLocationInCTAS' to true"))
+
+        checkAnswer(spark.read.json(path), spark.range(1, 2).toDF())
+      }
+    }
+  }
+
   test("SPARK-18510: use user specified types for partition columns in file sources") {
     import org.apache.spark.sql.functions.udf
     withTempDir { src =>
