@@ -72,7 +72,6 @@ from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
-    SortOrder,
     ColumnReference,
     UnresolvedRegex,
     UnresolvedStar,
@@ -349,15 +348,6 @@ class DataFrame:
     def repartitionByRange(  # type: ignore[misc]
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
-        def _convert_col(col: "ColumnOrName") -> Column:
-            if isinstance(col, Column):
-                if isinstance(col._expr, SortOrder):
-                    return col
-                else:
-                    return col.asc()
-            else:
-                return F.col(col).asc()
-
         if isinstance(numPartitions, int):
             if not numPartitions > 0:
                 raise PySparkValueError(
@@ -375,14 +365,14 @@ class DataFrame:
             else:
                 return DataFrame(
                     plan.RepartitionByExpression(
-                        self._plan, numPartitions, [_convert_col(c) for c in cols]
+                        self._plan, numPartitions, [F._sort_col(c) for c in cols]
                     ),
                     self.sparkSession,
                 )
         elif isinstance(numPartitions, (str, Column)):
             return DataFrame(
                 plan.RepartitionByExpression(
-                    self._plan, None, [_convert_col(c) for c in [numPartitions] + list(cols)]
+                    self._plan, None, [F._sort_col(c) for c in [numPartitions] + list(cols)]
                 ),
                 self.sparkSession,
             )
@@ -729,7 +719,7 @@ class DataFrame:
                 message_parameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
             )
 
-        return _cols
+        return [F._sort_col(c) for c in _cols]
 
     def sort(
         self,
