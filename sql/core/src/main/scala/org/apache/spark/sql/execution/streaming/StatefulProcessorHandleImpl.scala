@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import java.util
 import java.util.UUID
 
 import org.apache.spark.TaskContext
@@ -24,7 +25,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, TTLMode, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -77,14 +78,20 @@ class StatefulProcessorHandleImpl(
     store: StateStore,
     runId: UUID,
     keyEncoder: ExpressionEncoder[Any],
+    ttlMode: TTLMode,
     timeoutMode: TimeoutMode,
-    isStreaming: Boolean = true)
+    isStreaming: Boolean = true,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkMs: Option[Long] = None)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
-  private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
-  private def buildQueryInfo(): QueryInfo = {
+  private val ttlStates: util.List[TTLState] = new util.ArrayList[TTLState]()
 
+  private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"
+  logInfo(s"Created StatefulProcessorHandle")
+
+  private def buildQueryInfo(): QueryInfo = {
     val taskCtxOpt = Option(TaskContext.get())
     val (queryId, batchId) = if (!isStreaming) {
       (BATCH_QUERY_ID, 0L)
@@ -103,21 +110,26 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
-  private def verify(condition: => Boolean, msg: String): Unit = {
-    if (!condition) {
-      throw new IllegalStateException(msg)
-    }
-  }
-
   def setHandleState(newState: StatefulProcessorHandleState): Unit = {
     currState = newState
   }
 
   def getHandleState: StatefulProcessorHandleState = currState
 
-  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
+  override def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+
+    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder,
+      ttlMode, batchTimestampMs, eventTimeWatermarkMs)
+    val ttlState = resultState.ttlState
+
+    ttlState.foreach { s =>
+      ttlStates.add(s)
+      s.setStateVariable(resultState)
+    }
+
     resultState
   }
 
@@ -183,6 +195,16 @@ class StatefulProcessorHandleImpl(
   def listTimers(): Iterator[Long] = {
     verifyTimerOperations("list_timers")
     timerState.listTimers()
+  }
+
+  /**
+   * Performs the user state cleanup based on assigned TTl values. Any state
+   * which is expired will be cleaned up from StateStore.
+   */
+  def doTtlCleanup(): Unit = {
+    ttlStates.forEach { s =>
+      s.clearExpiredState()
+    }
   }
 
   /**

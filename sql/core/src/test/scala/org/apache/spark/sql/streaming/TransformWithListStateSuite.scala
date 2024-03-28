@@ -140,6 +140,7 @@ class TransformWithListStateSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update()) (
@@ -160,6 +161,7 @@ class TransformWithListStateSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -180,6 +182,7 @@ class TransformWithListStateSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -200,6 +203,7 @@ class TransformWithListStateSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -220,6 +224,7 @@ class TransformWithListStateSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -240,6 +245,7 @@ class TransformWithListStateSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(
@@ -260,6 +266,7 @@ class TransformWithListStateSuite extends StreamTest
         .groupByKey(x => x.key)
         .transformWithState(new TestListStateProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update()) (
@@ -312,6 +319,7 @@ class TransformWithListStateSuite extends StreamTest
         .groupByKey(x => x)
         .transformWithState(new ToggleSaveAndEmitProcessor(),
           TimeoutMode.NoTimeouts(),
+          TTLMode.NoTTL(),
           OutputMode.Update())
 
       testStream(result, OutputMode.Update())(

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.TypedAggUtils
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode}
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode, TTLMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
@@ -656,12 +656,14 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
    *                          operator.
    * @param timeoutMode The timeout mode of the stateful processor.
+   * @param ttlMode The ttlMode to evict user state on ttl expiration
    * @param outputMode The output mode of the stateful processor. Defaults to APPEND mode.
    *
    */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {
     Dataset[U](
       sparkSession,
@@ -669,6 +671,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         groupingAttributes,
         dataAttributes,
         statefulProcessor,
+        ttlMode,
         timeoutMode,
         outputMode,
         child = logicalPlan

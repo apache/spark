@@ -751,7 +751,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case TransformWithState(
         keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, statefulProcessor, timeoutMode, outputMode,
+        dataAttributes, statefulProcessor, ttlMode, timeoutMode, outputMode,
         keyEncoder, outputAttr, child) =>
         val execPlan = TransformWithStateExec(
           keyDeserializer,
@@ -759,6 +759,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           groupingAttributes,
           dataAttributes,
           statefulProcessor,
+          ttlMode,
           timeoutMode,
           outputMode,
           keyEncoder,
@@ -917,10 +918,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           hasInitialState, planLater(initialState), planLater(child)
         ) :: Nil
       case logical.TransformWithState(keyDeserializer, valueDeserializer, groupingAttributes,
-          dataAttributes, statefulProcessor, timeoutMode, outputMode, keyEncoder,
+          dataAttributes, statefulProcessor, ttlMode, timeoutMode, outputMode, keyEncoder,
           outputObjAttr, child) =>
         TransformWithStateExec.generateSparkPlanForBatchQueries(keyDeserializer, valueDeserializer,
-          groupingAttributes, dataAttributes, statefulProcessor, timeoutMode, outputMode,
+          groupingAttributes, dataAttributes, statefulProcessor, ttlMode, timeoutMode, outputMode,
           keyEncoder, outputObjAttr, planLater(child)) :: Nil
 
       case _: FlatMapGroupsInPandasWithState =>

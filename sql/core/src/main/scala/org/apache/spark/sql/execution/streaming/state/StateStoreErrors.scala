@@ -39,6 +39,13 @@ object StateStoreErrors {
     )
   }
 
+  def missingTTLValues(ttlMode: String): SparkException = {
+    SparkException.internalError(
+      msg = s"Failed to find timeout values for ttlMode=$ttlMode",
+      category = "TWS"
+    )
+  }
+
   def unsupportedOperationOnMissingColumnFamily(operationName: String, colFamilyName: String):
     StateStoreUnsupportedOperationOnMissingColumnFamily = {
     new StateStoreUnsupportedOperationOnMissingColumnFamily(operationName, colFamilyName)
@@ -112,6 +119,11 @@ object StateStoreErrors {
       handleState: String): StatefulProcessorCannotPerformOperationWithInvalidHandleState = {
     new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
   }
+
+  def cannotProvideTTLDurationForNoTTLMode(operationType: String,
+      stateName: String): StatefulProcessorCannotAssignTTLInNoTTLMode = {
+    new StatefulProcessorCannotAssignTTLInNoTTLMode(operationType, stateName)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -182,3 +194,10 @@ class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: Strin
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
     messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StatefulProcessorCannotAssignTTLInNoTTLMode(
+    operationType: String,
+    stateName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE",
+    messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))

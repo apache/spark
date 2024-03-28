@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode}
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, TimeoutMode, TTLMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -830,12 +830,15 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
    *   Instance of statefulProcessor whose functions will be invoked by the operator.
    * @param timeoutMode
    *   The timeout mode of the stateful processor.
+   * @param ttlMode
+   *   The ttlMode to evict user state on ttl expiration.
    * @param outputMode
    *   The output mode of the stateful processor. Defaults to APPEND mode.
    */
   def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
+      ttlMode: TTLMode,
       outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {
     throw new UnsupportedOperationException
   }
