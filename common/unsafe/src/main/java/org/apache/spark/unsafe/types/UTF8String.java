@@ -698,7 +698,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       UTF8String searchChar = copyUTF8String(
           searchIdx, searchIdx + numBytesForFirstByte(this.getByte(searchIdx)) - 1);
       int searchCharBytes = searchChar.numBytes;
-
       // try to find the matching for the searchChar in the trimString set
       if (trimString.find(searchChar, 0) >= 0) {
         trimIdx += searchCharBytes;
@@ -708,7 +707,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       searchIdx += searchCharBytes;
     }
-
     if (searchIdx == 0) {
       // Nothing trimmed
       return this;
@@ -873,30 +871,27 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int[] stringCharLen = new int[numBytes];
     // array of the first byte position for each character in the source string
     int[] stringCharPos = new int[numBytes];
-
     // build the position and length array
     while (charIdx < numBytes) {
       stringCharPos[numChars] = charIdx;
       stringCharLen[numChars] = numBytesForFirstByte(getByte(charIdx));
       charIdx += stringCharLen[numChars];
-      numChars++;
+      numChars ++;
     }
 
     // index trimEnd points to the first no matching byte position from the right side of
     // the source string.
     int trimEnd = numBytes - 1;
-
     while (numChars > 0) {
       UTF8String searchChar = copyUTF8String(
           stringCharPos[numChars - 1],
           stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
-
       if (trimString.find(searchChar, 0) >= 0) {
         trimEnd -= stringCharLen[numChars - 1];
       } else {
         break;
       }
-      numChars--;
+      numChars --;
     }
 
     if (trimEnd == numBytes - 1) {
