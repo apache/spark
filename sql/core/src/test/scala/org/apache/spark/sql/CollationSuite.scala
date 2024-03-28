@@ -705,6 +705,17 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("Create dataframe with non utf8 binary collation") {
+    val schema = StructType(Seq(StructField("Name", StringType("UNICODE_CI"))))
+    val data = Seq(Row("Alice"), Row("Bob"), Row("bob"))
+    val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+
+    checkAnswer(
+      df.groupBy("name").count(),
+      Seq(Row("Alice", 1), Row("Bob", 2))
+    )
+  }
+
   test("Aggregation on complex containing collated strings") {
     val table = "table_agg"
     // array
