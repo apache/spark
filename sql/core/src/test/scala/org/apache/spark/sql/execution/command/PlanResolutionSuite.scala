@@ -1586,7 +1586,7 @@ class PlanResolutionSuite extends AnalysisTest {
         // basic
         val sql1 =
           s"""
-             |MERGE INTO $target AS target
+             |MERGE WITH SCHEMA EVOLUTION INTO $target AS target
              |USING $source AS source
              |ON target.i = source.i
              |WHEN MATCHED AND (target.s='delete') THEN DELETE
@@ -1608,12 +1608,14 @@ class PlanResolutionSuite extends AnalysisTest {
                   insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
-                  notMatchedBySourceUpdateAssigns))) =>
+                  notMatchedBySourceUpdateAssigns)),
+              withSchemaEvoltuion) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
             checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns)
             checkNotMatchedBySourceClausesResolution(target, Some(ndl), Some(nul),
               notMatchedBySourceUpdateAssigns)
+            assert(withSchemaEvolution === true)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
