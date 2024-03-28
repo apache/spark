@@ -25,8 +25,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class PythonStreamingSourceOffset(json: String) extends Offset
 
-case class PythonStreamingSourcePartition(partition: Array[Byte]) extends InputPartition
-
 class PythonMicroBatchStream(
     ds: PythonDataSourceV2,
     shortName: String,
@@ -47,12 +45,20 @@ class PythonMicroBatchStream(
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
     runner.partitions(start.asInstanceOf[PythonStreamingSourceOffset].json,
-      end.asInstanceOf[PythonStreamingSourceOffset].json).map(PythonStreamingSourcePartition(_))
+      end.asInstanceOf[PythonStreamingSourceOffset].json)
+      .zipWithIndex.map(p => PythonInputPartition(p._2, p._1))
+  }
+
+  private lazy val readInfo: PythonDataSourceReadInfo = {
+    ds.source.createReadInfoInPython(
+      ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
+      outputSchema,
+      isStreaming = true)
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    // TODO(SPARK-47107): fill in the implementation.
-    null
+    new PythonPartitionReaderFactory(
+      ds.source, readInfo.func, outputSchema, None)
   }
 
   override def commit(end: Offset): Unit = {
