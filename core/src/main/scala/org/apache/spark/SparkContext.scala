@@ -52,7 +52,7 @@ import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.launcher.JVMRuntimeOptions
+import org.apache.spark.launcher.JavaModuleOptions
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -423,8 +423,8 @@ class SparkContext(config: SparkConf) extends Logging {
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
-    SparkContext.supplementJVMRuntimeOptions(_conf)
-    SparkContext.supplementJVMRuntimeIPv6Options(_conf)
+    SparkContext.supplementJavaModuleOptions(_conf)
+    SparkContext.supplementJavaIPv6Options(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -3294,11 +3294,11 @@ object SparkContext extends Logging {
    * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
-  private def supplementJVMRuntimeOptions(conf: SparkConf): Unit = {
+  private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       val v = conf.get(key) match {
-        case Some(opts) => s"${JVMRuntimeOptions.defaultOptions()} $opts"
-        case None => JVMRuntimeOptions.defaultOptions()
+        case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
+        case None => JavaModuleOptions.defaultModuleOptions()
       }
       conf.set(key.key, v)
     }
@@ -3306,7 +3306,7 @@ object SparkContext extends Logging {
     supplement(EXECUTOR_JAVA_OPTIONS)
   }
 
-  private def supplementJVMRuntimeIPv6Options(conf: SparkConf): Unit = {
+  private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
     def supplement(key: OptionalConfigEntry[String]): Unit = {
       val v = conf.get(key) match {
         case Some(opts) => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} $opts"

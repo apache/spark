@@ -445,7 +445,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
-  test("SPARK-45197: Make StandaloneRestServer add JVMRuntimeOptions to drivers") {
+  test("SPARK-45197: Make StandaloneRestServer add JavaModuleOptions to drivers") {
     val request = new CreateSubmissionRequest
     request.appResource = ""
     request.mainClass = ""

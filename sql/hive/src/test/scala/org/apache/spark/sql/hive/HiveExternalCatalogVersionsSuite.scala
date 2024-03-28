@@ -33,7 +33,7 @@ import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.launcher.JVMRuntimeOptions
+import org.apache.spark.launcher.JavaModuleOptions
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -223,7 +223,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath} " +
-          JVMRuntimeOptions.defaultOptions(),
+          JavaModuleOptions.defaultModuleOptions(),
         tempPyFile.getCanonicalPath)
       runSparkSubmit(args, Some(sparkHome.getCanonicalPath), isSparkTesting = false)
     }
