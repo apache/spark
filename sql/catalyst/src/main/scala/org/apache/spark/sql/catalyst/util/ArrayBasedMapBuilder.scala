@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -53,25 +52,18 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   private val mapKeyDedupPolicy = SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY)
 
-  private lazy val keyNormalizer: Any => Any = keyType match {
-    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
-    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
-    case _ => identity
-  }
-
   def put(key: Any, value: Any): Unit = {
     if (key == null) {
       throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
     }
 
-    val keyNormalized = keyNormalizer(key)
-    val index = keyToIndex.getOrDefault(keyNormalized, -1)
+    val index = keyToIndex.getOrDefault(key, -1)
     if (index == -1) {
       if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw QueryExecutionErrors.exceedMapSizeLimitError(size)
       }
-      keyToIndex.put(keyNormalized, values.length)
-      keys.append(keyNormalized)
+      keyToIndex.put(key, values.length)
+      keys.append(key)
       values.append(value)
     } else {
       if (mapKeyDedupPolicy == SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {

@@ -1050,30 +1050,37 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
       assert(e.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
-      val file = e.getMessageParameters.get("path")
+
+      // Check if the physical type is reporting correctly
+      val errMsg = e.getMessage
+      assert(errMsg.startsWith("Parquet column cannot be converted in file"))
+      val file = errMsg.substring("Parquet column cannot be converted in file ".length,
+        errMsg.indexOf(". "))
       val col = spark.read.parquet(file).schema.fields.filter(_.name == "a")
       assert(col.length == 1)
       if (col(0).dataType == StringType) {
-        checkErrorMatchPVals(
+        checkError(
           exception = e,
-          errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+          errorClass = "_LEGACY_ERROR_TEMP_2063",
           parameters = Map(
-            "path" -> s".*${dir.getCanonicalPath}.*",
+            "filePath" ->
+              s".*${dir.getCanonicalPath}.*",
             "column" -> "\\[a\\]",
-            "expectedType" -> "int",
-            "actualType" -> "BINARY"
-          )
+            "logicalType" -> "int",
+            "physicalType" -> "BINARY"),
+          matchPVals = true
         )
       } else {
-        checkErrorMatchPVals(
+        checkError(
           exception = e,
-          errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+          errorClass = "_LEGACY_ERROR_TEMP_2063",
           parameters = Map(
-            "path" -> s".*${dir.getCanonicalPath}.*",
+            "filePath" ->
+              s".*${dir.getCanonicalPath}.*",
             "column" -> "\\[a\\]",
-            "expectedType" -> "string",
-            "actualType" -> "INT32"
-          )
+            "logicalType" -> "string",
+            "physicalType" -> "INT32"),
+          matchPVals = true
         )
       }
     }

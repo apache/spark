@@ -193,6 +193,15 @@ object ExprUtils extends QueryErrorsBase {
           messageParameters = Map("sqlExpr" -> expr.sql))
       }
 
+      // Check if the data type of expr is orderable.
+      if (expr.dataType.existsRecursively(_.isInstanceOf[MapType])) {
+        expr.failAnalysis(
+          errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+          messageParameters = Map(
+            "sqlExpr" -> toSQLExpr(expr),
+            "dataType" -> toSQLType(expr.dataType)))
+      }
+
       if (!expr.deterministic) {
         // This is just a sanity check, our analysis rule PullOutNondeterministic should
         // already pull out those nondeterministic expressions and evaluate them in
