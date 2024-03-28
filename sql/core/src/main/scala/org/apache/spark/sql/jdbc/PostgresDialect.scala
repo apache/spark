@@ -70,10 +70,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       case Types.OTHER => Some(StringType)
       case _ if "text".equalsIgnoreCase(typeName) => Some(StringType) // sqlType is Types.VARCHAR
       case Types.ARRAY =>
-        val scale = md.build().getLong("scale").toInt
-        val isTimestampNTZ = md.build().getBoolean("isTimestampNTZ")
         // postgres array type names start with underscore
-        toCatalystType(typeName.drop(1), size, scale, isTimestampNTZ).map(ArrayType(_))
+        toCatalystType(typeName.drop(1), size, md).map(ArrayType(_))
       case _ => None
     }
   }
@@ -81,10 +79,12 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
   private def toCatalystType(
       typeName: String,
       precision: Int,
-      scale: Int,
-      isTimestampNTZ: Boolean): Option[DataType] = typeName match {
+      md: MetadataBuilder): Option[DataType] = typeName match {
     case "bool" => Some(BooleanType)
-    case "bit" => Some(BinaryType)
+    case "bit" if precision == 1 => Some(BooleanType)
+    case "bit" =>
+      md.putBoolean("pg_bit_array_type", value = true)
+      Some(BinaryType)
     case "int2" => Some(ShortType)
     case "int4" => Some(IntegerType)
     case "int8" | "oid" => Some(LongType)
@@ -99,10 +99,11 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       Some(StringType)
     case "bytea" => Some(BinaryType)
     case "timestamptz" | "timetz" => Some(TimestampType)
-    case "timestamp" | "time" =>
-      Some(if (isTimestampNTZ) TimestampNTZType else TimestampType)
+    case "timestamp" | "time" => Some(getTimestampType(md.build()))
     case "date" => Some(DateType)
-    case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
+    case "numeric" | "decimal" if precision > 0 =>
+      val scale = md.build().getLong("scale").toInt
+      Some(DecimalType.bounded(precision, scale))
     case "numeric" | "decimal" =>
       // SPARK-26538: handle numeric without explicit precision and scale.
       Some(DecimalType.SYSTEM_DEFAULT)

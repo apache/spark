@@ -4416,6 +4416,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val INFER_PANDAS_DICT_AS_MAP = buildConf("spark.sql.execution.pandas.inferPandasDictAsMap")
+    .doc("When true, spark.createDataFrame will infer dict from Pandas DataFrame " +
+      "as a MapType. When false, spark.createDataFrame infers dict from Pandas DataFrame " +
+      "as a StructType which is default inferring from PyArrow.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT =
     buildConf("spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled")
       .doc("PySpark's SparkSession.createDataFrame infers the element type of an array from all " +
@@ -5607,6 +5615,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def plannedWriteEnabled: Boolean = getConf(SQLConf.PLANNED_WRITE_ENABLED)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def inferPandasDictAsMap: Boolean = getConf(SQLConf.INFER_PANDAS_DICT_AS_MAP)
 
   def legacyInferArrayTypeFromFirstElement: Boolean = getConf(
     SQLConf.LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT)

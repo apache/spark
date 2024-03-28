@@ -83,14 +83,7 @@ abstract class FileFormatDataWriter(
     if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
       CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
-    try {
-      write(record)
-    } catch {
-      // Unwrap the Avro `AppendWriteException` which is only used to work around the Java API
-      // signature (DataFileWriter#write) that only allows to throw `IOException`.
-      case e: org.apache.avro.file.DataFileWriter.AppendWriteException =>
-        throw e.getCause
-    }
+    write(record)
   }
 
   /** Write an iterator of records. */

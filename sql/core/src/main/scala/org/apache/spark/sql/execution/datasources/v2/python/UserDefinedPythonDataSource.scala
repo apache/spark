@@ -67,11 +67,13 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
    */
   def createReadInfoInPython(
       pythonResult: PythonDataSourceCreationResult,
-      outputSchema: StructType): PythonDataSourceReadInfo = {
+      outputSchema: StructType,
+      isStreaming: Boolean): PythonDataSourceReadInfo = {
     new UserDefinedPythonDataSourceReadRunner(
       createPythonFunction(pythonResult.dataSource),
       UserDefinedPythonDataSource.readInputSchema,
-      outputSchema).runInPython()
+      outputSchema,
+      isStreaming).runInPython()
   }
 
   /**
@@ -312,7 +314,8 @@ case class PythonDataSourceReadInfo(
 private class UserDefinedPythonDataSourceReadRunner(
     func: PythonFunction,
     inputSchema: StructType,
-    outputSchema: StructType) extends PythonPlannerRunner[PythonDataSourceReadInfo](func) {
+    outputSchema: StructType,
+    isStreaming: Boolean) extends PythonPlannerRunner[PythonDataSourceReadInfo](func) {
 
   // See the logic in `pyspark.sql.worker.plan_data_source_read.py`.
   override val workerModule = "pyspark.sql.worker.plan_data_source_read"
@@ -329,6 +332,8 @@ private class UserDefinedPythonDataSourceReadRunner(
 
     // Send configurations
     dataOut.writeInt(SQLConf.get.arrowMaxRecordsPerBatch)
+
+    dataOut.writeBoolean(isStreaming)
   }
 
   override protected def receiveFromPython(dataIn: DataInputStream): PythonDataSourceReadInfo = {
@@ -346,6 +351,11 @@ private class UserDefinedPythonDataSourceReadRunner(
     // Receive the list of partitions, if any.
     val pickledPartitions = ArrayBuffer.empty[Array[Byte]]
     val numPartitions = dataIn.readInt()
+    if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+      val msg = PythonWorkerUtils.readUTF(dataIn)
+      throw QueryCompilationErrors.pythonDataSourceError(
+        action = "plan", tpe = "read", msg = msg)
+    }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
       pickledPartitions.append(pickledPartition)
