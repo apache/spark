@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
@@ -107,7 +108,7 @@ object PushDownUtils {
         (Right(r.pushedPredicates.toImmutableArraySeq),
           (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
-      case f: FileScanBuilder =>
+      case f: SupportsPushDownCatalystFilters =>
         val postScanFilters = f.pushFilters(filters)
         (Right(f.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
