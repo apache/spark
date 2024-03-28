@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import scala.util.control.NonFatal
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
@@ -25,8 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -46,26 +46,22 @@ import org.apache.spark.unsafe.types._
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit
-case class ParseJson(child: Expression) extends UnaryExpression
-  with NullIntolerant with ExpectsInputTypes with CodegenFallback {
+case class ParseJson(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with RuntimeReplaceable {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    VariantType,
+    "parseJson",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
   override def inputTypes: Seq[AbstractDataType] = StringType :: Nil
 
   override def dataType: DataType = VariantType
 
   override def prettyName: String = "parse_json"
-
-  protected override def nullSafeEval(input: Any): Any = {
-    try {
-      val v = VariantBuilder.parseJson(input.toString)
-      new VariantVal(v.getValue, v.getMetadata)
-    } catch {
-      case _: VariantSizeLimitException =>
-        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, "parse_json")
-      case NonFatal(e) =>
-        throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-        input.toString, BadRecordException(() => input.asInstanceOf[UTF8String], cause = e))
-    }
-  }
 
   override protected def withNewChildInternal(newChild: Expression): ParseJson =
     copy(child = newChild)
