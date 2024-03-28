@@ -1306,14 +1306,14 @@ class FunctionsTestsMixin:
         self.assertEqual(expected, actual["from_items"])
 
     def test_parse_json(self):
-        df = self.spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}])
         actual = df.select(
             F.to_json(F.parse_json(df.json)).alias("var"),
-            F.to_json(F.parse_json(F.lit('''{"b": [{"c": "str2"}]}'''))).alias("var_lit"),
+            F.to_json(F.parse_json(F.lit("""{"b": [{"c": "str2"}]}"""))).alias("var_lit"),
         ).first()
 
-        self.assertEqual('''{"a":1}''', actual["var"])
-        self.assertEqual('''{"b":[{"c":"str2"}]}''', actual["var_lit"])
+        self.assertEqual("""{"a":1}""", actual["var"])
+        self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
 
     def test_schema_of_json(self):
         with self.assertRaises(PySparkTypeError) as pe:

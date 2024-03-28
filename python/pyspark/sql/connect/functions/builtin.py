@@ -2035,6 +2035,7 @@ def parse_json(col: "ColumnOrName") -> Column:
 
 parse_json.__doc__ = pysparkfuncs.parse_json.__doc__
 
+
 def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
