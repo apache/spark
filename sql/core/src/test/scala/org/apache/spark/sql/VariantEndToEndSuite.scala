@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.VariantVal
 
-class VariantFunctionSuite extends QueryTest with SharedSparkSession {
+class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("parse_json/to_json round-trip") {
