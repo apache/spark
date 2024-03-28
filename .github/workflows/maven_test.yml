@@ -62,7 +62,7 @@ jobs:
           - hive2.3
         modules:
           - >-
-            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils
+            core,launcher,common#unsafe,common#kvstore,common#network-common,common#network-shuffle,common#sketch,common#utils,common#variant
           - >-
             graphx,streaming,hadoop-cloud
           - >-
