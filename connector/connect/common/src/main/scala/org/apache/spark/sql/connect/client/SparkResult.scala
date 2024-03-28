@@ -20,6 +20,7 @@ import java.lang.ref.Cleaner
 import java.util.Objects
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.ipc.message.{ArrowMessage, ArrowRecordBatch}
@@ -40,17 +41,38 @@ private[sql] class SparkResult[T](
     timeZoneId: String)
     extends AutoCloseable { self =>
 
+  case class StageInfo(
+      stageId: Long,
+      numTasks: Long,
+      completedTasks: Long = 0,
+      inputBytesRead: Long = 0,
+      completed: Boolean = false)
+
+  object StageInfo {
+    def apply(stageInfo: proto.ExecutePlanResponse.ExecutionProgress.StageInfo): StageInfo = {
+      StageInfo(
+        stageInfo.getStageId,
+        stageInfo.getNumTasks,
+        stageInfo.getNumCompletedTasks,
+        stageInfo.getInputBytesRead,
+        stageInfo.getDone)
+    }
+  }
+
+  object Progress {
+    def apply(progress: proto.ExecutePlanResponse.ExecutionProgress): Progress = {
+      Progress(
+        progress.getStagesList.asScala.map(StageInfo(_)).toSeq,
+        progress.getNumInflightTasks)
+    }
+  }
+
   /**
    * Progress of the query execution. This information can be accessed from the iterator.
    */
-  case class Progress(
-      totalTasks: Long = 0,
-      completedTasks: Long = 0,
-      totalStages: Long = 0,
-      completedStages: Long = 0,
-      inputBytesRead: Long = 0)
+  case class Progress(stages: Seq[StageInfo], inflight: Long)
 
-  var progress: Progress = new Progress()
+  var progress: Progress = new Progress(Seq.empty, 0)
   private[this] var opId: String = _
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
@@ -111,12 +133,7 @@ private[sql] class SparkResult[T](
       // Update the execution status. This information can now be accessed directly from
       // the iterator.
       if (response.hasExecutionProgress) {
-        progress = Progress(
-          response.getExecutionProgress.getNumTasks,
-          response.getExecutionProgress.getNumCompletedTasks,
-          response.getExecutionProgress.getNumStages,
-          response.getExecutionProgress.getNumCompletedStages,
-          response.getExecutionProgress.getInputBytesRead)
+        progress = Progress(response.getExecutionProgress)
       }
 
       if (response.hasSchema) {

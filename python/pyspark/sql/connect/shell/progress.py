@@ -17,10 +17,13 @@
 
 """Implementation of a progress bar that is displayed while a query is running."""
 import abc
+from dataclasses import dataclass
 import time
 import sys
 import typing
 from typing import Iterable, Any
+
+from pyspark.sql.connect.proto import ExecutePlanResponse
 
 try:
     from IPython.utils.terminal import get_terminal_size
@@ -33,17 +36,39 @@ except ImportError:
 from pyspark.sql.connect.shell import progress_bar_enabled
 
 
+@dataclass
+class StageInfo:
+    stage_id: int
+    num_tasks: int
+    num_completed_tasks: int
+    num_bytes_read: int
+    done: bool
+
+
 class ProgressHandler(abc.ABC):
     @abc.abstractmethod
     def __call__(
         self,
-        total_tasks: int,
-        tasks_completed: int,
-        bytes_read: int,
+        stages: Iterable[StageInfo],
         inflight_tasks: int,
         done: bool,
     ) -> None:
         pass
+
+
+def from_proto(proto: ExecutePlanResponse) -> typing.Tuple[Iterable[StageInfo], int]:
+    result = []
+    for stage in proto.stages:
+        result.append(
+            StageInfo(
+                stage_id=stage.stage_id,
+                num_tasks=stage.num_tasks,
+                num_completed_tasks=stage.num_completed_tasks,
+                num_bytes_read=stage.input_bytes_read,
+                done=stage.done,
+            )
+        )
+    return (result, proto.num_inflight_tasks)
 
 
 class Progress:
@@ -98,7 +123,7 @@ class Progress:
                 done=done,
             )
 
-    def update_ticks(self, ticks: int, current: int, bytes_read: int, inflight_tasks: int) -> None:
+    def update_ticks(self, stages: Iterable[StageInfo], inflight_tasks: int) -> None:
         """This method is called from the execution to update the progress bar with a new total
         tick counter and the current position. This is necessary in case new stages get added with
         new tasks and so the total task number will be updated as well.
@@ -111,10 +136,12 @@ class Progress:
         inflight_tasks int The number of tasks that are currently running
 
         """
-        if ticks > 0 and current != self._tick:
-            self._ticks = ticks
-            self._tick = current
-            self._bytes_read = bytes_read
+        total_tasks = sum(map(lambda x: x.num_tasks, stages))
+        completed_tasks = sum(map(lambda x: x.num_completed_tasks, stages))
+        if total_tasks > 0 and completed_tasks != self._tick:
+            self._ticks = total_tasks
+            self._tick = completed_tasks
+            self._bytes_read = sum(map(lambda x: x.num_bytes_read, stages))
             if self._tick > 0:
                 self.output()
             self._running = inflight_tasks

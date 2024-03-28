@@ -23,15 +23,16 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark.sql.connect.shell.progress import Progress
+from pyspark.sql.connect.shell.progress import Progress, StageInfo
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
     def test_simple_progress(self):
+        stages = [StageInfo(0, 100, 50, 999, False)]
         buffer = StringIO()
         p = Progress(output=buffer, enabled=True)
-        p.update_ticks(100, 50, 999, 10)
+        p.update_ticks(stages, 10)
         val = buffer.getvalue()
         self.assertIn("50.00%", val, "Current progress is 50%")
         self.assertIn("****", val, "Should use the default char to print.")
@@ -42,28 +43,34 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         self.assertTrue(val.endswith("\r"), "Line should be empty")
 
     def test_configure_char(self):
+        stages = [StageInfo(0, 100, 50, 999, False)]
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=True)
-        p.update_ticks(100, 50, 999, 10)
+        p.update_ticks(stages, 10)
         val = buffer.getvalue()
         self.assertIn("++++++", val, "Updating the char works.")
 
     def test_disabled_does_not_print(self):
+        stages = [StageInfo(0, 100, 50, 999, False)]
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=False)
-        p.update_ticks(100, 50, 999, 10)
-        p.update_ticks(100, 51, 999, 10)
+        p.update_ticks(stages, 10)
+        stages = [StageInfo(0, 100, 51, 999, False)]
+        p.update_ticks(stages, 10)
         val = buffer.getvalue()
         self.assertEqual(0, len(val), "If the printing is disabled, don't print.")
 
     def test_finish_progress(self):
+        stages = [StageInfo(0, 100, 50, 999, False)]
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=True)
-        p.update_ticks(100, 50, 999, 10)
+        p.update_ticks(stages, 10)
         p.finish()
         self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
 
     def test_progress_handler(self):
+        stages = [StageInfo(0, 0, 0, 0, False)]
+
         handler_called = 0
         done = False
 
@@ -78,8 +85,9 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
 
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=True, handlers=[handler])
-        p.update_ticks(100, 0, 0, 1)
-        p.update_ticks(100, 50, 999, 10)
+        p.update_ticks(stages, 1)
+        stages = [StageInfo(0, 100, 50, 999, False)]
+        p.update_ticks(stages, 10)
         self.assertIn("++++++", buffer.getvalue(), "Updating the char works.")
         self.assertEqual(1, handler_called, "Handler should be called.")
         self.assertFalse(done, "Before finish, done should be False")

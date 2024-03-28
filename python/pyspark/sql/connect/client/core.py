@@ -90,7 +90,7 @@ from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
-from pyspark.sql.connect.shell.progress import Progress, ProgressHandler
+from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_proto
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
@@ -1304,12 +1304,8 @@ class SparkConnectClient(object):
                 yield b.extension
             if b.HasField("execution_progress"):
                 if progress:
-                    progress.update_ticks(
-                        b.execution_progress.num_tasks,
-                        b.execution_progress.num_completed_tasks,
-                        b.execution_progress.input_bytes_read,
-                        b.execution_progress.num_inflight_tasks,
-                    )
+                    p = from_proto(b.execution_progress)
+                    progress.update_ticks(*p)
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "

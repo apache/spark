@@ -70,15 +70,13 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
     listener.onJobStart(testJobStart)
     val t = listener.trackedTags(testTag)
 
-    t.yieldWhenDirty(
-      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) => {
-        assert(totalTasks == 2)
-        assert(completedTasks == 0)
-        assert(totalStages == 2)
-        assert(completedStages == 0)
-        assert(bytesRead == 0)
-        assert(inflight == 0)
-      })
+    t.yieldWhenDirty((stages, inflight) => {
+      assert(stages.map(_.numTasks).sum == 2)
+      assert(stages.map(_.completedTasks).sum == 0)
+      assert(stages.size == 2)
+      assert(stages.map(_.inputBytesRead).sum == 0)
+      assert(inflight == 0)
+    })
   }
 
   test("taskDone") {
@@ -98,45 +96,59 @@ class ConnectProgressExecutionListenerSuite extends SparkFunSuite with MockitoSu
 
     val t = listener.trackedTags(testTag)
     var yielded = false
-    t.yieldWhenDirty {
-      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) =>
-        assert(totalTasks == 2)
-        assert(completedTasks == 0)
-        assert(totalStages == 2)
-        assert(completedStages == 0)
-        yielded = true
+    t.yieldWhenDirty { (stages, inflight) =>
+      assert(stages.map(_.numTasks).sum == 2)
+      assert(stages.map(_.completedTasks).sum == 0)
+      assert(stages.size == 2)
+      assert(
+        stages
+          .map(_.completed match {
+            case true => 1
+            case false => 0
+          })
+          .sum == 0)
+      yielded = true
     }
     assert(yielded, "Must updated with results")
 
     yielded = false
     listener.onTaskEnd(taskEnd)
-    t.yieldWhenDirty {
-      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) =>
-        assert(totalTasks == 2)
-        assert(completedTasks == 1)
-        assert(totalStages == 2)
-        assert(completedStages == 0)
-        assert(bytesRead == 500)
-        yielded = true
+    t.yieldWhenDirty { (stages, inflight) =>
+      assert(stages.map(_.numTasks).sum == 2)
+      assert(stages.map(_.completedTasks).sum == 1)
+      assert(stages.size == 2)
+      assert(stages.map(_.inputBytesRead).sum == 500)
+      assert(
+        stages
+          .map(_.completed match {
+            case true => 1
+            case false => 0
+          })
+          .sum == 0)
+      yielded = true
     }
     assert(yielded, "Must updated with results")
     yielded = false
-    t.yieldWhenDirty {
-      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) =>
-        yielded = true
+    t.yieldWhenDirty { (stages, inflight) =>
+      yielded = true
     }
     assert(!yielded, "Must not update if not dirty")
 
     val stageEnd = SparkListenerStageCompleted(testStage1)
     listener.onStageCompleted(stageEnd)
-    t.yieldWhenDirty {
-      (totalTasks, completedTasks, totalStages, completedStages, inflight, bytesRead) =>
-        assert(totalTasks == 2)
-        assert(completedTasks == 1)
-        assert(totalStages == 2)
-        assert(completedStages == 1)
-        assert(bytesRead == 500)
-        yielded = true
+    t.yieldWhenDirty { (stages, inflight) =>
+      assert(stages.map(_.numTasks).sum == 2)
+      assert(stages.map(_.completedTasks).sum == 1)
+      assert(stages.size == 2)
+      assert(stages.map(_.inputBytesRead).sum == 500)
+      assert(
+        stages
+          .map(_.completed match {
+            case true => 1
+            case false => 0
+          })
+          .sum == 1)
+      yielded = true
     }
     assert(yielded, "Must updated with results")
   }

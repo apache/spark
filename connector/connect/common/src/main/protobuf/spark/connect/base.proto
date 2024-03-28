@@ -441,12 +441,19 @@ message ExecutePlanResponse {
 
   // This message is used to communicate progress about the query progress during the execution.
   message ExecutionProgress {
-    int64 num_tasks = 1;
-    int64 num_completed_tasks = 2;
-    int64 num_stages = 3;
-    int64 num_completed_stages = 4;
-    int64 input_bytes_read = 5;
-    int64 num_inflight_tasks = 6;
+    // Captures the progress of each individual stage.
+    repeated StageInfo stages = 1;
+
+    // Captures the currently in progress tasks.
+    int64 num_inflight_tasks = 2;
+
+    message StageInfo {
+      int64 stage_id = 1;
+      int64 num_tasks = 2;
+      int64 num_completed_tasks = 3;
+      int64 input_bytes_read = 4;
+      bool done = 5;
+    }
   }
 }
 

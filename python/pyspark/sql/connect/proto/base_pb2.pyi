@@ -1451,43 +1451,68 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        NUM_TASKS_FIELD_NUMBER: builtins.int
-        NUM_COMPLETED_TASKS_FIELD_NUMBER: builtins.int
-        NUM_STAGES_FIELD_NUMBER: builtins.int
-        NUM_COMPLETED_STAGES_FIELD_NUMBER: builtins.int
-        INPUT_BYTES_READ_FIELD_NUMBER: builtins.int
+        class StageInfo(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            STAGE_ID_FIELD_NUMBER: builtins.int
+            NUM_TASKS_FIELD_NUMBER: builtins.int
+            NUM_COMPLETED_TASKS_FIELD_NUMBER: builtins.int
+            INPUT_BYTES_READ_FIELD_NUMBER: builtins.int
+            DONE_FIELD_NUMBER: builtins.int
+            stage_id: builtins.int
+            num_tasks: builtins.int
+            num_completed_tasks: builtins.int
+            input_bytes_read: builtins.int
+            done: builtins.bool
+            def __init__(
+                self,
+                *,
+                stage_id: builtins.int = ...,
+                num_tasks: builtins.int = ...,
+                num_completed_tasks: builtins.int = ...,
+                input_bytes_read: builtins.int = ...,
+                done: builtins.bool = ...,
+            ) -> None: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "done",
+                    b"done",
+                    "input_bytes_read",
+                    b"input_bytes_read",
+                    "num_completed_tasks",
+                    b"num_completed_tasks",
+                    "num_tasks",
+                    b"num_tasks",
+                    "stage_id",
+                    b"stage_id",
+                ],
+            ) -> None: ...
+
+        STAGES_FIELD_NUMBER: builtins.int
         NUM_INFLIGHT_TASKS_FIELD_NUMBER: builtins.int
-        num_tasks: builtins.int
-        num_completed_tasks: builtins.int
-        num_stages: builtins.int
-        num_completed_stages: builtins.int
-        input_bytes_read: builtins.int
+        @property
+        def stages(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___ExecutePlanResponse.ExecutionProgress.StageInfo
+        ]:
+            """Captures the progress of each individual stage."""
         num_inflight_tasks: builtins.int
+        """Captures the currently in progress tasks."""
         def __init__(
             self,
             *,
-            num_tasks: builtins.int = ...,
-            num_completed_tasks: builtins.int = ...,
-            num_stages: builtins.int = ...,
-            num_completed_stages: builtins.int = ...,
-            input_bytes_read: builtins.int = ...,
+            stages: collections.abc.Iterable[
+                global___ExecutePlanResponse.ExecutionProgress.StageInfo
+            ]
+            | None = ...,
             num_inflight_tasks: builtins.int = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "input_bytes_read",
-                b"input_bytes_read",
-                "num_completed_stages",
-                b"num_completed_stages",
-                "num_completed_tasks",
-                b"num_completed_tasks",
-                "num_inflight_tasks",
-                b"num_inflight_tasks",
-                "num_stages",
-                b"num_stages",
-                "num_tasks",
-                b"num_tasks",
+                "num_inflight_tasks", b"num_inflight_tasks", "stages", b"stages"
             ],
         ) -> None: ...
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.execution
 
+import scala.jdk.CollectionConverters._
+
 import com.google.protobuf.Message
 import io.grpc.stub.{ServerCallStreamObserver, StreamObserver}
 
@@ -144,24 +146,19 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       // having to synchronize on the listener.
       listener.tryGetTracker(executeHolder.jobTag).foreach { tracker =>
         // Only send progress message if there is something new to report.
-        tracker.yieldWhenDirty {
-          (tasks, tasksCompleted, stages, stagesCompleted, inflightTasks, inputBytesRead) =>
-            val response = ExecutePlanResponse
-              .newBuilder()
-              .setExecutionProgress(
-                ExecutePlanResponse.ExecutionProgress
-                  .newBuilder()
-                  .setInputBytesRead(inputBytesRead)
-                  .setNumTasks(tasks)
-                  .setNumCompletedTasks(tasksCompleted)
-                  .setNumCompletedStages(stagesCompleted)
-                  .setNumStages(stages)
-                  .setNumInflightTasks(inflightTasks))
-              .build()
-            // There is a special case when the response observer has alreaady determined
-            // that the final message is send (and the stream will be closed) but we might want
-            // to send the progress message. In this case we ignore the result of the `onNext` call.
-            executeHolder.responseObserver.tryOnNext(response)
+        tracker.yieldWhenDirty { (stages, inflightTasks) =>
+          val response = ExecutePlanResponse
+            .newBuilder()
+            .setExecutionProgress(
+              ExecutePlanResponse.ExecutionProgress
+                .newBuilder()
+                .addAllStages(stages.map(_.toProto()).asJava)
+                .setNumInflightTasks(inflightTasks))
+            .build()
+          // There is a special case when the response observer has alreaady determined
+          // that the final message is send (and the stream will be closed) but we might want
+          // to send the progress message. In this case we ignore the result of the `onNext` call.
+          executeHolder.responseObserver.tryOnNext(response)
         }
       }
     }
