@@ -20,12 +20,14 @@ package org.apache.spark.sql
 import java.io.File
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructField, StructType, VariantType}
+import org.apache.spark.sql.types.{StringType, StructField, StructType, VariantType}
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
@@ -49,6 +51,17 @@ class VariantSuite extends QueryTest with SharedSparkSession {
       query.write.parquet(tempDir)
       verifyResult(spark.read.parquet(tempDir))
     }
+  }
+
+  test("basic parse_json alias") {
+    val df = spark.createDataFrame(Seq(Row("""{ "a" : 1 }""")).asJava,
+      new StructType().add("json", StringType))
+    val actual = df.select(
+      to_json(parse_json(col("json"))),
+      to_json(parse_json(lit("""{"b": [{"c": "str2"}]}""")))).collect().head
+
+    assert(actual.getString(0) == """{"a":1}""")
+    assert(actual.getString(1) == """{"b":[{"c":"str2"}]}""")
   }
 
   test("round trip tests") {
