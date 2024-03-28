@@ -528,14 +528,26 @@ def try_avg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Calculating the average age
+
     >>> import pyspark.sql.functions as sf
-    >>> spark.createDataFrame(
-    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
-    ... ).select(sf.try_avg("age")).show()
+    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
+    >>> df.select(sf.try_avg("age")).show()
     +------------+
     |try_avg(age)|
     +------------+
     |         8.5|
+    +------------+
+
+    Example 2: Calculating the average age with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.try_avg("age")).show()
+    +------------+
+    |try_avg(age)|
+    +------------+
+    |         3.0|
     +------------+
     """
     return _invoke_function_over_columns("try_avg", col)
@@ -720,13 +732,38 @@ def try_sum(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import pyspark.sql.functions as sf
-    >>> spark.range(10).select(sf.try_sum("id")).show()
+    Example 1: Calculating the sum of values in a column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.range(10)
+    >>> df.select(sf.try_sum(df["id"])).show()
     +-----------+
     |try_sum(id)|
     +-----------+
     |         45|
     +-----------+
+
+    Example 2: Using a plus expression together to calculate the sum
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
+    >>> df.select(sf.try_sum(sf.col("A") + sf.col("B"))).show()
+    +----------------+
+    |try_sum((A + B))|
+    +----------------+
+    |              10|
+    +----------------+
+
+    Example 3: Calculating the summation of ages with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.try_sum("age")).show()
+    +------------+
+    |try_sum(age)|
+    +------------+
+    |           6|
+    +------------+
     """
     return _invoke_function_over_columns("try_sum", col)
 
@@ -1323,6 +1360,17 @@ def sum(col: "ColumnOrName") -> Column:
     +------------+
     |          10|
     +------------+
+
+    Example 3: Calculating the summation of ages with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.sum("age")).show()
+    +--------+
+    |sum(age)|
+    +--------+
+    |       6|
+    +--------+
     """
     return _invoke_function_over_columns("sum", col)
 
@@ -1349,13 +1397,27 @@ def avg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(10)
-    >>> df.select(avg(col("id"))).show()
-    +-------+
-    |avg(id)|
-    +-------+
-    |    4.5|
-    +-------+
+    Example 1: Calculating the average age
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
+    >>> df.select(sf.avg("age")).show()
+    +--------+
+    |avg(age)|
+    +--------+
+    |     8.5|
+    +--------+
+
+    Example 2: Calculating the average age with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.avg("age")).show()
+    +--------+
+    |avg(age)|
+    +--------+
+    |     3.0|
+    +--------+
     """
     return _invoke_function_over_columns("avg", col)
 
@@ -1383,13 +1445,27 @@ def mean(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(10)
-    >>> df.select(mean(df.id)).show()
-    +-------+
-    |avg(id)|
-    +-------+
-    |    4.5|
-    +-------+
+    Example 1: Calculating the average age
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
+    >>> df.select(sf.mean("age")).show()
+    +---------+
+    |mean(age)|
+    +---------+
+    |      8.5|
+    +---------+
+
+    Example 2: Calculating the average age with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.mean("age")).show()
+    +---------+
+    |mean(age)|
+    +---------+
+    |      3.0|
+    +---------+
     """
     return _invoke_function_over_columns("mean", col)
 
