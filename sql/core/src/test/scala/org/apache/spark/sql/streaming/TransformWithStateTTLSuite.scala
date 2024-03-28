@@ -23,7 +23,7 @@ import java.time.temporal.ChronoUnit
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{MemoryStream, ValueStateImpl}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, ValueStateImplWithTTL}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -44,7 +44,7 @@ case class OutputEvent(
 object TTLInputProcessFunction {
   def processRow(
       row: InputEvent,
-      valueState: ValueStateImpl[Int]): Iterator[OutputEvent] = {
+      valueState: ValueStateImplWithTTL[Int]): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
     val key = row.key
     if (row.action == "get") {
@@ -79,12 +79,17 @@ class ValueStateTTLProcessor
   extends StatefulProcessor[String, InputEvent, OutputEvent]
   with Logging {
 
-  @transient private var _valueState: ValueStateImpl[Int] = _
+  @transient private var _valueState: ValueStateImplWithTTL[Int] = _
+  private var _ttlMode: TTLMode = _
 
-  override def init(outputMode: OutputMode, timeoutMode: TimeoutMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode): Unit = {
     _valueState = getHandle
       .getValueState("valueState", Encoders.scalaInt)
-      .asInstanceOf[ValueStateImpl[Int]]
+      .asInstanceOf[ValueStateImplWithTTL[Int]]
+    _ttlMode = ttlMode
   }
 
   override def handleInputRows(
@@ -111,16 +116,19 @@ case class MultipleValueStatesTTLProcessor(
   extends StatefulProcessor[String, InputEvent, OutputEvent]
     with Logging {
 
-  @transient private var _valueStateWithTTL: ValueStateImpl[Int] = _
-  @transient private var _valueStateWithoutTTL: ValueStateImpl[Int] = _
+  @transient private var _valueStateWithTTL: ValueStateImplWithTTL[Int] = _
+  @transient private var _valueStateWithoutTTL: ValueStateImplWithTTL[Int] = _
 
-  override def init(outputMode: OutputMode, timeoutMode: TimeoutMode): Unit = {
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode): Unit = {
     _valueStateWithTTL = getHandle
       .getValueState("valueState", Encoders.scalaInt)
-      .asInstanceOf[ValueStateImpl[Int]]
+      .asInstanceOf[ValueStateImplWithTTL[Int]]
     _valueStateWithoutTTL = getHandle
       .getValueState("valueState", Encoders.scalaInt)
-      .asInstanceOf[ValueStateImpl[Int]]
+      .asInstanceOf[ValueStateImplWithTTL[Int]]
   }
 
   override def handleInputRows(
@@ -317,7 +325,7 @@ class TransformWithStateTTLSuite
     }
   }
 
-  test("validate multiple value states - with and without ttl - processing time ttl") {
+  test("validate multiple value states - processing time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {

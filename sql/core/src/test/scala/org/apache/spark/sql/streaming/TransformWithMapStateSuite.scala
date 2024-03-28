@@ -32,7 +32,8 @@ class TestMapStateProcessor
 
   override def init(
       outputMode: OutputMode,
-      timeoutMode: TimeoutMode): Unit = {
+      timeoutMode: TimeoutMode,
+      ttlMode: TTLMode): Unit = {
     _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING)
   }
 

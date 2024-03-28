@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Serializer
@@ -25,17 +26,13 @@ import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
 import org.apache.spark.sql.types.{BinaryType, LongType, StructType}
 
-object StateKeyValueRowSchema {
+object TransformWithStateKeyValueRowSchema {
   val KEY_ROW_SCHEMA: StructType = new StructType().add("key", BinaryType)
   val VALUE_ROW_SCHEMA: StructType = new StructType()
     .add("value", BinaryType)
+  val VALUE_ROW_SCHEMA_WITH_TTL: StructType = new StructType()
+    .add("value", BinaryType)
     .add("ttlExpirationMs", LongType)
-
-  def encodeGroupingKeyBytes(keyBytes: Array[Byte]): UnsafeRow = {
-    val keyProjection = UnsafeProjection.create(KEY_ROW_SCHEMA)
-    val keyRow = keyProjection(InternalRow(keyBytes))
-    keyRow
-  }
 }
 
 /**
@@ -57,20 +54,23 @@ object StateKeyValueRowSchema {
 class StateTypesEncoder[GK, V](
     keySerializer: Serializer[GK],
     valEncoder: Encoder[V],
-    stateName: String) {
-  import org.apache.spark.sql.execution.streaming.StateKeyValueRowSchema._
+    stateName: String,
+    hasTtl: Boolean) extends Logging {
+  import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema._
 
   /** Variables reused for conversions between byte array and UnsafeRow */
   private val keyProjection = UnsafeProjection.create(KEY_ROW_SCHEMA)
-  private val valueProjection = UnsafeProjection.create(VALUE_ROW_SCHEMA)
+  private val valueProjection = if (hasTtl) {
+      UnsafeProjection.create(VALUE_ROW_SCHEMA_WITH_TTL)
+    } else {
+      UnsafeProjection.create(VALUE_ROW_SCHEMA)
+    }
 
   /** Variables reused for value conversions between spark sql and object */
   private val valExpressionEnc = encoderFor(valEncoder)
   private val objToRowSerializer = valExpressionEnc.createSerializer()
   private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
   private val reusedValRow = new UnsafeRow(valEncoder.schema.fields.length)
-
-  private val NO_TTL_ENCODED_VALUE: Long = -1L
 
   // TODO: validate places that are trying to encode the key and check if we can eliminate/
   // add caching for some of these calls.
@@ -107,8 +107,7 @@ class StateTypesEncoder[GK, V](
   def encodeValue(value: V): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
     val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
-    val valRow = valueProjection(InternalRow(bytes, NO_TTL_ENCODED_VALUE))
-    valRow
+    valueProjection(InternalRow(bytes))
   }
 
   /**
@@ -118,8 +117,7 @@ class StateTypesEncoder[GK, V](
   def encodeValue(value: V, expirationMs: Long = -1): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
     val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
-    val valueRow = valueProjection(InternalRow(bytes, expirationMs))
-    valueRow
+    valueProjection(InternalRow(bytes, expirationMs))
   }
 
   def decodeValue(row: UnsafeRow): V = {
@@ -136,8 +134,7 @@ class StateTypesEncoder[GK, V](
    */
   def decodeTtlExpirationMs(row: UnsafeRow): Option[Long] = {
     val expirationMs = row.getLong(1)
-
-    if (expirationMs == NO_TTL_ENCODED_VALUE) {
+    if (expirationMs == -1) {
       None
     } else {
       Some(expirationMs)
@@ -149,8 +146,9 @@ object StateTypesEncoder {
   def apply[GK, V](
       keySerializer: Serializer[GK],
       valEncoder: Encoder[V],
-      stateName: String): StateTypesEncoder[GK, V] = {
-    new StateTypesEncoder[GK, V](keySerializer, valEncoder, stateName)
+      stateName: String,
+      hasTtl: Boolean = false): StateTypesEncoder[GK, V] = {
+    new StateTypesEncoder[GK, V](keySerializer, valEncoder, stateName, hasTtl)
   }
 }
 
@@ -159,8 +157,9 @@ class CompositeKeyStateEncoder[GK, K, V](
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V],
     schemaForCompositeKeyRow: StructType,
-    stateName: String)
-  extends StateTypesEncoder[GK, V](keySerializer, valEncoder, stateName) {
+    stateName: String,
+    hasTtl: Boolean = false)
+  extends StateTypesEncoder[GK, V](keySerializer, valEncoder, stateName, hasTtl) {
 
   private val compositeKeyProjection = UnsafeProjection.create(schemaForCompositeKeyRow)
   private val reusedKeyRow = new UnsafeRow(userKeyEnc.schema.fields.length)
