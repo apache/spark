@@ -21,6 +21,8 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -31,7 +33,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, IgnoreCachedData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -58,6 +60,10 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
+
+  def copy(): QueryExecution = {
+    new QueryExecution(sparkSession, logical, tracker, mode)
+  }
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -367,6 +373,20 @@ class QueryExecution(
    */
   private def withRedaction(message: String): String = {
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
+  }
+
+  /**
+   * This method performs a pre-order traversal and return a boolean Array
+   * representing whether some nodes of the logical tree are persisted.
+   */
+  def computeCacheStateSignature(): Array[Boolean] = {
+    val cacheManager = sparkSession.sharedState.cacheManager
+    val cacheStatesOfNodes = ArrayBuffer[Boolean]()
+    normalized.foreach(plan => cacheStatesOfNodes += (plan match {
+      case _: IgnoreCachedData => false
+      case currentFragment => cacheManager.lookupCachedData(currentFragment).isDefined
+    }))
+    cacheStatesOfNodes.toArray
   }
 
   /** A special namespace for commands that can be used to debug query execution. */

@@ -134,6 +134,116 @@ class DatasetCacheSuite extends QueryTest
     assert(df.storageLevel == StorageLevel.NONE)
   }
 
+  test("SPARK-46992 collect before persisting") {
+    val childDs = (1 to 4).toDF("id").sort("id").sample(0.4, 123)
+    // this check will call ds.collect() first
+    assert(Array(Row(1), Row(4)).sameElements(childDs.collect()))
+    // and then cache it
+    childDs.cache()
+    assert(childDs.queryExecution.computeCacheStateSignature()
+      .sameElements(Array(true, false, false, false)))
+    // Make sure, the Dataset is indeed cached.
+    assertCached(childDs)
+    assert(childDs.count() == childDs.collect().length,
+      "The result of ds.count() is inconsistent with ds.collect()")
+
+    val parentDs = childDs.limit(1)
+    assert(parentDs.queryExecution.computeCacheStateSignature()
+      .sameElements(Array(false, false, true, false, false, false)))
+    assertCached(parentDs)
+
+    // The child ds is un-persisted so the same is parent ds
+    childDs.unpersist()
+    assert(childDs.queryExecution.computeCacheStateSignature()
+      .sameElements(Array(false, false, false, false)))
+    assertNotCached(childDs)
+    assert(parentDs.queryExecution.computeCacheStateSignature()
+      .sameElements(Array(false, false, false, false, false, false)))
+    assertNotCached(parentDs)
+
+    // The child ds is persisted so the same is parent ds
+    childDs.cache()
+    assert(childDs.queryExecution.computeCacheStateSignature()
+      .sameElements(Array(true, false, false, false)))
+    assert(parentDs.queryExecution.computeCacheStateSignature()
+      .sameElements(Array(false, false, true, false, false, false)))
+    assertCached(parentDs)
+  }
+
+  test("SPARK-46992 consistent queryExecution: 'sort(...).sample(...)'") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val df0 = (1 to 4).toDF("id")
+    val df1 = df0.sort("id").sample(0.4, 123)
+    val df2 = df1.as[Int].map(_ * 2).toDF()
+
+    assert(df1.count() == df1.collect().length,
+      s"non-persisted: ${df1.count()} <> ${df1.collect().length}")
+    assert(df2.count() == df2.collect().length,
+      s"non-persisted: ${df2.count()} <> ${df2.collect().length}")
+    assert(df1.count() == df2.count(),
+      s"non-persisted (count): ${df1.count()} <> ${df2.count()}")
+
+    val dfC = df1.persist(StorageLevel.MEMORY_ONLY)
+    dfC.count()
+    assert(dfC.count() == dfC.collect().length,
+      s"persisted: ${dfC.count()} <> ${dfC.collect().length}")
+    assert(df1.count() == df1.collect().length,
+      s"persisted: ${df1.count()} <> ${df1.collect().length}")
+    assert(df2.count() == df2.collect().length,
+      s"persisted: ${df2.count()} <> ${df2.collect().length}")
+
+    assert(df1.count() == dfC.count(),
+      s"persisted (count): ${df1.count()} <> ${dfC.count()}")
+    assert(df1.count() == df2.count(),
+      s"persisted (count): ${df1.count()} <> ${df2.count()}")
+
+    val planBefore = df2.queryExecution.executedPlan
+    df2.count()
+    val planAfter = df2.queryExecution.executedPlan
+    assert(planBefore eq planAfter, "executedPlan shouldn't be updated without changes")
+
+    dfC.unpersist()
+
+    assert(dfC.count() == dfC.collect().length,
+      s"unpersisted: ${dfC.count()} <> ${dfC.collect().length}")
+    assert(df1.count() == df1.collect().length,
+      s"unpersisted: ${df1.count()} <> ${df1.collect().length}")
+    assert(df2.count() == df2.collect().length,
+      s"unpersisted: ${df2.count()} <> ${df2.collect().length}")
+    assert(df1.count() == df2.count(),
+      s"unpersisted (count): ${df1.count()} <> ${df2.count()}")
+  }
+
+  test("SPARK-46992 consistent queryExecution: multiple branches with persisted children") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val dfL = (1 to 4).toDF("idL").sort("idL").sample(0.4, 123)
+    val dfR = (1 to 7).toDF("idR").sort("idR").sample(0.4, 123)
+    val df = dfL.join(dfR)
+
+    assert(df.count() == df.collect().length,
+      s"L and R not persisted: ${df.count()} <> ${df.collect().length}")
+
+    dfL.cache().count()
+    assert(df.count() == df.collect().length,
+      s"L persisted: ${df.count()} <> ${df.collect().length}")
+
+    dfR.cache().count()
+    assert(df.count() == df.collect().length,
+      s"L and R persisted: ${df.count()} <> ${df.collect().length}")
+
+    dfR.unpersist()
+    assert(df.count() == df.collect().length,
+      s"L persisted and R unpersisted: ${df.count()} <> ${df.collect().length}")
+
+    dfL.unpersist()
+    assert(df.count() == df.collect().length,
+      s"L unpersisted and R unpersisted: ${df.count()} <> ${df.collect().length}")
+  }
+
   test("cache UDF result correctly") {
     val expensiveUDF = udf({x: Int => Thread.sleep(2000); x})
     val df = spark.range(0, 2).toDF("a").repartition(1).withColumn("b", expensiveUDF($"a"))

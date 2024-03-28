@@ -193,9 +193,42 @@ private[sql] object Dataset {
  */
 @Stable
 class Dataset[T] private[sql](
-    @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
+    @Unstable @transient val queryUnpersisted: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
+
+  @volatile @transient private var queryPersisted: Option[(Array[Boolean], QueryExecution)] = None
+
+  @DeveloperApi @Unstable
+  def queryExecution: QueryExecution = {
+    if (queryUnpersisted == null) {
+      return null
+    }
+    val cacheStatesSign = queryUnpersisted.computeCacheStateSignature()
+    if (cacheStatesSign.forall(_ == false)) {
+      queryPersisted = None
+      queryUnpersisted
+    } else {
+      queryPersisted match {
+        // If we haven't cached queryPersisted, we create new one
+        case None =>
+          val qe = queryUnpersisted.copy()
+          queryPersisted = Some((qe.computeCacheStateSignature(), qe))
+          qe
+        // If there exists cached queryPersisted, and cache signature doesn't change, we reuse it.
+        // Otherwise we create a new queryExecution and cache it.
+        case Some((lastCacheStateSign, qe)) =>
+          val currentCacheStateSign = qe.computeCacheStateSignature()
+          if (currentCacheStateSign.sameElements(lastCacheStateSign)) {
+            qe
+          } else {
+            val qe = queryUnpersisted.copy()
+            queryPersisted = Some((currentCacheStateSign, qe))
+            qe
+          }
+      }
+    }
+  }
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
@@ -220,7 +253,7 @@ class Dataset[T] private[sql](
     this(sqlContext.sparkSession, logicalPlan, encoder)
   }
 
-  @transient private[sql] val logicalPlan: LogicalPlan = {
+  @transient private[sql] def logicalPlan: LogicalPlan = {
     val plan = queryExecution.commandExecuted
     if (sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
       val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
