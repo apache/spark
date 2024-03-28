@@ -78,12 +78,18 @@ object CommandUtils extends Logging {
     val libraryPathName = Utils.libraryPathEnvName
     val libraryPathEntries = command.libraryPathEntries
     val cmdLibraryPath = command.environment.get(libraryPathName)
+    val localEnvs = Map(
+      "JAVA_HOME" -> sys.env.getOrElse("JAVA_HOME", ""),
+      "SPARK_HOME" -> sys.env.getOrElse("SPARK_HOME", ""),
+    ).filterNot(_._2.isEmpty)
 
     var newEnvironment = if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
       val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ env.get(libraryPathName)
-      command.environment ++ Map(libraryPathName -> libraryPaths.mkString(File.pathSeparator))
+      (command.environment
+        ++ Map(libraryPathName -> libraryPaths.mkString(File.pathSeparator))
+        ++ localEnvs)
     } else {
-      command.environment
+      command.environment ++ localEnvs
     }
 
     // set auth secret to env variable if needed
