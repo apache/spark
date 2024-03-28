@@ -549,6 +549,34 @@ def try_avg(col: "ColumnOrName") -> Column:
     +------------+
     |         3.0|
     +------------+
+
+    Example 3: Calculating the average age with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.try_avg("age")).show()
+    +------------+
+    |try_avg(age)|
+    +------------+
+    |         3.0|
+    +------------+
+
+    Example 4: Overflow results in NULL when ANSI mode is on
+
+    >>> import pyspark.sql.functions as sf
+    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
+    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
+    >>> try:
+    ...     df = spark.createDataFrame(
+    ...         [(Decimal("1" * 38),), (Decimal(0),)], "number DECIMAL(38, 0)")
+    ...     df.select(sf.try_avg(df.number)).show()
+    ... finally:
+    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    +---------------+
+    |try_avg(number)|
+    +---------------+
+    |           NULL|
+    +---------------+
     """
     return _invoke_function_over_columns("try_avg", col)
 
@@ -764,6 +792,22 @@ def try_sum(col: "ColumnOrName") -> Column:
     +------------+
     |           6|
     +------------+
+
+    Example 4: Overflow results in NULL when ANSI mode is on
+
+    >>> import pyspark.sql.functions as sf
+    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
+    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
+    >>> try:
+    ...     df = spark.createDataFrame([(Decimal("1" * 38),)] * 10, "number DECIMAL(38, 0)")
+    ...     df.select(sf.try_sum(df.number)).show()
+    ... finally:
+    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    +---------------+
+    |try_sum(number)|
+    +---------------+
+    |           NULL|
+    +---------------+
     """
     return _invoke_function_over_columns("try_sum", col)
 
