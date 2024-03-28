@@ -1458,6 +1458,18 @@ package object config {
       .doubleConf
       .createWithDefault(1.5)
 
+  private[spark] val KUBERNETES_JARS_AVOID_DOWNLOAD_SCHEMES =
+    ConfigBuilder("spark.kubernetes.jars.avoidDownloadSchemes")
+      .doc("Comma-separated list of schemes for which jars will NOT be downloaded to the " +
+        "driver local disk prior to be distributed to executors, only for kubernetes deployment. " +
+        "For use in cases when the jars are big and executor counts are high, " +
+        "concurrent download causes network saturation and timeouts. " +
+        "Wildcard '*' is denoted to not downloading jars for any the schemes.")
+      .version("4.0.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val FORCE_DOWNLOAD_SCHEMES =
     ConfigBuilder("spark.yarn.dist.forceDownloadSchemes")
       .doc("Comma-separated list of schemes for which resources will be downloaded to the " +
