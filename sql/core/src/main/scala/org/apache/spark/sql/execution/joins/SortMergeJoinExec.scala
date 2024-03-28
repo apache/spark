@@ -815,8 +815,10 @@ case class SortMergeJoinExec(
       v => s"$v = new $matchedClsName(1);", forceInline = true)
     val rightMatched = ctx.addMutableState(matchedClsName, "rightMatched",
       v => s"$v = new $matchedClsName(1);", forceInline = true)
-    val leftIndex = ctx.freshName("leftIndex")
-    val rightIndex = ctx.freshName("rightIndex")
+    val leftIndex = ctx.addMutableState(CodeGenerator.JAVA_INT, "leftIndex",
+      v => s"$v = 0;", forceInline = true)
+    val rightIndex = ctx.addMutableState(CodeGenerator.JAVA_INT, "rightIndex",
+      v => s"$v = 0;", forceInline = true)
 
     // Generate code for join condition
     val leftResultVars = genOneSideJoinVars(
@@ -878,6 +880,8 @@ case class SortMergeJoinExec(
          |  int comp = 0;
          |  $leftBuffer.clear();
          |  $rightBuffer.clear();
+         |  $leftIndex = 0;
+         |  $rightIndex = 0;
          |
          |  if ($leftInputRow == null) {
          |    $leftInputRow = (InternalRow) leftIter.next();
@@ -957,44 +961,63 @@ case class SortMergeJoinExec(
        """.stripMargin)
 
     // Scan the left and right buffers to find all matched rows.
-    val matchRowsInBuffer =
+    val matchRowsInBufferFuncName = ctx.freshName("matchRowsInBuffer")
+    ctx.addNewFunction(matchRowsInBufferFuncName,
       s"""
-         |int $leftIndex;
-         |int $rightIndex;
-         |
-         |for ($leftIndex = 0; $leftIndex < $leftBuffer.size(); $leftIndex++) {
-         |  $leftOutputRow = (InternalRow) $leftBuffer.get($leftIndex);
-         |  for ($rightIndex = 0; $rightIndex < $rightBuffer.size(); $rightIndex++) {
-         |    $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
-         |    $conditionCheck {
-         |      $consumeFullOuterJoinRow();
-         |      $leftMatched.set($leftIndex);
-         |      $rightMatched.set($rightIndex);
+         |private boolean $matchRowsInBufferFuncName() throws java.io.IOException {
+         |  while ($leftIndex < $leftBuffer.size()) {
+         |    $leftOutputRow = (InternalRow) $leftBuffer.get($leftIndex);
+         |    while ($rightIndex < $rightBuffer.size()) {
+         |      $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
+         |      $conditionCheck {
+         |        $consumeFullOuterJoinRow();
+         |        $leftMatched.set($leftIndex);
+         |        $rightMatched.set($rightIndex);
+         |        if (shouldStop()) {
+         |          $rightIndex++;
+         |          return true;
+         |        }
+         |      }
+         |      $rightIndex++;
          |    }
+         |    $rightIndex = 0;
+         |    if (!$leftMatched.get($leftIndex)) {
+         |      $rightOutputRow = null;
+         |      $consumeFullOuterJoinRow();
+         |      if (shouldStop()) {
+         |        $leftIndex++;
+         |        return true;
+         |      }
+         |    }
+         |    $leftIndex++;
          |  }
          |
-         |  if (!$leftMatched.get($leftIndex)) {
-         |
-         |    $rightOutputRow = null;
-         |    $consumeFullOuterJoinRow();
+         |  $leftOutputRow = null;
+         |  while ($rightIndex < $rightBuffer.size()) {
+         |    if (!$rightMatched.get($rightIndex)) {
+         |      // The right row has never matched any left row, join it with null row
+         |      $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
+         |      $consumeFullOuterJoinRow();
+         |      if (shouldStop()) {
+         |        $rightIndex++;
+         |        return true;
+         |      }
+         |    }
+         |    $rightIndex++;
          |  }
+         |  return false;
          |}
-         |
-         |$leftOutputRow = null;
-         |for ($rightIndex = 0; $rightIndex < $rightBuffer.size(); $rightIndex++) {
-         |  if (!$rightMatched.get($rightIndex)) {
-         |    // The right row has never matched any left row, join it with null row
-         |    $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
-         |    $consumeFullOuterJoinRow();
-         |  }
-         |}
-       """.stripMargin
+       """.stripMargin)
 
     s"""
+       |// If we already buffered some matching rows, use them directly
+       |if ($leftIndex < $leftBuffer.size() || $rightIndex < $rightBuffer.size()) {
+       |  if($matchRowsInBufferFuncName()) return;
+       |}
        |while (($leftInputRow != null || $leftInput.hasNext()) &&
        |  ($rightInputRow != null || $rightInput.hasNext())) {
        |  $findNextJoinRowsFuncName($leftInput, $rightInput);
-       |  $matchRowsInBuffer
+       |  $matchRowsInBufferFuncName();
        |  if (shouldStop()) return;
        |}
        |
