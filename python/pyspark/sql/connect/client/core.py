@@ -1321,6 +1321,9 @@ class SparkConnectClient(object):
                         + f"{num_records_in_batch}."
                     )
                 num_records += num_records_in_batch
+            if b.HasField("create_resource_profile_command_result"):
+                profile_id = b.create_resource_profile_command_result.profile_id
+                yield {"create_resource_profile_command_result": profile_id}
 
         try:
             if self._use_reattachable_execute:
@@ -1746,3 +1749,12 @@ class SparkConnectClient(object):
         else:
             # Update the server side session ID.
             self._server_session_id = response.server_side_session_id
+
+    def _create_profile(self, profile: pb2.ResourceProfile) -> int:
+        """Create the ResourceProfile on the server side and return the profile ID"""
+        logger.info("Creating the ResourceProfile")
+        cmd = pb2.Command()
+        cmd.create_resource_profile_command.profile.CopyFrom(profile)
+        (_, properties) = self.execute_command(cmd)
+        profile_id = properties["create_resource_profile_command_result"]
+        return profile_id

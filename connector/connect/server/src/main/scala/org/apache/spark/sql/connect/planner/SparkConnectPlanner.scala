@@ -32,16 +32,14 @@ import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
+import org.apache.spark.connect.proto.{CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
-import org.apache.spark.connect.proto.StreamingForeachFunction
-import org.apache.spark.connect.proto.StreamingQueryManagerCommand
-import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
+import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
@@ -544,6 +542,12 @@ class SparkConnectPlanner(
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         val pythonUdf = transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
+        val profile = if (rel.hasProfileId) {
+          val profileId = rel.getProfileId
+          Some(session.sparkContext.resourceProfileManager.resourceProfileFromId(profileId))
+        } else {
+          None
+        }
         pythonUdf.evalType match {
           case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
             logical.MapInPandas(
@@ -551,14 +555,14 @@ class SparkConnectPlanner(
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
               isBarrier,
-              None)
+              profile)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
             logical.MapInArrow(
               pythonUdf,
               DataTypeUtils.toAttributes(pythonUdf.dataType.asInstanceOf[StructType]),
               baseRel,
               isBarrier,
-              None)
+              profile)
           case _ =>
             throw InvalidPlanInput(
               s"Function with EvalType: ${pythonUdf.evalType} is not supported")
@@ -2531,6 +2535,11 @@ class SparkConnectPlanner(
           responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
         handleGetResourcesCommand(responseObserver)
+      case proto.Command.CommandTypeCase.CREATE_RESOURCE_PROFILE_COMMAND =>
+        handleCreateResourceProfileCommand(
+          command.getCreateResourceProfileCommand,
+          responseObserver)
+
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -3323,6 +3332,43 @@ class SparkConnectPlanner(
                     .addAllAddresses(resource.addresses.toImmutableArraySeq.asJava)
                     .build())
                 .asJava)
+            .build())
+        .build())
+  }
+
+  def handleCreateResourceProfileCommand(
+      createResourceProfileCommand: CreateResourceProfileCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val rp = createResourceProfileCommand.getProfile
+    val ereqs = rp.getExecutorResourcesMap.asScala.map { case (name, res) =>
+      name -> new ExecutorResourceRequest(
+        res.getResourceName,
+        res.getAmount,
+        res.getDiscoveryScript,
+        res.getVendor)
+    }.toMap
+    val treqs = rp.getTaskResourcesMap.asScala.map { case (name, res) =>
+      name -> new TaskResourceRequest(res.getResourceName, res.getAmount)
+    }.toMap
+
+    // Create ResourceProfile add add it to ResourceProfileManager
+    val profile = if (ereqs.isEmpty) {
+      new TaskResourceProfile(treqs)
+    } else {
+      new ResourceProfile(ereqs, treqs)
+    }
+    session.sparkContext.resourceProfileManager.addResourceProfile(profile)
+
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setCreateResourceProfileCommandResult(
+          proto.CreateResourceProfileCommandResult
+            .newBuilder()
+            .setProfileId(profile.id)
             .build())
         .build())
   }

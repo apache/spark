@@ -44,6 +44,7 @@ message Command {
     CommonInlineUserDefinedTableFunction register_table_function = 10;
     StreamingQueryListenerBusCommand streaming_query_listener_bus_command = 11;
     CommonInlineUserDefinedDataSource register_data_source = 12;
+    CreateResourceProfileCommand create_resource_profile_command = 13;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -467,4 +468,16 @@ message GetResourcesCommand { }
 // Response for command 'GetResourcesCommand'.
 message GetResourcesCommandResult {
   map<string, ResourceInformation> resources = 1;
+}
+
+// Command to create ResourceProfile
+message CreateResourceProfileCommand {
+  // (Required) The ResourceProfile to be built on the server-side.
+  ResourceProfile profile = 1;
+}
+
+// Response for command 'CreateResourceProfileCommand'.
+message CreateResourceProfileCommandResult {
+  // (Required) Server-side generated resource profile id.
+  int32 profile_id = 1;
 }
