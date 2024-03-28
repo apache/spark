@@ -142,9 +142,12 @@ private class AsyncEventQueue(
       eventCount.incrementAndGet()
       eventQueue.put(POISON_PILL)
     }
-    // this thread might be trying to stop itself as part of error handling -- we can't join
+    // 1.If the user does not want to wait for the dispatch to end,
+    // they can omit the thread join.
+    // 2.this thread might be trying to stop itself as part of error handling -- we can't join
     // in that case.
-    if (Thread.currentThread() != dispatchThread) {
+    if (conf.get(LISTENER_BUS_EVENT_QUEUE_WAIT_FOR_EVENT_DISPATCH_EXIT_ON_STOP) &&
+      Thread.currentThread() != dispatchThread) {
       dispatchThread.join()
     }
   }
