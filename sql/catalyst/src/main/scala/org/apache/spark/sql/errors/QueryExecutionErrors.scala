@@ -2715,6 +2715,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(functionName)))
   }
 
+  def invalidVariantCast(value: String, dataType: DataType): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_VARIANT_CAST",
+      messageParameters = Map("value" -> value, "dataType" -> toSQLType(dataType)))
+  }
+
+  def invalidVariantGetPath(path: String, functionName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_VARIANT_GET_PATH",
+      messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
+  }
+
   def invalidCharsetError(functionName: String, charset: String): RuntimeException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_PARAMETER_VALUE.CHARSET",
