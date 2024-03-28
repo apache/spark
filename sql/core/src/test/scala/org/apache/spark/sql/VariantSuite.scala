@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{StringType, StructField, StructType, VariantType}
 import org.apache.spark.unsafe.types.VariantVal
 import org.apache.spark.util.ArrayImplicits._
 
@@ -202,6 +202,65 @@ class VariantSuite extends QueryTest with SharedSparkSession {
     withTable("t") {
       intercept[AnalysisException] {
         spark.sql(s"CREATE TABLE t USING PARQUET PARTITIONED BY (v) AS $queryString")
+      }
+    }
+  }
+
+  test("SPARK-47546: invalid variant binary") {
+    // Write a struct-of-binary that looks like a Variant, but with minor variations that may make
+    // it invalid to read.
+    // Test cases:
+    // 1) A binary that is almost correct, but contains an extra field "paths"
+    // 2,3) A binary with incorrect field names
+    // 4) Incorrect data typea
+    // 5,6) Nullable value or metdata
+
+    // Binary value of empty metadata
+    val m = "X'010000'"
+    // Binary value of a literal "false"
+    val v = "X'8'"
+    val cases = Seq(
+        s"named_struct('value', $v, 'metadata', $m, 'paths', $v)",
+        s"named_struct('value', $v, 'dictionary', $m)",
+        s"named_struct('val', $v, 'metadata', $m)",
+        s"named_struct('value', 8, 'metadata', $m)",
+        s"named_struct('value', cast(null as binary), 'metadata', $m)",
+        s"named_struct('value', $v, 'metadata', cast(null as binary))"
+    )
+    cases.foreach { structDef =>
+      withTempDir { dir =>
+        val file = new File(dir, "dir").getCanonicalPath
+        val df = spark.sql(s"select $structDef as v from range(10)")
+        df.write.parquet(file)
+        val schema = StructType(Seq(StructField("v", VariantType)))
+        val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
+        val e = intercept[org.apache.spark.SparkException](result.collect())
+        assert(e.getCause.isInstanceOf[AnalysisException], e.printStackTrace)
+      }
+    }
+  }
+
+  test("SPARK-47546: valid variant binary") {
+    // Test valid struct-of-binary formats. We don't expect anybody to construct a Variant in this
+    // way, but it lets us validate slight variations that could be produced by a different writer.
+
+    // Binary value of empty metadata
+    val m = "X'010000'"
+    // Binary value of a literal "false"
+    val v = "X'8'"
+    val cases = Seq(
+        s"named_struct('value', $v, 'metadata', $m)",
+        s"named_struct('metadata', $m, 'value', $v)"
+    )
+    cases.foreach { structDef =>
+      withTempDir { dir =>
+        val file = new File(dir, "dir").getCanonicalPath
+        val df = spark.sql(s"select $structDef as v from range(10)")
+        df.write.parquet(file)
+        val schema = StructType(Seq(StructField("v", VariantType)))
+        val result = spark.read.schema(schema).parquet(file)
+            .selectExpr("to_json(v)")
+        checkAnswer(result, Seq.fill(10)(Row("false")))
       }
     }
   }
