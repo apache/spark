@@ -37,7 +37,6 @@ from pyspark.testing.sqlutils import (
     have_pandas,
     pandas_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 
 class DataFrameCreationTestsMixin:
@@ -71,7 +70,7 @@ class DataFrameCreationTestsMixin:
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_create_dataframe_required_pandas_not_found(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             with self.assertRaisesRegex(
                 ImportError, "(Pandas >= .* must be installed|No module named '?pandas'?)"
             ):
