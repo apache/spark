@@ -485,7 +485,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def sql: String = (value, dataType) match {
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
-    case (v: UTF8String, StringType) =>
+    case (v: UTF8String, _: StringType) =>
       // Escapes all backslashes and single quotes.
       "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
     case (v: Byte, ByteType) => s"${v}Y"
