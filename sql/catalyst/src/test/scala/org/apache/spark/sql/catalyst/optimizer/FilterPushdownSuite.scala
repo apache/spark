@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1495,5 +1498,18 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = x.where(IsNotNull(Sequence($"x.a", $"x.b", None)) && $"x.c" > 1)
       .analyze
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
+  }
+
+  test("SPARK-46885: Push down filters through TypedFilter") {
+    implicit def productEncoder[T <: Product : TypeTag]: ExpressionEncoder[T] =
+      ExpressionEncoder[T]()
+
+    val f = (i: (Int, Int, Int)) => i._1 > 0
+
+    val query = testRelation.filter(f).where($"a" > 3).analyze
+    val optimized = Optimize.execute(query)
+
+    val correctAnswer = testRelation.where($"a" > 3).filter(f)
+    comparePlans(optimized, correctAnswer.analyze)
   }
 }
