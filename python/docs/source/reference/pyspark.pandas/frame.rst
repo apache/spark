@@ -261,6 +261,7 @@ Time series-related
 .. autosummary::
    :toctree: api/
 
+   DataFrame.asfreq
    DataFrame.resample
    DataFrame.shift
    DataFrame.first_valid_index
