@@ -18,6 +18,7 @@
 package org.apache.spark.serializer
 
 import java.io._
+import java.lang.{Boolean => JBoolean}
 import java.lang.reflect.{Field, Method}
 
 import scala.annotation.tailrec
@@ -67,8 +68,7 @@ private[spark] object SerializationDebugger extends Logging {
   }
 
   private[serializer] var enableDebugging: Boolean = {
-    !sun.security.action.GetBooleanAction
-      .privilegedGetProperty("sun.io.serialization.extendedDebugInfo")
+    !JBoolean.getBoolean("sun.io.serialization.extendedDebugInfo")
   }
 
   private class SerializationDebugger {
