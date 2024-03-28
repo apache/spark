@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_NAMESPACE
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.executor.CoarseGrainedExecutorBackend
 import org.apache.spark.internal.Logging
@@ -27,6 +28,47 @@ import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.Utils
+
+/**
+ * Custom implementation of CoarseGrainedExecutorBackend for Kubernetes resource manager.
+ * This class provides kubernetes executor attributes.
+ */
+private[spark] class KubernetesExecutorBackend(
+    rpcEnv: RpcEnv,
+    appId: String,
+    driverUrl: String,
+    executorId: String,
+    bindAddress: String,
+    hostname: String,
+    podName: String,
+    cores: Int,
+    env: SparkEnv,
+    resourcesFile: Option[String],
+    resourceProfile: ResourceProfile)
+  extends CoarseGrainedExecutorBackend(
+    rpcEnv,
+    driverUrl,
+    executorId,
+    bindAddress,
+    hostname,
+    cores,
+    env,
+    resourcesFile,
+    resourceProfile) with Logging {
+
+  override def extractAttributes: Map[String, String] = {
+    // give precedence to attributes extracted by overridden method
+    Map(
+      "LOG_FILES" -> "log",
+      "APP_ID" -> appId,
+      "EXECUTOR_ID" -> executorId,
+      "HOSTNAME" -> hostname,
+      "KUBERNETES_NAMESPACE" -> env.conf.get(KUBERNETES_NAMESPACE),
+      "KUBERNETES_POD_NAME" -> podName
+    ) ++ super.extractAttributes
+  }
+
+}
 
 private[spark] object KubernetesExecutorBackend extends Logging {
 
@@ -49,8 +91,8 @@ private[spark] object KubernetesExecutorBackend extends Logging {
   def main(args: Array[String]): Unit = {
     val createFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile, String) =>
       CoarseGrainedExecutorBackend = { case (rpcEnv, arguments, env, resourceProfile, execId) =>
-        new CoarseGrainedExecutorBackend(rpcEnv, arguments.driverUrl, execId,
-        arguments.bindAddress, arguments.hostname, arguments.cores,
+        new KubernetesExecutorBackend(rpcEnv, arguments.appId, arguments.driverUrl, execId,
+        arguments.bindAddress, arguments.hostname, arguments.podName, arguments.cores,
         env, arguments.resourcesFileOpt, resourceProfile)
     }
     run(parseArguments(args, this.getClass.getCanonicalName.stripSuffix("$")), createFn)
