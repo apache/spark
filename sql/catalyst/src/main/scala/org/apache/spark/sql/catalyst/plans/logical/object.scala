@@ -588,7 +588,46 @@ object TransformWithState {
       outputMode,
       keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
       CatalystSerde.generateObjAttr[U],
-      child
+      child,
+      hasInitialState = false,
+      // the following parameters will not be used in physical plan if hasInitialState = false
+      initialStateGroupingAttrs = groupingAttributes,
+      initialStateDataAttrs = dataAttributes,
+      initialStateDeserializer =
+        UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      initialState = LocalRelation(encoderFor[K].schema) // empty data set
+    )
+    CatalystSerde.serialize[U](mapped)
+  }
+
+  // This apply() is to invoke TransformWithState object with hasInitialState set to true
+  def apply[K: Encoder, V: Encoder, U: Encoder, S: Encoder](
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode,
+      child: LogicalPlan,
+      initialStateGroupingAttrs: Seq[Attribute],
+      initialStateDataAttrs: Seq[Attribute],
+      initialState: LogicalPlan): LogicalPlan = {
+    val keyEncoder = encoderFor[K]
+    val mapped = new TransformWithState(
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
+      groupingAttributes,
+      dataAttributes,
+      statefulProcessor.asInstanceOf[StatefulProcessor[Any, Any, Any]],
+      timeoutMode,
+      outputMode,
+      keyEncoder.asInstanceOf[ExpressionEncoder[Any]],
+      CatalystSerde.generateObjAttr[U],
+      child,
+      hasInitialState = true,
+      initialStateGroupingAttrs,
+      initialStateDataAttrs,
+      UnresolvedDeserializer(encoderFor[S].deserializer, initialStateDataAttrs),
+      initialState
     )
     CatalystSerde.serialize[U](mapped)
   }
@@ -604,10 +643,18 @@ case class TransformWithState(
     outputMode: OutputMode,
     keyEncoder: ExpressionEncoder[Any],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer {
+    child: LogicalPlan,
+    hasInitialState: Boolean = false,
+    initialStateGroupingAttrs: Seq[Attribute],
+    initialStateDataAttrs: Seq[Attribute],
+    initialStateDeserializer: Expression,
+    initialState: LogicalPlan) extends BinaryNode with ObjectProducer {
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): TransformWithState =
-    copy(child = newChild)
+  override def left: LogicalPlan = child
+  override def right: LogicalPlan = initialState
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithState =
+    copy(child = newLeft, initialState = newRight)
 }
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */

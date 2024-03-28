@@ -2162,6 +2162,12 @@ Failed to perform stateful processor operation=`<operationType>` with invalid ha
 
 Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
 
+### STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=`<groupingKey>`.
+
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

@@ -769,4 +769,24 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
       }
     )
   }
+
+  test("transformWithStateWithInitialState - streaming with hdfsStateStoreProvider should fail") {
+    val inputData = MemoryStream[InitInputRow]
+    val initDf = Seq(("init_1", 40.0), ("init_2", 100.0)).toDS()
+      .groupByKey(x => x._1)
+      .mapValues(x => x)
+    val result = inputData.toDS()
+      .groupByKey(x => x.key)
+      .transformWithState(new AccumulateStatefulProcessorWithInitState(),
+        TimeoutMode.NoTimeouts(), OutputMode.Append(), initDf
+      )
+    testStream(result, OutputMode.Update())(
+      AddData(inputData, InitInputRow("a", "add", -1.0)),
+      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
+        (t: Throwable) => {
+          assert(t.getMessage.contains("not supported"))
+        }
+      }
+    )
+  }
 }
