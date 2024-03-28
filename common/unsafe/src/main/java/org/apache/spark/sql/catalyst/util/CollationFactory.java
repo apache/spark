@@ -175,12 +175,19 @@ public final class CollationFactory {
    * Auxiliary methods for collation aware string operations.
    */
 
+  /**
+   * Creates an instance of ICU's StringSearch with provided parameters.
+   * @param targetUTF8String UTF8String representation of the string to be searched.
+   * @param patternUTF8String UTF8String representation of the string to search for.
+   * @param collationId ID of the collation to use.
+   * @return Created instance of StringSearch.
+   */
   public static StringSearch getStringSearch(
-      final UTF8String targetString,
-      final UTF8String patternString,
+      final UTF8String targetUTF8String,
+      final UTF8String patternUTF8String,
       final int collationId) {
-    String pattern = patternString.toString();
-    CharacterIterator target = new StringCharacterIterator(targetString.toString());
+    String pattern = patternUTF8String.toString();
+    CharacterIterator target = new StringCharacterIterator(targetUTF8String.toString());
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
     return new StringSearch(pattern, target, (RuleBasedCollator) collator);
   }

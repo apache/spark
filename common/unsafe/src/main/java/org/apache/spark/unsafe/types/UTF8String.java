@@ -585,6 +585,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(s, e);
   }
 
+  /**
+   * Trims space characters from both ends of this string - same as {@link UTF8String#trim()}.
+   * This variant of the method additionally applies provided collation to this string
+   * and space character before searching.
+   *
+   * @param collationId Id of the collation to use.
+   * @return this string with no spaces at the start or end.
+   */
   public UTF8String trim(int collationId) {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
         || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
@@ -638,6 +646,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
   }
 
+  /**
+   * Trims characters of the given trim string from both ends of this string.
+   * This variant of the method additionally applies provided collation to this string
+   * and trim characters before searching.
+   *
+   * @param trimString The trim characters string.
+   * @param collationId Id of the collation to use.
+   * @return this string with no occurrences of the characters from trim string.
+   */
   public UTF8String trim(UTF8String trimString, int collationId) {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return trim(trimString);
@@ -670,6 +687,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(s, this.numBytes - 1);
   }
 
+  /**
+   * Trims space characters from the start of this string - same as {@link UTF8String#trimLeft()}.
+   * This variant of the method additionally applies provided collation to this string
+   * and space character before searching.
+   *
+   * @param collationId Id of the collation to use.
+   * @return this string with no spaces at the start.
+   */
   public UTF8String trimLeft(int collationId) {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
         || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
@@ -718,6 +743,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(trimIdx, numBytes - 1);
   }
 
+  /**
+   * Trims characters of the given trim string from the start of this string.
+   * This variant of the method additionally applies provided collation to this string
+   * and trim characters before searching.
+   *
+   * @param trimString The trim characters string.
+   * @param collationId Id of the collation to use.
+   * @return this string with no occurrences of the trim characters at the start.
+   */
   public UTF8String trimLeft(UTF8String trimString, int collationId) {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return trimLeft(trimString);
@@ -834,6 +868,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(0, e);
   }
 
+  /**
+   * Trims space characters from the end of this string - same as {@link UTF8String#trimRight()}.
+   * This variant of the method additionally applies provided collation to this string
+   * and space character before searching.
+   *
+   * @param collationId Id of the collation to use.
+   * @return this string with no spaces at the end.
+   */
   public UTF8String trimRight(int collationId) {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
         || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
@@ -905,6 +947,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(0, trimEnd);
   }
 
+  /**
+   * Trims characters of the given trim string from the end of this string.
+   * This variant of the method additionally applies provided collation to this string
+   * and trim characters before searching.
+   *
+   * @param trimString The trim characters string.
+   * @param collationId Id of the collation to use.
+   * @return this string with no occurrences of the trim characters at the end.
+   */
   public UTF8String trimRight(UTF8String trimString, int collationId) {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return trimRight(trimString);
