@@ -16,39 +16,25 @@
  */
 package org.apache.spark.util
 
-import java.io.File
-import java.nio.file.Files
-
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKey.EXECUTOR_ID
 
-class PatternLoggingSuite extends AnyFunSuite // scalastyle:ignore funsuite
-  with BeforeAndAfterAll
-  with Logging {
+class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
 
-  private val logFile = new File("target/pattern.log").toPath
+  override protected def logFilePath: String = "target/pattern.log"
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    Files.delete(logFile)
-  }
+  override def beforeAll(): Unit = Logging.disableStructuredLogging()
 
-  // Returns the first line in the log file that contains the given substring.
-  private def getLogString(subStr: String): String = {
-    val content = Files.readString(logFile)
-    content.split("\n").filter(_.contains(subStr)).head
-  }
+  override def afterAll(): Unit = Logging.enableStructuredLogging()
 
   test("Pattern layout logging") {
     val msg = "This is a log message"
-    logError(msg)
 
-    val logOutput = getLogString(msg)
+    val logOutput = captureLogOutput(() => logError(msg))
     // scalastyle:off line.size.limit
-    val pattern = """.*ERROR PatternLoggingSuite: This is a log message""".r
+    val pattern = """.*ERROR PatternLoggingSuite: This is a log message\n""".r
     // scalastyle:on
     assert(pattern.matches(logOutput))
   }
@@ -56,18 +42,17 @@ class PatternLoggingSuite extends AnyFunSuite // scalastyle:ignore funsuite
   test("Pattern layout logging with MDC") {
     logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.")
 
-    val logOutput = getLogString("executor")
-    val pattern = """.*ERROR PatternLoggingSuite: Lost executor 1.""".r
+    val logOutput = captureLogOutput(() => logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}."))
+    val pattern = """.*ERROR PatternLoggingSuite: Lost executor 1.\n""".r
     assert(pattern.matches(logOutput))
   }
 
   test("Pattern layout exception logging") {
     val exception = new RuntimeException("OOM")
-    logError(log"Error in executor ${MDC(EXECUTOR_ID, "1")}.", exception)
 
-    val logOutput1 = getLogString("Error")
-    assert(logOutput1.contains("ERROR PatternLoggingSuite: Error in executor 1."))
-    val logOutput2 = getLogString("RuntimeException")
-    assert(logOutput2.contains("java.lang.RuntimeException: OOM"))
+    val logOutput = captureLogOutput(() =>
+      logError(log"Error in executor ${MDC(EXECUTOR_ID, "1")}.", exception))
+    assert(logOutput.contains("ERROR PatternLoggingSuite: Error in executor 1."))
+    assert(logOutput.contains("java.lang.RuntimeException: OOM"))
   }
 }
