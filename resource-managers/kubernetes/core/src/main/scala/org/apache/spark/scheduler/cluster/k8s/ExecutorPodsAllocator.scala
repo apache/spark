@@ -191,6 +191,13 @@ class ExecutorPodsAllocator(
         .map { case (k, v) => (k, v._1) }
     newlyCreatedExecutors --= schedulerKnownNewlyCreatedExecs.keySet
 
+    // If executor was created and removed in a short period, then it is possible that the creation
+    // was not captured by any snapshots. In this case, we should remove the executor from
+    // schedulerKnownNewlyCreatedExecs list, otherwise it will get stuck in the list and new
+    // executor will not be requested.
+    schedulerKnownNewlyCreatedExecs --=
+      schedulerKnownNewlyCreatedExecs.filterKeys(!schedulerKnownExecs.contains(_)).keySet
+
     // For all executors we've created against the API but have not seen in a snapshot
     // yet - check the current time. If the current time has exceeded some threshold,
     // assume that the pod was either never created (the API server never properly
