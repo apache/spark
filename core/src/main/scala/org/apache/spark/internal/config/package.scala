@@ -141,6 +141,16 @@ package object config {
         "Ensure that memory overhead is a double greater than 0")
       .createWithDefault(0.1)
 
+  private[spark] val STRUCTURED_LOGGING_ENABLED =
+    ConfigBuilder("spark.log.structuredLogging.enabled")
+      .doc("When true, the default log4j output format is structured JSON lines, and there will " +
+        "be Mapped Diagnostic Context (MDC) fields added to the logs. This is useful for log " +
+        "aggregation and analysis tools. When false, the default log4j output will be plain " +
+        "text and no MDC will be set.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val DRIVER_LOG_LOCAL_DIR =
     ConfigBuilder("spark.driver.log.localDir")
       .doc("Specifies a local directory to write driver logs and enable Driver Log UI Tab.")
