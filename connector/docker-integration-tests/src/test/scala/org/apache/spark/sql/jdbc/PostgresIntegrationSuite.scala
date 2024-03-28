@@ -499,7 +499,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     checkAnswer(df, Seq(Row(null)))
   }
 
-  test("SPARK-47628: test_bit_array") {
+  test("SPARK-47628: Fix reading bit array type") {
     val df = sqlContext.read.jdbc(jdbcUrl, "test_bit_array", new Properties)
     val expected = Row(Array(true, false), Array(
       Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
