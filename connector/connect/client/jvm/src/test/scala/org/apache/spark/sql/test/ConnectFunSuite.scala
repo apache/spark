@@ -18,7 +18,12 @@ package org.apache.spark.sql.test
 
 import java.nio.file.Path
 
+import scala.annotation.tailrec
+
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach}
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+
+import org.apache.spark.internal.Logging
 
 /**
  * The basic testsuite the client tests should extend from.
@@ -53,5 +58,53 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       "src",
       "test",
       "resources").toAbsolutePath
+  }
+}
+
+trait Retryable
+    extends AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach
+    with Logging {
+
+  /**
+   * Note: this method doesn't support `BeforeAndAfter`. You must use `BeforeAndAfterEach` to set
+   * up and tear down resources.
+   */
+  def testRetry(s: String, n: Int = 2)(body: => Unit): Unit = {
+    test(s) {
+      retry(n) {
+        body
+      }
+    }
+  }
+
+  /**
+   * Note: this method doesn't support `BeforeAndAfter`. You must use `BeforeAndAfterEach` to set
+   * up and tear down resources.
+   */
+  def retry[T](n: Int)(body: => T): T = {
+    if (this.isInstanceOf[BeforeAndAfter]) {
+      throw new UnsupportedOperationException(
+        s"testRetry/retry cannot be used with ${classOf[BeforeAndAfter]}. " +
+          s"Please use ${classOf[BeforeAndAfterEach]} instead.")
+    }
+    retry0(n, n)(body)
+  }
+
+  @tailrec private final def retry0[T](n: Int, n0: Int)(body: => T): T = {
+    try body
+    catch {
+      case e: Throwable =>
+        if (n > 0) {
+          logWarning(e.getMessage, e)
+          logInfo(s"\n\n===== RETRY #${n0 - n + 1} =====\n")
+          // Reset state before re-attempting in order so that tests which use patterns like
+          // LocalSparkContext to clean up state can work correctly when retried.
+          afterEach()
+          beforeEach()
+          retry0(n - 1, n0)(body)
+        } else throw e
+    }
   }
 }
