@@ -90,6 +90,21 @@ class ValueStateImpl[S](
       encodedValue, stateName)
   }
 
+  /** Function to update and overwrite state associated with given key */
+  override def update(
+      newState: S,
+      expirationMs: Long): Unit = {
+
+    if (expirationMs != -1) {
+      throw StateStoreErrors.cannotProvideTTLDurationForNoTTLMode("update", stateName)
+    }
+
+    val encodedValue = stateTypesEncoder.encodeValue(newState)
+    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
+    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
+      encodedValue, stateName)
+  }
+
   /** Function to remove state for given key */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)

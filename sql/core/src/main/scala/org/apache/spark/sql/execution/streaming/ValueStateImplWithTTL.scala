@@ -23,7 +23,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{TTLMode, ValueState}
 
 /**
@@ -102,6 +102,11 @@ class ValueStateImplWithTTL[S](
       newState: S,
       ttlDuration: Duration = Duration.ZERO): Unit = {
 
+    if (ttlMode == TTLMode.EventTimeTTL() && ttlDuration != Duration.ZERO) {
+      throw StateStoreErrors.cannotProvideTTLDurationForEventTimeTTLMode(
+        "update", stateName)
+    }
+
     val expirationMs =
       if (ttlDuration != null && ttlDuration != Duration.ZERO) {
         StateTTL.calculateExpirationTimeForDuration(
@@ -109,6 +114,19 @@ class ValueStateImplWithTTL[S](
       } else {
         -1
       }
+
+    val encodedValue = stateTypesEncoder.encodeValue(newState, expirationMs)
+
+    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
+    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
+      encodedValue, stateName)
+
+    ttlState.upsertTTLForStateKey(expirationMs, serializedGroupingKey)
+  }
+
+  override def update(
+      newState: S,
+      expirationMs: Long): Unit = {
 
     val encodedValue = stateTypesEncoder.encodeValue(newState, expirationMs)
 

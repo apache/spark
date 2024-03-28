@@ -3584,6 +3584,13 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_CANNOT_USE_TTL_DURATION_IN_EVENT_TIME_TTL_MODE" : {
+    "message" : [
+      "TTL duration is not allowed for event time ttl expiration on State store operation=<operationType> on state=<stateName>.",
+      "Use absolute expiration time instead."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."

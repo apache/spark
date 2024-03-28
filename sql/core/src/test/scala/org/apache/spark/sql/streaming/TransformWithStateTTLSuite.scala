@@ -18,8 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
-import java.time.{Duration, Instant}
-import java.time.temporal.ChronoUnit
+import java.time.Duration
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoders
@@ -33,7 +32,8 @@ case class InputEvent(
     action: String,
     value: Int,
     ttl: Duration,
-    eventTime: Timestamp = null)
+    eventTime: Timestamp = null,
+    eventTimeTtl: Timestamp = null)
 
 case class OutputEvent(
     key: String,
@@ -43,6 +43,7 @@ case class OutputEvent(
 
 object TTLInputProcessFunction {
   def processRow(
+      ttlMode: TTLMode,
       row: InputEvent,
       valueState: ValueStateImplWithTTL[Int]): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
@@ -63,7 +64,13 @@ object TTLInputProcessFunction {
         results = OutputEvent(key, -1, isTTLValue = true, ttlExpiration.get) :: results
       }
     } else if (row.action == "put") {
-      valueState.update(row.value, row.ttl)
+      if (ttlMode == TTLMode.EventTimeTTL() && row.eventTimeTtl != null) {
+        valueState.update(row.value, row.eventTimeTtl.getTime)
+      } else if (ttlMode == TTLMode.EventTimeTTL()) {
+        valueState.update(row.value)
+      } else {
+        valueState.update(row.value, row.ttl)
+      }
     } else if (row.action == "get_values_in_ttl_state") {
       val ttlValues = valueState.getValuesInTTLState()
       ttlValues.foreach { v =>
@@ -80,7 +87,7 @@ class ValueStateTTLProcessor
   with Logging {
 
   @transient private var _valueState: ValueStateImplWithTTL[Int] = _
-  private var _ttlMode: TTLMode = _
+  @transient private var _ttlMode: TTLMode = _
 
   override def init(
       outputMode: OutputMode,
@@ -100,7 +107,7 @@ class ValueStateTTLProcessor
     var results = List[OutputEvent]()
 
     for (row <- inputRows) {
-      val resultIter = TTLInputProcessFunction.processRow(row, _valueState)
+      val resultIter = TTLInputProcessFunction.processRow(_ttlMode, row, _valueState)
       resultIter.foreach { r =>
         results = r :: results
       }
@@ -118,6 +125,7 @@ case class MultipleValueStatesTTLProcessor(
 
   @transient private var _valueStateWithTTL: ValueStateImplWithTTL[Int] = _
   @transient private var _valueStateWithoutTTL: ValueStateImplWithTTL[Int] = _
+  @transient private var _ttlMode: TTLMode = _
 
   override def init(
       outputMode: OutputMode,
@@ -129,6 +137,7 @@ case class MultipleValueStatesTTLProcessor(
     _valueStateWithoutTTL = getHandle
       .getValueState("valueState", Encoders.scalaInt)
       .asInstanceOf[ValueStateImplWithTTL[Int]]
+    _ttlMode = ttlMode
   }
 
   override def handleInputRows(
@@ -144,7 +153,7 @@ case class MultipleValueStatesTTLProcessor(
     }
 
     for (row <- inputRows) {
-      val resultIterator = TTLInputProcessFunction.processRow(row, state)
+      val resultIterator = TTLInputProcessFunction.processRow(_ttlMode, row, state)
       resultIterator.foreach { r =>
         results = r :: results
       }
@@ -394,15 +403,15 @@ class TransformWithStateTTLSuite
           TimeoutMode.NoTimeouts(),
           TTLMode.EventTimeTTL())
 
-      val eventTime1 = Timestamp.from(Instant.EPOCH.plus(30, ChronoUnit.SECONDS))
-      val eventTime2 = Timestamp.from(Instant.EPOCH.plus(60, ChronoUnit.SECONDS))
-      val ttlDuration = Duration.ofMinutes(1)
-      val ttlExpirationMs = Instant.EPOCH.plus(ttlDuration).toEpochMilli
-      val eventTime3 = Timestamp.from(Instant.ofEpochMilli(ttlExpirationMs + 1000))
+      val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
+      val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
+      val ttlExpiration = Timestamp.valueOf("2024-01-01 00:03:00")
+      val ttlExpirationMs = ttlExpiration.getTime
+      val eventTime3 = Timestamp.valueOf("2024-01-01 00:05:00")
 
       testStream(result)(
         AddData(inputStream,
-          InputEvent("k1", "put", 1, ttlDuration, eventTime1)),
+          InputEvent("k1", "put", 1, null, eventTime1, ttlExpiration)),
         CheckNewAnswer(),
         // get this state, and make sure we get unexpired value
         AddData(inputStream, InputEvent("k1", "get", -1, null, eventTime2)),
@@ -416,7 +425,7 @@ class TransformWithStateTTLSuite
         ProcessAllAvailable(),
         CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, ttlExpirationMs)),
         // increment event time so that key k1 expires
-        AddData(inputStream, InputEvent("k2", "put", 1, ttlDuration, eventTime3)),
+        AddData(inputStream, InputEvent("k2", "put", 1, null, eventTime3)),
         CheckNewAnswer(),
         // validate that k1 has expired
         AddData(inputStream, InputEvent("k1", "get", -1, null, eventTime3)),
@@ -443,15 +452,15 @@ class TransformWithStateTTLSuite
           TimeoutMode.NoTimeouts(),
           TTLMode.EventTimeTTL())
 
-      val eventTime1 = Timestamp.from(Instant.EPOCH.plus(30, ChronoUnit.SECONDS))
-      val eventTime2 = Timestamp.from(Instant.EPOCH.plus(60, ChronoUnit.SECONDS))
-      val ttlDuration = Duration.ofMinutes(1)
-      val ttlExpirationMs = Instant.EPOCH.plus(ttlDuration).toEpochMilli
-      val eventTime3 = Timestamp.from(Instant.ofEpochMilli(ttlExpirationMs + 1000))
+      val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
+      val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
+      val ttlExpiration = Timestamp.valueOf("2024-01-01 00:03:00")
+      val ttlExpirationMs = ttlExpiration.getTime
+      val eventTime3 = Timestamp.valueOf("2024-01-01 00:05:00")
 
       testStream(result)(
         AddData(inputStream,
-          InputEvent("k1", "put", 1, ttlDuration, eventTime1)),
+          InputEvent("k1", "put", 1, null, eventTime1, ttlExpiration)),
         CheckNewAnswer(),
         // get this state, and make sure we get unexpired value
         AddData(inputStream, InputEvent("k1", "get", 1, null, eventTime2)),
@@ -493,14 +502,14 @@ class TransformWithStateTTLSuite
           TimeoutMode.NoTimeouts(),
           TTLMode.EventTimeTTL())
 
-      val eventTime1 = Timestamp.from(Instant.EPOCH.plus(30, ChronoUnit.SECONDS))
-      val eventTime2 = Timestamp.from(Instant.EPOCH.plus(60, ChronoUnit.SECONDS))
-      val ttlDuration = Duration.ofMinutes(1)
-      val ttlExpirationMs = Instant.EPOCH.plus(ttlDuration).toEpochMilli
-      val eventTime3 = Timestamp.from(Instant.ofEpochMilli(ttlExpirationMs + 1000))
+      val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
+      val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
+      val ttlExpiration = Timestamp.valueOf("2024-01-01 00:03:00")
+      val ttlExpirationMs = ttlExpiration.getTime
+      val eventTime3 = Timestamp.valueOf("2024-01-01 00:05:00")
 
       testStream(result)(
-        AddData(inputStream, InputEvent("k1", "put", 1, ttlDuration, eventTime1)),
+        AddData(inputStream, InputEvent("k1", "put", 1, null, eventTime1, ttlExpiration)),
         CheckNewAnswer(),
         // get this state, and make sure we get unexpired value
         AddData(inputStream, InputEvent("k1", "get", 1, null, eventTime2)),
