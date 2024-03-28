@@ -46,10 +46,7 @@ from pyspark.sql.types import DataType
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.expressions import (
-    Expression,
-    SortOrder,
-)
+from pyspark.sql.connect.expressions import Expression
 from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
     PySparkValueError,
@@ -674,19 +671,11 @@ class Sort(LogicalPlan):
         self.columns = columns
         self.is_global = is_global
 
-    def _convert_col(
-        self, col: Column, session: "SparkConnectClient"
-    ) -> proto.Expression.SortOrder:
-        if isinstance(col._expr, SortOrder):
-            return col._expr.to_plan(session).sort_order
-        else:
-            return SortOrder(col._expr).to_plan(session).sort_order
-
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.sort.input.CopyFrom(self._child.plan(session))
-        plan.sort.order.extend([self._convert_col(c, session) for c in self.columns])
+        plan.sort.order.extend([c.to_plan(session).sort_order for c in self.columns])
         plan.sort.is_global = self.is_global
         return plan
 
