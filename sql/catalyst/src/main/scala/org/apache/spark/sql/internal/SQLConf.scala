@@ -3526,6 +3526,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PULL_OUT_NESTED_DATA_OUTER_REF_EXPRESSIONS_ENABLED =
+    buildConf("spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled")
+      .internal()
+      .doc("Handle correlation over nested data extract expressions by pulling out the " +
+        "expression into the outer plan. This enables correlation on map attributes for example.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OPTIMIZE_ONE_ROW_RELATION_SUBQUERY =
     buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery")
       .internal()
