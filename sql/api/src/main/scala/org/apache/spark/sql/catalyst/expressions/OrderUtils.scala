@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, NullType, StructType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, NullType, StructType, UserDefinedType, VariantType}
 
 object OrderUtils {
   /**
@@ -24,6 +24,7 @@ object OrderUtils {
    */
   def isOrderable(dataType: DataType): Boolean = dataType match {
     case NullType => true
+    case VariantType => false
     case dt: AtomicType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)

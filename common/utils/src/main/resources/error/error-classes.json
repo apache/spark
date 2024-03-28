@@ -1390,6 +1390,12 @@
     ],
     "sqlState" : "42805"
   },
+  "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
+    "message" : [
+      "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ],
+    "sqlState" : "42822"
+  },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid HLL sketch buffers are supported as inputs (such as those produced by the `hll_sketch_agg` function)."

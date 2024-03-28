@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends QueryErrorsBase {
@@ -191,6 +191,15 @@ object ExprUtils extends QueryErrorsBase {
         expr.failAnalysis(
           errorClass = "GROUP_BY_AGGREGATE",
           messageParameters = Map("sqlExpr" -> expr.sql))
+      }
+
+      // Check if the data type of expr is orderable.
+      if (expr.dataType.existsRecursively(_.isInstanceOf[VariantType])) {
+        expr.failAnalysis(
+          errorClass = "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+          messageParameters = Map(
+            "sqlExpr" -> toSQLExpr(expr),
+            "dataType" -> toSQLType(expr.dataType)))
       }
 
       if (!expr.deterministic) {

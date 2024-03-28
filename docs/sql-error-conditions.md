@@ -846,6 +846,12 @@ GROUP BY `<index>` refers to an expression `<aggExpr>` that contains an aggregat
 
 GROUP BY position `<index>` is not in select list (valid range is [1, `<size>`]).
 
+### GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE
+
+[SQLSTATE: 42822](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The expression `<sqlExpr>` cannot be used as a grouping expression because its data type `<dataType>` is not an orderable data type.
+
 ### HLL_INVALID_INPUT_SKETCH_BUFFER
 
 [SQLSTATE: 22546](sql-error-conditions-sqlstates.html#class-22-data-exception)
