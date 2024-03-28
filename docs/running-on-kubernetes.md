@@ -685,6 +685,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Comma-separated list of schemes for which jars will NOT be downloaded to the 
+    driver local disk prior to be distributed to executors, only for kubernetes deployment. 
+    For use in cases when the jars are big and executor counts are high, 
+    concurrent download causes network saturation and timeouts. 
+    Wildcard '*' is denoted to not downloading jars for any the schemes.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.authenticate.submission.caCertFile</code></td>
   <td>(none)</td>
   <td>
