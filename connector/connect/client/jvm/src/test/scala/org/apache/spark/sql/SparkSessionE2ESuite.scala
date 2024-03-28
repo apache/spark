@@ -235,8 +235,8 @@ class SparkSessionE2ESuite extends RemoteSparkSession {
       .repartition(1000)
       .collectResult()
     assert(result.length == 10000)
-    assert(result.progress.totalTasks > 100)
-    assert(result.progress.completedTasks > 100)
+    assert(result.progress.stages.map(_.numTasks).sum > 100)
+    assert(result.progress.stages.map(_.completedTasks).sum > 100)
   }
 
   test("interrupt operation") {
