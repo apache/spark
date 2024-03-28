@@ -20,16 +20,16 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
-import com.amazonaws.services.kinesis.clientlibrary.exceptions._
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
-import com.amazonaws.services.kinesis.model.Record
-import org.mockito.ArgumentMatchers.{anyList, anyString, eq => meq}
+import org.mockito.ArgumentMatchers.{any, anyList, anyString, eq => meq}
 import org.mockito.Mockito.{never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
+import software.amazon.kinesis.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
+import software.amazon.kinesis.lifecycle.events.{InitializationInput, LeaseLostInput, ProcessRecordsInput, ShardEndedInput, ShutdownRequestedInput}
+import software.amazon.kinesis.processor.RecordProcessorCheckpointer
+import software.amazon.kinesis.retrieval.KinesisClientRecord
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
 
@@ -42,33 +42,43 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   val app = "TestKinesisReceiver"
   val stream = "mySparkStream"
   val endpoint = "endpoint-url"
-  val workerId = "dummyWorkerId"
+  val schedulerId = "dummySchedulerId"
   val shardId = "dummyShardId"
   val seqNum = "dummySeqNum"
   val checkpointInterval = Duration(10)
   val someSeqNum = Some(seqNum)
 
-  val record1 = new Record()
-  record1.setData(ByteBuffer.wrap("Spark In Action".getBytes(StandardCharsets.UTF_8)))
-  val record2 = new Record()
-  record2.setData(ByteBuffer.wrap("Learning Spark".getBytes(StandardCharsets.UTF_8)))
+  val dummyInitializationInput = InitializationInput.builder()
+    .shardId(shardId)
+    .build()
+
+  val record1 = KinesisClientRecord.builder()
+    .data(ByteBuffer.wrap("Spark In Action".getBytes(StandardCharsets.UTF_8)))
+    .build()
+  val record2 = KinesisClientRecord.builder()
+    .data(ByteBuffer.wrap("Learning Spark".getBytes(StandardCharsets.UTF_8)))
+    .build()
   val batch = Arrays.asList(record1, record2)
 
   var receiverMock: KinesisReceiver[Array[Byte]] = _
-  var checkpointerMock: IRecordProcessorCheckpointer = _
+  var checkpointerMock: RecordProcessorCheckpointer = _
 
   override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]
-    checkpointerMock = mock[IRecordProcessorCheckpointer]
+    checkpointerMock = mock[RecordProcessorCheckpointer]
   }
 
   test("process records including store and set checkpointer") {
     when(receiverMock.isStopped()).thenReturn(false)
     when(receiverMock.getCurrentLimit).thenReturn(Int.MaxValue)
 
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.initialize(shardId)
-    recordProcessor.processRecords(batch, checkpointerMock)
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    recordProcessor.initialize(dummyInitializationInput)
+    val processRecordsInput = ProcessRecordsInput.builder()
+      .records(batch)
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.processRecords(processRecordsInput)
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, times(1)).addRecords(shardId, batch)
@@ -79,9 +89,13 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     when(receiverMock.isStopped()).thenReturn(false)
     when(receiverMock.getCurrentLimit).thenReturn(1)
 
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.initialize(shardId)
-    recordProcessor.processRecords(batch, checkpointerMock)
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    recordProcessor.initialize(dummyInitializationInput)
+    val processRecordsInput = ProcessRecordsInput.builder()
+      .records(batch)
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.processRecords(processRecordsInput)
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, times(1)).addRecords(shardId, batch.subList(0, 1))
@@ -93,8 +107,12 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     when(receiverMock.isStopped()).thenReturn(true)
     when(receiverMock.getCurrentLimit).thenReturn(Int.MaxValue)
 
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.processRecords(batch, checkpointerMock)
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    val processRecordsInput = ProcessRecordsInput.builder()
+      .records(batch)
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.processRecords(processRecordsInput)
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, never).addRecords(anyString, anyList())
@@ -109,9 +127,13 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     ).thenThrow(new RuntimeException())
 
     intercept[RuntimeException] {
-      val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-      recordProcessor.initialize(shardId)
-      recordProcessor.processRecords(batch, checkpointerMock)
+      val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+      recordProcessor.initialize(dummyInitializationInput)
+      val processRecordsInput = ProcessRecordsInput.builder()
+        .records(batch)
+        .checkpointer(checkpointerMock)
+        .build()
+      recordProcessor.processRecords(processRecordsInput)
     }
 
     verify(receiverMock, times(1)).isStopped()
@@ -119,27 +141,63 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     verify(receiverMock, never).setCheckpointer(anyString, meq(checkpointerMock))
   }
 
-  test("shutdown should checkpoint if the reason is TERMINATE") {
-    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
-
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.initialize(shardId)
-    recordProcessor.shutdown(checkpointerMock, ShutdownReason.TERMINATE)
-
-    verify(receiverMock, times(1)).removeCheckpointer(meq(shardId), meq(checkpointerMock))
+  test("should not checkpoint when the method leaseLost is called") {
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    val leaseLostInput = LeaseLostInput.builder().build()
+    recordProcessor.leaseLost(leaseLostInput)
+    verify(checkpointerMock, times(0)).checkpoint()
   }
 
+  test("should checkpoint when the method shardEnded is called") {
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    val shardEndedInput = ShardEndedInput.builder()
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.initialize(dummyInitializationInput)
+    recordProcessor.shardEnded(shardEndedInput)
 
-  test("shutdown should not checkpoint if the reason is something other than TERMINATE") {
-    when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
+    verify(receiverMock, times(1)).removeCheckpointer(shardId, checkpointerMock)
+  }
 
-    val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.initialize(shardId)
-    recordProcessor.shutdown(checkpointerMock, ShutdownReason.ZOMBIE)
-    recordProcessor.shutdown(checkpointerMock, null)
+  test("should not checkpoint when the method shardEnded is called, but shardId is null") {
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    val initializationInput = InitializationInput.builder()
+      .shardId(null)
+      .build()
+    recordProcessor.initialize(initializationInput)
 
-    verify(receiverMock, times(2)).removeCheckpointer(meq(shardId),
-      meq[IRecordProcessorCheckpointer](null))
+    val shardEndedInput = ShardEndedInput.builder()
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.shardEnded(shardEndedInput)
+
+    verify(receiverMock, times(0)).removeCheckpointer(any(), meq(checkpointerMock))
+  }
+
+  test("should checkpoint when the method shutdownRequested is called") {
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    val shutdownRequestedInput = ShutdownRequestedInput.builder()
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.initialize(dummyInitializationInput)
+    recordProcessor.shutdownRequested(shutdownRequestedInput)
+
+    verify(receiverMock, times(1)).removeCheckpointer(shardId, checkpointerMock)
+  }
+
+  test("should not checkpoint when the method shutdownRequested is called, but shardId is null") {
+    val recordProcessor = new KinesisRecordProcessor(receiverMock, schedulerId)
+    val initializationInput = InitializationInput.builder()
+      .shardId(null)
+      .build()
+    recordProcessor.initialize(initializationInput)
+
+    val shutdownRequestedInput = ShutdownRequestedInput.builder()
+      .checkpointer(checkpointerMock)
+      .build()
+    recordProcessor.shutdownRequested(shutdownRequestedInput)
+
+    verify(receiverMock, times(0)).removeCheckpointer(any(), meq(checkpointerMock))
   }
 
   test("retry success on first attempt") {
