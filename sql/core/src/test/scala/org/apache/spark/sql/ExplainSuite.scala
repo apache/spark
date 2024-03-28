@@ -350,11 +350,13 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
 
     val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
+    val silentExplainOutput = getNormalizedExplain(testDf, SilentMode)
     assert(simpleExplainOutput.startsWith("== Physical Plan =="))
     Seq("== Parsed Logical Plan ==",
         "== Analyzed Logical Plan ==",
         "== Optimized Logical Plan ==").foreach { planType =>
       assert(!simpleExplainOutput.contains(planType))
+      assert(!silentExplainOutput.contains(planType))
     }
     checkKeywordsExistsInExplain(
       testDf,
@@ -381,6 +383,11 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       "* LocalTableScan (1)" ::
         "(1) LocalTableScan [codegen id :" ::
         Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      SilentMode,
+      "== No plan generated. SILENT mode used. ==" ::
+        Nil: _*)
   }
 
   test("SPARK-34970: Redact Map type options in explain output") {
@@ -394,7 +401,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     Seq(SimpleMode, ExtendedMode, FormattedMode).foreach { mode =>
       checkKeywordsExistsInExplain(cmd, mode, value)
     }
-    Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
+    Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode, SilentMode)
+      .foreach { mode =>
       checkKeywordsNotExistsInExplain(cmd, mode, password)
       checkKeywordsNotExistsInExplain(cmd, mode, token)
     }
@@ -415,7 +423,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         .table(tableName)
 
       checkKeywordsExistsInExplain(df2, ExtendedMode, value)
-      Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
+      Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode, SilentMode)
+        .foreach { mode =>
         checkKeywordsNotExistsInExplain(df2, mode, password)
         checkKeywordsNotExistsInExplain(df2, mode, token)
       }
@@ -433,6 +442,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     assertExplainOutput(CodegenMode)
     assertExplainOutput(CostMode)
     assertExplainOutput(FormattedMode)
+    assertExplainOutput(SilentMode)
 
     val errMsg = intercept[IllegalArgumentException] {
       ExplainMode.fromString("unknown")

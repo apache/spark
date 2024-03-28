@@ -211,6 +211,7 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
     "shared",
     "show",
     "show_database",
+    "silent",
     "skewed",
     "smallint",
     "snapshot",

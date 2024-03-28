@@ -27,7 +27,7 @@ By default, this clause provides information about a physical plan only.
 ### Syntax
 
 ```sql
-EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
+EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED | SILENT ] statement
 ```
 
 ### Parameters
@@ -50,6 +50,10 @@ EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
 * **FORMATTED**
 
     Generates two sections: a physical plan outline and node details.
+ 
+* **SILENT**
+
+    Generates an empty plan.
 
 * **statement**
 
@@ -123,5 +127,12 @@ EXPLAIN FORMATTED select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k
  (4) HashAggregate [codegen id : 2]
  Input: [k#19, sum#24L]
 |
+
+-- Using Silent 
 +----------------------------------------------------+
+EXPLAIN SILENT select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
++----------------------------------------------------+
+|                                                plan|
++----------------------------------------------------+
+| == No plan generated. SILENT mode used. ==
 ```

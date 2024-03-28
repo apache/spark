@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
+import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SilentMode, SimpleMode}
 import org.apache.spark.util.ArrayImplicits._
 
 private[connect] class SparkConnectAnalyzeHandler(
@@ -84,6 +84,8 @@ private[connect] class SparkConnectAnalyzeHandler(
             queryExecution.explainString(CostMode)
           case proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED =>
             queryExecution.explainString(FormattedMode)
+          case proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SILENT =>
+            queryExecution.explainString(SilentMode)
           case other => throw new UnsupportedOperationException(s"Unknown Explain Mode $other!")
         }
         builder.setExplain(
