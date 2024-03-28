@@ -48,8 +48,7 @@ public class AuthEngineSuite {
       "fb00000005617070496400000010708451c9dd2792c97c1ca66e6df449ef0000003c64fe899ecdaf458d4" +
       "e25e9d5c5a380b8e6d1a184692fac065ed84f8592c18e9629f9c636809dca2ffc041f20346eb53db78738" +
       "08ecad08b46b5ee3ff";
-  private static final String sharedKey =
-      "31963f15a320d5c90333f7ecf5cf3a31c7eaf151de07fef8494663a9f47cfd31";
+  private static final String derivedKey = "2d6e7a9048c8265c33a8f3747bfcc84c";
   private static final String inputIv = "fc6a5dc8b90a9dad8f54f08b51a59ed2";
   private static final String outputIv = "a72709baf00785cad6329ce09f631f71";
   private static TransportConf conf;
@@ -174,7 +173,7 @@ public class AuthEngineSuite {
       // Verify that the client will accept an old transcript.
       client.deriveSessionCipher(clientChallenge, serverResponse);
       TransportCipher clientCipher = client.sessionCipher();
-      assertEquals(Hex.encode(clientCipher.getKey().getEncoded()), sharedKey);
+      assertEquals(Hex.encode(clientCipher.getKey().getEncoded()), derivedKey);
       assertEquals(Hex.encode(clientCipher.getInputIv()), inputIv);
       assertEquals(Hex.encode(clientCipher.getOutputIv()), outputIv);
     }

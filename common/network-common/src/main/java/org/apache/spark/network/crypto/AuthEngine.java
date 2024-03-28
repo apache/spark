@@ -41,6 +41,7 @@ import org.apache.spark.network.util.TransportConf;
  * Exchange, using a pre-shared key to derive an AES-GCM key encrypting key.
  */
 class AuthEngine implements Closeable {
+  public static final byte[] DERIVED_KEY_INFO = "derivedKey".getBytes(UTF_8);
   public static final byte[] INPUT_IV_INFO = "inputIv".getBytes(UTF_8);
   public static final byte[] OUTPUT_IV_INFO = "outputIv".getBytes(UTF_8);
   private static final String MAC_ALGORITHM = "HMACSHA256";
@@ -201,6 +202,12 @@ class AuthEngine implements Closeable {
       byte[] sharedSecret,
       boolean isClient,
       byte[] transcript) throws GeneralSecurityException {
+    byte[] derivedKey = Hkdf.computeHkdf(
+        MAC_ALGORITHM,
+        sharedSecret,
+        transcript,
+        DERIVED_KEY_INFO,
+        AES_GCM_KEY_SIZE_BYTES);
     byte[] clientIv = Hkdf.computeHkdf(
         MAC_ALGORITHM,
         sharedSecret,
@@ -213,7 +220,7 @@ class AuthEngine implements Closeable {
         transcript,  // Passing this as the HKDF salt
         OUTPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
         AES_GCM_KEY_SIZE_BYTES);
-    SecretKeySpec sessionKey = new SecretKeySpec(sharedSecret, "AES");
+    SecretKeySpec sessionKey = new SecretKeySpec(derivedKey, "AES");
     return new TransportCipher(
         cryptoConf,
         conf.cipherTransformation(),
