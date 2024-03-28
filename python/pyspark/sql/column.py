@@ -35,6 +35,7 @@ from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark.context import SparkContext
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark.errors.utils import with_origin_to_class
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import get_active_spark_context
 
@@ -177,6 +178,7 @@ def _bin_op(
         return Column(njc)
 
     _.__doc__ = doc
+    _.__name__ = name
     return _
 
 
@@ -195,6 +197,7 @@ def _reverse_op(
     return _
 
 
+@with_origin_to_class
 class Column:
 
     """

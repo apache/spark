@@ -51,6 +51,7 @@ class CapturedException(PySparkException):
         stackTrace: Optional[str] = None,
         cause: Optional[Py4JJavaError] = None,
         origin: Optional[Py4JJavaError] = None,
+        error_location_details: str = "",
     ):
         # desc & stackTrace vs origin are mutually exclusive.
         # cause is optional.
@@ -71,6 +72,7 @@ class CapturedException(PySparkException):
         if self._cause is None and origin is not None and origin.getCause() is not None:
             self._cause = convert_exception(origin.getCause())
         self._origin = origin
+        self._error_location_details = error_location_details
 
     def __str__(self) -> str:
         assert SparkContext._jvm is not None
@@ -88,7 +90,7 @@ class CapturedException(PySparkException):
         desc = self._desc
         if debug_enabled:
             desc = desc + "\n\nJVM stacktrace:\n%s" % self._stackTrace
-        return str(desc)
+        return str(desc) + self._error_location_details
 
     def getErrorClass(self) -> Optional[str]:
         assert SparkContext._gateway is not None
