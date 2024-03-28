@@ -113,6 +113,7 @@ else:
     )
 
 print("SparkSession available as 'spark'.")
+print("Use exit() or Ctrl-D (i.e. EOF) to exit.")
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:

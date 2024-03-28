@@ -104,6 +104,7 @@ class SparkILoop(in0: BufferedReader, out: PrintWriter)
     echo(welcomeMsg)
     echo("Type in expressions to have them evaluated.")
     echo("Type :help for more information.")
+    echo("Use :quit or Ctrl-D (i.e. EOF) to exit.")
   }
 
   /** Available commands */
