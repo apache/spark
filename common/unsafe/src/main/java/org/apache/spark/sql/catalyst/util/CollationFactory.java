@@ -176,11 +176,11 @@ public final class CollationFactory {
    */
 
   public static StringSearch getStringSearch(
-      final UTF8String left,
-      final UTF8String right,
+      final UTF8String targetString,
+      final UTF8String patternString,
       final int collationId) {
-    String pattern = right.toString();
-    CharacterIterator target = new StringCharacterIterator(left.toString());
+    String pattern = patternString.toString();
+    CharacterIterator target = new StringCharacterIterator(targetString.toString());
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
     return new StringSearch(pattern, target, (RuleBasedCollator) collator);
   }
