@@ -62,7 +62,7 @@ class SparkOptimizer(
       RewriteDistinctAggregates) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates) :+
-    Batch("Cleanup filters that cannot be pushed down", Once,
+    Batch("Cleanup filters that cannot be pushed down", FixedPoint(1),
       CleanupDynamicPruningFilters,
       // cleanup the unnecessary TrueLiteral predicates
       BooleanSimplification,
