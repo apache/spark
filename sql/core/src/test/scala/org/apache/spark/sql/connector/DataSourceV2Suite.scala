@@ -966,6 +966,32 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       )
     }
   }
+
+  test("SPARK-47463: Pushed down v2 filter that folded predicate into (if / case) branches") {
+    withTempView("t1") {
+      spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
+        .createTempView("t1")
+      val df1 = sql(
+        s"""
+           |select * from
+           |(select if(i = 1, i, 0) as c from t1) t
+           |where t.c > 0
+           |""".stripMargin
+      )
+      val result1 = df1.collect()
+      assert(result1.length == 1)
+
+      val df2 = sql(
+        s"""
+           |select * from
+           |(select case when i = 1 then i else 0 end as c from t1) t
+           |where t.c > 0
+           |""".stripMargin
+      )
+      val result2 = df2.collect()
+      assert(result2.length == 1)
+    }
+  }
 }
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
