@@ -3291,7 +3291,7 @@ object SparkContext extends Logging {
   }
 
   /**
-   * SPARK-36796: This is a helper function to supplement `--add-opens` options to
+   * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {

@@ -103,30 +103,6 @@ class OptimizerSuite extends PlanTest {
     assert(message1.contains("are dangling"))
   }
 
-  test("Optimizer per rule validation catches invalid grouping types") {
-    val analyzed = LocalRelation(Symbol("a").map(IntegerType, IntegerType))
-      .select(Symbol("a")).analyze
-
-    /**
-     * A dummy optimizer rule for testing that invalid grouping types are not allowed.
-     */
-    object InvalidGroupingType extends Rule[LogicalPlan] {
-      def apply(plan: LogicalPlan): LogicalPlan = {
-        Aggregate(plan.output, plan.output, plan)
-      }
-    }
-
-    val optimizer = new SimpleTestOptimizer() {
-      override def defaultBatches: Seq[Batch] =
-        Batch("test", FixedPoint(1),
-          InvalidGroupingType) :: Nil
-    }
-    val message1 = intercept[SparkException] {
-      optimizer.execute(analyzed)
-    }.getMessage
-    assert(message1.contains("cannot be of type Map"))
-  }
-
   test("Optimizer per rule validation catches invalid aggregation expressions") {
     val analyzed = LocalRelation(Symbol("a").long, Symbol("b").long)
       .select(Symbol("a"), Symbol("b")).analyze

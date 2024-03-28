@@ -31,6 +31,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
@@ -635,7 +636,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(c1, 0, 1)",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain non-binary orderable collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -652,7 +654,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "LOWER(c1)",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain non-binary orderable collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -669,7 +672,48 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "UCASE(struct1.a)",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain non-binary orderable collated string type"))
+  }
+
+  test("SPARK-47431: Default collation set to UNICODE, literal test") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UNICODE")))
+    }
+  }
+
+  test("SPARK-47431: Default collation set to UNICODE, column type test") {
+    withTable("t") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+        sql(s"CREATE TABLE t(c1 STRING) USING PARQUET")
+        sql(s"INSERT INTO t VALUES ('a')")
+        checkAnswer(sql(s"SELECT collation(c1) FROM t"), Seq(Row("UNICODE")))
+      }
+    }
+  }
+
+  test("SPARK-47431: Create table with UTF8_BINARY, make sure collation persists on read") {
+    withTable("t") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY") {
+        sql("CREATE TABLE t(c1 STRING) USING PARQUET")
+        sql("INSERT INTO t VALUES ('a')")
+        checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
+      }
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+        checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
+      }
+    }
+  }
+
+  test("Create dataframe with non utf8 binary collation") {
+    val schema = StructType(Seq(StructField("Name", StringType("UNICODE_CI"))))
+    val data = Seq(Row("Alice"), Row("Bob"), Row("bob"))
+    val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+
+    checkAnswer(
+      df.groupBy("name").count(),
+      Seq(Row("Alice", 1), Row("Bob", 2))
+    )
   }
 
   test("Aggregation on complex containing collated strings") {

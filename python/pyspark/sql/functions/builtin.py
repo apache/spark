@@ -528,15 +528,45 @@ def try_avg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Calculating the average age
+
     >>> import pyspark.sql.functions as sf
-    >>> spark.createDataFrame(
-    ...     [(1982, 15), (1990, 2)], ["birth", "age"]
-    ... ).select(sf.try_avg("age")).show()
+    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
+    >>> df.select(sf.try_avg("age")).show()
     +------------+
     |try_avg(age)|
     +------------+
     |         8.5|
     +------------+
+
+    Example 2: Calculating the average age with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.try_avg("age")).show()
+    +------------+
+    |try_avg(age)|
+    +------------+
+    |         3.0|
+    +------------+
+
+    Example 3: Overflow results in NULL when ANSI mode is on
+
+    >>> from decimal import Decimal
+    >>> import pyspark.sql.functions as sf
+    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
+    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
+    >>> try:
+    ...     df = spark.createDataFrame(
+    ...         [(Decimal("1" * 38),), (Decimal(0),)], "number DECIMAL(38, 0)")
+    ...     df.select(sf.try_avg(df.number)).show()
+    ... finally:
+    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    +---------------+
+    |try_avg(number)|
+    +---------------+
+    |           NULL|
+    +---------------+
     """
     return _invoke_function_over_columns("try_avg", col)
 
@@ -720,13 +750,55 @@ def try_sum(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> import pyspark.sql.functions as sf
-    >>> spark.range(10).select(sf.try_sum("id")).show()
+    Example 1: Calculating the sum of values in a column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.range(10)
+    >>> df.select(sf.try_sum(df["id"])).show()
     +-----------+
     |try_sum(id)|
     +-----------+
     |         45|
     +-----------+
+
+    Example 2: Using a plus expression together to calculate the sum
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 2), (3, 4)], ["A", "B"])
+    >>> df.select(sf.try_sum(sf.col("A") + sf.col("B"))).show()
+    +----------------+
+    |try_sum((A + B))|
+    +----------------+
+    |              10|
+    +----------------+
+
+    Example 3: Calculating the summation of ages with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.try_sum("age")).show()
+    +------------+
+    |try_sum(age)|
+    +------------+
+    |           6|
+    +------------+
+
+    Example 4: Overflow results in NULL when ANSI mode is on
+
+    >>> from decimal import Decimal
+    >>> import pyspark.sql.functions as sf
+    >>> origin = spark.conf.get("spark.sql.ansi.enabled")
+    >>> spark.conf.set("spark.sql.ansi.enabled", "true")
+    >>> try:
+    ...     df = spark.createDataFrame([(Decimal("1" * 38),)] * 10, "number DECIMAL(38, 0)")
+    ...     df.select(sf.try_sum(df.number)).show()
+    ... finally:
+    ...     spark.conf.set("spark.sql.ansi.enabled", origin)
+    +---------------+
+    |try_sum(number)|
+    +---------------+
+    |           NULL|
+    +---------------+
     """
     return _invoke_function_over_columns("try_sum", col)
 
@@ -1323,6 +1395,17 @@ def sum(col: "ColumnOrName") -> Column:
     +------------+
     |          10|
     +------------+
+
+    Example 3: Calculating the summation of ages with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.sum("age")).show()
+    +--------+
+    |sum(age)|
+    +--------+
+    |       6|
+    +--------+
     """
     return _invoke_function_over_columns("sum", col)
 
@@ -1349,13 +1432,27 @@ def avg(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(10)
-    >>> df.select(avg(col("id"))).show()
-    +-------+
-    |avg(id)|
-    +-------+
-    |    4.5|
-    +-------+
+    Example 1: Calculating the average age
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
+    >>> df.select(sf.avg("age")).show()
+    +--------+
+    |avg(age)|
+    +--------+
+    |     8.5|
+    +--------+
+
+    Example 2: Calculating the average age with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.avg("age")).show()
+    +--------+
+    |avg(age)|
+    +--------+
+    |     3.0|
+    +--------+
     """
     return _invoke_function_over_columns("avg", col)
 
@@ -1383,13 +1480,27 @@ def mean(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(10)
-    >>> df.select(mean(df.id)).show()
-    +-------+
-    |avg(id)|
-    +-------+
-    |    4.5|
-    +-------+
+    Example 1: Calculating the average age
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
+    >>> df.select(sf.mean("age")).show()
+    +--------+
+    |avg(age)|
+    +--------+
+    |     8.5|
+    +--------+
+
+    Example 2: Calculating the average age with None
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
+    >>> df.select(sf.mean("age")).show()
+    +--------+
+    |avg(age)|
+    +--------+
+    |     3.0|
+    +--------+
     """
     return _invoke_function_over_columns("mean", col)
 
@@ -15066,29 +15177,66 @@ def from_json(
 
     Examples
     --------
-    >>> from pyspark.sql.types import *
-    >>> data = [(1, '''{"a": 1}''')]
+    Example 1: Parsing JSON with a specified schema
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType
     >>> schema = StructType([StructField("a", IntegerType())])
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json=Row(a=1))]
-    >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
-    [Row(json=Row(a=1))]
-    >>> df.select(from_json(df.value, "MAP<STRING,INT>").alias("json")).collect()
-    [Row(json={'a': 1})]
-    >>> data = [(1, '''[{"a": 1}]''')]
+    >>> df = spark.createDataFrame([(1, '''{"a": 1}''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, schema).alias("json")).show()
+    +----+
+    |json|
+    +----+
+    | {1}|
+    +----+
+
+    Example 2: Parsing JSON with a DDL-formatted string.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, '''{"a": 1}''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, "a INT").alias("json")).show()
+    +----+
+    |json|
+    +----+
+    | {1}|
+    +----+
+
+    Example 3: Parsing JSON into a MapType
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, '''{"a": 1}''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, "MAP<STRING,INT>").alias("json")).show()
+    +--------+
+    |    json|
+    +--------+
+    |{a -> 1}|
+    +--------+
+
+    Example 4: Parsing JSON into an ArrayType of StructType
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql.types import ArrayType, StructType, StructField, IntegerType
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json=[Row(a=1)])]
-    >>> schema = schema_of_json(lit('''{"a": 0}'''))
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json=Row(a=None))]
-    >>> data = [(1, '''[1, 2, 3]''')]
+    >>> df = spark.createDataFrame([(1, '''[{"a": 1}]''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, schema).alias("json")).show()
+    +-----+
+    | json|
+    +-----+
+    |[{1}]|
+    +-----+
+
+    Example 5: Parsing JSON into an ArrayType
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType
     >>> schema = ArrayType(IntegerType())
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json=[1, 2, 3])]
+    >>> df = spark.createDataFrame([(1, '''[1, 2, 3]''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, schema).alias("json")).show()
+    +---------+
+    |     json|
+    +---------+
+    |[1, 2, 3]|
+    +---------+
     """
 
     if isinstance(schema, DataType):
@@ -15129,28 +15277,64 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
 
     Examples
     --------
+    Example 1: Converting a StructType column to JSON
+
+    >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql import Row
-    >>> from pyspark.sql.types import *
     >>> data = [(1, Row(age=2, name='Alice'))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='{"age":2,"name":"Alice"}')]
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +------------------------+
+    |json                    |
+    +------------------------+
+    |{"age":2,"name":"Alice"}|
+    +------------------------+
+
+    Example 2: Converting an ArrayType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
     >>> data = [(1, [Row(age=2, name='Alice'), Row(age=3, name='Bob')])]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
-    >>> data = [(1, {"name": "Alice"})]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='{"name":"Alice"}')]
-    >>> data = [(1, [{"name": "Alice"}, {"name": "Bob"}])]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='[{"name":"Alice"},{"name":"Bob"}]')]
-    >>> data = [(1, ["Alice", "Bob"])]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='["Alice","Bob"]')]
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +-------------------------------------------------+
+    |json                                             |
+    +-------------------------------------------------+
+    |[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]|
+    +-------------------------------------------------+
+
+    Example 3: Converting a MapType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, {"name": "Alice"})], ("key", "value"))
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +----------------+
+    |json            |
+    +----------------+
+    |{"name":"Alice"}|
+    +----------------+
+
+    Example 4: Converting a nested MapType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, [{"name": "Alice"}, {"name": "Bob"}])], ("key", "value"))
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +---------------------------------+
+    |json                             |
+    +---------------------------------+
+    |[{"name":"Alice"},{"name":"Bob"}]|
+    +---------------------------------+
+
+    Example 5: Converting a simple ArrayType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, ["Alice", "Bob"])], ("key", "value"))
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +---------------+
+    |json           |
+    +---------------+
+    |["Alice","Bob"]|
+    +---------------+
     """
 
     return _invoke_function("to_json", _to_java_column(col), _options_to_str(options))
