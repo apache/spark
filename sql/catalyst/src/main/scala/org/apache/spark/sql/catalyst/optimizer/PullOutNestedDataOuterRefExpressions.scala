@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, DynamicPruningSubquery, Expression, GetMapValue, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, DynamicPruningSubquery, Expression, GetMapValue, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.stripOuterReference
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -82,8 +82,8 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
   def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAllPatterns(PLAN_EXPRESSION, OUTER_REFERENCE, EXTRACT_VALUE)) {
     case plan: UnaryNode =>
-      // Map of canonicalized original expression to (new outer projection, attribute reference)
-      val newExprMap = mutable.HashMap.empty[Expression, (NamedExpression, AttributeReference)]
+      // Map of canonicalized original expression to new outer projection
+      val newExprMap = mutable.HashMap.empty[Expression, NamedExpression]
       val newPlan = plan.transformExpressionsWithPruning(
         _.containsAllPatterns(PLAN_EXPRESSION, OUTER_REFERENCE, EXTRACT_VALUE)) {
         case e: DynamicPruningSubquery => e // Skip this case
@@ -102,13 +102,11 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
                 val name = toPrettySQL(projExpr)
                 // Create a new project expression for the outer plan
                 val outerProj = Alias(projExpr, name)()
-                // Create a reference to the new project expression
-                val ref = outerProj.toAttribute
-                newExprMap(key) = (outerProj, ref)
+                newExprMap(key) = outerProj
               }
-              val (outerProj, ref) = newExprMap(key)
+              val outerProj = newExprMap(key)
               // Replace with the reference to the new outer projection
-              OuterReference(ref)
+              OuterReference(outerProj.toAttribute)
           }
           // Note: Need to update outer attrs, otherwise the references of the subquery expr will
           // not include the new outer attr, which can lead to issues like ColumnPruning pruning
@@ -128,7 +126,7 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
         // Currently only subqueries in UnaryNode are supported, in the future we can support nodes
         // with multiple children e.g. joins as long as each expression only references only one
         // child.
-        val newProjectExprs: Iterable[NamedExpression] = newExprMap.values.map(_._1)
+        val newProjectExprs: Iterable[NamedExpression] = newExprMap.values
         Project(plan.output,
           newPlan.withNewChildren(Seq(
             Project(newPlan.child.output ++ newProjectExprs, newPlan.child)
