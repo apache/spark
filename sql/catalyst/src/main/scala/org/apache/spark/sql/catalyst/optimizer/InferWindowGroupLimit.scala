@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SizeBasedWindowFunction, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalRelation, LogicalPlan, Window, WindowGroupLimit}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, LIMIT, WINDOW}
 
 /**
- * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions
- * and the function results are further filtered by limit-like predicates. Example query:
+ * Inserts a `WindowGroupLimit` below `Window` if the `Window` has rank-like functions and the
+ * function results are further filtered by limit-like predicates or an actual limit. Example
+ * query:
  * {{{
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn = 5
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 = rn
@@ -32,6 +33,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 > rn
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE rn <= 5
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
+ *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 LIMIT 5
+ *   SELECT *, SUM(b) OVER(PARTITION BY k ORDER BY a) AS s FROM Tab1 LIMIT 5
+ *   SELECT *, SUM(b) OVER(ORDER BY a) AS s FROM Tab1 LIMIT 5
  * }}}
  */
 object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
@@ -69,10 +73,55 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
+  /**
+   * Whether support inferring WindowGroupLimit from Limit outside of Window. Check if:
+   * 1. The window orderSpec exists unfoldable one or all window expressions should use the same
+   *  expanding window.
+   * 2. All window expressions should not have SizeBasedWindowFunction.
+   * 3. The Limit could not be pushed down through Window.
+   */
+  private def limitSupport(limit: Int, window: Window): Boolean =
+    limit <= conf.windowGroupLimitThreshold && window.child.maxRows.forall(_ > limit) &&
+      !window.child.isInstanceOf[WindowGroupLimit] &&
+      (window.orderSpec.exists(!_.child.foldable) ||
+        window.windowExpressions.forall(isExpandingWindow)) &&
+      window.windowExpressions.forall {
+        case Alias(WindowExpression(windowFunction, WindowSpecDefinition(_, _,
+        SpecifiedWindowFrame(_, UnboundedPreceding, CurrentRow))), _)
+          if !windowFunction.isInstanceOf[SizeBasedWindowFunction] &&
+            // LimitPushDownThroughWindow have better performance than WindowGroupLimit if the
+            // window function is rank-like and Window partitionSpec is empty.
+            (!support(windowFunction) || window.partitionSpec.nonEmpty) => true
+        case _ => false
+      }
+
+  private def selectRankLikeFunction(windowExpressions: Seq[NamedExpression]): Expression =
+    // If windowExpressions all are RowFrame, choose SimpleLimitIterator,
+    // else RankLimitIterator to obtain enough rows for ensure data accuracy.
+    if (windowExpressions.forall(isExpandingWindow)) {
+      new RowNumber
+    } else {
+      new Rank
+    }
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (conf.windowGroupLimitThreshold == -1) return plan
 
-    plan.transformWithPruning(_.containsAllPatterns(FILTER, WINDOW), ruleId) {
+    plan.transformWithPruning(
+      t => t.containsPattern(WINDOW) && t.containsAnyPattern(FILTER, LIMIT), ruleId) {
+      case localLimit @ LocalLimit(IntegerLiteral(limit),
+        window @ Window(windowExpressions, partitionSpec, orderSpec, child))
+        if limitSupport(limit, window) =>
+        val windowGroupLimit = WindowGroupLimit(
+          partitionSpec, orderSpec, selectRankLikeFunction(windowExpressions), limit, child)
+        localLimit.withNewChildren(Seq(window.withNewChildren(Seq(windowGroupLimit))))
+      case localLimit @ LocalLimit(IntegerLiteral(limit), project @ Project(_,
+        window @ Window(windowExpressions, partitionSpec, orderSpec, child)))
+        if limitSupport(limit, window) =>
+        val windowGroupLimit = WindowGroupLimit(
+          partitionSpec, orderSpec, selectRankLikeFunction(windowExpressions), limit, child)
+        localLimit.withNewChildren(Seq(
+          project.withNewChildren(Seq(window.withNewChildren(Seq(windowGroupLimit))))))
       case filter @ Filter(condition,
         window @ Window(windowExpressions, partitionSpec, orderSpec, child))
         if !child.isInstanceOf[WindowGroupLimit] && windowExpressions.forall(isExpandingWindow) &&
