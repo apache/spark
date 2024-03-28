@@ -3249,10 +3249,10 @@ object SQLConf {
 
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
-      .doc("Disables key normalization when creating a map with ")
+      .doc("Disables key normalization when creating a map with `ArrayBasedMapBuilder`.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val FASTFAIL_ON_FILEFORMAT_OUTPUT =
     buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
@@ -5460,6 +5460,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def disableMapKeyNormalization: Boolean = getConf(DISABLE_MAP_KEY_NORMALIZATION)
 
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 

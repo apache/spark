@@ -64,7 +64,7 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
       throw QueryExecutionErrors.nullAsMapKeyNotAllowedError()
     }
 
-    val keyNormalized = keyNormalizer(key)
+    val keyNormalized = if (SQLConf.get.disableMapKeyNormalization) key else keyNormalizer(key)
     val index = keyToIndex.getOrDefault(keyNormalized, -1)
     if (index == -1) {
       if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
