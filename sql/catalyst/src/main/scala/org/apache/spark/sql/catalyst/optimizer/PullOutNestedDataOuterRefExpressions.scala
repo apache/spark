@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, DynamicPruningSubquery, GetMapValue, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, DynamicPruningSubquery, Expression, GetMapValue, NamedExpression, OuterReference, SubExprUtils, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.stripOuterReference
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, UnaryNode}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -82,8 +82,8 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
   def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAllPatterns(PLAN_EXPRESSION, OUTER_REFERENCE, EXTRACT_VALUE)) {
     case plan: UnaryNode =>
-      // Map of original expression semanticHash to (new outer projection, attribute reference)
-      val newExprMap = mutable.HashMap.empty[Int, (NamedExpression, AttributeReference)]
+      // Map of canonicalized original expression to (new outer projection, attribute reference)
+      val newExprMap = mutable.HashMap.empty[Expression, (NamedExpression, AttributeReference)]
       val newPlan = plan.transformExpressionsWithPruning(
         _.containsAllPatterns(PLAN_EXPRESSION, OUTER_REFERENCE, EXTRACT_VALUE)) {
         case e: DynamicPruningSubquery => e // Skip this case
@@ -96,18 +96,17 @@ object PullOutNestedDataOuterRefExpressions extends Rule[LogicalPlan] {
               // e.references.isEmpty checks whether there are any inner references (since it
               // doesn't include outer references). The expression must reference the outer plan
               // only, not the inner plan.
-              val hash = e.semanticHash()
-              if (!newExprMap.contains(hash)) {
+              val key = e.canonicalized
+              if (!newExprMap.contains(key)) {
                 val projExpr = stripOuterReference(e)
                 val name = toPrettySQL(projExpr)
                 // Create a new project expression for the outer plan
                 val outerProj = Alias(projExpr, name)()
                 // Create a reference to the new project expression
-                val ref = AttributeReference(name, projExpr.dataType, projExpr.nullable)(
-                  outerProj.exprId)
-                newExprMap(hash) = (outerProj, ref)
+                val ref = outerProj.toAttribute
+                newExprMap(key) = (outerProj, ref)
               }
-              val (outerProj, ref) = newExprMap(hash)
+              val (outerProj, ref) = newExprMap(key)
               // Replace with the reference to the new outer projection
               OuterReference(ref)
           }
