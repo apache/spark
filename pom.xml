@@ -3343,6 +3343,9 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-deploy-plugin</artifactId>
           <version>3.1.1</version>
+          <configuration>
+            <deployAtEnd>true</deployAtEnd>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
