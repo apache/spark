@@ -236,6 +236,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) {
       }
       generateExpressionWithName("OVERLAY", children)
     case date: DateAdd => generateExpressionWithName("DATE_ADD", date.children)
+    case date: DateSub => generateExpressionWithName("DATE_SUB", date.children)
     case date: DateDiff => generateExpressionWithName("DATE_DIFF", date.children)
     case date: TruncDate => generateExpressionWithName("TRUNC", date.children)
     case Second(child, _) =>
