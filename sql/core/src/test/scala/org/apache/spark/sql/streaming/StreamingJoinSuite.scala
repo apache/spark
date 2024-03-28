@@ -257,6 +257,75 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     )
   }
 
+
+  test("stream stream inner join with one time-interval condition " +
+    "- with one watermark") {
+    val leftSource = MemoryStream[(Int, Int)]
+    val rightSource = MemoryStream[(Int, Int)]
+
+    val leftStream = leftSource
+      .toDF()
+      .withColumn("left_value", $"_1")
+      .withColumn("left_time", timestamp_seconds($"_2"))
+      .withWatermark("left_time", "15 seconds")
+
+    // Take note: no watermark is defined on the right
+    val rightStream = rightSource
+      .toDF()
+      .withColumn("right_value", $"_1")
+      .withColumn("right_time", timestamp_seconds($"_2"))
+
+    // Our condition is R > L + 10 and we have a watermark on the left, so state
+    // should be dropped on the right
+    val joined = leftStream
+      .join(
+        rightStream,
+        expr("left_value = right_value AND right_time > left_time + interval 10 seconds"),
+        "inner"
+      )
+      .select($"left_value", $"left_time".cast("int"), $"right_time".cast("int"))
+
+    testStream(joined)(
+      StartStream(),
+      AddData(leftSource, (4, 100)),
+      AddData(rightSource, (3, 105)),
+      CheckNewAnswer(),
+      assertNumStateRows(total = 2, updated = 2),
+      AddData(leftSource, (4, 200)),
+      CheckNewAnswer(),
+      // Now, since we add to left (4, 200), the left watermark advances to
+      // 200 - 15, which is 185 seconds.
+      //
+      // If the left watermark is 185, then the minimum left we could possibly
+      // receive is 185. With our constraint, R > L + 10, we can determine which
+      // R values to clean up:
+      //
+      //    R > L + 10
+      //
+      // Since we know the minimum L, we can find the smallest R before which there
+      // will be no more joins. Since the minimum L is 185, then R > 195. So, if we
+      // receive a timestamp on the right stream less than (or equal to) 195, we don't
+      // need to hold onto it, since no future left records will join with it.
+      //
+      // As a result, we should be able to remove all right records less than
+      // 195. Thus, we should remove (3, 105) from right state.
+      //
+      //    left:  (4, 100), (4, 200)
+      //    right: ()
+      assertNumStateRows(total = 2, updated = 1),
+      AddData(rightSource, (4, 111)),
+      CheckNewAnswer((4, 100, 111)),
+      // (4, 111) joined with (4, 100), which makes sense.
+      //
+      // (4, 111) won't join with any future records on the left since 111 < 185.
+      // As a result, we don't add it to state.
+      //
+      //    left: (4, 100), (4, 200)
+      //    right: ()
+      assertNumStateRows(total = 2, updated = 0)
+    )
+  }
+
   test("stream stream inner join on windows - without watermark") {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
@@ -943,6 +1012,75 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
         )
       }
     }
+  }
+
+  test("left outer join with one time-interval condition - with one watermark") {
+    val leftSource = MemoryStream[(Int, Int)] // (value, seconds)
+    val rightSource = MemoryStream[(Int, Int)] // (value, seconds)
+
+    // No watermark on the left, since we're dropping state on the left
+    val leftStream = leftSource
+      .toDF()
+      .withColumn("left_value", $"_1")
+      .withColumn("left_time", timestamp_seconds($"_2"))
+
+    // Since we want to drop state on the left, we define the watermark on the right
+    val rightStream = rightSource
+      .toDF()
+      .withColumn("right_value", $"_1")
+      .withColumn("right_time", timestamp_seconds($"_2"))
+      .withWatermark("right_time", "10 seconds")
+
+    // Left outer join means we need L > R + k
+    //  <- drop ->
+    // L --------SWM------------------
+    //             \
+    //              5
+    //               \
+    // R -------------WM---------------
+    val joined = leftStream
+      .join(
+        rightStream,
+        expr("left_value = right_value AND left_time > right_time - interval 5 seconds"),
+        "left_outer"
+      )
+      .select($"left_value", $"right_value", $"left_time".cast("int"), $"right_time".cast("int"))
+
+    testStream(joined)(
+      // Verify that right state never dropped
+      AddData(rightSource, (100, 1), (101, 5), (102, 30)),
+      CheckAnswer(),
+      AddData(rightSource, (103, 19)), // Late data, however, is dropped
+      CheckAnswer(),
+      assertNumStateRows(total = 3, updated = 3, droppedByWatermark = 1),
+
+      // Since the right WM is 20, the drop region for the left is [0, 20-5].
+      // As a result, (101, 14) on the left is part of early state exclusion.
+      AddData(leftSource, (101, 14)),
+      CheckNewAnswer((101, 101, 14, 5)),
+      assertNumStateRows(total = 3, updated = 0),
+
+      // Add a left value not part of early state exclusion
+      AddData(leftSource, (102, 27)),
+      CheckNewAnswer((102, 102, 27, 30)),
+      assertNumStateRows(total = 4, updated = 1),
+
+      // Add something we won't join on, so that we can test the null row
+      AddData(leftSource, (200, 30)),
+      CheckNewAnswer(),
+      assertNumStateRows(total = 5, updated = 1),
+
+      // The left value in state has timestamp 30. It should be evicted when
+      // the right watermark becomes 30 + 5, 35.
+      //
+      // An event-time of 46 on the right sets the right WM to 36, thereby:
+      //    - Adding (103, 46) to right state
+      //    - Evicting (200, 30) from left state
+      //    - Emitting (and evicting) (200, 30) from left state as a null join
+      AddData(rightSource, (103, 46)),
+      CheckNewAnswer((200, null, 30, null)),
+      assertNumStateRows(total = 4, updated = 1)
+    )
   }
 
   // When the join condition isn't true, the outer null rows must be generated, even if the join

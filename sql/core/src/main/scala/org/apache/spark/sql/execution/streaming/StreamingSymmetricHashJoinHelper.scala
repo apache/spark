@@ -23,7 +23,7 @@ import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsBaseRDD, ZippedPartitionsPartition}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, BoundReference, Expression, NamedExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
@@ -198,11 +198,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     val joinKeyOrdinalForWatermark: Option[Int] = findJoinKeyOrdinalForWatermark(
       leftKeys, rightKeys)
 
+    // Returns a predicate that drops data less than the state watermark.
+    // oneSideInputAttributes are the attributes to base the state watermark off of, while
+    // otherSideInputAttributes are the attributes on which the watermark is defined.
     def getOneSideStateWatermarkPredicate(
         oneSideInputAttributes: Seq[Attribute],
         oneSideJoinKeys: Seq[Expression],
         otherSideInputAttributes: Seq[Attribute]): Option[JoinStateWatermarkPredicate] = {
-      val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
+      val watermarkAttribute = otherSideInputAttributes.find(_.metadata.contains(delayKey))
+      val isWatermarkDefinedOnInput = watermarkAttribute.isDefined
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
       if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
@@ -218,11 +222,27 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
-          eventTimeWatermarkForEviction)
-        val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
-        val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
-        expr.map(JoinStateValueWatermarkPredicate.apply _)
+          eventTimeWatermarkForEviction
+        )
 
+        val attributesInCondition = AttributeSet(
+          condition.get.collect { case a: AttributeReference => a }
+        )
+
+        // Find the attribute that isn't the watermark attribute
+        val stateWatermarkAttributeSeq = attributesInCondition
+          .filterNot(_.semanticEquals(watermarkAttribute.get))
+          .toSeq
+
+        if (stateWatermarkAttributeSeq.size == 1) {
+          val expr = watermarkExpression(Some(stateWatermarkAttributeSeq.head), stateValueWatermark)
+          expr.map(JoinStateValueWatermarkPredicate.apply _)
+        } else {
+          // This should never happen, since if we have two attributes from the condition
+          // and one watermark (which we have, since isWatermarkDefinedOnInput is true),
+          // we should have one state watermark.
+          None
+        }
       } else {
         None
       }
