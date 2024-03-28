@@ -15112,8 +15112,6 @@ def parse_json(
     col : :class:`~pyspark.sql.Column` or str
         a column or column name JSON formatted strings
 
-        .. # noqa
-
     Returns
     -------
     :class:`~pyspark.sql.Column`
@@ -15121,10 +15119,9 @@ def parse_json(
 
     Examples
     --------
-    >>> from pyspark.sql.types import *
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
-    >>> df.select(to_json(parse_json(df.json)).alias("v")).collect()
-    [Row(v='{"a":1}')]
+    >>> df.select(to_json(parse_json(df.json))).collect()
+    [Row(to_json(parse_json(json))='{"a":1}')]
     """
 
     return _invoke_function("parse_json", _to_java_column(col))

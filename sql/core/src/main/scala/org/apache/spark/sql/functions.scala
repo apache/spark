@@ -6597,15 +6597,6 @@ object functions {
   /**
    * Parses a JSON string and constructs a Variant value.
    *
-   * @param json a JSON string.
-   *
-   * @since 4.0.0
-   */
-  def parse_json(json: String): Column = parse_json(lit(json))
-
-  /**
-   * Parses a JSON string and constructs a Variant value.
-   *
    * @param json a string column that contains JSON data.
    *
    * @since 4.0.0
