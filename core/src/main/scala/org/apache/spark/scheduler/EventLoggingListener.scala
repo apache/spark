@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.net.URI
-import java.util.Properties
+import java.util.{Date, Properties}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -30,7 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogFileWriter
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{EVENT_LOG_USEXATTR, _}
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
@@ -63,6 +63,10 @@ private[spark] class EventLoggingListener(
   private[scheduler] val logWriter: EventLogFileWriter =
     EventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf)
 
+  // Application summary information is written to extended attributes only if we
+  // have the flag enabled and if we are using SingleLogFileWriter
+  private[scheduler] var shouldUseXAttr = sparkConf.get(EVENT_LOG_USEXATTR) &&
+    !sparkConf.get(EVENT_LOG_ENABLE_ROLLING)
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new mutable.ArrayBuffer[String]
 
@@ -74,12 +78,24 @@ private[spark] class EventLoggingListener(
   private val liveStageExecutorMetrics =
     mutable.HashMap.empty[(Int, Int), mutable.HashMap[String, ExecutorMetrics]]
 
+  private var envXAttrUpdated = false
+
   /**
    * Creates the log file in the configured log directory.
    */
   def start(): Unit = {
     logWriter.start()
     initEventLog()
+    if (shouldUseXAttr) writeToXattr(USER_XATTR_ENABLED, "true")
+  }
+
+  private def writeToXattr(String attr, String value): Unit = {
+    try {
+      logWriter.writeToXAttr(attr, value)
+    } catch {
+      case e: UnsupportedOperationException =>
+        shouldUseXAttr = false
+    }
   }
 
   private def initEventLog(): Unit = {
@@ -128,6 +144,16 @@ private[spark] class EventLoggingListener(
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     logEvent(redactEvent(sparkConf, event))
+    if (shouldUseXAttr && !envXAttrUpdated) {
+      envXAttrUpdated = true
+      val allProperties = event.environmentDetails("Spark Properties").toMap
+      val aclsValueList = List(allProperties.get("spark.ui.view.acls").getOrElse("None"),
+        allProperties.get("spark.admin.acls").getOrElse("None"),
+        allProperties.get("spark.ui.view.acls.groups").getOrElse("None"),
+        allProperties.get("spark.admin.acls.groups").getOrElse("None"))
+        .mkString("|")
+      writeToXAttr(USER_ATTEMPT_ACLS, aclsValueList)
+    }
   }
 
   // Events that trigger a flush
@@ -175,10 +201,21 @@ private[spark] class EventLoggingListener(
 
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     logEvent(event, flushLogger = true)
+    if (shouldUseXAttr) {
+      writeToXAttr(USER_APP_ID, event.appId.getOrElse("None"))
+      writeToXAttr(USER_APP_NAME, event.appName)
+      writeToXAttr(USER_ATTEMPT_ID, event.appAttemptId.getOrElse("None"))
+      writeToXAttr(USER_ATTEMPT_STARTTIME, new Date(event.time).getTime.toString)
+      writeToXAttr(USER_ATTEMPT_SPARKUSER, event.sparkUser)
+      writeToXAttr(USER_ATTEMPT_APPSPARKVERSION, SPARK_VERSION)
+    }
   }
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     logEvent(event, flushLogger = true)
+    if (shouldUseXAttr) {
+      writeToXAttr(USER_ATTEMPT_ENDTIME, new Date(event.time).getTime.toString)
+    }
   }
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     logEvent(event, flushLogger = true)
@@ -299,6 +336,20 @@ private[spark] class EventLoggingListener(
 
 private[spark] object EventLoggingListener extends Logging {
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
+  val USER_XATTR_ENABLED = "user.xattr.enabled"
+  val USER_APP_ID = "user.app.id"
+  val USER_APP_NAME = "user.app.name"
+  val USER_ATTEMPT_ID = "user.attempt.id"
+  val USER_ATTEMPT_STARTTIME = "user.attempt.startTime"
+  val USER_ATTEMPT_SPARKUSER = "user.attempt.sparkUser"
+  val USER_ATTEMPT_APPSPARKVERSION = "user.attempt.appSparkVersion"
+  val USER_ATTEMPT_ENDTIME = "user.attempt.endTime"
+  val USER_ATTEMPT_ACLS = "user.attempt.acls"
+  val XATTRS_APPLICATION_START_LIST = List(USER_APP_ID, USER_APP_NAME, USER_ATTEMPT_ID,
+    USER_ATTEMPT_STARTTIME, USER_ATTEMPT_SPARKUSER, USER_ATTEMPT_APPSPARKVERSION)
+  val XATTRS_LIST = List(USER_APP_ID, USER_APP_NAME, USER_ATTEMPT_ID,
+    USER_ATTEMPT_STARTTIME, USER_ATTEMPT_SPARKUSER, USER_ATTEMPT_APPSPARKVERSION, USER_ATTEMPT_ACLS,
+    USER_ATTEMPT_ENDTIME)
   // Dummy stage key used by driver in executor metrics updates
   val DRIVER_STAGE_KEY = (-1, -1)
 

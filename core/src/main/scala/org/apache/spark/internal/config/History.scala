@@ -202,6 +202,13 @@ private[spark] object History {
     .stringConf
     .createOptional
 
+  val EVENT_LOG_XATTR_ENABLED = ConfigBuilder("spark.history.fs.eventLog.xattr.enabled")
+    .doc("Whether to use HDFS extended attributes to store metadata about event logs. " +
+      "This can only be leveraged when the underlying file system supports extended attributes.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val CUSTOM_EXECUTOR_LOG_URL = ConfigBuilder("spark.history.custom.executor.log.url")
     .doc("Specifies custom spark executor log url for supporting external log service instead of " +
       "using cluster managers' application log urls in the history server. Spark will support " +

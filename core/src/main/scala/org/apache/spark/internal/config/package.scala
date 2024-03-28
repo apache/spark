@@ -268,6 +268,12 @@ package object config {
         "configured to be at least 10 MiB.")
       .createWithDefaultString("128m")
 
+  private[spark] val EVENT_LOG_USEXATTR =
+    ConfigBuilder("spark.eventLog.usexattr")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_ID =
     ConfigBuilder("spark.executor.id").version("1.2.0").stringConf.createOptional
 
