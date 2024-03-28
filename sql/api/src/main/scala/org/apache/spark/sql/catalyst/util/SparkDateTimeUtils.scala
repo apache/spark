@@ -225,7 +225,7 @@ trait SparkDateTimeUtils {
     val localMillis = Math.multiplyExact(rebasedDays, MILLIS_PER_DAY)
     val timeZoneOffset = TimeZone.getDefault match {
       case zoneInfo: TimeZone if zoneInfo.getClass.getName == zoneInfoClassName =>
-        getOffsetsByWallHandle.invoke(zoneInfo, localMillis, null)
+        getOffsetsByWallHandle.invoke(zoneInfo, localMillis, null).asInstanceOf[Int]
       case timeZone: TimeZone =>
         timeZone.getOffset(localMillis - timeZone.getRawOffset)
     }
