@@ -89,24 +89,39 @@ class NettyBlockTransferServiceSuite
   }
 
   test("SPARK-27637: test fetch block with executor dead") {
+    verifyExecutorDeadException()
+  }
+
+  test("SPARK-41954: test fetch block with executor decommissioned and dead") {
+    verifyExecutorDeadException(true)
+  }
+
+  def verifyExecutorDeadException(isDecommissioned: Boolean = false): Unit = {
     implicit val executionContext = ExecutionContext.global
     val port = 17634 + Random.nextInt(10000)
     logInfo("random port for test: " + port)
 
     val driverEndpointRef = new RpcEndpointRef(new SparkConf()) {
       override def address: RpcAddress = null
+
       override def name: String = "test"
+
       override def send(message: Any): Unit = {}
+
       // This rpcEndPointRef always return false for unit test to touch ExecutorDeadException.
       override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
-        Future{false.asInstanceOf[T]}
+        Future {
+          (false, isDecommissioned).asInstanceOf[T]
+        }
       }
     }
 
     val clientFactory = mock(classOf[TransportClientFactory])
     val client = mock(classOf[TransportClient])
     // This is used to touch an IOException during fetching block.
-    when(client.sendRpc(any(), any())).thenAnswer(_ => {throw new IOException()})
+    when(client.sendRpc(any(), any())).thenAnswer(_ => {
+      throw new IOException()
+    })
     var createClientCount = 0
     when(clientFactory.createClient(any(), any(), any())).thenAnswer(_ => {
       createClientCount += 1
@@ -116,7 +131,11 @@ class NettyBlockTransferServiceSuite
     val listener = mock(classOf[BlockFetchingListener])
     var hitExecutorDeadException = false
     when(listener.onBlockTransferFailure(any(), any(classOf[ExecutorDeadException])))
-      .thenAnswer(_ => {hitExecutorDeadException = true})
+      .thenAnswer(input => {
+        hitExecutorDeadException = true
+        assert(isDecommissioned ==
+          input.getArgument(1, classOf[ExecutorDeadException]).isDecommissioned)
+      })
 
     service0 = createService(port, driverEndpointRef)
     val clientFactoryField = service0.getClass
