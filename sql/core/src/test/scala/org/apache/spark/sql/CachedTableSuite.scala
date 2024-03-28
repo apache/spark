@@ -1773,7 +1773,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("SPARK-47633: Cache hit for lateral join with join condition") {
     withTempView("t", "q1") {
-      sql("CREATE or REPLACE TEMP VIEW t(c1, c2) AS VALUES (0, 1), (1, 2)")
+      sql("create or replace temp view t(c1, c2) as values (0, 1), (1, 2)")
       val query = """select *
                     |from t
                     |join lateral (
