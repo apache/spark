@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import org.apache.spark.{SparkFunSuite, SparkThrowable}
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
@@ -105,7 +105,7 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
   test("parseJson negative") {
     def checkException(json: String, errorClass: String, parameters: Map[String, String]): Unit = {
       checkError(
-        exception = intercept[SparkThrowable] {
+        exception = intercept[SparkRuntimeException] {
           VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
         },
         errorClass = errorClass,

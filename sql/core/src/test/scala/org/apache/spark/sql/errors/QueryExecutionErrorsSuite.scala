@@ -380,7 +380,7 @@ class QueryExecutionErrorsSuite
       }
     }
 
-    val e2 = e1.getCause.asInstanceOf[SparkException]
+    val e2 = e1.getCause.asInstanceOf[SparkRuntimeException]
     assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
 
     checkError(

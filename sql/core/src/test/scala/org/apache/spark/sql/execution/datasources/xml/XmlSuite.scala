@@ -36,7 +36,7 @@ import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{DebugFilesystem, SparkException, SparkFileNotFoundException}
+import org.apache.spark.{DebugFilesystem, SparkException, SparkFileNotFoundException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -252,7 +252,7 @@ class XmlSuite
     }
     assert(exceptionInParsing.getErrorClass == "FAILED_READ_FILE")
     checkError(
-      exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
@@ -279,7 +279,7 @@ class XmlSuite
     }
     assert(exceptionInParsing.getErrorClass == "FAILED_READ_FILE")
     checkError(
-      exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",

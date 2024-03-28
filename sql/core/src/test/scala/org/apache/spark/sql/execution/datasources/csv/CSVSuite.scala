@@ -379,7 +379,7 @@ abstract class CSVSuite
           .load(testFile(carsFile)).collect()
       }
       assert(e1.getErrorClass == "FAILED_READ_FILE")
-      val e2 = e1.getCause.asInstanceOf[SparkException]
+      val e2 = e1.getCause.asInstanceOf[SparkRuntimeException]
       assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
       checkError(
         exception = e2.getCause.asInstanceOf[SparkRuntimeException],
@@ -1641,12 +1641,17 @@ abstract class CSVSuite
   }
 
   test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
-    val exception = intercept[SparkException] {
+    val exception = intercept[SparkRuntimeException] {
       spark.read.schema("a DOUBLE")
         .option("mode", "FAILFAST")
         .csv(Seq("10u12").toDS())
         .collect()
     }
+    checkError(
+      exception,
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
     assert(exception.getCause.getMessage.contains("""input string: "10u12""""))
 
     val count = spark.read.schema("a FLOAT")
@@ -3311,7 +3316,7 @@ class CSVv1Suite extends CSVSuite {
       }
       assert(ex.getErrorClass == "FAILED_READ_FILE")
       checkError(
-        exception = ex.getCause.asInstanceOf[SparkException],
+        exception = ex.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[2015,Chevy,Volt,null,null]",

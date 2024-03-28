@@ -558,15 +558,15 @@ class CliSuite extends SparkFunSuite {
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("JsonParseException"))(
-      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"),
+      ("", "SparkRuntimeException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"),
       ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
     runCliWithin(
       1.minute,
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
-      errorResponses = Seq("SparkException"))(
-      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"))
+      errorResponses = Seq("SparkRuntimeException"))(
+      ("", "SparkRuntimeException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {

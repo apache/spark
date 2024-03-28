@@ -1492,8 +1492,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def malformedRecordsDetectedInRecordParsingError(
-      badRecord: String, e: Throwable): Throwable = {
-    new SparkException(
+      badRecord: String, e: Throwable): SparkRuntimeException = {
+    new SparkRuntimeException(
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       messageParameters = Map(
         "badRecord" -> badRecord,
@@ -2712,7 +2712,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "invalidValue" -> pos.toString))
   }
 
-  def variantSizeLimitError(sizeLimit: Int, functionName: String): Throwable = {
+  def variantSizeLimitError(sizeLimit: Int, functionName: String): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "VARIANT_SIZE_LIMIT",
       messageParameters = Map(

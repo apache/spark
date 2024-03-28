@@ -37,7 +37,7 @@ case class ParseJson(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with RuntimeReplaceable {
 
   override lazy val replacement: Expression = StaticInvoke(
-    VariantExpressionEvalUtils.getClass,
+    classOf[VariantExpressionEvalUtils],
     VariantType,
     "parseJson",
     Seq(child),
