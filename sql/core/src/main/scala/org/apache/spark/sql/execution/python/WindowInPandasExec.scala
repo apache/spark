@@ -76,7 +76,12 @@ case class WindowInPandasExec(
     child: SparkPlan)
   extends WindowExecBase with PythonSQLMetrics {
   override lazy val metrics: Map[String, SQLMetric] = pythonMetrics ++ Map(
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size")
+    "numOfOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numOfPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
+    "numOfWindowPartitions" -> SQLMetrics.createMetric(sparkContext, "number of window partitions"),
+    "spilledRows" -> SQLMetrics.createMetric(sparkContext, "spilled rows"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size in memory"),
+    "spillSizeOnDisk" -> SQLMetrics.createSizeMetric(sparkContext, "spill size on disk")
   )
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -87,6 +92,11 @@ case class WindowInPandasExec(
         orderSpec,
         child.output,
         longMetric("spillSize"),
+        longMetric("numOfOutputRows"),
+        longMetric("numOfPartitions"),
+        longMetric("spilledRows"),
+        longMetric("numOfWindowPartitions"),
+        longMetric("spillSizeOnDisk"),
         pythonMetrics,
         conf.pythonUDFProfiler)
 

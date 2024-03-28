@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
-import org.apache.spark.sql.execution.window.WindowGroupLimitExec
+import org.apache.spark.sql.execution.window.{WindowExec, WindowGroupLimitExec}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -919,10 +919,119 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     //     ...
     testSparkPlanMetricsWithPredicates(df, 1, Map(
       1L -> (("Window", Map(
-        "spill size" -> {
+        "spill size in memory" -> {
           _.toString.matches(sizeMetricPattern)
         }))))
     )
+  }
+
+  test("Check WindowExec SQL Metrics") {
+    // There are 2 window partitions
+    val data = Seq((1, "a1"), (2, "b1"), (1, "a2"), (2, "b2")).toDF("col1", "col2")
+    val w = Window.partitionBy("col1").orderBy("col2")
+    val df = data.select(rank().over(w))
+    df.collect()
+    val windowExec = df.queryExecution.executedPlan.find(_.isInstanceOf[WindowExec])
+    val windowSparkPlan = windowExec.get
+    assert(windowSparkPlan.metrics("numOfOutputRows").value == 4)
+    assert(windowSparkPlan.metrics("numOfPartitions").value
+      == windowSparkPlan.outputPartitioning.numPartitions)
+    assert(windowSparkPlan.metrics("numOfWindowPartitions").value == 2)
+    // There is no spilled rows in this case because current processed number of rows is lower than
+    // SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD (default value: 4096).
+    assert(windowSparkPlan.metrics("spilledRows").value == 0)
+    assert(windowSparkPlan.metrics("spillSize").value == 0)
+    assert(windowSparkPlan.metrics("spillSizeOnDisk").value == 0)
+  }
+
+  test("Check WindowExec Spill Metrics when all rows are spilling into memory and disk") {
+    withSQLConf(
+      SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
+      // There are 2 window partitions
+      val data = Seq((1, "a1"), (2, "b1"), (1, "a2"), (2, "b2"),
+        (1, "a3"), (2, "b3")).toDF("col1", "col2")
+      val w = Window.partitionBy("col1").orderBy("col2")
+      val df = data.select(rank().over(w))
+      df.collect()
+      val windowExec = df.queryExecution.executedPlan.find(_.isInstanceOf[WindowExec])
+      val windowSparkPlan = windowExec.get
+      // Total number of output rows
+      assert(windowSparkPlan.metrics("numOfOutputRows").value == 6)
+      assert(windowSparkPlan.metrics("numOfPartitions").value
+        == windowSparkPlan.outputPartitioning.numPartitions)
+      assert(windowSparkPlan.metrics("numOfWindowPartitions").value == 2)
+      // Total number of spilled rows and bytes into memory and disk. This is less than
+      // numOfOutputRows because UnsafeExternalSorter creates UnsafeInMemorySorter and
+      // it buffers rows based on SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.
+      // In this sample query, there are 2 window partitions. 1st and 2nd window partitions
+      // have 1 buffered row (in UnsafeInMemorySorter a.k.a spilled row into memory)
+      // and 2 spilled rows (in UnsafeInMemorySorter a.k.a spilled rows into disk) per each.
+      // Note: There is not 1x1 relationship between numOfWindowPartitions vs numOfPartitions.
+      assert(windowSparkPlan.metrics("spilledRows").value == 4)
+      assert(windowSparkPlan.metrics("spillSize").value == 134217696)
+      assert(windowSparkPlan.metrics("spillSizeOnDisk").value == 166)
+    }
+  }
+
+  test("Check WindowExec Spill Metrics when some of them are spilling into disk") {
+    withSQLConf(
+      SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "4") {
+      // There are 4 window partitions
+      val data = Seq((1, "a1"), (1, "b1"), (1, "c1"), (1, "d1"), (1, "e1"),
+        (2, "a2"), (2, "b2"), (2, "b3"),
+        (3, "a3"), (3, "b3"), (3, "c3"), (3, "d3"), (3, "e3"),
+        (4, "a4")
+      ).toDF("col1", "col2")
+      val w = Window.partitionBy("col1").orderBy("col2")
+      val df = data.select(rank().over(w))
+      df.collect()
+      val windowExec = df.queryExecution.executedPlan.find(_.isInstanceOf[WindowExec])
+      val windowSparkPlan = windowExec.get
+      // Total number of output rows
+      assert(windowSparkPlan.metrics("numOfOutputRows").value == 14)
+      assert(windowSparkPlan.metrics("numOfPartitions").value ==
+        windowSparkPlan.outputPartitioning.numPartitions)
+      assert(windowSparkPlan.metrics("numOfWindowPartitions").value == 4)
+      // Total number of spilled rows and bytes into memory and disk. This is less than
+      // numOfOutputRows because UnsafeExternalSorter creates UnsafeInMemorySorter and it buffers
+      // rows based on SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD. In this sample query,
+      // there are 4 window partitions. 1st and 3rd window partitions have 1 buffered row
+      // (in UnsafeInMemorySorter a.k.a spilled row into memory) and 4 spilled rows
+      // (in UnsafeInMemorySorter a.k.a spilled rows into disk) per each. 2nd and 4th window
+      // partitions numOfRows are under spill threshold so all of them are buffered (not spilled)
+      // Note: There is not 1x1 relationship between numOfWindowPartitions vs numOfPartitions.
+      assert(windowSparkPlan.metrics("spilledRows").value == 8)
+      assert(windowSparkPlan.metrics("spillSize").value == 134217696)
+      assert(windowSparkPlan.metrics("spillSizeOnDisk").value == 188)
+    }
+  }
+
+  test("Check WindowExec Spill Metrics when none of them are spilling to disk") {
+    withSQLConf(
+      SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
+      // There are 3 window partitions
+      val data = Seq((1, "a1"), (1, "b1"), (2, "a2"), (2, "b2"), (3, "a3"), (3, "b3"))
+        .toDF("col1", "col2")
+      val w = Window.partitionBy("col1").orderBy("col2")
+      val df = data.select(rank().over(w))
+      df.collect()
+      val windowExec = df.queryExecution.executedPlan.find(_.isInstanceOf[WindowExec])
+      val windowSparkPlan = windowExec.get
+      // Total number of output rows
+      assert(windowSparkPlan.metrics("numOfOutputRows").value == 6)
+      assert(windowSparkPlan.metrics("numOfPartitions").value ==
+        windowSparkPlan.outputPartitioning.numPartitions)
+      assert(windowSparkPlan.metrics("numOfWindowPartitions").value == 3)
+      // In this sample query, there are 3 window partitions. Each window partitions have
+      // 2 buffered rows and no spilled row per each.
+      // Note: There is not 1x1 relationship between numOfWindowPartitions vs numOfPartitions.
+      assert(windowSparkPlan.metrics("spilledRows").value == 0)
+      assert(windowSparkPlan.metrics("spillSize").value == 0)
+      assert(windowSparkPlan.metrics("spillSizeOnDisk").value == 0)
+    }
   }
 
   test("SPARK-37099: Add numOutputRows metric for WindowGroupLimitExec") {

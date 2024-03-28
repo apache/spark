@@ -30,7 +30,13 @@ class WindowEvaluatorFactory(
     val partitionSpec: Seq[Expression],
     val orderSpec: Seq[SortOrder],
     val childOutput: Seq[Attribute],
-    val spillSize: SQLMetric)
+    val spillSize: SQLMetric,
+    val numOfOutputRows: SQLMetric,
+    val numOfPartitions: SQLMetric,
+    val spilledRows: SQLMetric,
+    val numOfWindowPartitions: SQLMetric,
+    val spillSizeOnDisk: SQLMetric)
+
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
@@ -45,6 +51,9 @@ class WindowEvaluatorFactory(
     private val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
     private val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     private val spillThreshold = conf.windowExecBufferSpillThreshold
+
+    // Increase processed numOfPartitions
+    numOfPartitions += 1
 
     override def eval(
         partitionIndex: Int,
@@ -111,6 +120,10 @@ class WindowEvaluatorFactory(
 
           // Setup iteration
           rowIndex = 0
+
+          // Increase processed numOfWindowPartitions
+          numOfWindowPartitions += 1
+
           bufferIterator = buffer.generateIterator()
         }
 
@@ -123,6 +136,8 @@ class WindowEvaluatorFactory(
             // clear final partition
             buffer.clear()
             spillSize += buffer.spillSize
+            spillSizeOnDisk += buffer.spillSizeOnDisk
+            spilledRows += buffer.spilledRows
           }
           found
         }
@@ -147,6 +162,9 @@ class WindowEvaluatorFactory(
             // 'Merge' the input row with the window function result
             join(current, windowFunctionResult)
             rowIndex += 1
+
+            // Increase processed numOfOutputRows
+            numOfOutputRows += 1
 
             // Return the projection.
             result(join)
