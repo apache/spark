@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
@@ -864,7 +865,7 @@ object SparkSession extends Logging {
     // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
     private val builder = SparkConnectClient.builder().loadFromEnvironment()
     private var client: SparkConnectClient = _
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
+    private[this] val options = new ConcurrentHashMap[String, String]
 
     def remote(connectionString: String): Builder = {
       builder.connectionString(connectionString)
@@ -894,8 +895,8 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
+    def config(key: String, value: String): Builder = {
+      options.put(key, value)
       this
     }
 
@@ -905,8 +906,8 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
+    def config(key: String, value: Long): Builder = {
+      options.put(key, value.toString)
       this
     }
 
@@ -916,8 +917,8 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
+    def config(key: String, value: Double): Builder = {
+      options.put(key, value.toString)
       this
     }
 
@@ -927,8 +928,8 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
+    def config(key: String, value: Boolean): Builder = {
+      options.put(key, value.toString)
       this
     }
 
@@ -938,12 +939,11 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def config(map: Map[String, Any]): Builder = synchronized {
-      map.foreach { kv: (String, Any) =>
-        {
-          options += kv._1 -> kv._2.toString
-        }
-      }
+    def config(map: Map[String, Any]): Builder = {
+      val kvs = map.map { kv: (String, Any) =>
+        (kv._1, kv._2.toString)
+      }.asJava
+      options.putAll(kvs)
       this
     }
 
@@ -953,7 +953,7 @@ object SparkSession extends Logging {
      *
      * @since 3.5.0
      */
-    def config(map: java.util.Map[String, Any]): Builder = synchronized {
+    def config(map: java.util.Map[String, Any]): Builder = {
       config(map.asScala.toMap)
     }
 
@@ -975,7 +975,7 @@ object SparkSession extends Logging {
     }
 
     private def applyOptions(session: SparkSession): Unit = {
-      options.foreach { case (key, value) =>
+      options.asScala.foreach { case (key, value) =>
         session.conf.set(key, value)
       }
     }
