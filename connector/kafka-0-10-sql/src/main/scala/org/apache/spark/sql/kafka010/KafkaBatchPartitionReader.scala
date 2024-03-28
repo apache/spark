@@ -35,9 +35,8 @@ private[kafka010] case class KafkaBatchInputPartition(
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
     includeHeaders: Boolean) extends InputPartition {
-  override def preferredLocations(): Array[String] = {
+  override def preferredLocations(): Array[String] =
     offsetRange.preferredLoc.map(Array(_)).getOrElse(Array())
-  }
 }
 
 private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory with Logging {
@@ -116,7 +115,7 @@ private case class KafkaBatchPartitionReader(
       } else {
         range.untilOffset
       }
-      KafkaOffsetRange(range.topicPartition, fromOffset, untilOffset, None)
+      KafkaOffsetRange(range.topicPartition, fromOffset, untilOffset, range.preferredLoc)
     } else {
       range
     }
