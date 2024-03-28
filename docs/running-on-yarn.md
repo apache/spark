@@ -665,16 +665,6 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
   <td>3.0.0</td>
 </tr>
-<tr>
-  <td><code>spark.yarn.shuffle.server.recovery.disabled</code></td>
-  <td>false</td>
-  <td>
-    Set to true for applications that have higher security requirements and prefer that their
-    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
-    the External Shuffle Service restarts.
-  </td>
-  <td>3.5.0</td>
-</tr>
 </table>
 
 #### Available patterns for SHS custom executor log URL
@@ -909,6 +899,16 @@ The following extra configuration options are available when the shuffle service
     created when switching storage types.
   </td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.shuffle.server.recovery.disabled</code></td>
+  <td>false</td>
+  <td>
+    Set to true for applications that have higher security requirements and prefer that their
+    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    the External Shuffle Service restarts.
+  </td>
+  <td>3.5.0</td>
 </tr>
 </table>
 
