@@ -27,15 +27,13 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import org.apache.spark.api.java.Optional;
-import org.apache.spark.sql.streaming.GroupStateTimeout;
-import org.apache.spark.sql.streaming.OutputMode;
+import org.apache.spark.sql.streaming.*;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
 
 import com.google.common.base.Objects;
-import org.apache.spark.sql.streaming.TestGroupState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -389,6 +387,16 @@ public class JavaDatasetSuite implements Serializable {
         GroupStateTimeout.NoTimeout());
 
     Assertions.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
+
+    StatefulProcessor<Integer, String, String> testStatefulProcessor = new TestStatefulProcessor();
+    Dataset<String> transformWithStateMapped = grouped.transformWithState(
+      testStatefulProcessor,
+      TimeoutMode.NoTimeouts(),
+      OutputMode.Append(),
+      Encoders.STRING());
+
+    Assertions.assertEquals(asSet("1a", "3foobar"),
+      toSet(transformWithStateMapped.collectAsList()));
 
     Dataset<Tuple2<Integer, String>> reduced =
       grouped.reduceGroups((ReduceFunction<String>) (v1, v2) -> v1 + v2);

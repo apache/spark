@@ -656,13 +656,14 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
    *                          operator.
    * @param timeoutMode The timeout mode of the stateful processor.
-   * @param outputMode The output mode of the stateful processor. Defaults to APPEND mode.
+   * @param outputMode The output mode of the stateful processor.
    *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeoutMode: TimeoutMode,
-      outputMode: OutputMode = OutputMode.Append()): Dataset[U] = {
+      outputMode: OutputMode): Dataset[U] = {
     Dataset[U](
       sparkSession,
       TransformWithState[K, V, U](
@@ -674,6 +675,33 @@ class KeyValueGroupedDataset[K, V] private[sql](
         child = logicalPlan
       )
     )
+  }
+
+  /**
+   * (Java-specific)
+   * Invokes methods defined in the stateful processor used in arbitrary state API v2.
+   * We allow the user to act on per-group set of input rows along with keyed state and the
+   * user can choose to output/return 0 or more rows.
+   * For a static/batch dataset, this operator is not supported and will throw an exception.
+   * For a streaming dataframe, we will repeatedly invoke the interface methods for new rows
+   * in each trigger and the user's state/state variables will be stored persistently across
+   * invocations.
+   *
+   * @tparam U The type of the output objects. Must be encodable to Spark SQL types.
+   * @param statefulProcessor Instance of statefulProcessor whose functions will be invoked by the
+   *                          operator.
+   * @param timeoutMode The timeout mode of the stateful processor.
+   * @param outputMode The output mode of the stateful processor.
+   * @param outputEncoder Encoder for the output type.
+   *
+   * See [[Encoder]] for more details on what types are encodable to Spark SQL.
+   */
+  private[sql] def transformWithState[U: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeoutMode: TimeoutMode,
+      outputMode: OutputMode,
+      outputEncoder: Encoder[U]): Dataset[U] = {
+    transformWithState(statefulProcessor, timeoutMode, outputMode)(outputEncoder)
   }
 
   /**
