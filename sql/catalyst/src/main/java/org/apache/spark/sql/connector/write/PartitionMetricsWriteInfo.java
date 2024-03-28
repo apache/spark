@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.write;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
@@ -27,7 +28,7 @@ import java.util.TreeMap;
  * This is patterned after {@code org.apache.spark.util.AccumulatorV2}
  * </p>
  */
-public class PartitionMetricsWriteInfo {
+public class PartitionMetricsWriteInfo implements Serializable {
 
   private final Map<String, PartitionMetrics> metrics = new TreeMap<>();
 
