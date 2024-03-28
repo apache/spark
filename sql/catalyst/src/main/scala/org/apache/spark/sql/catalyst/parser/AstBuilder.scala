@@ -671,7 +671,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
         } else {
           // TODO For v2 commands, we will cast the string back to its actual value,
           //  which is a waste and can be improved in the future.
-          Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
+          Cast(l, conf.defaultStringType, Some(conf.sessionLocalTimeZone)).eval().toString
         }
       case other =>
         throw new SparkIllegalArgumentException(
@@ -2863,7 +2863,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal(createString(ctx))
+    Literal.create(createString(ctx), conf.defaultStringType)
   }
 
   /**
