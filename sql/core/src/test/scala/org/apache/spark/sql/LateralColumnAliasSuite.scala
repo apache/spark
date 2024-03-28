@@ -1284,4 +1284,14 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       Row(2) :: Nil
     )
   }
+
+  test("SPARK-47471: support order-insensitive lateral column alias") {
+    checkAnswerWhenOnAndExceptionWhenOff(
+      s"select d + 1 as e, dept as d from $testTable where name = 'amy'",
+      Row(2, 1) :: Nil)
+
+    checkAnswerWhenOnAndExceptionWhenOff(
+      s"select e + 1 as f, d + 1 as e, dept as d from $testTable where name = 'amy'",
+      Row(3, 2, 1) :: Nil)
+  }
 }
