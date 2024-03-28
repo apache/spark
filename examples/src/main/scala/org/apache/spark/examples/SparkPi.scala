@@ -18,25 +18,38 @@
 // scalastyle:off println
 package org.apache.spark.examples
 
-import scala.math.random
-
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.{lit, random, sum, when}
 
 /** Computes an approximation to pi */
 object SparkPi {
   def main(args: Array[String]): Unit = {
+    if (args.length == 0) {
+      System.out.println("Consider providing number of partitions and size of each partition " +
+        "as first and second argument.")
+    }
+
+    val partitions = if (args.length > 0) args(0).toInt else 2
+    val rowsPerPartition = if (args.length > 1) args(1).toLong else 100000L
+
+    System.out.println("Computing Pi with " +
+      partitions + " partitions" + (if (args.length < 1) " (default)" else "") + " and " +
+      rowsPerPartition + " rows per partition" + (if (args.length < 2) " (default)" else "")
+    )
+
     val spark = SparkSession
       .builder()
       .appName("Spark Pi")
       .getOrCreate()
-    val slices = if (args.length > 0) args(0).toInt else 2
-    val n = math.min(100000L * slices, Int.MaxValue).toInt // avoid overflow
-    val count = spark.sparkContext.parallelize(1 until n, slices).map { i =>
-      val x = random() * 2 - 1
-      val y = random() * 2 - 1
-      if (x*x + y*y <= 1) 1 else 0
-    }.reduce(_ + _)
-    println(s"Pi is roughly ${4.0 * count / (n - 1)}")
+    import spark.implicits._
+
+    val N = rowsPerPartition * partitions
+    val count = spark.range(0, N, 1, partitions)
+      .select((random() * 2 - 1).as("x"), (random() * 2 - 1).as("y"))
+      .select(sum(when($"x" * $"x" + $"y" * $"y" <= 1, lit(1))))
+      .as[Long]
+      .head()
+    println(s"Pi is roughly ${4.0 * count / N}")
     spark.stop()
   }
 }
