@@ -16,50 +16,37 @@
  */
 package org.apache.spark.util
 
-import java.io.{ByteArrayOutputStream, PrintStream}
+import java.io.File
+import java.nio.file.Files
 
-import org.apache.commons.io.output.TeeOutputStream
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKey.EXECUTOR_ID
 
-abstract class LoggingSuiteBase
-    extends AnyFunSuite // scalastyle:ignore funsuite
+class StructuredLoggingSuite extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterAll
-    with BeforeAndAfterEach
     with Logging {
-  protected val outContent = new ByteArrayOutputStream()
-  protected val originalErr = System.err
+  private val className = this.getClass.getName.stripSuffix("$")
+  private val logFile = new File("target/pattern.log").toPath
 
-  override def beforeAll(): Unit = {
-    val teeStream = new TeeOutputStream(originalErr, outContent)
-    System.setErr(new PrintStream(teeStream))
-  }
-
-  override def afterAll(): Unit = {
-    System.setErr(originalErr)
-  }
-
-  override def afterEach(): Unit = {
-    outContent.reset()
-  }
-}
-
-class StructuredLoggingSuite extends LoggingSuiteBase {
-  val className = this.getClass.getName.stripSuffix("$")
   override def beforeAll(): Unit = {
     super.beforeAll()
-    Logging.enableStructuredLogging()
+    Files.delete(logFile)
+  }
+
+  // Returns the first line in the log file that contains the given substring.
+  private def getLogString(subStr: String): String = {
+    val content = Files.readString(logFile)
+    content.split("\n").filter(_.contains(subStr)).head
   }
 
   test("Structured logging") {
     val msg = "This is a log message"
     logError(msg)
+    val logOutput = getLogString(msg)
 
-    val logOutput = outContent.toString.split("\n").filter(_.contains(msg)).head
-    assert(logOutput.nonEmpty)
     // scalastyle:off line.size.limit
     val pattern = s"""\\{"ts":"[^"]+","level":"ERROR","msg":"This is a log message","logger":"$className"}""".r
     // scalastyle:on
@@ -69,7 +56,7 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
   test("Structured logging with MDC") {
     logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.")
 
-    val logOutput = outContent.toString.split("\n").filter(_.contains("executor")).head
+    val logOutput = getLogString("Lost")
     assert(logOutput.nonEmpty)
     // scalastyle:off line.size.limit
     val pattern1 = s"""\\{"ts":"[^"]+","level":"ERROR","msg":"Lost executor 1.","context":\\{"executor_id":"1"},"logger":"$className"}""".r
@@ -79,12 +66,13 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
 
   test("Structured exception logging with MDC") {
     val exception = new RuntimeException("OOM")
-    logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.", exception)
+    logError(log"Error in executor ${MDC(EXECUTOR_ID, "1")}.", exception)
 
-    val logOutput = outContent.toString.split("\n").filter(_.contains("executor")).head
+    val file = Files.readString(new File("target/structured.log").toPath)
+    val logOutput = file.split("\n").filter(_.contains("Error")).head
     assert(logOutput.nonEmpty)
     // scalastyle:off line.size.limit
-    val pattern = s"""\\{"ts":"[^"]+","level":"ERROR","msg":"Lost executor 1.","context":\\{"executor_id":"1"},"exception":\\{"class":"java.lang.RuntimeException","msg":"OOM","stacktrace":.*},"logger":"$className"}""".r
+    val pattern = s"""\\{"ts":"[^"]+","level":"ERROR","msg":"Error in executor 1.","context":\\{"executor_id":"1"},"exception":\\{"class":"java.lang.RuntimeException","msg":"OOM","stacktrace":.*},"logger":"$className"}""".r
     // scalastyle:on
     assert(pattern.matches(logOutput))
   }

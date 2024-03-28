@@ -16,21 +16,37 @@
  */
 package org.apache.spark.util
 
+import java.io.File
+import java.nio.file.Files
+
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKey.EXECUTOR_ID
 
-class PatternLoggingSuite extends LoggingSuiteBase {
+class PatternLoggingSuite extends AnyFunSuite // scalastyle:ignore funsuite
+  with BeforeAndAfterAll
+  with Logging {
+
+  private val logFile = new File("target/pattern.log").toPath
+
   override def beforeAll(): Unit = {
     super.beforeAll()
-    Logging.disableStructuredLogging()
+    Files.delete(logFile)
+  }
+
+  // Returns the first line in the log file that contains the given substring.
+  private def getLogString(subStr: String): String = {
+    val content = Files.readString(logFile)
+    content.split("\n").filter(_.contains(subStr)).head
   }
 
   test("Pattern layout logging") {
     val msg = "This is a log message"
     logError(msg)
 
-    val logOutput = outContent.toString.split("\n").filter(_.contains(msg)).head
-    assert(logOutput.nonEmpty)
+    val logOutput = getLogString(msg)
     // scalastyle:off line.size.limit
     val pattern = """.*ERROR PatternLoggingSuite: This is a log message""".r
     // scalastyle:on
@@ -40,18 +56,18 @@ class PatternLoggingSuite extends LoggingSuiteBase {
   test("Pattern layout logging with MDC") {
     logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.")
 
-    val logOutput = outContent.toString.split("\n").filter(_.contains("executor")).head
-    assert(logOutput.nonEmpty)
+    val logOutput = getLogString("executor")
     val pattern = """.*ERROR PatternLoggingSuite: Lost executor 1.""".r
     assert(pattern.matches(logOutput))
   }
 
   test("Pattern layout exception logging") {
     val exception = new RuntimeException("OOM")
-    logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.", exception)
+    logError(log"Error in executor ${MDC(EXECUTOR_ID, "1")}.", exception)
 
-    assert(outContent.toString.nonEmpty)
-    assert(outContent.toString.contains("ERROR PatternLoggingSuite: Lost executor 1."))
-    assert(outContent.toString.contains("java.lang.RuntimeException: OOM"))
+    val logOutput1 = getLogString("Error")
+    assert(logOutput1.contains("ERROR PatternLoggingSuite: Error in executor 1."))
+    val logOutput2 = getLogString("RuntimeException")
+    assert(logOutput2.contains("java.lang.RuntimeException: OOM"))
   }
 }
