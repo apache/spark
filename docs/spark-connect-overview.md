@@ -26,7 +26,9 @@ between client and server allows Spark and its open ecosystem to be
 leveraged from everywhere. It can be embedded in modern data applications,
 in IDEs, Notebooks and programming languages.
 
-To get started, see [Quickstart: Spark Connect](api/python/getting_started/quickstart_connect.html).
+**Related Pages**
+* To get started, see [Quickstart: Spark Connect](api/python/getting_started/quickstart_connect.html).
+* Extending Spark Connect with custom plugins is covered in [Extending Spark Connect with Custom Plugins](spark-connect-extending.html).
 
 <p style="text-align: center;">
   <img src="img/spark-connect-api.png" title="Spark Connect API" alt="Spark Connect API Diagram" />
