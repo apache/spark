@@ -174,6 +174,7 @@ case class InsertIntoHadoopFsRelationCommand(
         qualifiedOutputPath
       }
 
+      val statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf))
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -185,10 +186,9 @@ case class InsertIntoHadoopFsRelationCommand(
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
-          statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
+          statsTrackers = statsTrackers,
           options = options,
           numStaticPartitionCols = staticPartitions.size)
-
 
       // update metastore partition metadata
       if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty

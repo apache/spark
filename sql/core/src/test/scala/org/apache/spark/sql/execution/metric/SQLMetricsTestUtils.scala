@@ -19,16 +19,20 @@ package org.apache.spark.sql.execution.metric
 
 import java.io.File
 
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanInfo}
+import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
+import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.util.QueryExecutionListener
 
 
 trait SQLMetricsTestUtils extends SQLTestUtils {
@@ -104,55 +108,118 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     assert(totalNumBytes > 0)
   }
 
+  private class CaptureWriteCommand extends QueryExecutionListener {
+
+    val v1WriteCommands: mutable.Buffer[V1WriteCommand] = mutable.Buffer[V1WriteCommand]()
+
+    override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+      if (qe.executedPlan.isInstanceOf[ExecutedCommandExec] ||
+        qe.executedPlan.isInstanceOf[DataWritingCommandExec]) {
+        qe.optimizedPlan match {
+          case _: V1WriteCommand =>
+            val executedPlanCmd = qe.executedPlan.asInstanceOf[DataWritingCommandExec].cmd
+            v1WriteCommands += executedPlanCmd.asInstanceOf[V1WriteCommand]
+
+          // All other commands
+          case _ =>
+            logDebug(f"Query execution data is not currently supported for query: " +
+              f"${qe.toString} with plan class ${qe.executedPlan.getClass.getName} " +
+              f" and executed plan : ${qe.executedPlan}")
+        }
+      }
+    }
+
+    override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+
+  }
+
+  protected def withQueryExecutionListener[L <: QueryExecutionListener]
+  (spark: SparkSession, listener: L)
+  (body: L => Unit): Unit = {
+    spark.listenerManager.register(listener)
+    try {
+      body(listener)
+    }
+    finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+
   protected def testMetricsNonDynamicPartition(
       dataFormat: String,
       tableName: String): Unit = {
-    withTable(tableName) {
-      Seq((1, 2)).toDF("i", "j")
-        .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
+    val listener = new CaptureWriteCommand()
+    withQueryExecutionListener(spark, listener) { _ =>
+      withTable(tableName) {
+        Seq((1, 2)).toDF("i", "j")
+          .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
 
-      val tableLocation =
-        new File(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).location)
+        val tableLocation =
+          new File(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).location)
 
-      // 2 files, 100 rows, 0 dynamic partition.
-      verifyWriteDataMetrics(Seq(2, 0, 100)) {
-        (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
-          .write.format(dataFormat).mode("overwrite").insertInto(tableName)
+        // 2 files, 100 rows, 0 dynamic partition.
+        verifyWriteDataMetrics(Seq(2, 0, 100)) {
+          (0 until 100).map(i => (i, i + 1)).toDF("i", "j").repartition(2)
+            .write.format(dataFormat).mode("overwrite").insertInto(tableName)
+        }
+        assert(TestUtils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
       }
-      assert(TestUtils.recursiveList(tableLocation).count(_.getName.startsWith("part-")) == 2)
     }
+
+    // Verify that there were 2 write command for the entire write process.  This test creates the
+    // table and performs a repartitioning
+    assert(listener.v1WriteCommands.length == 2)
+    assert(listener.v1WriteCommands.forall(
+      v1WriteCommand => v1WriteCommand.partitionMetrics.isEmpty))
   }
 
   protected def testMetricsDynamicPartition(
       provider: String,
       dataFormat: String,
       tableName: String): Unit = {
-    withTable(tableName) {
-      withTempPath { dir =>
-        spark.sql(
-          s"""
-             |CREATE TABLE $tableName(a int, b int)
-             |USING $provider
-             |PARTITIONED BY(a)
-             |LOCATION '${dir.toURI}'
+    val listener = new CaptureWriteCommand()
+    withQueryExecutionListener(spark, listener) { _ =>
+      withTable(tableName) {
+        withTempPath { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE $tableName(a int, b int)
+               |USING $provider
+               |PARTITIONED BY(a)
+               |LOCATION '${dir.toURI}'
            """.stripMargin)
-        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
-        assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
+          val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+          assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
 
-        val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
-          .selectExpr("id a", "id b")
+          val df = spark.range(start = 0, end = 40, step = 1, numPartitions = 1)
+            .selectExpr("id a", "id b")
 
-        // 40 files, 80 rows, 40 dynamic partitions.
-        verifyWriteDataMetrics(Seq(40, 40, 80)) {
-          df.union(df).repartition(2, $"a")
-            .write
-            .format(dataFormat)
-            .mode("overwrite")
-            .insertInto(tableName)
+          // 40 files, 80 rows, 40 dynamic partitions.
+          verifyWriteDataMetrics(Seq(40, 40, 80)) {
+            df.union(df).repartition(2, $"a")
+              .write
+              .format(dataFormat)
+              .mode("overwrite")
+              .insertInto(tableName)
+          }
+          assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
         }
-        assert(TestUtils.recursiveList(dir).count(_.getName.startsWith("part-")) == 40)
       }
     }
+
+    // Verify that there was a single write command for the entire write process
+    assert(listener.v1WriteCommands.length == 1)
+    val v1WriteCommand = listener.v1WriteCommands.head
+
+    // Verify the number of partitions
+    assert(v1WriteCommand.partitionMetrics.keySet.size == 40)
+    // Verify the number of files per partition
+    assert(v1WriteCommand.partitionMetrics.values.forall(
+      partitionStats => partitionStats.numFiles == 1))
+    // Verify the number of rows per partition
+    assert(v1WriteCommand.partitionMetrics.values.forall(
+      partitionStats => partitionStats.numRows == 2))
   }
 
   /**

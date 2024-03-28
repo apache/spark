@@ -28,6 +28,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 trait WriteTaskStats extends Serializable
 
 
+trait PartitionTaskStats extends Serializable {
+  def numFiles: Int
+  def numBytes: Long
+  def numRows: Long
+}
+
 /**
  * A trait for classes that are capable of collecting statistics on data that's being processed by
  * a single write task in [[FileFormatWriter]] - i.e. there should be one instance per executor.
@@ -46,8 +52,10 @@ trait WriteTaskStatsTracker {
   /**
    * Process the fact that a new file is about to be written.
    * @param filePath Path of the file into which future rows will be written.
+   * @param partitionValues Optional reference to the partition associated with this new file.  This
+   *                        avoids trying to extract the partition values from the filePath.
    */
-  def newFile(filePath: String): Unit
+  def newFile(filePath: String, partitionValues: Option[InternalRow] = None): Unit
 
   /**
    * Process the fact that a file is finished to be written and closed.
@@ -95,6 +103,7 @@ trait WriteJobStatsTracker extends Serializable {
    * E.g. aggregate them, write them to memory / disk, issue warnings, whatever.
    * @param stats One [[WriteTaskStats]] object from each successful write task.
    * @param jobCommitTime Time of committing the job.
+   * @param partitionsMap A map of [[InternalRow]] to a partition subpath
    * @note The type of @param `stats` is too generic. These classes should probably be parametrized:
    *   WriteTaskStatsTracker[S <: WriteTaskStats]
    *   WriteJobStatsTracker[S <: WriteTaskStats, T <: WriteTaskStatsTracker[S]]
@@ -105,5 +114,6 @@ trait WriteJobStatsTracker extends Serializable {
    * to the expected derived type when implementing this method in a derived class.
    * The framework will make sure to call this with the right arguments.
    */
-  def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit
+  def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long,
+                   partitionsMap: Map[InternalRow, String] = Map.empty): Unit
 }
