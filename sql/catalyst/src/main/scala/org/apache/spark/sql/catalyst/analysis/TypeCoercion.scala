@@ -609,7 +609,7 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
-        val collationId = getOutputCollation(c.children, failOnIndeterminate = false)
+        val collationId = getOutputCollation(c.children)
         val newChildren = c.children.map { e =>
           implicitCast(e, StringType(collationId)).getOrElse(e)
         }
@@ -659,7 +659,7 @@ abstract class TypeCoercionBase {
         val newIndex = implicitCast(index, IntegerType).getOrElse(index)
         val newInputs = if (conf.eltOutputAsString ||
           !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-          val collationId = getOutputCollation(children, failOnIndeterminate = false)
+          val collationId = getOutputCollation(children)
           children.tail.map { e =>
             implicitCast(e, StringType(collationId)).getOrElse(e)
           }

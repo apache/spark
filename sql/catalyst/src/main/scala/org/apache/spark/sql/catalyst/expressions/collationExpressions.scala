@@ -118,9 +118,6 @@ case class Collation(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
   override def replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
-    if (collationId == CollationFactory.INDETERMINATE_COLLATION_ID) {
-      throw QueryCompilationErrors.indeterminateCollationError()
-    }
     val collationName = CollationFactory.fetchCollation(collationId).collationName
     Literal.create(collationName, StringType(collationId))
   }

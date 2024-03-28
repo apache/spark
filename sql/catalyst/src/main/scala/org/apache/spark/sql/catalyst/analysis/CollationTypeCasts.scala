@@ -20,46 +20,24 @@ package org.apache.spark.sql.catalyst.analysis
 import javax.annotation.Nullable
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, CreateArray, ExpectsInputTypes, Expression, Predicate, SortOrder}
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, CreateArray, ExpectsInputTypes, Expression, Predicate, SortOrder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
-    // Case when we do not fail if resulting collation is indeterminate
-    case checkCastWithIndeterminate @ (_: ComplexTypeMergingExpression
-                                       | _: CreateArray) =>
-      val newChildren =
-        collateToSingleType(checkCastWithIndeterminate.children, failOnIndeterminate = false)
-      checkCastWithIndeterminate.withNewChildren(newChildren)
     // Case when we do fail if resulting collation is indeterminate
     case checkCastWithoutIndeterminate @ (_: BinaryExpression
                                           | _: Predicate
                                           | _: SortOrder
-                                          | _: ExpectsInputTypes)
+                                          | _: ExpectsInputTypes
+                                          | _: ComplexTypeMergingExpression
+                                          | _: CreateArray)
       if shouldCast(checkCastWithoutIndeterminate.children) =>
       val newChildren = collateToSingleType(checkCastWithoutIndeterminate.children)
       checkCastWithoutIndeterminate.withNewChildren(newChildren)
-    // Case if casting is not needed, but we only have indeterminate
-    // collations and we do not want to fail
-    case checkIndeterminateWithoutFail@(_: Invoke)
-      if hasIndeterminate(checkIndeterminateWithoutFail.children
-      .filter(e => hasStringType(e.dataType))
-      .map(e => extractStringType(e.dataType))) =>
-      checkIndeterminateWithoutFail
-    // Case if casting is not needed, but we only have indeterminate collations
-    case checkIndeterminate@(_: BinaryExpression
-                             | _: Predicate
-                             | _: SortOrder
-                             | _: ExpectsInputTypes
-                             | _: Alias)
-      if hasIndeterminate(checkIndeterminate.children
-        .filter(e => hasStringType(e.dataType))
-        .map(e => extractStringType(e.dataType))) =>
-      throw QueryCompilationErrors.indeterminateCollationError()
   }
 
   def shouldCast(types: Seq[Expression]): Boolean = {
@@ -112,9 +90,8 @@ object CollationTypeCasts extends TypeCoercionRule {
   /**
    * Collates input expressions to a single collation.
    */
-  def collateToSingleType(exprs: Seq[Expression],
-                          failOnIndeterminate: Boolean = true): Seq[Expression] = {
-    val collationId = getOutputCollation(exprs, failOnIndeterminate)
+  def collateToSingleType(exprs: Seq[Expression]): Seq[Expression] = {
+    val collationId = getOutputCollation(exprs)
 
     exprs.map(e => castStringType(e, collationId).getOrElse(e))
   }
@@ -125,7 +102,7 @@ object CollationTypeCasts extends TypeCoercionRule {
    * any expressions, but will only be affected by collated StringTypes or
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
-  def getOutputCollation(exprs: Seq[Expression], failOnIndeterminate: Boolean = true): Int = {
+  def getOutputCollation(exprs: Seq[Expression]): Int = {
     val explicitTypes = exprs.filter(hasExplicitCollation)
       .map(e => extractStringType(e.dataType).collationId).distinct
 
@@ -144,28 +121,15 @@ object CollationTypeCasts extends TypeCoercionRule {
           .map(e => extractStringType(e.dataType))
 
         if (hasMultipleImplicits(dataTypes)) {
-          if (failOnIndeterminate) {
-            throw QueryCompilationErrors.implicitCollationMismatchError()
-          } else {
-            CollationFactory.INDETERMINATE_COLLATION_ID
-          }
+          throw QueryCompilationErrors.implicitCollationMismatchError()
         }
         else {
-          dataTypes.find(!_.isDefaultCollation)
-            .getOrElse(StringType)
+          dataTypes.find(dt => !(dt == SQLConf.get.defaultStringType))
+            .getOrElse(SQLConf.get.defaultStringType)
             .collationId
         }
     }
   }
-
-  /**
-   * Checks if there exists an input with input type StringType(-1)
-   * @param dataTypes
-   * @return
-   */
-  private def hasIndeterminate(dataTypes: Seq[DataType]): Boolean =
-    dataTypes.exists(dt => dt.isInstanceOf[StringType]
-      && dt.asInstanceOf[StringType].isIndeterminateCollation)
 
   /**
    * This check is always preformed when we have no explicit collation. It returns true
@@ -175,7 +139,8 @@ object CollationTypeCasts extends TypeCoercionRule {
    * @return
    */
   private def hasMultipleImplicits(dataTypes: Seq[StringType]): Boolean =
-    dataTypes.filter(!_.isDefaultCollation).map(_.collationId).distinct.size > 1
+    dataTypes.filter(dt => !(dt == SQLConf.get.defaultStringType))
+      .map(_.collationId).distinct.size > 1
 
   /**
    * Checks if a given expression has explicitly set collation. For complex DataTypes
