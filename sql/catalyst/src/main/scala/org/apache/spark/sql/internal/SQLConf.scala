@@ -333,6 +333,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ENABLE_EXTENSION_INFO = buildConf("spark.sql.enableExtensionInfo")
+    .doc("If true, Spark will print plan information from extensions (if any) in explain plan " +
+      " and in the UI")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
@@ -4898,6 +4905,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def planChangeRules: Option[String] = getConf(PLAN_CHANGE_LOG_RULES)
 
   def planChangeBatches: Option[String] = getConf(PLAN_CHANGE_LOG_BATCHES)
+
+  def enableExtensionInfo: Boolean = getConf(ENABLE_EXTENSION_INFO)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
