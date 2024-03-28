@@ -172,61 +172,64 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("migrate shuffle data to fallback storage") {
-    val conf = new SparkConf(false)
-      .set("spark.app.id", "testId")
-      .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
-      .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
-        Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
+    Seq(true, false).foreach { migrateToStorage =>
+      val conf = new SparkConf(false)
+        .set("spark.app.id", "testId")
+        .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
+        .set(STORAGE_DECOMMISSION_MIGRATE_TO_EXTERNAL_STORAGE, migrateToStorage)
+        .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
+          Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
 
-    val ids = Set((1, 1L, 1))
-    val bm = mock(classOf[BlockManager])
-    val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
-    when(bm.diskBlockManager).thenReturn(dbm)
-    val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf, bm)
-    val indexFile = indexShuffleBlockResolver.getIndexFile(1, 1L)
-    val dataFile = indexShuffleBlockResolver.getDataFile(1, 1L)
-    indexFile.createNewFile()
-    dataFile.createNewFile()
+      val ids = Set((1, 1L, 1))
+      val bm = mock(classOf[BlockManager])
+      val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
+      when(bm.diskBlockManager).thenReturn(dbm)
+      val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf, bm)
+      val indexFile = indexShuffleBlockResolver.getIndexFile(1, 1L)
+      val dataFile = indexShuffleBlockResolver.getDataFile(1, 1L)
+      indexFile.createNewFile()
+      dataFile.createNewFile()
 
-    val resolver = mock(classOf[IndexShuffleBlockResolver])
-    when(resolver.getStoredShuffles())
-      .thenReturn(ids.map(triple => ShuffleBlockInfo(triple._1, triple._2)).toSeq)
-    ids.foreach { case (shuffleId: Int, mapId: Long, reduceId: Int) =>
-      when(resolver.getMigrationBlocks(mc.any()))
-        .thenReturn(List(
-          (ShuffleIndexBlockId(shuffleId, mapId, reduceId), mock(classOf[ManagedBuffer])),
-          (ShuffleDataBlockId(shuffleId, mapId, reduceId), mock(classOf[ManagedBuffer]))))
-      when(resolver.getIndexFile(shuffleId, mapId)).thenReturn(indexFile)
-      when(resolver.getDataFile(shuffleId, mapId)).thenReturn(dataFile)
-    }
-
-    when(bm.getPeers(mc.any()))
-      .thenReturn(Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID))
-    val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
-    when(bm.master).thenReturn(bmm)
-    val blockTransferService = mock(classOf[BlockTransferService])
-    when(blockTransferService.uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(),
-      mc.any(), mc.any())).thenThrow(new IOException)
-    when(bm.blockTransferService).thenReturn(blockTransferService)
-    when(bm.migratableResolver).thenReturn(resolver)
-    when(bm.getMigratableRDDBlocks()).thenReturn(Seq())
-
-    val decommissioner = new BlockManagerDecommissioner(conf, bm)
-
-    try {
-      decommissioner.start()
-      val fallbackStorage = new FallbackStorage(conf)
-      eventually(timeout(10.second), interval(1.seconds)) {
-        // uploadBlockSync should not be used, verify that it is not called
-        verify(blockTransferService, never())
-          .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
-
-        Seq("shuffle_1_1_0.index", "shuffle_1_1_0.data").foreach { filename =>
-          assert(fallbackStorage.exists(shuffleId = 1, filename))
-        }
+      val resolver = mock(classOf[IndexShuffleBlockResolver])
+      when(resolver.getStoredShuffles())
+        .thenReturn(ids.map(triple => ShuffleBlockInfo(triple._1, triple._2)).toSeq)
+      ids.foreach { case (shuffleId: Int, mapId: Long, reduceId: Int) =>
+        when(resolver.getMigrationBlocks(mc.any()))
+          .thenReturn(List(
+            (ShuffleIndexBlockId(shuffleId, mapId, reduceId), mock(classOf[ManagedBuffer])),
+            (ShuffleDataBlockId(shuffleId, mapId, reduceId), mock(classOf[ManagedBuffer]))))
+        when(resolver.getIndexFile(shuffleId, mapId)).thenReturn(indexFile)
+        when(resolver.getDataFile(shuffleId, mapId)).thenReturn(dataFile)
       }
-    } finally {
-      decommissioner.stop()
+
+      when(bm.getPeers(mc.any()))
+        .thenReturn(Seq(FallbackStorage.FALLBACK_BLOCK_MANAGER_ID))
+      val bmm = new BlockManagerMaster(new NoopRpcEndpointRef(conf), null, conf, false)
+      when(bm.master).thenReturn(bmm)
+      val blockTransferService = mock(classOf[BlockTransferService])
+      when(blockTransferService.uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(),
+        mc.any(), mc.any())).thenThrow(new IOException)
+      when(bm.blockTransferService).thenReturn(blockTransferService)
+      when(bm.migratableResolver).thenReturn(resolver)
+      when(bm.getMigratableRDDBlocks()).thenReturn(Seq())
+
+      val decommissioner = new BlockManagerDecommissioner(conf, bm)
+
+      try {
+        decommissioner.start()
+        val fallbackStorage = FallbackStorage.getFallbackStorage(conf).get
+        eventually(timeout(10.second), interval(1.seconds)) {
+          // uploadBlockSync should not be used, verify that it is not called
+          verify(blockTransferService, never())
+            .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
+
+          Seq("shuffle_1_1_0.index", "shuffle_1_1_0.data").foreach { filename =>
+            assert(fallbackStorage.exists(shuffleId = 1, filename))
+          }
+        }
+      } finally {
+        decommissioner.stop()
+      }
     }
   }
 

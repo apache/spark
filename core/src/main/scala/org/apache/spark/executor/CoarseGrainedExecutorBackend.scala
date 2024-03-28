@@ -314,6 +314,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     logInfo(msg)
     try {
       decommissioned = true
+      val startTime = System.nanoTime()
       val migrationEnabled = env.conf.get(STORAGE_DECOMMISSION_ENABLED) &&
         (env.conf.get(STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED) ||
           env.conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED))
@@ -354,7 +355,8 @@ private[spark] class CoarseGrainedExecutorBackend(
                 // We can only trust allBlocksMigrated boolean value if there were no tasks running
                 // since the start of computing it.
                 if (allBlocksMigrated && (migrationTime > lastTaskFinishTime.get())) {
-                  logInfo("No running tasks, all blocks migrated, stopping.")
+                  val timeTakenMs = (System.nanoTime() - startTime) / (1000 * 1000)
+                  logInfo(s"No running tasks, all blocks migrated in $timeTakenMs ms, stopping.")
                   exitExecutor(0, ExecutorLossMessage.decommissionFinished, notifyDriver = true)
                 } else {
                   logInfo("All blocks not yet migrated.")

@@ -390,6 +390,10 @@ object SparkEnv extends Logging {
       new MapOutputTrackerMasterEndpoint(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
+    if (conf.get(STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ).isEmpty) {
+      conf.set(STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ, numUsableCores * 2)
+    }
+
     val blockManagerPort = if (isDriver) {
       conf.get(DRIVER_BLOCK_MANAGER_PORT)
     } else {
