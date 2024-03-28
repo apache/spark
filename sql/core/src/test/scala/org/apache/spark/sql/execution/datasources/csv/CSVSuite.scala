@@ -35,7 +35,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
@@ -378,10 +378,7 @@ abstract class CSVSuite
           .options(Map("header" -> "true", "mode" -> "failfast"))
           .load(testFile(carsFile)).collect()
       }
-      checkError(
-        exception = e1,
-        errorClass = "FAILED_READ_FILE.NO_HINT",
-        parameters = Map("path" -> testFile(carsFile).replaceFirst("file:", "file://")))
+      assert(e1.getErrorClass == "FAILED_READ_FILE")
       val e2 = e1.getCause.asInstanceOf[SparkRuntimeException]
       assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
       checkError(
@@ -1503,13 +1500,10 @@ abstract class CSVSuite
       val df = spark.read.option("multiLine", true).csv(csvPath.toString)
       fs.delete(csvPath, true)
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        checkErrorMatchPVals(
-          exception = intercept[SparkException] {
-            df.collect()
-          },
-          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
-          parameters = Map("path" -> ".*")
-        )
+        val e = intercept[SparkFileNotFoundException] {
+          df.collect()
+        }
+        assert(e.getMessage.contains(".csv does not exist"))
       }
 
       sampledTestData.write.csv(csvPath.toString)
@@ -1936,7 +1930,7 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(exception.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(exception.getErrorClass == "FAILED_READ_FILE")
         assert(exception.getCause.getMessage.contains("CSV header does not conform to the schema"))
 
         val shortSchema = new StructType().add("f1", DoubleType)
@@ -1949,7 +1943,7 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(exception.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(exception.getErrorClass == "FAILED_READ_FILE")
         assert(exceptionForShortSchema.getCause.getMessage.contains(
           "Number of column in CSV header is not equal to number of fields in the schema"))
 
@@ -1967,7 +1961,7 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(exceptionForLongSchema.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(exceptionForLongSchema.getErrorClass == "FAILED_READ_FILE")
         assert(exceptionForLongSchema.getCause.getMessage.contains(
           "Header length: 2, schema size: 3"))
 
@@ -1981,7 +1975,7 @@ abstract class CSVSuite
             .csv(path.getCanonicalPath)
             .collect()
         }
-        assert(caseSensitiveException.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(caseSensitiveException.getErrorClass == "FAILED_READ_FILE")
         assert(caseSensitiveException.getCause.getMessage.contains(
           "CSV header does not conform to the schema"))
       }
@@ -3320,10 +3314,7 @@ class CSVv1Suite extends CSVSuite {
           .options(Map("header" -> "true", "mode" -> "failfast"))
           .load(testFile(carsFile)).collect()
       }
-      checkError(
-        exception = ex,
-        errorClass = "FAILED_READ_FILE.NO_HINT",
-        parameters = Map("path" -> testFile(carsFile).replaceFirst("file:", "file://")))
+      assert(ex.getErrorClass == "FAILED_READ_FILE")
       checkError(
         exception = ex.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -3351,7 +3342,7 @@ class CSVv2Suite extends CSVSuite {
             .options(Map("header" -> "true", "mode" -> "failfast"))
             .load(testFile(carsFile)).collect()
         },
-        errorClass = "FAILED_READ_FILE.NO_HINT",
+        errorClass = "FAILED_READ_FILE",
         parameters = Map("path" -> s".*$carsFile"),
         matchPVals = true
       )

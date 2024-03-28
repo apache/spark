@@ -53,8 +53,7 @@ class PythonBatch(
   private lazy val infoInPython: PythonDataSourceReadInfo = {
     ds.source.createReadInfoInPython(
       ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema)),
-      outputSchema,
-      isStreaming = false)
+      outputSchema)
   }
 
   override def planInputPartitions(): Array[InputPartition] =

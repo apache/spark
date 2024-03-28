@@ -267,6 +267,14 @@ Error parsing descriptor bytes into Protobuf FileDescriptorSet.
 
 `<message>`. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
+### CANNOT_READ_FILE_FOOTER
+
+SQLSTATE: KD001
+
+Could not read footer for file: `<file>`. Please ensure that the file is in either ORC or Parquet format.
+If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.
+If it is, you can choose to either ignore it or fix the corruption.
+
 ### CANNOT_RECOGNIZE_HIVE_TYPE
 
 [SQLSTATE: 429BB](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -724,13 +732,11 @@ For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.
 
 Failed parsing struct: `<raw>`.
 
-### [FAILED_READ_FILE](sql-error-conditions-failed-read-file-error-class.html)
+### FAILED_READ_FILE
 
 SQLSTATE: KD001
 
 Encountered error while reading file `<path>`.
-
-For more details see [FAILED_READ_FILE](sql-error-conditions-failed-read-file-error-class.html)
 
 ### FAILED_REGISTER_CLASS_WITH_KRYO
 
@@ -845,6 +851,12 @@ GROUP BY `<index>` refers to an expression `<aggExpr>` that contains an aggregat
 [SQLSTATE: 42805](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 GROUP BY position `<index>` is not in select list (valid range is [1, `<size>`]).
+
+### GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE
+
+[SQLSTATE: 42822](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The expression `<sqlExpr>` cannot be used as a grouping expression because its data type `<dataType>` is not an orderable data type.
 
 ### HLL_INVALID_INPUT_SKETCH_BUFFER
 

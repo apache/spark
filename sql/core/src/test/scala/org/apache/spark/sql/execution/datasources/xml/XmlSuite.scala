@@ -36,7 +36,7 @@ import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{DebugFilesystem, SparkException, SparkRuntimeException}
+import org.apache.spark.{DebugFilesystem, SparkException, SparkFileNotFoundException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -250,11 +250,7 @@ class XmlSuite
         .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
         .collect()
     }
-    checkError(
-      exception = exceptionInParsing,
-      errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> ("file://" + getTestResourcePath(resDir + "cars-malformed.xml")))
-    )
+    assert(exceptionInParsing.getErrorClass == "FAILED_READ_FILE")
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -281,11 +277,7 @@ class XmlSuite
         .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
         .show()
     }
-    checkError(
-      exception = exceptionInParsing,
-      errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> ("file://" + getTestResourcePath(resDir + "unclosed_tag.xml")))
-    )
+    assert(exceptionInParsing.getErrorClass == "FAILED_READ_FILE")
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -2846,13 +2838,10 @@ class XmlSuite
       val df = spark.read.option("rowTag", "ROW").option("multiLine", true).xml(xmlPath.toString)
       fs.delete(xmlPath, true)
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        checkErrorMatchPVals(
-          exception = intercept[SparkException] {
-            df.collect()
-          },
-          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
-          parameters = Map("path" -> ".*")
-        )
+        val e = intercept[SparkFileNotFoundException] {
+          df.collect()
+        }
+        assert(e.getMessage.contains(".xml does not exist"))
       }
 
       sampledTestData.write.option("rowTag", "ROW").xml(xmlPath.toString)

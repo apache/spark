@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import java.io.{File, IOException}
+import java.io.{File, FileNotFoundException, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.time.DateTimeException
@@ -32,7 +32,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.apache.spark._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
@@ -747,6 +747,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = cause)
   }
 
+  def readCurrentFileNotFoundError(e: FileNotFoundException): SparkFileNotFoundException = {
+    new SparkFileNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2055",
+      messageParameters = Map("message" -> e.getMessage))
+  }
+
   def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
     val errorSubClass = if (pathExists) "EXISTENT_PATH" else "NON_EXISTENT_PATH"
     new SparkIllegalArgumentException(
@@ -799,26 +805,25 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def fileNotExistError(path: String, e: Exception): Throwable = {
-    new SparkException(
-      errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
-      messageParameters = Map("path" -> path),
-      cause = e)
+  def fileNotFoundError(e: FileNotFoundException): SparkFileNotFoundException = {
+    new SparkFileNotFoundException(
+      errorClass = "_LEGACY_ERROR_TEMP_2062",
+      messageParameters = Map("message" -> e.getMessage))
   }
 
-  def parquetColumnDataTypeMismatchError(
-      path: String,
+  def unsupportedSchemaColumnConvertError(
+      filePath: String,
       column: String,
-      expectedType: String,
-      actualType: String,
+      logicalType: String,
+      physicalType: String,
       e: Exception): Throwable = {
     new SparkException(
-      errorClass = "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+      errorClass = "_LEGACY_ERROR_TEMP_2063",
       messageParameters = Map(
-        "path" -> path,
+        "filePath" -> filePath,
         "column" -> column,
-        "expectedType" -> expectedType,
-        "actualType" -> actualType),
+        "logicalType" -> logicalType,
+        "physicalType" -> physicalType),
       cause = e)
   }
 
@@ -826,7 +831,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       e: Throwable,
       path: String): Throwable = {
     new SparkException(
-      errorClass = "FAILED_READ_FILE.NO_HINT",
+      errorClass = "FAILED_READ_FILE",
       messageParameters = Map("path" -> path),
       cause = e)
   }
@@ -1009,8 +1014,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def cannotReadFooterForFileError(file: Path, e: Exception): Throwable = {
     new SparkException(
-      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-      messageParameters = Map("path" -> file.toString()),
+      errorClass = "CANNOT_READ_FILE_FOOTER",
+      messageParameters = Map("file" -> file.toString()),
       cause = e)
   }
 

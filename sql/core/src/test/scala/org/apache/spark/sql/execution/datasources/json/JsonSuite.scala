@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.{functions => F, _}
@@ -1944,13 +1944,10 @@ abstract class JsonSuite
       val df = spark.read.option("multiLine", true).json(jsonPath.toString)
       fs.delete(jsonPath, true)
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        checkErrorMatchPVals(
-          exception = intercept[SparkException] {
-            df.collect()
-          },
-          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
-          parameters = Map("path" -> ".*")
-        )
+        val e = intercept[SparkFileNotFoundException] {
+          df.collect()
+        }
+        assert(e.getMessage.contains(".json does not exist"))
       }
 
       sampledTestData.write.json(jsonPath.toString)
@@ -2044,7 +2041,7 @@ abstract class JsonSuite
           .json(path)
           .collect()
       }
-      assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(ex.getErrorClass == "FAILED_READ_FILE")
       checkError(
         exception = ex.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -2337,7 +2334,7 @@ abstract class JsonSuite
         .json(testFile(fileName))
         .count()
     }
-    assert(exception.getErrorClass.startsWith("FAILED_READ_FILE"))
+    assert(exception.getErrorClass == "FAILED_READ_FILE")
     assert(exception.getCause.getMessage.contains(
       "Malformed records are detected in record parsing"))
   }

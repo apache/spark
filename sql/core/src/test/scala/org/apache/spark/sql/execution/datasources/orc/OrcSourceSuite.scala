@@ -231,12 +231,13 @@ abstract class OrcSuite
   protected def testMergeSchemasInParallel(
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
     testMergeSchemasInParallel(true, schemaReader)
-    checkErrorMatchPVals(
+    checkError(
       exception = intercept[SparkException] {
         testMergeSchemasInParallel(false, schemaReader)
       }.getCause.getCause.asInstanceOf[SparkException],
-      errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-      parameters = Map("path" -> "file:.*")
+      errorClass = "CANNOT_READ_FILE_FOOTER",
+      parameters = Map("file" -> "file:.*"),
+      matchPVals = true
     )
   }
 
@@ -477,12 +478,13 @@ abstract class OrcSuite
 
         // don't ignore corrupt files
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          checkErrorMatchPVals(
+          checkError(
             exception = intercept[SparkException] {
               spark.read.orc(basePath).columns.length
             }.getCause.getCause.asInstanceOf[SparkException],
-            errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
-            parameters = Map("path" -> "file:.*")
+            errorClass = "CANNOT_READ_FILE_FOOTER",
+            parameters = Map("file" -> "file:.*"),
+            matchPVals = true
           )
         }
       }

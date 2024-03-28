@@ -243,8 +243,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
-    Batch("InsertMapSortInGroupingExpressions", Once,
-      InsertMapSortInGroupingExpressions) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)

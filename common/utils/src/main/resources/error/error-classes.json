@@ -304,6 +304,14 @@
     ],
     "sqlState" : "22007"
   },
+  "CANNOT_READ_FILE_FOOTER" : {
+    "message" : [
+      "Could not read footer for file: <file>. Please ensure that the file is in either ORC or Parquet format.",
+      "If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.",
+      "If it is, you can choose to either ignore it or fix the corruption."
+    ],
+    "sqlState" : "KD001"
+  },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
       "Cannot recognize hive type string: <fieldType>, column: <fieldName>. The specified data type for the field cannot be recognized by Spark SQL. Please check the data type of the specified field and ensure that it is a valid Spark SQL data type. Refer to the Spark SQL documentation for a list of valid data types and their format. If the data type is correct, please ensure that you are using a supported version of Spark SQL."
@@ -1249,31 +1257,6 @@
     "message" : [
       "Encountered error while reading file <path>."
     ],
-    "subClass" : {
-      "CANNOT_READ_FILE_FOOTER" : {
-        "message" : [
-          "Could not read footer. Please ensure that the file is in either ORC or Parquet format.",
-          "If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.",
-          "If it is, you can choose to either ignore it or fix the corruption."
-        ]
-      },
-      "FILE_NOT_EXIST" : {
-        "message" : [
-          "File does not exist. It is possible the underlying files have been updated.",
-          "You can explicitly invalidate the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by recreating the Dataset/DataFrame involved."
-        ]
-      },
-      "NO_HINT" : {
-        "message" : [
-          ""
-        ]
-      },
-      "PARQUET_COLUMN_DATA_TYPE_MISMATCH" : {
-        "message" : [
-          "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
-        ]
-      }
-    },
     "sqlState" : "KD001"
   },
   "FAILED_REGISTER_CLASS_WITH_KRYO" : {
@@ -1389,6 +1372,12 @@
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
+  },
+  "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
+    "message" : [
+      "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
+    ],
+    "sqlState" : "42822"
   },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
@@ -6136,6 +6125,12 @@
       "buildReader is not supported for <format>."
     ]
   },
+  "_LEGACY_ERROR_TEMP_2055" : {
+    "message" : [
+      "<message>",
+      "It is possible the underlying files have been updated. You can explicitly invalidate the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by recreating the Dataset/DataFrame involved."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_2056" : {
     "message" : [
       "Unable to clear output directory <staticPrefixPath> prior to writing to it."
@@ -6166,6 +6161,17 @@
   "_LEGACY_ERROR_TEMP_2061" : {
     "message" : [
       "No records should be returned from EmptyDataReader."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2062" : {
+    "message" : [
+      "<message>",
+      "It is possible the underlying files have been updated. You can explicitly invalidate the cache in Spark by recreating the Dataset/DataFrame involved."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2063" : {
+    "message" : [
+      "Parquet column cannot be converted in file <filePath>. Column: <column>, Expected: <logicalType>, Found: <physicalType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2065" : {

@@ -22,7 +22,6 @@ import time
 import unittest
 
 from pyspark.sql import Row
-import pyspark.sql.functions as F
 from pyspark.sql.types import (
     DateType,
     TimestampType,
@@ -157,57 +156,6 @@ class DataFrameCreationTestsMixin:
             error_class="CANNOT_DETERMINE_TYPE",
             message_parameters={},
         )
-
-    def test_schema_inference_from_pandas_with_dict(self):
-        # SPARK-47543: test for verifying if inferring `dict` as `MapType` work properly.
-        import pandas as pd
-
-        pdf = pd.DataFrame({"str_col": ["second"], "dict_col": [{"first": 0.7, "second": 0.3}]})
-
-        with self.sql_conf(
-            {
-                "spark.sql.execution.arrow.pyspark.enabled": True,
-                "spark.sql.execution.arrow.pyspark.fallback.enabled": False,
-                "spark.sql.execution.pandas.inferPandasDictAsMap": True,
-            }
-        ):
-            sdf = self.spark.createDataFrame(pdf)
-            self.assertEqual(
-                sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
-                [Row(str_col="second", dict_col={"first": 0.7, "second": 0.3}, test=0.3)],
-            )
-
-            # Empty dict should fail
-            pdf_empty_struct = pd.DataFrame({"str_col": ["second"], "dict_col": [{}]})
-
-            with self.assertRaises(PySparkValueError) as pe:
-                self.spark.createDataFrame(pdf_empty_struct)
-
-            self.check_error(
-                exception=pe.exception,
-                error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                message_parameters={},
-            )
-
-            # Dict has different types of values should fail
-            pdf_different_type = pd.DataFrame(
-                {"str_col": ["second"], "dict_col": [{"first": 0.7, "second": "0.3"}]}
-            )
-            self.assertRaises(
-                PySparkValueError, lambda: self.spark.createDataFrame(pdf_different_type)
-            )
-
-        with self.sql_conf(
-            {
-                "spark.sql.execution.arrow.pyspark.enabled": False,
-                "spark.sql.execution.pandas.inferPandasDictAsMap": True,
-            }
-        ):
-            sdf = self.spark.createDataFrame(pdf)
-            self.assertEqual(
-                sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
-                [Row(str_col="second", dict_col={"first": 0.7, "second": 0.3}, test=0.3)],
-            )
 
 
 class DataFrameCreationTests(

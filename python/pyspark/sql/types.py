@@ -250,18 +250,14 @@ class StringType(AtomicType):
 
     Parameters
     ----------
-    collation : str
-        name of the collation, default is UTF8_BINARY.
+    collationId : int
+        the collation id number.
     """
 
     collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
 
-    def __init__(self, collation: Optional[str] = None):
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
+    def __init__(self, collationId: int = 0):
+        self.collationId = collationId
 
     def collationIdToName(self) -> str:
         return (
@@ -281,11 +277,7 @@ class StringType(AtomicType):
         return "string" + self.collationIdToName()
 
     def __repr__(self) -> str:
-        return (
-            "StringType('%s')" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
-            else "StringType()"
-        )
+        return "StringType(%d)" % (self.collationId) if self.collationId != 0 else "StringType()"
 
 
 class CharType(AtomicType):
@@ -1662,7 +1654,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return CalendarIntervalType()
         elif _COLLATED_STRING.match(json_value):
             m = _COLLATED_STRING.match(json_value)
-            return StringType(m.group(1))  # type: ignore[union-attr]
+            return StringType(StringType.collationNameToId(m.group(1)))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
