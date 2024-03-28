@@ -806,7 +806,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     parser.parsePlan("SELECT\r1") // ASCII carriage return
     parser.parsePlan("SELECT\n1") // ASCII line feed
     parser.parsePlan("SELECT\t1") // ASCII tab
-    parser.parsePlan("SELECT\v1") // ASCII vertical tab
+    parser.parsePlan("SELECT\u000B1") // ASCII vertical tab
     parser.parsePlan("SELECT\f1") // ASCII form feed
   }
 
