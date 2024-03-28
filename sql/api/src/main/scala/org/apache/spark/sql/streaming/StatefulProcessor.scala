@@ -91,5 +91,3 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
     statefulProcessorHandle
   }
 }
-
-// private[sql] abstract class StatefulProcessorInJava[K, I, O] extends StatefulProcessor[K, I, O]
