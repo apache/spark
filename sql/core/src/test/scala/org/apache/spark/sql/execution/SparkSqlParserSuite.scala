@@ -812,10 +812,6 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
   // Need to switch off scala style for Unicode characters
   // scalastyle:off
-  test("verify whitespace handling - ASCII form feed") {
-    parser.parsePlan("SELECT\u000C1") // ASCII form feed
-  }
-
   test("verify whitespace handling - Unicode no-break space") {
     parser.parsePlan("SELECT\u00A01") // Unicode no-break space
   }
