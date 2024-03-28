@@ -86,6 +86,10 @@ class StatefulProcessorHandleImpl(
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
+  /**
+   * Stores all the active ttl states, and is used to cleanup expired values
+   * in [[doTtlCleanup()]] function.
+   */
   private val ttlStates: util.List[TTLState] = new util.ArrayList[TTLState]()
 
   private val BATCH_QUERY_ID = "00000000-0000-0000-0000-000000000000"

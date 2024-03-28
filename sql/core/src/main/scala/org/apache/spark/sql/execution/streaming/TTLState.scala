@@ -34,7 +34,8 @@ object StateTTLSchema {
 }
 
 /**
- * Encapsulates the ttl row information stored in [[SingleKeyTTLState]].
+ * Encapsulates the ttl row information stored in [[SingleKeyTTLStateImpl]].
+ *
  * @param groupingKey grouping key for which ttl is set
  * @param expirationMs expiration time for the grouping key
  */
@@ -73,7 +74,7 @@ trait StateVariableWithTTLSupport {
 trait TTLState {
 
   /**
-   * Perform the user state clean yp based on ttl values stored in
+   * Perform the user state clean up based on ttl values stored in
    * this state. NOTE that its not safe to call this operation concurrently
    * when the user can also modify the underlying State. Cleanup should be initiated
    * after arbitrary state operations are completed by the user.
@@ -84,7 +85,7 @@ trait TTLState {
 /**
  * Manages the ttl information for user state keyed with a single key (grouping key).
  */
-class SingleKeyTTLState(
+class SingleKeyTTLStateImpl(
     ttlMode: TTLMode,
     stateName: String,
     store: StateStore,

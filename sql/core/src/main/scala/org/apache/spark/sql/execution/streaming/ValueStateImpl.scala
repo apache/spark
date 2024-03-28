@@ -44,7 +44,7 @@ class ValueStateImpl[S](
 
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
-  private[sql] var ttlState: Option[SingleKeyTTLState] = None
+  private[sql] var ttlState: Option[SingleKeyTTLStateImpl] = None
 
   initialize()
 

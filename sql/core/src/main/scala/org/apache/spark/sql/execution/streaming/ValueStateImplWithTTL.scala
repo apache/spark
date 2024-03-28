@@ -55,7 +55,7 @@ class ValueStateImplWithTTL[S](
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder,
     stateName, hasTtl = true)
-  private[sql] var ttlState: SingleKeyTTLState = _
+  private[sql] var ttlState: SingleKeyTTLStateImpl = _
 
   initialize()
 
@@ -65,7 +65,7 @@ class ValueStateImplWithTTL[S](
     store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
 
-    ttlState = new SingleKeyTTLState(ttlMode, stateName, store,
+    ttlState = new SingleKeyTTLStateImpl(ttlMode, stateName, store,
       batchTimestampMs, eventTimeWatermarkMs)
   }
 
