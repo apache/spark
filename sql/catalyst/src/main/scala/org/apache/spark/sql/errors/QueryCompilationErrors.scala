@@ -620,28 +620,42 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("prettyName" -> toSQLId(prettyName), "syntax" -> toSQLStmt(syntax)))
   }
 
-  def nonDeterministicFilterInAggregateError(): Throwable = {
+  def subqueryExpressionInLambdaOrHigherOrderFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1024",
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
       messageParameters = Map.empty)
   }
 
-  def nonBooleanFilterInAggregateError(): Throwable = {
+  def nonDeterministicFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1025",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
+      messageParameters = Map("filterExpr" -> toSQLExpr(filterExpr)))
   }
 
-  def aggregateInAggregateFilterError(): Throwable = {
+  def nonBooleanFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1026",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
+      messageParameters = Map("filterExpr" -> toSQLExpr(filterExpr)))
   }
 
-  def windowFunctionInAggregateFilterError(): Throwable = {
+  def aggregateInAggregateFilterError(
+      filterExpr: Expression,
+      aggExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1027",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
+      messageParameters = Map(
+        "filterExpr" -> toSQLExpr(filterExpr),
+        "aggExpr" -> toSQLExpr(aggExpr)))
+  }
+
+  def windowFunctionInAggregateFilterError(
+      filterExpr: Expression,
+      windowExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
+      messageParameters = Map(
+        "filterExpr" -> toSQLExpr(filterExpr),
+        "windowExpr" -> toSQLExpr(windowExpr)))
   }
 
   def distinctInverseDistributionFunctionUnsupportedError(funcName: String): Throwable = {

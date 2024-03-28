@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.io.FileNotFoundException
 import java.util
 
 import scala.jdk.CollectionConverters._
@@ -26,7 +27,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkUpgradeException}
+import org.apache.spark.{SparkException, SparkUpgradeException}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -124,22 +125,21 @@ object FileDataSourceV2 {
 
   def attachFilePath(filePath: => String, ex: Throwable): Throwable = {
     ex match {
+      // This is not a file issue, throw it directly and ask users to handle the upgrade issue.
+      case sue: SparkUpgradeException =>
+        throw sue
+      // The error is already FAILED_READ_FILE, throw it directly. To be consistent, schema
+      // inference code path throws `FAILED_READ_FILE`, but the file reading code path can reach
+      // that code path as well and we should not double-wrap the error.
+      case e: SparkException if e.getErrorClass == "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER" =>
+        throw e
       case e: SchemaColumnConvertNotSupportedException =>
-        throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
+        throw QueryExecutionErrors.parquetColumnDataTypeMismatchError(
           filePath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-      case sue: SparkUpgradeException => throw sue
-      // the following exceptions already contains file path, we don't need to wrap it with
-      // `QueryExecutionErrors.cannotReadFilesError` to provide the file path.
-      case e: SparkFileNotFoundException => throw e
-      case e: SparkException if e.getErrorClass == "CANNOT_READ_FILE_FOOTER" => throw e
+      case e: FileNotFoundException =>
+        throw QueryExecutionErrors.fileNotExistError(filePath, e)
       case NonFatal(e) =>
-        // TODO: do we need to check the cause?
-        e.getCause match {
-          case sue: SparkUpgradeException => throw sue
-          case e: SparkFileNotFoundException => throw e
-          case e: SparkException if e.getErrorClass == "CANNOT_READ_FILE_FOOTER" => throw e
-          case _ => throw QueryExecutionErrors.cannotReadFilesError(e, filePath)
-        }
+        throw QueryExecutionErrors.cannotReadFilesError(e, filePath)
     }
   }
 }

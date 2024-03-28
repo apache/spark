@@ -29,32 +29,32 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 @Stable
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
   /**
-   * Returns whether assigned collation is the default spark collation (UTF8_BINARY).
+   * Support for Binary Equality implies that strings are considered equal only if
+   * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
+   * non-binary. If this field is true, byte level operations can be used against this datatype
+   * (e.g. for equality and hashing).
    */
-  def isDefaultCollation: Boolean = collationId == CollationFactory.DEFAULT_COLLATION_ID
+  def supportsBinaryEquality: Boolean =
+    CollationFactory.fetchCollation(collationId).supportsBinaryEquality
+  def isUTF8BinaryLcaseCollation: Boolean =
+    collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID
 
   /**
-   * Binary collation implies that strings are considered equal only if they are
-   * byte for byte equal. E.g. all accent or case-insensitive collations are considered non-binary.
-   * If this field is true, byte level operations can be used against this datatype (e.g. for
-   * equality and hashing).
+   * Support for Binary Ordering implies that strings are considered equal only
+   * if they are byte for byte equal. E.g. all accent or case-insensitive collations are
+   * considered non-binary. Also their ordering does not require calls to ICU library, as
+   * it follows spark internal implementation. If this field is true, byte level operations
+   * can be used against this datatype (e.g. for equality, hashing and ordering).
    */
-  def isBinaryCollation: Boolean = CollationFactory.fetchCollation(collationId).isBinaryCollation
-  def isLowercaseCollation: Boolean = collationId == CollationFactory.LOWERCASE_COLLATION_ID
-
-  /**
-   * Returns whether the collation is indeterminate. An indeterminate collation is
-   * a result of combination of conflicting non-default implicit collations.
-   */
-  def isIndeterminateCollation: Boolean = collationId == CollationFactory.INDETERMINATE_COLLATION_ID
+  def supportsBinaryOrdering: Boolean =
+    CollationFactory.fetchCollation(collationId).supportsBinaryOrdering
 
   /**
    * Type name that is shown to the customer.
    * If this is an UTF8_BINARY collation output is `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (isDefaultCollation) "string"
-    else if (isIndeterminateCollation) s"string collate INDETERMINATE_COLLATION"
+    if (collationId == 0) "string"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
   override def equals(obj: Any): Boolean =
@@ -77,5 +77,10 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
  */
 @Stable
 case object StringType extends StringType(0) {
-  def apply(collationId: Int): StringType = new StringType(collationId)
+  private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
+
+  def apply(collation: String): StringType = {
+    val collationId = CollationFactory.collationNameToId(collation)
+    new StringType(collationId)
+  }
 }

@@ -103,8 +103,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
         // MySQL connector behaviour
         md.putLong("binarylong", 1)
         Some(LongType)
-      case Types.BIT if "TINYINT".equalsIgnoreCase(typeName) =>
-        Some(BooleanType)
       case Types.VARCHAR if "TINYTEXT".equalsIgnoreCase(typeName) =>
         // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
         Some(StringType)

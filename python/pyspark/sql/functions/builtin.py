@@ -15066,29 +15066,66 @@ def from_json(
 
     Examples
     --------
-    >>> from pyspark.sql.types import *
-    >>> data = [(1, '''{"a": 1}''')]
+    Example 1: Parsing JSON with a specified schema
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql.types import StructType, StructField, IntegerType
     >>> schema = StructType([StructField("a", IntegerType())])
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json=Row(a=1))]
-    >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
-    [Row(json=Row(a=1))]
-    >>> df.select(from_json(df.value, "MAP<STRING,INT>").alias("json")).collect()
-    [Row(json={'a': 1})]
-    >>> data = [(1, '''[{"a": 1}]''')]
+    >>> df = spark.createDataFrame([(1, '''{"a": 1}''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, schema).alias("json")).show()
+    +----+
+    |json|
+    +----+
+    | {1}|
+    +----+
+
+    Example 2: Parsing JSON with a DDL-formatted string.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, '''{"a": 1}''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, "a INT").alias("json")).show()
+    +----+
+    |json|
+    +----+
+    | {1}|
+    +----+
+
+    Example 3: Parsing JSON into a MapType
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, '''{"a": 1}''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, "MAP<STRING,INT>").alias("json")).show()
+    +--------+
+    |    json|
+    +--------+
+    |{a -> 1}|
+    +--------+
+
+    Example 4: Parsing JSON into an ArrayType of StructType
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql.types import ArrayType, StructType, StructField, IntegerType
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json=[Row(a=1)])]
-    >>> schema = schema_of_json(lit('''{"a": 0}'''))
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json=Row(a=None))]
-    >>> data = [(1, '''[1, 2, 3]''')]
+    >>> df = spark.createDataFrame([(1, '''[{"a": 1}]''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, schema).alias("json")).show()
+    +-----+
+    | json|
+    +-----+
+    |[{1}]|
+    +-----+
+
+    Example 5: Parsing JSON into an ArrayType
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql.types import ArrayType, IntegerType
     >>> schema = ArrayType(IntegerType())
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json=[1, 2, 3])]
+    >>> df = spark.createDataFrame([(1, '''[1, 2, 3]''')], ("key", "value"))
+    >>> df.select(sf.from_json(df.value, schema).alias("json")).show()
+    +---------+
+    |     json|
+    +---------+
+    |[1, 2, 3]|
+    +---------+
     """
 
     if isinstance(schema, DataType):
@@ -15129,28 +15166,64 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
 
     Examples
     --------
+    Example 1: Converting a StructType column to JSON
+
+    >>> import pyspark.sql.functions as sf
     >>> from pyspark.sql import Row
-    >>> from pyspark.sql.types import *
     >>> data = [(1, Row(age=2, name='Alice'))]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='{"age":2,"name":"Alice"}')]
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +------------------------+
+    |json                    |
+    +------------------------+
+    |{"age":2,"name":"Alice"}|
+    +------------------------+
+
+    Example 2: Converting an ArrayType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import Row
     >>> data = [(1, [Row(age=2, name='Alice'), Row(age=3, name='Bob')])]
     >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
-    >>> data = [(1, {"name": "Alice"})]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='{"name":"Alice"}')]
-    >>> data = [(1, [{"name": "Alice"}, {"name": "Bob"}])]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='[{"name":"Alice"},{"name":"Bob"}]')]
-    >>> data = [(1, ["Alice", "Bob"])]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_json(df.value).alias("json")).collect()
-    [Row(json='["Alice","Bob"]')]
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +-------------------------------------------------+
+    |json                                             |
+    +-------------------------------------------------+
+    |[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]|
+    +-------------------------------------------------+
+
+    Example 3: Converting a MapType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, {"name": "Alice"})], ("key", "value"))
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +----------------+
+    |json            |
+    +----------------+
+    |{"name":"Alice"}|
+    +----------------+
+
+    Example 4: Converting a nested MapType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, [{"name": "Alice"}, {"name": "Bob"}])], ("key", "value"))
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +---------------------------------+
+    |json                             |
+    +---------------------------------+
+    |[{"name":"Alice"},{"name":"Bob"}]|
+    +---------------------------------+
+
+    Example 5: Converting a simple ArrayType column to JSON
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, ["Alice", "Bob"])], ("key", "value"))
+    >>> df.select(sf.to_json(df.value).alias("json")).show(truncate=False)
+    +---------------+
+    |json           |
+    +---------------+
+    |["Alice","Bob"]|
+    +---------------+
     """
 
     return _invoke_function("to_json", _to_java_column(col), _options_to_str(options))
