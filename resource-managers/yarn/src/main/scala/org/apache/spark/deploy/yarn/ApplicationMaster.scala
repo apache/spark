@@ -50,7 +50,7 @@ import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.MiscellaneousProcessDetails
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
 
@@ -562,13 +562,24 @@ private[spark] class ApplicationMaster(
   private def allocationThreadImpl(): Unit = {
     // The number of failures in a row until the allocation thread gives up.
     val reporterMaxFailures = sparkConf.get(MAX_REPORTER_THREAD_FAILURES)
+    val minExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(sparkConf)
+    val minRegisteredRatio = sparkConf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).getOrElse(0.8)
+    val keepaliveOnMinExecutors = allocator.failureTracker.keepaliveOnMinExecutors
+    def insufficientResources: Boolean = {
+      !keepaliveOnMinExecutors ||
+        allocator.getNumExecutorsRunning < minExecutors * minRegisteredRatio
+    }
     var failureCount = 0
     while (!finished) {
       try {
-        if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
+        if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures && insufficientResources) {
+          val errorMsg = SchedulerBackendUtils.formatExecutorFailureError(
+            maxNumExecutorFailures,
+            allocator.getNumExecutorsRunning,
+            minExecutors,
+            keepaliveOnMinExecutors)
           finish(FinalApplicationStatus.FAILED,
-            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
-            s"Max number of executor failures ($maxNumExecutorFailures) reached")
+            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES, errorMsg)
         } else if (allocator.isAllNodeExcluded) {
           finish(FinalApplicationStatus.FAILED,
             ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,

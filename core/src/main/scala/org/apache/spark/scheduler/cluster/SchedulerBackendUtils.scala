@@ -17,7 +17,7 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES}
+import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS, EXECUTOR_INSTANCES, KEEPALIVE_ON_MIN_EXECUTORS}
 import org.apache.spark.util.Utils
 
 private[spark] object SchedulerBackendUtils {
@@ -43,5 +43,21 @@ private[spark] object SchedulerBackendUtils {
     } else {
       conf.get(EXECUTOR_INSTANCES).getOrElse(numExecutors)
     }
+  }
+
+  def formatExecutorFailureError(
+      maxNumExecutorFailures: Int,
+      numOfExecutorRunning: Int,
+      minExecutors: Int,
+      keepaliveOnMinExecutors: Boolean): String = {
+    s"Max number of executor failures ($maxNumExecutorFailures) reached, ${
+      if (keepaliveOnMinExecutors) {
+        s"and the running executors $numOfExecutorRunning is less than minimum($minExecutors) " +
+          "required"
+      } else {
+        s"the running executors is $numOfExecutorRunning. Consider turning on" +
+          s" ${KEEPALIVE_ON_MIN_EXECUTORS.key} if running executors is sufficient"
+      }
+    }"
   }
 }
