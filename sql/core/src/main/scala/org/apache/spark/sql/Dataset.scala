@@ -227,6 +227,11 @@ class Dataset[T] private[sql](
       dsIds.add(id)
       plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
     }
+    // A plan might get its PLAN_ID_TAG via connect or belong to multiple dataframes so only assign
+    // an id to a plan if it doesn't have any
+    if (plan.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty) {
+      plan.setTagValue(LogicalPlan.PLAN_ID_TAG, id)
+    }
     plan
   }
 
@@ -1472,8 +1477,13 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 3.5.0
    */
-  def metadataColumn(colName: String): Column =
-    Column(queryExecution.analyzed.getMetadataAttributeByName(colName))
+  def metadataColumn(colName: String): Column = {
+    val a = queryExecution.analyzed.getMetadataAttributeByName(colName)
+    a.setTagValue(LogicalPlan.PLAN_ID_TAG,
+      logicalPlan.getTagValue(LogicalPlan.PLAN_ID_TAG).get)
+    a.setTagValue(LogicalPlan.IS_METADATA_COL, ())
+    Column(a)
+  }
 
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
@@ -1482,14 +1492,20 @@ class Dataset[T] private[sql](
   // `DetectAmbiguousSelfJoin` will remove it.
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
-      case a: AttributeReference
-        if sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
-        val metadata = new MetadataBuilder()
-          .withMetadata(a.metadata)
-          .putLong(Dataset.DATASET_ID_KEY, id)
-          .putLong(Dataset.COL_POS_KEY, logicalPlan.output.indexWhere(a.semanticEquals))
-          .build()
-        a.withMetadata(metadata)
+      case a: AttributeReference =>
+        val newA = if (sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+          val metadata = new MetadataBuilder()
+            .withMetadata(a.metadata)
+            .putLong(Dataset.DATASET_ID_KEY, id)
+            .putLong(Dataset.COL_POS_KEY, logicalPlan.output.indexWhere(a.semanticEquals))
+            .build()
+          a.withMetadata(metadata)
+        } else {
+          a
+        }
+        newA.setTagValue(LogicalPlan.PLAN_ID_TAG,
+          logicalPlan.getTagValue(LogicalPlan.PLAN_ID_TAG).get)
+        newA
     }
     newExpr.asInstanceOf[NamedExpression]
   }
@@ -1573,7 +1589,15 @@ class Dataset[T] private[sql](
 
       case other => other
     }
-    Project(untypedCols.map(_.named), logicalPlan)
+    val metadataOutputSet = AttributeSet(logicalPlan.metadataOutput)
+    val namedCols = untypedCols.map(_.named).map(_.transform {
+      case ar: AttributeReference
+          if !logicalPlan.outputSet.contains(ar) && !metadataOutputSet.contains(ar) =>
+        val ua = UnresolvedAttribute(Seq(ar.name))
+        ua.copyTagsFrom(ar)
+        ua
+    }.asInstanceOf[NamedExpression])
+    Project(namedCols, logicalPlan)
   }
 
   /**
