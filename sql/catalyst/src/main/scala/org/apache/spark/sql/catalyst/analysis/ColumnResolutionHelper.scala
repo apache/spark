@@ -518,24 +518,90 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     case _ => e
   }
 
+  private def resolveUsingDatasetId(
+      ua: UnresolvedAttribute,
+      left: LogicalPlan,
+      right: LogicalPlan,
+      datasetId: Long): Option[NamedExpression] = {
+    def findUnaryNodeMatchingTagId(lp: LogicalPlan): Option[(LogicalPlan, Int)] = {
+      var currentLp = lp
+      var depth = 0
+      while (true) {
+        if (currentLp.getTagValue(LogicalPlan.DATASET_ID_TAG).exists(_.contains(datasetId))) {
+          return Option(currentLp, depth)
+        } else {
+          if (currentLp.children.size == 1) {
+            currentLp = currentLp.children.head
+          } else {
+            // leaf node or node is a binary node
+            return None
+          }
+        }
+        depth += 1
+      }
+      None
+    }
+
+    val leftDefOpt = findUnaryNodeMatchingTagId(left)
+    val rightDefOpt = findUnaryNodeMatchingTagId(right)
+    val resolveOnAttribs = (leftDefOpt, rightDefOpt) match {
+
+      case (None, Some((lp, _))) => lp.output
+
+      case (Some((lp, _)), None) => lp.output
+
+      case (Some((lp1, depth1)), Some((lp2, depth2))) =>
+        if (depth1 == depth2) {
+          lp1.output
+        } else if (depth1 < depth2) {
+          lp1.output
+        } else {
+          lp2.output
+        }
+
+      case _ => Seq.empty
+    }
+
+    AttributeSeq.fromNormalOutput(resolveOnAttribs).resolve(Seq(ua.name), conf.resolver)
+  }
+
   private def resolveDataFrameColumn(
       u: UnresolvedAttribute,
       q: Seq[LogicalPlan]): Option[NamedExpression] = {
-    val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
-    if (planIdOpt.isEmpty) return None
-    val planId = planIdOpt.get
-    logDebug(s"Extract plan_id $planId from $u")
 
-    val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
-    val (resolved, matched) = resolveDataFrameColumnByPlanId(u, planId, isMetadataAccess, q)
-    if (!matched) {
-      // Can not find the target plan node with plan id, e.g.
-      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
-      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
-      //  df1.select(df2.a)   <-   illegal reference df2.a
-      throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
+    val attrWithDatasetIdOpt = u.getTagValue(LogicalPlan.ATTRIBUTE_DATASET_ID_TAG)
+    val resolvedOpt = if (attrWithDatasetIdOpt.isDefined) {
+      val did = attrWithDatasetIdOpt.get
+      if (q.size == 1) {
+        val binaryNodeOpt = q.head.collectFirst {
+          case bn: BinaryNode => bn
+        }
+        binaryNodeOpt.flatMap(bn => resolveUsingDatasetId(u, bn.left, bn.right, did))
+      } else if (q.size == 2) {
+        resolveUsingDatasetId(u, q(0), q(1), did)
+      } else {
+        None
+      }
+    } else {
+      val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
+      if (planIdOpt.isEmpty) {
+        None
+      } else {
+        val planId = planIdOpt.get
+        logDebug(s"Extract plan_id $planId from $u")
+        val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
+        val (resolved, matched) = resolveDataFrameColumnByPlanId(u, planId, isMetadataAccess, q)
+        if (!matched) {
+          // Can not find the target plan node with plan id, e.g.
+          //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+          //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+          //  df1.select(df2.a)   <-   illegal reference df2.a
+          throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
+        }
+        resolved
+      }
     }
-    resolved
+    resolvedOpt
   }
 
   private def resolveDataFrameColumnByPlanId(
