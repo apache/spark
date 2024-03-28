@@ -42,7 +42,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -115,6 +115,49 @@ class SparkConnectPlanner(
 
   private lazy val pythonExec =
     sys.env.getOrElse("PYSPARK_PYTHON", sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python3"))
+
+  // Some relation transform need to create Dataset, then get the logical plan from the Dataset.
+  // This method used to reuse the Dataset instead to discard it.
+  def transformRelationAsDataset(rel: proto.Relation): Dataset[Row] = {
+    val dataset = rel.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.DROP => transformDropAsDataset(rel.getDrop)
+      case proto.Relation.RelTypeCase.FILL_NA => transformNAFillAsDataset(rel.getFillNa)
+      case proto.Relation.RelTypeCase.DROP_NA => transformNADropAsDataset(rel.getDropNa)
+      case proto.Relation.RelTypeCase.REPLACE => transformReplaceAsDataset(rel.getReplace)
+      case proto.Relation.RelTypeCase.SUMMARY => transformStatSummaryAsDataset(rel.getSummary)
+      case proto.Relation.RelTypeCase.DESCRIBE => transformStatDescribeAsDataset(rel.getDescribe)
+      case proto.Relation.RelTypeCase.COV => transformStatCovAsDataset(rel.getCov)
+      case proto.Relation.RelTypeCase.CORR => transformStatCorrAsDataset(rel.getCorr)
+      case proto.Relation.RelTypeCase.CROSSTAB =>
+        transformStatCrosstabAsDataset(rel.getCrosstab)
+      case proto.Relation.RelTypeCase.FREQ_ITEMS =>
+        transformStatFreqItemsAsDataset(rel.getFreqItems)
+      case proto.Relation.RelTypeCase.SAMPLE_BY =>
+        transformStatSampleByAsDataset(rel.getSampleBy)
+      case proto.Relation.RelTypeCase.TO_SCHEMA => transformToSchemaAsDataset(rel.getToSchema)
+      case proto.Relation.RelTypeCase.TO_DF => transformToDFAsDataset(rel.getToDf)
+      case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
+        transformApplyInPandasWithStateAsDataset(rel.getApplyInPandasWithState)
+      case proto.Relation.RelTypeCase.WITH_COLUMNS_RENAMED =>
+        transformWithColumnsRenamedAsDataset(rel.getWithColumnsRenamed)
+      case proto.Relation.RelTypeCase.WITH_COLUMNS =>
+        transformWithColumnsAsDataset(rel.getWithColumns)
+      case proto.Relation.RelTypeCase.WITH_WATERMARK =>
+        transformWithWatermarkAsDataset(rel.getWithWatermark)
+      case _ if executeHolderOpt.isDefined =>
+        Dataset.ofRows(
+          session,
+          transformRelation(rel),
+          executeHolder.eventsManager.createQueryPlanningTracker())
+      case _ =>
+        Dataset.ofRows(session, transformRelation(rel))
+    }
+
+    if (rel.hasCommon && rel.getCommon.hasPlanId) {
+      dataset.logicalPlan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
+    }
+    dataset
+  }
 
   // The root of the query plan is a relation and we apply the transformations to it.
   def transformRelation(rel: proto.Relation): LogicalPlan = {
@@ -264,8 +307,7 @@ class SparkConnectPlanner(
   }
 
   private def transformShowString(rel: proto.ShowString): LogicalPlan = {
-    val showString = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+    val showString = transformRelationAsDataset(rel.getInput)
       .showString(rel.getNumRows, rel.getTruncate, rel.getVertical)
     LocalRelation.fromProduct(
       output = AttributeReference("show_string", StringType, false)() :: Nil,
@@ -273,8 +315,7 @@ class SparkConnectPlanner(
   }
 
   private def transformHtmlString(rel: proto.HtmlString): LogicalPlan = {
-    val htmlString = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+    val htmlString = transformRelationAsDataset(rel.getInput)
       .htmlString(rel.getNumRows, rel.getTruncate)
     LocalRelation.fromProduct(
       output = AttributeReference("html_string", StringType, false)() :: Nil,
@@ -322,7 +363,7 @@ class SparkConnectPlanner(
    */
   private def transformSample(rel: proto.Sample): LogicalPlan = {
     val plan = if (rel.getDeterministicOrder) {
-      val input = Dataset.ofRows(session, transformRelation(rel.getInput))
+      val input = transformRelationAsDataset(rel.getInput)
 
       // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
       // constituent partitions each time a split is materialized which could result in
@@ -366,7 +407,7 @@ class SparkConnectPlanner(
     logical.Range(start, end, step, numPartitions)
   }
 
-  private def transformNAFill(rel: proto.NAFill): LogicalPlan = {
+  private def transformNAFillAsDataset(rel: proto.NAFill): Dataset[Row] = {
     if (rel.getValuesCount == 0) {
       throw InvalidPlanInput(s"values must contains at least 1 item!")
     }
@@ -376,41 +417,49 @@ class SparkConnectPlanner(
           s"values and cols should have the same length!")
     }
 
-    val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val dataset = transformRelationAsDataset(rel.getInput)
 
     val cols = rel.getColsList.asScala.toArray
     val values = rel.getValuesList.asScala.toArray
     if (values.length == 1) {
       val value = LiteralValueProtoConverter.toCatalystValue(values.head)
       val columns = if (cols.nonEmpty) Some(cols.toImmutableArraySeq) else None
-      dataset.na.fillValue(value, columns).logicalPlan
+      dataset.na.fillValue(value, columns)
     } else {
       val valueMap = mutable.Map.empty[String, Any]
       cols.zip(values).foreach { case (col, value) =>
         valueMap.update(col, LiteralValueProtoConverter.toCatalystValue(value))
       }
-      dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
+      dataset.na.fill(valueMap = valueMap.toMap)
     }
   }
 
-  private def transformNADrop(rel: proto.NADrop): LogicalPlan = {
-    val dataset = Dataset.ofRows(session, transformRelation(rel.getInput))
+  private def transformNAFill(rel: proto.NAFill): LogicalPlan = {
+    transformNAFillAsDataset(rel).logicalPlan
+  }
+
+  private def transformNADropAsDataset(rel: proto.NADrop): Dataset[Row] = {
+    val dataset = transformRelationAsDataset(rel.getInput)
 
     val cols = rel.getColsList.asScala.toArray
 
     (cols.nonEmpty, rel.hasMinNonNulls) match {
       case (true, true) =>
-        dataset.na.drop(minNonNulls = rel.getMinNonNulls, cols = cols).logicalPlan
+        dataset.na.drop(minNonNulls = rel.getMinNonNulls, cols = cols)
       case (true, false) =>
-        dataset.na.drop(cols = cols).logicalPlan
+        dataset.na.drop(cols = cols)
       case (false, true) =>
-        dataset.na.drop(minNonNulls = rel.getMinNonNulls).logicalPlan
+        dataset.na.drop(minNonNulls = rel.getMinNonNulls)
       case (false, false) =>
-        dataset.na.drop().logicalPlan
+        dataset.na.drop()
     }
   }
 
-  private def transformReplace(rel: proto.NAReplace): LogicalPlan = {
+  private def transformNADrop(rel: proto.NADrop): LogicalPlan = {
+    transformNADropAsDataset(rel).logicalPlan
+  }
+
+  private def transformReplaceAsDataset(rel: proto.NAReplace): Dataset[Row] = {
     val replacement = mutable.Map.empty[Any, Any]
     rel.getReplacementsList.asScala.foreach { replace =>
       replacement.update(
@@ -419,60 +468,65 @@ class SparkConnectPlanner(
     }
 
     if (rel.getColsCount == 0) {
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .na
+      transformRelationAsDataset(rel.getInput).na
         .replace("*", replacement.toMap)
-        .logicalPlan
     } else {
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .na
+      transformRelationAsDataset(rel.getInput).na
         .replace(rel.getColsList.asScala.toSeq, replacement.toMap)
-        .logicalPlan
     }
+  }
+
+  private def transformReplace(rel: proto.NAReplace): LogicalPlan = {
+    transformReplaceAsDataset(rel).logicalPlan
+  }
+
+  private def transformStatSummaryAsDataset(rel: proto.StatSummary): Dataset[Row] = {
+    transformRelationAsDataset(rel.getInput)
+      .summary(rel.getStatisticsList.asScala.toSeq: _*)
   }
 
   private def transformStatSummary(rel: proto.StatSummary): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .summary(rel.getStatisticsList.asScala.toSeq: _*)
-      .logicalPlan
+    transformStatSummaryAsDataset(rel).logicalPlan
+  }
+
+  private def transformStatDescribeAsDataset(rel: proto.StatDescribe): Dataset[Row] = {
+    transformRelationAsDataset(rel.getInput)
+      .describe(rel.getColsList.asScala.toSeq: _*)
   }
 
   private def transformStatDescribe(rel: proto.StatDescribe): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .describe(rel.getColsList.asScala.toSeq: _*)
-      .logicalPlan
+    transformStatDescribeAsDataset(rel).logicalPlan
+  }
+
+  private def transformStatCovAsDataset(rel: proto.StatCov): Dataset[Row] = {
+    val df = transformRelationAsDataset(rel.getInput)
+    StatFunctions
+      .calculateCovImpl(df, Seq(rel.getCol1, rel.getCol2))
   }
 
   private def transformStatCov(rel: proto.StatCov): LogicalPlan = {
-    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
-    StatFunctions
-      .calculateCovImpl(df, Seq(rel.getCol1, rel.getCol2))
-      .logicalPlan
+    transformStatCovAsDataset(rel).logicalPlan
   }
 
-  private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
-    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+  private def transformStatCorrAsDataset(rel: proto.StatCorr): Dataset[Row] = {
+    val df = transformRelationAsDataset(rel.getInput)
     if (rel.hasMethod) {
       StatFunctions
         .calculateCorrImpl(df, Seq(rel.getCol1, rel.getCol2), rel.getMethod)
-        .logicalPlan
     } else {
       StatFunctions
         .calculateCorrImpl(df, Seq(rel.getCol1, rel.getCol2))
-        .logicalPlan
     }
+  }
+
+  private def transformStatCorr(rel: proto.StatCorr): LogicalPlan = {
+    transformStatCorrAsDataset(rel).logicalPlan
   }
 
   private def transformStatApproxQuantile(rel: proto.StatApproxQuantile): LogicalPlan = {
     val cols = rel.getColsList.asScala.toArray
     val probabilities = rel.getProbabilitiesList.asScala.map(_.doubleValue()).toArray
-    val approxQuantile = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .stat
+    val approxQuantile = transformRelationAsDataset(rel.getInput).stat
       .approxQuantile(cols, probabilities, rel.getRelativeError)
     LocalRelation.fromProduct(
       output =
@@ -480,25 +534,30 @@ class SparkConnectPlanner(
       data = Tuple1.apply(approxQuantile) :: Nil)
   }
 
-  private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .stat
+  private def transformStatCrosstabAsDataset(rel: proto.StatCrosstab): Dataset[Row] = {
+    transformRelationAsDataset(rel.getInput).stat
       .crosstab(rel.getCol1, rel.getCol2)
-      .logicalPlan
   }
 
-  private def transformStatFreqItems(rel: proto.StatFreqItems): LogicalPlan = {
+  private def transformStatCrosstab(rel: proto.StatCrosstab): LogicalPlan = {
+    transformStatCrosstabAsDataset(rel).logicalPlan
+  }
+
+  private def transformStatFreqItemsAsDataset(rel: proto.StatFreqItems): Dataset[Row] = {
     val cols = rel.getColsList.asScala.toSeq
-    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val df = transformRelationAsDataset(rel.getInput)
     if (rel.hasSupport) {
-      df.stat.freqItems(cols, rel.getSupport).logicalPlan
+      df.stat.freqItems(cols, rel.getSupport)
     } else {
-      df.stat.freqItems(cols).logicalPlan
+      df.stat.freqItems(cols)
     }
   }
 
-  private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
+  private def transformStatFreqItems(rel: proto.StatFreqItems): LogicalPlan = {
+    transformStatFreqItemsAsDataset(rel).logicalPlan
+  }
+
+  private def transformStatSampleByAsDataset(rel: proto.StatSampleBy): Dataset[Row] = {
     val fractions = rel.getFractionsList.asScala.map { protoFraction =>
       val stratum = transformLiteral(protoFraction.getStratum) match {
         case Literal(s, StringType) if s != null => s.toString
@@ -507,31 +566,36 @@ class SparkConnectPlanner(
       (stratum, protoFraction.getFraction)
     }
 
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .stat
+    transformRelationAsDataset(rel.getInput).stat
       .sampleBy(
         col = Column(transformExpression(rel.getCol)),
         fractions = fractions.toMap,
         seed = if (rel.hasSeed) rel.getSeed else Utils.random.nextLong)
-      .logicalPlan
   }
 
-  private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
+  private def transformStatSampleBy(rel: proto.StatSampleBy): LogicalPlan = {
+    transformStatSampleByAsDataset(rel).logicalPlan
+  }
+
+  private def transformToSchemaAsDataset(rel: proto.ToSchema): Dataset[Row] = {
     val schema = transformDataType(rel.getSchema)
     assert(schema.isInstanceOf[StructType])
 
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+    transformRelationAsDataset(rel.getInput)
       .to(schema.asInstanceOf[StructType])
-      .logicalPlan
+  }
+
+  private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
+    transformToSchemaAsDataset(rel).logicalPlan
+  }
+
+  private def transformToDFAsDataset(rel: proto.ToDF): Dataset[Row] = {
+    transformRelationAsDataset(rel.getInput)
+      .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
   }
 
   private def transformToDF(rel: proto.ToDF): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .toDF(rel.getColumnNamesList.asScala.toSeq: _*)
-      .logicalPlan
+    transformToDFAsDataset(rel).logicalPlan
   }
 
   private def transformMapPartitions(rel: proto.MapPartitions): LogicalPlan = {
@@ -598,8 +662,7 @@ class SparkConnectPlanner(
         val cols =
           rel.getGroupingExpressionsList.asScala.toSeq.map(expr =>
             Column(transformExpression(expr)))
-        val group = Dataset
-          .ofRows(session, transformRelation(rel.getInput))
+        val group = transformRelationAsDataset(rel.getInput)
           .groupBy(cols: _*)
 
         pythonUdf.evalType match {
@@ -721,11 +784,9 @@ class SparkConnectPlanner(
           rel.getOtherGroupingExpressionsList.asScala.toSeq.map(expr =>
             Column(transformExpression(expr)))
 
-        val input = Dataset
-          .ofRows(session, transformRelation(rel.getInput))
+        val input = transformRelationAsDataset(rel.getInput)
           .groupBy(inputCols: _*)
-        val other = Dataset
-          .ofRows(session, transformRelation(rel.getOther))
+        val other = transformRelationAsDataset(rel.getOther)
           .groupBy(otherCols: _*)
 
         val pythonUdf = createUserDefinedPythonFunction(commonUdf)
@@ -930,7 +991,8 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformApplyInPandasWithState(rel: proto.ApplyInPandasWithState): LogicalPlan = {
+  private def transformApplyInPandasWithStateAsDataset(
+      rel: proto.ApplyInPandasWithState): Dataset[Row] = {
     val pythonUdf = transformPythonUDF(rel.getFunc)
     val cols =
       rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
@@ -939,8 +1001,7 @@ class SparkConnectPlanner(
 
     val stateSchema = parseSchema(rel.getStateSchema)
 
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+    transformRelationAsDataset(rel.getInput)
       .groupBy(cols: _*)
       .applyInPandasWithState(
         pythonUdf,
@@ -948,7 +1009,10 @@ class SparkConnectPlanner(
         stateSchema,
         rel.getOutputMode,
         rel.getTimeoutConf)
-      .logicalPlan
+  }
+
+  private def transformApplyInPandasWithState(rel: proto.ApplyInPandasWithState): LogicalPlan = {
+    transformApplyInPandasWithStateAsDataset(rel).logicalPlan
   }
 
   private def transformCommonInlineUserDefinedTableFunction(
@@ -999,25 +1063,26 @@ class SparkConnectPlanner(
       .logicalPlan
   }
 
-  private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
+  private def transformWithColumnsRenamedAsDataset(
+      rel: proto.WithColumnsRenamed): Dataset[Row] = {
     if (rel.getRenamesCount > 0) {
       val (colNames, newColNames) = rel.getRenamesList.asScala.toSeq.map { rename =>
         (rename.getColName, rename.getNewColName)
       }.unzip
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
+      transformRelationAsDataset(rel.getInput)
         .withColumnsRenamed(colNames, newColNames)
-        .logicalPlan
     } else {
       // for backward compatibility
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
+      transformRelationAsDataset(rel.getInput)
         .withColumnsRenamed(rel.getRenameColumnsMapMap)
-        .logicalPlan
     }
   }
 
-  private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
+  private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
+    transformWithColumnsRenamedAsDataset(rel).logicalPlan
+  }
+
+  private def transformWithColumnsAsDataset(rel: proto.WithColumns): Dataset[Row] = {
     val (colNames, cols, metadata) =
       rel.getAliasesList.asScala.toSeq.map { alias =>
         if (alias.getNameCount != 1) {
@@ -1034,17 +1099,21 @@ class SparkConnectPlanner(
         (alias.getName(0), Column(transformExpression(alias.getExpr)), metadata)
       }.unzip3
 
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+    transformRelationAsDataset(rel.getInput)
       .withColumns(colNames, cols, metadata)
-      .logicalPlan
+  }
+
+  private def transformWithColumns(rel: proto.WithColumns): LogicalPlan = {
+    transformWithColumnsAsDataset(rel).logicalPlan
+  }
+
+  private def transformWithWatermarkAsDataset(rel: proto.WithWatermark): Dataset[Row] = {
+    transformRelationAsDataset(rel.getInput)
+      .withWatermark(rel.getEventTime, rel.getDelayThreshold)
   }
 
   private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .withWatermark(rel.getEventTime, rel.getDelayThreshold)
-      .logicalPlan
+    transformWithWatermarkAsDataset(rel).logicalPlan
   }
 
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
@@ -2296,8 +2365,8 @@ class SparkConnectPlanner(
   }
 
   private def transformAsOfJoin(rel: proto.AsOfJoin): LogicalPlan = {
-    val left = Dataset.ofRows(session, transformRelation(rel.getLeft))
-    val right = Dataset.ofRows(session, transformRelation(rel.getRight))
+    val left = transformRelationAsDataset(rel.getLeft)
+    val right = transformRelationAsDataset(rel.getRight)
     val leftAsOf = Column(transformExpression(rel.getLeftAsOf))
     val rightAsOf = Column(transformExpression(rel.getRightAsOf))
     val joinType = rel.getJoinType
@@ -2355,8 +2424,8 @@ class SparkConnectPlanner(
       sameOrderExpressions = Seq.empty)
   }
 
-  private def transformDrop(rel: proto.Drop): LogicalPlan = {
-    var output = Dataset.ofRows(session, transformRelation(rel.getInput))
+  private def transformDropAsDataset(rel: proto.Drop): Dataset[Row] = {
+    var output = transformRelationAsDataset(rel.getInput)
     if (rel.getColumnsCount > 0) {
       val cols = rel.getColumnsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
       output = output.drop(cols.head, cols.tail: _*)
@@ -2365,7 +2434,11 @@ class SparkConnectPlanner(
       val colNames = rel.getColumnNamesList.asScala.toSeq
       output = output.drop(colNames: _*)
     }
-    output.logicalPlan
+    output
+  }
+
+  private def transformDrop(rel: proto.Drop): LogicalPlan = {
+    transformDropAsDataset(rel).logicalPlan
   }
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
