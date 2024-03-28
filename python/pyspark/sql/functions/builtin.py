@@ -550,17 +550,6 @@ def try_avg(col: "ColumnOrName") -> Column:
     |         3.0|
     +------------+
 
-    Example 3: Calculating the average age with None
-
-    >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
-    >>> df.select(sf.try_avg("age")).show()
-    +------------+
-    |try_avg(age)|
-    +------------+
-    |         3.0|
-    +------------+
-
     Example 4: Overflow results in NULL when ANSI mode is on
 
     >>> import pyspark.sql.functions as sf
