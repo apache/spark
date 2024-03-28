@@ -29,9 +29,8 @@ import org.apache.logging.log4j.core.config.DefaultConfiguration
 import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
-import org.apache.spark.util.{SparkClassUtils, SparkEnvUtils}
+import org.apache.spark.util.SparkClassUtils
 
 /**
  * Mapped Diagnostic Context (MDC) that will be used in log messages.
@@ -92,27 +91,17 @@ trait Logging {
   }
 
   implicit class LogStringContext(val sc: StringContext) {
-    def log(args: Any*): MessageWithContext = {
+    def log(args: MDC*): MessageWithContext = {
       val processedParts = sc.parts.iterator
       val sb = new StringBuilder(processedParts.next())
       lazy val map = new java.util.HashMap[String, String]()
 
-      args.foreach { arg =>
-        arg match {
-          case mdc: MDC =>
-            sb.append(mdc.value)
-            if (Logging.isStructuredLoggingEnabled) {
-              map.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
-            }
-          case other =>
-            // Note: all the arguments are supposed to be MDCs, but we only throw an exception
-            //       if we are running in test mode. This is to avoid breaking existing code.
-            if (SparkEnvUtils.isTesting) {
-              throw new SparkException(s"Argument $other is not a MDC")
-            } else {
-              sb.append(other.toString)
-            }
+      args.foreach { mdc =>
+        sb.append(mdc.value)
+        if (Logging.isStructuredLoggingEnabled) {
+          map.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
         }
+
         if (processedParts.hasNext) {
           sb.append(processedParts.next())
         }
@@ -281,7 +270,7 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-  @volatile private var useStructuredLogging = true
+  @volatile private var structuredLoggingEnabled = true
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
   @volatile private[spark] var setLogLevelPrinted: Boolean = false
 
@@ -355,21 +344,21 @@ private[spark] object Logging {
    * Enable Structured logging framework.
    */
   private[spark] def enableStructuredLogging(): Unit = {
-    useStructuredLogging = true
+    structuredLoggingEnabled = true
   }
 
   /**
    * Disable Structured logging framework.
    */
   private[spark] def disableStructuredLogging(): Unit = {
-    useStructuredLogging = false
+    structuredLoggingEnabled = false
   }
 
   /**
    * Return true if Structured logging framework is enabled.
    */
   private[spark] def isStructuredLoggingEnabled: Boolean = {
-    useStructuredLogging
+    structuredLoggingEnabled
   }
 
   private[spark] class SparkShellLoggingFilter extends AbstractFilter {
