@@ -1771,7 +1771,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("lateral_join_canonicalization") {
+  test("SPARK-47633: Cache hit for lateral join with join condition") {
     withTempView("t", "q1") {
       sql("CREATE or REPLACE TEMP VIEW t(c1, c2) AS VALUES (0, 1), (1, 2)")
       val query = """select *
@@ -1785,7 +1785,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       val df = sql(query)
       checkAnswer(df,
         Row(0, 1, 0, 1) :: Row(1, 2, 1, 2) :: Nil)
-      df.explain()
       assert(getNumInMemoryRelations(df) == 1)
     }
 
