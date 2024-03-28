@@ -137,17 +137,12 @@ case class VariantGet(
         messageParameters = Map(
           "inputName" -> toSQLId("path"),
           "inputType" -> toSQLType(path.dataType),
-          "inputExpr" -> toSQLExpr(path)
-        )
-      )
+          "inputExpr" -> toSQLExpr(path)))
     } else if (!VariantGet.checkDataType(targetType)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
-        messageParameters = Map(
-          "srcType" -> toSQLType(VariantType),
-          "targetType" -> toSQLType(targetType)
-        )
-      )
+        messageParameters =
+          Map("srcType" -> toSQLType(VariantType), "targetType" -> toSQLType(targetType)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -171,17 +166,12 @@ case class VariantGet(
   override def nullable: Boolean = true
 
   protected override def nullSafeEval(input: Any, path: Any): Any = {
-    var v = new Variant(
-      input.asInstanceOf[VariantVal].getValue, input.asInstanceOf[VariantVal].getMetadata)
-    for (path <- parsedPath) {
-      v = path match {
-        case scala.util.Left(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
-        case scala.util.Right(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
-        case _ => null
-      }
-      if (v == null) return null
-    }
-    VariantGet.cast(v, dataType, failOnError, timeZoneId)
+    VariantGet.variantGet(
+      input.asInstanceOf[VariantVal],
+      parsedPath,
+      dataType,
+      failOnError,
+      timeZoneId)
   }
 
   override def left: Expression = child
@@ -208,6 +198,25 @@ case object VariantGet {
     case MapType(StringType, valueType, _) => checkDataType(valueType)
     case StructType(fields) => fields.forall(f => checkDataType(f.dataType))
     case _ => false
+  }
+
+  /** The actual implementation of the `VariantGet` expression. */
+  def variantGet(
+      input: VariantVal,
+      parsedPath: Array[VariantPathParser.PathSegment],
+      dataType: DataType,
+      failOnError: Boolean,
+      zoneId: Option[String]): Any = {
+    var v = new Variant(input.getValue, input.getMetadata)
+    for (path <- parsedPath) {
+      v = path match {
+        case scala.util.Left(key) if v.getType == Type.OBJECT => v.getFieldByKey(key)
+        case scala.util.Right(index) if v.getType == Type.ARRAY => v.getElementAtIndex(index)
+        case _ => null
+      }
+      if (v == null) return null
+    }
+    VariantGet.cast(v, dataType, failOnError, zoneId)
   }
 
   /**
@@ -245,13 +254,16 @@ case object VariantGet {
             // strict overflow checks.
             input match {
               case l: Long if dataType == TimestampType =>
-                try Math.multiplyExact(l, MICROS_PER_SECOND) catch {
+                try Math.multiplyExact(l, MICROS_PER_SECOND)
+                catch {
                   case _: ArithmeticException => invalidCast()
                 }
               case d: Decimal if dataType == TimestampType =>
                 try {
-                  d.toJavaBigDecimal.multiply(new java.math.BigDecimal(MICROS_PER_SECOND))
-                    .toBigInteger.longValueExact()
+                  d.toJavaBigDecimal
+                    .multiply(new java.math.BigDecimal(MICROS_PER_SECOND))
+                    .toBigInteger
+                    .longValueExact()
                 } catch {
                   case _: ArithmeticException => invalidCast()
                 }
@@ -291,8 +303,8 @@ case object VariantGet {
           for (i <- 0 until v.objectSize()) {
             val field = v.getFieldAtIndex(i)
             st.getFieldIndex(field.key) match {
-              case Some(idx) => row.update(idx,
-                cast(field.value, fields(idx).dataType, failOnError, zoneId))
+              case Some(idx) =>
+                row.update(idx, cast(field.value, fields(idx).dataType, failOnError, zoneId))
               case _ =>
             }
           }
@@ -314,8 +326,7 @@ abstract class VariantGetExpressionBuilderBase(failOnError: Boolean) extends Exp
         expressions(0),
         expressions(1),
         ExprUtils.evalTypeExpr(expressions(2)),
-        failOnError
-      )
+        failOnError)
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
     }
