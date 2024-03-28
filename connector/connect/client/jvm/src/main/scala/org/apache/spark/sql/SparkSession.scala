@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
@@ -482,17 +482,21 @@ class SparkSession private[sql] (
     }
   }
 
-  private[sql] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
-    newDataset(UnboundRowEncoder)(f)
+  private[sql] def newDataFrame(
+      f: proto.Relation.Builder => Unit,
+      observationsOpt: Option[Map[String, Observation]] = None): DataFrame = {
+    newDataset(UnboundRowEncoder, observationsOpt)(f)
   }
 
-  private[sql] def newDataset[T](encoder: AgnosticEncoder[T])(
+  private[sql] def newDataset[T](
+      encoder: AgnosticEncoder[T],
+      observationsOpt: Option[Map[String, Observation]] = None)(
       f: proto.Relation.Builder => Unit): Dataset[T] = {
     val builder = proto.Relation.newBuilder()
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    new Dataset[T](this, plan, encoder)
+    new Dataset[T](this, plan, encoder, observationsOpt)
   }
 
   @DeveloperApi
@@ -538,9 +542,12 @@ class SparkSession private[sql] (
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
-  private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
+  private[sql] def execute[T](
+      plan: proto.Plan,
+      encoder: AgnosticEncoder[T],
+      observationsOpt: Option[Map[String, Observation]] = None): SparkResult[T] = {
     val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder, timeZoneId)
+    val result = new SparkResult(value, allocator, encoder, timeZoneId, observationsOpt)
     result
   }
 
@@ -550,14 +557,17 @@ class SparkSession private[sql] (
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     // .foreach forces that the iterator is consumed and closed
-    client.execute(plan).foreach(_ => ())
+    execute(plan).foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toSeq forces that the iterator is consumed and closed
-    client.execute(plan).toSeq
+    execute(plan).toSeq
   }
+
+  private[sql] def execute(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] =
+    client.execute(plan)
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()

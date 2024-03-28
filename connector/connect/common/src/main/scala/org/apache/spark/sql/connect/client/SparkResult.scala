@@ -26,10 +26,12 @@ import org.apache.arrow.vector.ipc.message.{ArrowMessage, ArrowRecordBatch}
 import org.apache.arrow.vector.types.pojo
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
+import org.apache.spark.sql.ObservationBase
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -37,7 +39,8 @@ private[sql] class SparkResult[T](
     responses: CloseableIterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T],
-    timeZoneId: String)
+    timeZoneId: String,
+    observationsOpt: Option[Map[String, ObservationBase]] = None)
     extends AutoCloseable { self =>
 
   private[this] var opId: String = _
@@ -46,6 +49,7 @@ private[sql] class SparkResult[T](
   private[this] var arrowSchema: pojo.Schema = _
   private[this] var nextResultIndex: Int = 0
   private val resultMap = mutable.Map.empty[Int, (Long, Seq[ArrowMessage])]
+  private val observedMetrics = mutable.Map.empty[String, Map[String, Any]]
   private val cleanable =
     SparkResult.cleaner.register(this, new SparkResultCloseable(resultMap, responses))
 
@@ -83,6 +87,9 @@ private[sql] class SparkResult[T](
     var stop = false
     while (!stop && responses.hasNext) {
       val response = responses.next()
+
+      // Collect metrics for this response
+      observedMetrics ++= processObservedMetrics(response.getObservedMetricsList)
 
       // Save and validate operationId
       if (opId == null) {
@@ -159,6 +166,26 @@ private[sql] class SparkResult[T](
     nonEmpty
   }
 
+  private def processObservedMetrics(
+      metrics: java.util.List[ObservedMetrics]): Iterable[(String, Map[String, Any])] = {
+    val processed = mutable.ListBuffer.empty[(String, Map[String, Any])]
+    metrics.forEach { metric =>
+      assert(metric.getKeysCount == metric.getValuesCount)
+      val kv = (0 until metric.getKeysCount).map { i =>
+        val key = metric.getKeys(i)
+        val value = LiteralValueProtoConverter.toCatalystValue(metric.getValues(i))
+        key -> value
+      }.toMap
+      processed += metric.getName -> kv
+      // If the metrics is registered by an Observation object, attach them and unblock any
+      // blocked thread.
+      observationsOpt.map { observations =>
+        observations.get(metric.getName).map(_.setMetricsAndNotify(Some(kv)))
+      }
+    }
+    processed
+  }
+
   /**
    * Returns the number of elements in the result.
    */
@@ -207,6 +234,15 @@ private[sql] class SparkResult[T](
       rows.close()
     }
     result
+  }
+
+  /**
+   * Returns all observed metrics in the result.
+   */
+  def getObservedMetrics: Map[String, Map[String, Any]] = {
+    // We need to process all responses to get all metrics.
+    processResponses()
+    observedMetrics.toMap
   }
 
   /**
