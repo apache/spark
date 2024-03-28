@@ -39,16 +39,16 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteBase {
 
-  private lazy val sessionCatalog = spark.sessionState.catalog
+  protected lazy val sessionCatalog = spark.sessionState.catalog
 
   protected def buildCreateTableSQL(t: String): String
 
-  private def normalizeSerdeProp(props: Map[String, String]): Map[String, String] = {
+  protected def normalizeSerdeProp(props: Map[String, String]): Map[String, String] = {
     props.filterNot(p => Seq("serialization.format", "path").contains(p._1))
   }
 
   // Verify that the location is set to the expected string
-  private def checkLocation(
+  protected def checkLocation(
       tableIdent: TableIdentifier,
       expected: URI,
       spec: Option[TablePartitionSpec] = None): Unit = {
