@@ -426,6 +426,28 @@ private[spark] object TestUtils extends SparkTestUtils {
       EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
     file.getPath
   }
+
+  /** Sets all configs specified in `confPairs`, calls `f`, and then restores them. */
+  def withConf[T](confPairs: (String, String)*)(f: => T): T = {
+    val conf = SparkEnv.get.conf
+    val (keys, values) = confPairs.unzip
+    val currentValues = keys.map { key =>
+      if (conf.contains(key)) {
+        Some(conf.get(key))
+      } else {
+        None
+      }
+    }
+    (keys, values).zipped.foreach { (key, value) =>
+      conf.set(key, value)
+    }
+    try f finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => conf.set(key, value)
+        case (key, None) => conf.remove(key)
+      }
+    }
+  }
 }
 
 

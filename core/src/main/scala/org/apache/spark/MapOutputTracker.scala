@@ -1293,6 +1293,32 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     mapSizesByExecutorId.iter
   }
 
+  def getMapOutputLocationWithRefresh(
+      shuffleId: Int,
+      mapId: Long,
+      prevLocation: BlockManagerId): BlockManagerId = {
+    // Try to get the cached location first in case other concurrent tasks
+    // fetched the fresh location already
+    var currentLocationOpt = getMapOutputLocation(shuffleId, mapId)
+    if (currentLocationOpt.contains(prevLocation)) {
+      // Address in the cache unchanged. Try to clean cache and get a fresh location
+      unregisterShuffle(shuffleId)
+      currentLocationOpt = getMapOutputLocation(shuffleId, mapId, canFetchMergeResult = true)
+    }
+    currentLocationOpt.getOrElse(
+      throw new MetadataFetchFailedException(shuffleId, -1,
+        message = s"Failed to get map output location for shuffleId $shuffleId, mapId $mapId")
+    )
+  }
+
+  private def getMapOutputLocation(
+      shuffleId: Int,
+      mapId: Long,
+      canFetchMergeResult: Boolean = false): Option[BlockManagerId] = {
+    val (mapOutputStatuses, _) = getStatuses(shuffleId, conf, canFetchMergeResult)
+    mapOutputStatuses.filter(_ != null).find(_.mapId == mapId).map(_.location)
+  }
+
   override def getPushBasedShuffleMapSizesByExecutorId(
       shuffleId: Int,
       startMapIndex: Int,
