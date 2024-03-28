@@ -76,7 +76,7 @@ object UnboundBucketFunction extends UnboundFunction {
   override def name(): String = "bucket"
 }
 
-object BucketFunction extends ScalarFunction[Int] {
+object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "bucket"
@@ -85,6 +85,34 @@ object BucketFunction extends ScalarFunction[Int] {
   override def produceResult(input: InternalRow): Int = {
     (input.getLong(1) % input.getInt(0)).toInt
   }
+
+  override def bucketReducer(
+    thisNumBuckets: Int,
+    otherFunc: ReducibleFunction[_, _],
+    otherNumBuckets: Int): Reducer[Int, Int] = {
+
+    if (otherFunc == BucketFunction) {
+      if ((thisNumBuckets > otherNumBuckets)
+        && (thisNumBuckets % otherNumBuckets == 0)) {
+        BucketReducer(thisNumBuckets, otherNumBuckets)
+      } else {
+        val gcd = this.gcd(thisNumBuckets, otherNumBuckets)
+        if (gcd != thisNumBuckets) {
+          BucketReducer(thisNumBuckets, gcd)
+        } else {
+          null
+        }
+      }
+    } else {
+      null
+    }
+  }
+
+  private def gcd(a: Int, b: Int): Int = BigInt(a).gcd(BigInt(b)).toInt
+}
+
+case class BucketReducer(thisNumBuckets: Int, divisor: Int) extends Reducer[Int, Int] {
+  override def reduce(bucket: Int): Int = bucket % divisor
 }
 
 object UnboundStringSelfFunction extends UnboundFunction {
