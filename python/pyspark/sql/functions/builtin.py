@@ -15247,6 +15247,35 @@ def from_json(
 
 
 @_try_remote_functions
+def parse_json(
+    col: "ColumnOrName",
+) -> Column:
+    """
+    Parses a column containing a JSON string into a :class:`VariantType`.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        a column or column name JSON formatted strings
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a new column of VariantType.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(to_json(parse_json(df.json))).collect()
+    [Row(to_json(parse_json(json))='{"a":1}')]
+    """
+
+    return _invoke_function("parse_json", _to_java_column(col))
+
+
+@_try_remote_functions
 def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Column:
     """
     Converts a column containing a :class:`StructType`, :class:`ArrayType` or a :class:`MapType`
