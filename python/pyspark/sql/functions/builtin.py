@@ -19234,8 +19234,6 @@ def nvl2(col1: "ColumnOrName", col2: "ColumnOrName", col3: "ColumnOrName") -> Co
     return _invoke_function_over_columns("nvl2", col1, col2, col3)
 
 
-# TODO(SPARK-46738) Re-enable testing that includes the 'Cast' operation after
-#  fixing the display difference between Regular Spark and Spark Connect on `Cast`.
 @_try_remote_functions
 def aes_encrypt(
     input: "ColumnOrName",
@@ -19328,7 +19326,7 @@ def aes_encrypt(
     ... )
     >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, df.mode, df.padding),
     ...     df.key, df.mode, df.padding
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------------------------------+
     |CAST(aes_decrypt(aes_encrypt(input, key, mode, padding, , ), key, mode, padding, ) AS STRING)|
     +---------------------------------------------------------------------------------------------+
@@ -19344,7 +19342,7 @@ def aes_encrypt(
     ... )
     >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, df.mode),
     ...     df.key, df.mode
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------------------------------+
     |CAST(aes_decrypt(aes_encrypt(input, key, mode, DEFAULT, , ), key, mode, DEFAULT, ) AS STRING)|
     +---------------------------------------------------------------------------------------------+
@@ -19360,7 +19358,7 @@ def aes_encrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unbase64(sf.base64(sf.aes_encrypt(df.input, df.key))), df.key
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +-------------------------------------------------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(base64(aes_encrypt(input, key, GCM, DEFAULT, , ))), key, GCM, DEFAULT, ) AS STRING)|
     +-------------------------------------------------------------------------------------------------------------+
@@ -19374,8 +19372,6 @@ def aes_encrypt(
     return _invoke_function_over_columns("aes_encrypt", input, key, _mode, _padding, _iv, _aad)
 
 
-# TODO(SPARK-46738) Re-enable testing that includes the 'Cast' operation after
-#  fixing the display difference between Regular Spark and Spark Connect on `Cast`.
 @_try_remote_functions
 def aes_decrypt(
     input: "ColumnOrName",
@@ -19429,7 +19425,7 @@ def aes_decrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
     +---------------------------------------------------------------------+
@@ -19446,7 +19442,7 @@ def aes_decrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, padding, ) AS STRING)|
     +------------------------------------------------------------------+
@@ -19463,7 +19459,7 @@ def aes_decrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, DEFAULT, ) AS STRING)|
     +------------------------------------------------------------------+
@@ -19480,7 +19476,7 @@ def aes_decrypt(
     ... )
     >>> df.select(sf.aes_decrypt(
     ...     sf.unhex(df.input), df.key
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +--------------------------------------------------------------+
     |CAST(aes_decrypt(unhex(input), key, GCM, DEFAULT, ) AS STRING)|
     +--------------------------------------------------------------+
@@ -19493,8 +19489,6 @@ def aes_decrypt(
     return _invoke_function_over_columns("aes_decrypt", input, key, _mode, _padding, _aad)
 
 
-# TODO(SPARK-46738) Re-enable testing that includes the 'Cast' operation after
-#  fixing the display difference between Regular Spark and Spark Connect on `Cast`.
 @_try_remote_functions
 def try_aes_decrypt(
     input: "ColumnOrName",
@@ -19550,7 +19544,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +-------------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
     +-------------------------------------------------------------------------+
@@ -19568,7 +19562,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +-------------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
     +-------------------------------------------------------------------------+
@@ -19585,7 +19579,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode, df.padding
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +----------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, ) AS STRING)|
     +----------------------------------------------------------------------+
@@ -19602,7 +19596,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unbase64(df.input), df.key, df.mode
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +----------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, DEFAULT, ) AS STRING)|
     +----------------------------------------------------------------------+
@@ -19619,7 +19613,7 @@ def try_aes_decrypt(
     ... )
     >>> df.select(sf.try_aes_decrypt(
     ...     sf.unhex(df.input), df.key
-    ... ).cast("STRING")).show(truncate=False) # doctest: +SKIP
+    ... ).cast("STRING")).show(truncate=False)
     +------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unhex(input), key, GCM, DEFAULT, ) AS STRING)|
     +------------------------------------------------------------------+
