@@ -550,7 +550,7 @@ def try_avg(col: "ColumnOrName") -> Column:
     |         3.0|
     +------------+
 
-    Example 4: Overflow results in NULL when ANSI mode is on
+    Example 3: Overflow results in NULL when ANSI mode is on
 
     >>> import pyspark.sql.functions as sf
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
