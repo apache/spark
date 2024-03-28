@@ -466,6 +466,17 @@ object SQLConf {
       .intConf
       .createWithDefault(100)
 
+  val REWRITE_TO_JSON_TUPLE_THRESHOLD =
+    buildConf("spark.sql.optimizer.rewriteGetJsonObjectToJsonTupleThreshold")
+      .internal()
+      .doc("When the number of GetJsonObject that consumes the same JSON as input exceeds " +
+        "the threshold, we rewrite those GetJsonObjects to a single JsonTuple to eliminate " +
+        "multiple time JSON parsing procedure. The threshold must be greater than 1.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(t => t > 1, "The threshold must be greater than 1")
+      .createOptional
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")

@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -136,11 +136,22 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
+
   @transient
   private lazy val evaluator = if (path.foldable) {
     new GetJsonObjectEvaluator(path.eval().asInstanceOf[UTF8String])
   } else {
     new GetJsonObjectEvaluator()
+  }
+
+  // Used to rewrite GetJsonObject to JsonTuple. It only supports `.name` paths
+  @transient private[catalyst] lazy val rewriteToJsonTuplePath: Option[Expression] = {
+    evaluator.parsedPath match {
+      case Some(List(PathInstruction.Key, PathInstruction.Named(name))) =>
+        Some(Literal.create(name, StringType))
+      case _ => None
+    }
   }
 
   override def eval(input: InternalRow): Any = {
@@ -218,8 +229,9 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
   def this() = this(null)
 
   @transient
-  private lazy val parsedPath: Option[List[PathInstruction]] =
-    parsePath(cachedPath)
+  private lazy val _parsedPath: Option[List[PathInstruction]] = parsePath(cachedPath)
+
+  private[expressions] def parsedPath: Option[List[PathInstruction]] = _parsedPath
 
   @transient
   private var jsonStr: UTF8String = null
@@ -241,7 +253,7 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
     }
 
     val parsed = if (cachedPath != null) {
-      parsedPath
+      _parsedPath
     } else {
       parsePath(pathStr)
     }

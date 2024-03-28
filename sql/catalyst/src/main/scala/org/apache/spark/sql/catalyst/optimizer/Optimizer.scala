@@ -85,6 +85,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDown,
         LimitPushDownThroughWindow,
         ColumnPruning,
+        RewriteGetJsonObject,
         GenerateOptimization,
         // Operator combine
         CollapseRepartition,
