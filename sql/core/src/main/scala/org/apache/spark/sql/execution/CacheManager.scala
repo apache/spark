@@ -154,18 +154,30 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       plan: LogicalPlan,
       cascade: Boolean,
       blocking: Boolean = false): Unit = {
-    uncacheQuery(spark, _.sameResult(plan), cascade, blocking)
+    val dummyCd = CachedData(plan, Left(plan))
+    uncacheQuery(spark,
+      (planToCheck: LogicalPlan, partialMatchOk: Boolean) => {
+      dummyCd.plan.sameResult(planToCheck) || (partialMatchOk &&
+        (planToCheck match {
+        case p: Project => lookUpPartiallyMatchedCachedPlan(p, IndexedSeq(dummyCd)).isDefined
+        case _ => false
+      }))
+    }, cascade, blocking)
   }
 
   def uncacheTableOrView(spark: SparkSession, name: Seq[String], cascade: Boolean): Unit = {
     uncacheQuery(
       spark,
-      isMatchedTableOrView(_, name, spark.sessionState.conf),
+      isMatchedTableOrView(_, _, name, spark.sessionState.conf),
       cascade,
       blocking = false)
   }
 
-  private def isMatchedTableOrView(plan: LogicalPlan, name: Seq[String], conf: SQLConf): Boolean = {
+  private def isMatchedTableOrView(
+      plan: LogicalPlan,
+      partialMatch: Boolean,
+      name: Seq[String],
+      conf: SQLConf): Boolean = {
     def isSameName(nameInCache: Seq[String]): Boolean = {
       nameInCache.length == name.length && nameInCache.zip(name).forall(conf.resolver.tupled)
     }
@@ -194,14 +206,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   def uncacheQuery(
       spark: SparkSession,
-      isMatchedPlan: LogicalPlan => Boolean,
+      isMatchedPlan: (LogicalPlan, Boolean) => Boolean,
       cascade: Boolean,
       blocking: Boolean): Unit = {
-    val shouldRemove: LogicalPlan => Boolean =
-      if (cascade) {
-        _.exists(isMatchedPlan)
+
+    val shouldRemove: LogicalPlan => Boolean = if (cascade) {
+        _.exists(isMatchedPlan(_, false))
       } else {
-        isMatchedPlan
+        isMatchedPlan(_, false)
       }
     val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
     this.synchronized {
@@ -228,7 +240,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         val cacheAlreadyLoaded = cd.cachedRepresentation.
           fold(CacheManager.inMemoryRelationExtractor, identity).cacheBuilder.
           isCachedColumnBuffersLoaded
-        cd.plan.exists(isMatchedPlan) && !cacheAlreadyLoaded
+        !cacheAlreadyLoaded && cd.plan.exists(isMatchedPlan(_, true))
       })
     }
   }
@@ -305,17 +317,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val fullMatch = cachedData.find(cd => plan.sameResult(cd.plan))
     fullMatch.map(Option(_)).getOrElse(
       plan match {
-        case p: Project => lookUpPartiallyMatchedCachedPlan(p)
+        case p: Project => lookUpPartiallyMatchedCachedPlan(p, cachedData)
         case _ => None
       })
   }
 
-  private def lookUpPartiallyMatchedCachedPlan(incomingProject: Project): Option[CachedData] = {
+  private def lookUpPartiallyMatchedCachedPlan(
+        incomingProject: Project,
+        cachedPlansToUse: IndexedSeq[CachedData]): Option[CachedData] = {
     var foundMatch = false
     var partialMatch: Option[CachedData] = None
     val (incmngchild, incomingFilterChain) =
       CompatibilityChecker.extractChildIgnoringFiltersFromIncomingProject(incomingProject)
-    for (cd <- cachedData if !foundMatch) {
+    for (cd <- cachedPlansToUse if !foundMatch) {
       (incmngchild, incomingFilterChain, cd.plan) match {
         case CompatibilityChecker(residualIncomingFilterChain, cdPlanProject) =>
           // since the child of both incoming and cached plan are same
@@ -397,14 +411,21 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
               val modifiedInProj = replacementProjectListForIncomingProject(incomingProject,
                 directlyMappedincomingToCachedPlanIndx, cdPlanProject,
                 cdAttribToCommonAttribForIncmngNe, transformedIndirectlyMappableExpr)
-              val root = cd.cachedRepresentation.toOption.get.withOutput(
-                projectionToForceOnCdPlan)
-              val newPartialPlan = if (transformedIntermediateFilters.isEmpty) {
-                Project(modifiedInProj, root)
+              // If InMemoryRelation (right is defined) it is the case of lookup or cache query
+              // Else it is a case of dummy CachedData partial lookup for finding out if the
+              // plan being checked uses the uncached plan
+              val newPartialPlan = if (cd.cachedRepresentation.isRight) {
+                val root = cd.cachedRepresentation.toOption.get.withOutput(
+                  projectionToForceOnCdPlan)
+                if (transformedIntermediateFilters.isEmpty) {
+                  Project(modifiedInProj, root)
+                } else {
+                  val chainedFilter = CompatibilityChecker.combineFilterChainUsingRoot(
+                    transformedIntermediateFilters, root)
+                  Project(modifiedInProj, chainedFilter)
+                }
               } else {
-                val chainedFilter = CompatibilityChecker.combineFilterChainUsingRoot(
-                  transformedIntermediateFilters, root)
-                Project(modifiedInProj, chainedFilter)
+                cd.cachedRepresentation.left.toOption.get
               }
               partialMatch = Option(cd.copy(cachedRepresentation = Left(newPartialPlan)))
               foundMatch = true

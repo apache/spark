@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.analysis.EarlyCollapseProject
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.internal.SQLConf
 
 class EarlyCollapseProjectWithCachingSuite extends EarlyCollapseProjectSuite {
@@ -60,5 +60,30 @@ class EarlyCollapseProjectWithCachingSuite extends EarlyCollapseProjectSuite {
         filter($"d" < 300)
     }
     checkAnswer(fullyUnopt, rows)
+  }
+
+  test("check cached plan invalidation when subplan is uncached") {
+    val baseDf = spark.range(1000).select($"id" as "a", $"id" as "b").
+      select($"a" + 1 as "c", $"a", $"b").filter($"a" > 4)
+    val df1 = baseDf.withColumn("d", $"a" + 1 + $"b")
+    baseDf.cache()
+    // Add df1 to the CacheManager; the buffer is currently empty.
+    df1.cache()
+    assertCacheDependency(df1, 1)
+    // removal of InMemoryRelation of base Df should result in the removal of dependency of df1
+    baseDf.unpersist(blocking = true)
+    assertCacheDependency(df1.limit(1000), 0)
+  }
+
+
+  private def assertCacheDependency(df: DataFrame, numOfCachesDependedUpon: Int = 1): Unit = {
+
+    val cachedPlan = df.queryExecution.withCachedData.collectFirst {
+      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
+    }
+    assert(cachedPlan.isDefined)
+
+    assert(find(cachedPlan.get)(_.isInstanceOf[InMemoryTableScanExec]).size
+      == numOfCachesDependedUpon)
   }
 }
