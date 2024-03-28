@@ -186,14 +186,14 @@ private[client] object GrpcExceptionConverter {
       new StreamingQueryException(
         params.message,
         params.cause.orNull,
-        params.errorClass.orNull,
+        params.errorClass.getOrElse("UNCLASSIFIED"),
         params.messageParameters)),
     errorConstructor(params =>
       new ParseException(
         None,
         Origin(),
         Origin(),
-        errorClass = params.errorClass.orNull,
+        errorClass = params.errorClass.getOrElse("UNCLASSIFIED"),
         messageParameters = params.messageParameters,
         queryContext = params.queryContext)),
     errorConstructor(params =>
@@ -203,24 +203,29 @@ private[client] object GrpcExceptionConverter {
         cause = params.cause,
         context = params.queryContext)),
     errorConstructor(params =>
-      new NamespaceAlreadyExistsException(params.errorClass.orNull, params.messageParameters)),
+      new NamespaceAlreadyExistsException(
+        params.errorClass.getOrElse("UNCLASSIFIED"),
+        params.messageParameters)),
     errorConstructor(params =>
       new TableAlreadyExistsException(
-        params.errorClass.orNull,
+        params.errorClass.getOrElse("UNCLASSIFIED"),
         params.messageParameters,
         params.cause)),
     errorConstructor(params =>
       new TempTableAlreadyExistsException(
-        params.errorClass.orNull,
+        params.errorClass.getOrElse("UNCLASSIFIED"),
         params.messageParameters,
         params.cause)),
     errorConstructor(params =>
       new NoSuchDatabaseException(
-        params.errorClass.orNull,
+        params.errorClass.getOrElse("UNCLASSIFIED"),
         params.messageParameters,
         params.cause)),
     errorConstructor(params =>
-      new NoSuchTableException(params.errorClass.orNull, params.messageParameters, params.cause)),
+      new NoSuchTableException(
+        params.errorClass.getOrElse("UNCLASSIFIED"),
+        params.messageParameters,
+        params.cause)),
     errorConstructor[NumberFormatException](params =>
       new SparkNumberFormatException(
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3104"),
@@ -254,13 +259,13 @@ private[client] object GrpcExceptionConverter {
         params.queryContext)),
     errorConstructor(params =>
       new SparkRuntimeException(
-        params.errorClass.orNull,
+        params.errorClass.getOrElse("UNCLASSIFIED"),
         params.messageParameters,
         params.cause.orNull,
         params.queryContext)),
     errorConstructor(params =>
       new SparkUpgradeException(
-        params.errorClass.orNull,
+        params.errorClass.getOrElse("UNCLASSIFIED"),
         params.messageParameters,
         params.cause.orNull)),
     errorConstructor(params =>

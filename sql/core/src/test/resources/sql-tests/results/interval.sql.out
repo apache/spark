@@ -2326,8 +2326,10 @@ select a * 1.1 from values (interval '-2147483648 months', interval '2147483647 
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
@@ -2335,8 +2337,10 @@ select a / 0.5 from values (interval '-2147483648 months', interval '2147483647 
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-Overflow
+org.apache.spark.SparkException
+{
+  "errorClass" : "UNCLASSIFIED"
+}
 
 
 -- !query
