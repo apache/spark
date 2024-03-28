@@ -24,7 +24,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -330,7 +330,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Row(null, null, badRec)) :: Row(Row(2, 12, null)) :: Nil)
 
       checkError(
-        exception = intercept[SparkRuntimeException] {
+        exception = intercept[SparkException] {
           df.select(from_csv($"value", schema, Map("mode" -> "FAILFAST"))).collect()
         },
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -476,21 +476,16 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234")).toDF("csv")
           .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
 
-        checkError(
-          exception = intercept[SparkRuntimeException] {
-            df.selectExpr("parsed.a").collect()
-          },
-          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-          parameters = Map("badRecord" -> "[1,null]", "failFastMode" -> "FAILFAST")
-        )
+        val err1 = intercept[SparkException] {
+          df.selectExpr("parsed.a").collect()
+        }
 
-        checkError(
-          exception = intercept[SparkRuntimeException] {
-            df.selectExpr("parsed.b").collect()
-          },
-          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-          parameters = Map("badRecord" -> "[1,null]", "failFastMode" -> "FAILFAST")
-        )
+        val err2 = intercept[SparkException] {
+          df.selectExpr("parsed.b").collect()
+        }
+
+        assert(err1.getMessage.contains("Malformed records are detected in record parsing"))
+        assert(err2.getMessage.contains("Malformed records are detected in record parsing"))
       }
     }
   }

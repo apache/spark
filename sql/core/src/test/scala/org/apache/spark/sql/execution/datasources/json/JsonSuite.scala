@@ -1072,7 +1072,7 @@ abstract class JsonSuite
       "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
 
     checkError(
-      exception = intercept[SparkRuntimeException] {
+      exception = intercept[SparkException] {
         spark.read
           .option("mode", "FAILFAST")
           .schema("a string")
@@ -2043,7 +2043,7 @@ abstract class JsonSuite
       }
       assert(ex.getErrorClass == "FAILED_READ_FILE")
       checkError(
-        exception = ex.getCause.asInstanceOf[SparkRuntimeException],
+        exception = ex.getCause.asInstanceOf[SparkException],
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map(
           "badRecord" -> "[null]",
@@ -2667,7 +2667,7 @@ abstract class JsonSuite
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
       .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
-    val e = intercept[SparkRuntimeException] {df.collect()}
+    val e = intercept[SparkException] {df.collect()}
     assert(e.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
@@ -3258,16 +3258,11 @@ abstract class JsonSuite
   }
 
   test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
-    val exception = intercept[SparkRuntimeException] {
+    val exception = intercept[SparkException] {
       spark.read.option("mode", "failfast")
         .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS()).collect()
     }
-
-    checkError(
-      exception = exception,
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
-    )
+    assert(exception.getMessage.contains("Malformed records are detected"))
 
     checkError(
       exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
