@@ -37,6 +37,7 @@ from typing import (
     Iterable,
     TYPE_CHECKING,
     ClassVar,
+    Callable,
 )
 
 import numpy as np
@@ -325,6 +326,41 @@ class SparkSession:
         return DataStreamReader(self)
 
     readStream.__doc__ = PySparkSession.readStream.__doc__
+
+    def registerProgressHandler(self, handler: Callable) -> None:
+        """
+        Register a progress handler to be called when a progress update is received from the server.
+        .. versionadded:: 4.0
+
+        Examples
+        --------
+        >>> import os
+        >>> handler = lambda **kwargs: os.write(str(kwargs))
+        >>> spark.registerProgressHandler(handler)
+        """
+        self._client.register_progress_handler(handler)
+
+    def removeProgressHandler(self, handler: Callable) -> None:
+        """
+        Remove a progress handler that was previously registered.
+        .. versionadded:: 4.0
+
+        Examples
+        --------
+        >>> import os
+        >>> handler = lambda **kwargs: os.write(str(kwargs))
+        >>> spark.registerProgressHandler(handler)
+        >>> spark.removeProgressHandler(handler)
+        """
+        self._client.remove_progress_handler(handler)
+
+    def clearProgressHandlers(self) -> None:
+        """
+        Clear all registered progress handlers.
+        .. versionadded:: 4.0
+
+        """
+        self._client.clear_progress_handlers()
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
