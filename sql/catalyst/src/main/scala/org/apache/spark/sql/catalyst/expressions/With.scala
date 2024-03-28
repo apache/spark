@@ -40,7 +40,7 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * Builds a map of ids (originally assigned ids -> canonicalized ids) to be re-assigned during
    * canonicalization.
    */
-  protected lazy val canonicalizationIdMap: Map[Long, Long] = {
+  private lazy val canonicalizationIdMap: Map[Long, Long] = {
     // Start numbering after taking into account all nested With expression id maps.
     var currentId = child.map {
       case w: With => w.canonicalizationIdMap.size
