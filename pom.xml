@@ -2935,6 +2935,7 @@
                       <exclude>org.apache.hadoop:hadoop-mapreduce-client-jobclient</exclude>
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
+                      <exclude>com.amazonaws:aws-java-sdk-bundle</exclude>
                       <exclude>*:*_2.12</exclude>
                       <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>
