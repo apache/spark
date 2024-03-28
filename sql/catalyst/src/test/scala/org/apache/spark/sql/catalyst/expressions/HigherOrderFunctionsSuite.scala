@@ -76,6 +76,10 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       f
   }
 
+  def filterValue(expr: Expression, f: Expression => Expression): Expression = {
+    FilterValue(expr, createLambda(expr.dataType, expr.nullable, f)).bind(validateBinding)
+  }
+
   def transform(expr: Expression, f: Expression => Expression): Expression = {
     val ArrayType(et, cn) = expr.dataType
     ArrayTransform(expr, createLambda(et, cn, f)).bind(validateBinding)
@@ -140,6 +144,33 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
   def mapFilter(expr: Expression, f: (Expression, Expression) => Expression): Expression = {
     val MapType(kt, vt, vcn) = expr.dataType
     MapFilter(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
+  }
+
+  test("FilterValue") {
+    val v1 = Literal.create("a")
+    val v2 = Literal.create("")
+    val v3 = Literal.create(null, StringType)
+
+    val nonEmpty: Expression => Expression = x => Not(EqualTo(x, ""))
+    val notA: Expression => Expression = x => Not(EqualTo(x, "a"))
+    val nullCondition: Expression => Expression = x => Literal.create(null, BooleanType)
+
+    checkEvaluation(filterValue(v1, nonEmpty), "a")
+    checkEvaluation(filterValue(v2, nonEmpty), null)
+    checkEvaluation(filterValue(v3, nonEmpty), null)
+    checkEvaluation(filterValue(v1, notA), null)
+    checkEvaluation(filterValue(v2, notA), "")
+    checkEvaluation(filterValue(v1, nullCondition), null)
+
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val ai1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
+    val ain = Literal.create(null, ArrayType(IntegerType))
+
+    val arrNonEmpty: Expression => Expression = x => Size(x) > 0
+
+    checkEvaluation(filterValue(ai0, arrNonEmpty), Seq(1, 2, 3))
+    checkEvaluation(filterValue(ai1, arrNonEmpty), null)
+    checkEvaluation(filterValue(ain, arrNonEmpty), null)
   }
 
   test("ArrayTransform") {
