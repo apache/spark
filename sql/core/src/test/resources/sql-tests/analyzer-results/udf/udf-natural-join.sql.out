@@ -38,20 +38,19 @@ SELECT * FROM nt1 natural join nt2 where udf(k) = "one"
 -- !query analysis
 Project [k#x, v1#x, v2#x]
 +- Filter (cast(udf(cast(k#x as string)) as string) = one)
-   +- Project [k#x, v1#x, v2#x]
-      +- Join Inner, (k#x = k#x)
-         :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x, v1#x])
-         :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-         :        +- Project [k#x, v1#x]
-         :           +- SubqueryAlias nt1
-         :              +- LocalRelation [k#x, v1#x]
-         +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x, v2#x])
-               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-                  +- Project [k#x, v2#x]
-                     +- SubqueryAlias nt2
-                        +- LocalRelation [k#x, v2#x]
+   +- Join Inner, (k#x = k#x)
+      :- SubqueryAlias nt1
+      :  +- View (`nt1`, [k#x, v1#x])
+      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+      :        +- Project [k#x, v1#x]
+      :           +- SubqueryAlias nt1
+      :              +- LocalRelation [k#x, v1#x]
+      +- SubqueryAlias nt2
+         +- View (`nt2`, [k#x, v2#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+               +- Project [k#x, v2#x]
+                  +- SubqueryAlias nt2
+                     +- LocalRelation [k#x, v2#x]
 
 
 -- !query

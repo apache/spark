@@ -415,12 +415,11 @@ SELECT '' AS `xxx`, *
   FROM J1_TBL INNER JOIN J2_TBL USING (i)
 -- !query analysis
 Project [ AS xxx#x, i#x, j#x, t#x, k#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join Inner, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -428,12 +427,11 @@ SELECT '' AS `xxx`, *
   FROM J1_TBL JOIN J2_TBL USING (i)
 -- !query analysis
 Project [ AS xxx#x, i#x, j#x, t#x, k#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join Inner, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -460,12 +458,11 @@ SELECT '' AS `xxx`, *
   FROM J1_TBL NATURAL JOIN J2_TBL
 -- !query analysis
 Project [ AS xxx#x, i#x, j#x, t#x, k#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join Inner, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -473,16 +470,15 @@ SELECT '' AS `xxx`, *
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d)
 -- !query analysis
 Project [ AS xxx#x, a#x, b#x, c#x, d#x]
-+- Project [a#x, b#x, c#x, d#x]
-   +- Join Inner, (a#x = a#x)
-      :- SubqueryAlias t1
-      :  +- Project [i#x AS a#x, j#x AS b#x, t#x AS c#x]
-      :     +- SubqueryAlias spark_catalog.default.j1_tbl
-      :        +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias t2
-         +- Project [i#x AS a#x, k#x AS d#x]
-            +- SubqueryAlias spark_catalog.default.j2_tbl
-               +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (a#x = a#x)
+   :- SubqueryAlias t1
+   :  +- Project [i#x AS a#x, j#x AS b#x, t#x AS c#x]
+   :     +- SubqueryAlias spark_catalog.default.j1_tbl
+   :        +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias t2
+      +- Project [i#x AS a#x, k#x AS d#x]
+         +- SubqueryAlias spark_catalog.default.j2_tbl
+            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -490,16 +486,15 @@ SELECT '' AS `xxx`, *
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a)
 -- !query analysis
 Project [ AS xxx#x, a#x, b#x, c#x, d#x]
-+- Project [a#x, b#x, c#x, d#x]
-   +- Join Inner, (a#x = a#x)
-      :- SubqueryAlias t1
-      :  +- Project [i#x AS a#x, j#x AS b#x, t#x AS c#x]
-      :     +- SubqueryAlias spark_catalog.default.j1_tbl
-      :        +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias t2
-         +- Project [i#x AS d#x, k#x AS a#x]
-            +- SubqueryAlias spark_catalog.default.j2_tbl
-               +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join Inner, (a#x = a#x)
+   :- SubqueryAlias t1
+   :  +- Project [i#x AS a#x, j#x AS b#x, t#x AS c#x]
+   :     +- SubqueryAlias spark_catalog.default.j1_tbl
+   :        +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias t2
+      +- Project [i#x AS d#x, k#x AS a#x]
+         +- SubqueryAlias spark_catalog.default.j2_tbl
+            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -573,12 +568,11 @@ SELECT '' AS `xxx`, *
   FROM J1_TBL RIGHT OUTER JOIN J2_TBL USING (i)
 -- !query analysis
 Project [ AS xxx#x, i#x, j#x, t#x, k#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join RightOuter, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join RightOuter, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -586,12 +580,11 @@ SELECT '' AS `xxx`, *
   FROM J1_TBL RIGHT JOIN J2_TBL USING (i)
 -- !query analysis
 Project [ AS xxx#x, i#x, j#x, t#x, k#x]
-+- Project [i#x, j#x, t#x, k#x]
-   +- Join RightOuter, (i#x = i#x)
-      :- SubqueryAlias spark_catalog.default.j1_tbl
-      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-      +- SubqueryAlias spark_catalog.default.j2_tbl
-         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
++- Join RightOuter, (i#x = i#x)
+   :- SubqueryAlias spark_catalog.default.j1_tbl
+   :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+   +- SubqueryAlias spark_catalog.default.j2_tbl
+      +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -630,12 +623,11 @@ SELECT '' AS `xxx`, *
 -- !query analysis
 Project [ AS xxx#x, i#x, j#x, t#x, k#x]
 +- Filter (k#x = 1)
-   +- Project [i#x, j#x, t#x, k#x]
-      +- Join LeftOuter, (i#x = i#x)
-         :- SubqueryAlias spark_catalog.default.j1_tbl
-         :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-         +- SubqueryAlias spark_catalog.default.j2_tbl
-            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
+   +- Join LeftOuter, (i#x = i#x)
+      :- SubqueryAlias spark_catalog.default.j1_tbl
+      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+      +- SubqueryAlias spark_catalog.default.j2_tbl
+         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -644,12 +636,11 @@ SELECT '' AS `xxx`, *
 -- !query analysis
 Project [ AS xxx#x, i#x, j#x, t#x, k#x]
 +- Filter (i#x = 1)
-   +- Project [i#x, j#x, t#x, k#x]
-      +- Join LeftOuter, (i#x = i#x)
-         :- SubqueryAlias spark_catalog.default.j1_tbl
-         :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
-         +- SubqueryAlias spark_catalog.default.j2_tbl
-            +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
+   +- Join LeftOuter, (i#x = i#x)
+      :- SubqueryAlias spark_catalog.default.j1_tbl
+      :  +- Relation spark_catalog.default.j1_tbl[i#x,j#x,t#x] parquet
+      +- SubqueryAlias spark_catalog.default.j2_tbl
+         +- Relation spark_catalog.default.j2_tbl[i#x,k#x] parquet
 
 
 -- !query
@@ -729,17 +720,16 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name)
 -- !query analysis
-Project [name#x, n#x, n#x, n#x]
-+- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x, n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
-      :  +- Join FullOuter, (name#x = name#x)
-      :     :- SubqueryAlias spark_catalog.default.t1
-      :     :  +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias spark_catalog.default.t3
-         +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, n#x, n#x, n#x]
++- Join FullOuter, (name#x = name#x)
+   :- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
+   :  +- Join FullOuter, (name#x = name#x)
+   :     :- SubqueryAlias spark_catalog.default.t1
+   :     :  +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias spark_catalog.default.t3
+      +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -750,16 +740,15 @@ INNER JOIN
 USING (name)
 -- !query analysis
 Project [name#x, n#x, n#x]
-+- Project [name#x, n#x, n#x]
-   +- Join Inner, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [name#x, n#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join Inner, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [name#x, n#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -770,16 +759,15 @@ LEFT JOIN
 USING (name)
 -- !query analysis
 Project [name#x, n#x, n#x]
-+- Project [name#x, n#x, n#x]
-   +- Join LeftOuter, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [name#x, n#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join LeftOuter, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [name#x, n#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -789,17 +777,16 @@ FULL JOIN
 (SELECT * FROM t3) s3
 USING (name)
 -- !query analysis
-Project [name#x, n#x, n#x]
-+- Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [name#x, n#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, n#x, n#x]
++- Join FullOuter, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [name#x, n#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -809,16 +796,15 @@ NATURAL INNER JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
 Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join Inner, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join Inner, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -828,16 +814,15 @@ NATURAL LEFT JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
 Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join LeftOuter, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join LeftOuter, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -846,17 +831,16 @@ SELECT * FROM
 NATURAL FULL JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
-Project [name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s2
-      :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
-      :     +- SubqueryAlias spark_catalog.default.t2
-      :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
++- Join FullOuter, (name#x = name#x)
+   :- SubqueryAlias s2
+   :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+   :     +- SubqueryAlias spark_catalog.default.t2
+   :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -868,22 +852,21 @@ NATURAL INNER JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
 Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join Inner, (name#x = name#x)
-      :- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
-      :  +- Join Inner, (name#x = name#x)
-      :     :- SubqueryAlias s1
-      :     :  +- Project [name#x, n#x AS s1_n#x, 1 AS s1_1#x]
-      :     :     +- SubqueryAlias spark_catalog.default.t1
-      :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias s2
-      :        +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
-      :           +- SubqueryAlias spark_catalog.default.t2
-      :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
++- Join Inner, (name#x = name#x)
+   :- Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
+   :  +- Join Inner, (name#x = name#x)
+   :     :- SubqueryAlias s1
+   :     :  +- Project [name#x, n#x AS s1_n#x, 1 AS s1_1#x]
+   :     :     +- SubqueryAlias spark_catalog.default.t1
+   :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   :     +- SubqueryAlias s2
+   :        +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+   :           +- SubqueryAlias spark_catalog.default.t2
+   :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -894,23 +877,22 @@ NATURAL FULL JOIN
 NATURAL FULL JOIN
 (SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3
 -- !query analysis
-Project [name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
-      :  +- Join FullOuter, (name#x = name#x)
-      :     :- SubqueryAlias s1
-      :     :  +- Project [name#x, n#x AS s1_n#x, 1 AS s1_1#x]
-      :     :     +- SubqueryAlias spark_catalog.default.t1
-      :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      :     +- SubqueryAlias s2
-      :        +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
-      :           +- SubqueryAlias spark_catalog.default.t2
-      :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-      +- SubqueryAlias s3
-         +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
-            +- SubqueryAlias spark_catalog.default.t3
-               +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x, s3_n#x, s3_2#x]
++- Join FullOuter, (name#x = name#x)
+   :- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s1_1#x, s2_n#x, s2_2#x]
+   :  +- Join FullOuter, (name#x = name#x)
+   :     :- SubqueryAlias s1
+   :     :  +- Project [name#x, n#x AS s1_n#x, 1 AS s1_1#x]
+   :     :     +- SubqueryAlias spark_catalog.default.t1
+   :     :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   :     +- SubqueryAlias s2
+   :        +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+   :           +- SubqueryAlias spark_catalog.default.t2
+   :              +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+   +- SubqueryAlias s3
+      +- Project [name#x, n#x AS s3_n#x, 3 AS s3_2#x]
+         +- SubqueryAlias spark_catalog.default.t3
+            +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -923,25 +905,24 @@ NATURAL FULL JOIN
     (SELECT name, n as s3_n FROM t3) as s3
   ) ss2
 -- !query analysis
-Project [name#x, s1_n#x, s2_n#x, s3_n#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s3_n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s1
-      :  +- Project [name#x, n#x AS s1_n#x]
-      :     +- SubqueryAlias spark_catalog.default.t1
-      :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      +- SubqueryAlias ss2
-         +- Project [name#x, s2_n#x, s3_n#x]
-            +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s3_n#x]
-               +- Join FullOuter, (name#x = name#x)
-                  :- SubqueryAlias s2
-                  :  +- Project [name#x, n#x AS s2_n#x]
-                  :     +- SubqueryAlias spark_catalog.default.t2
-                  :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-                  +- SubqueryAlias s3
-                     +- Project [name#x, n#x AS s3_n#x]
-                        +- SubqueryAlias spark_catalog.default.t3
-                           +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s3_n#x]
++- Join FullOuter, (name#x = name#x)
+   :- SubqueryAlias s1
+   :  +- Project [name#x, n#x AS s1_n#x]
+   :     +- SubqueryAlias spark_catalog.default.t1
+   :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   +- SubqueryAlias ss2
+      +- Project [name#x, s2_n#x, s3_n#x]
+         +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s3_n#x]
+            +- Join FullOuter, (name#x = name#x)
+               :- SubqueryAlias s2
+               :  +- Project [name#x, n#x AS s2_n#x]
+               :     +- SubqueryAlias spark_catalog.default.t2
+               :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+               +- SubqueryAlias s3
+                  +- Project [name#x, n#x AS s3_n#x]
+                     +- SubqueryAlias spark_catalog.default.t3
+                        +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query
@@ -954,25 +935,24 @@ NATURAL FULL JOIN
     (SELECT name, n as s3_n FROM t3) as s3
   ) ss2
 -- !query analysis
-Project [name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
-+- Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
-   +- Join FullOuter, (name#x = name#x)
-      :- SubqueryAlias s1
-      :  +- Project [name#x, n#x AS s1_n#x]
-      :     +- SubqueryAlias spark_catalog.default.t1
-      :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
-      +- SubqueryAlias ss2
-         +- Project [name#x, s2_n#x, s2_2#x, s3_n#x]
-            +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x]
-               +- Join FullOuter, (name#x = name#x)
-                  :- SubqueryAlias s2
-                  :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
-                  :     +- SubqueryAlias spark_catalog.default.t2
-                  :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
-                  +- SubqueryAlias s3
-                     +- Project [name#x, n#x AS s3_n#x]
-                        +- SubqueryAlias spark_catalog.default.t3
-                           +- Relation spark_catalog.default.t3[name#x,n#x] parquet
+Project [coalesce(name#x, name#x) AS name#x, s1_n#x, s2_n#x, s2_2#x, s3_n#x]
++- Join FullOuter, (name#x = name#x)
+   :- SubqueryAlias s1
+   :  +- Project [name#x, n#x AS s1_n#x]
+   :     +- SubqueryAlias spark_catalog.default.t1
+   :        +- Relation spark_catalog.default.t1[name#x,n#x] parquet
+   +- SubqueryAlias ss2
+      +- Project [name#x, s2_n#x, s2_2#x, s3_n#x]
+         +- Project [coalesce(name#x, name#x) AS name#x, s2_n#x, s2_2#x, s3_n#x]
+            +- Join FullOuter, (name#x = name#x)
+               :- SubqueryAlias s2
+               :  +- Project [name#x, n#x AS s2_n#x, 2 AS s2_2#x]
+               :     +- SubqueryAlias spark_catalog.default.t2
+               :        +- Relation spark_catalog.default.t2[name#x,n#x] parquet
+               +- SubqueryAlias s3
+                  +- Project [name#x, n#x AS s3_n#x]
+                     +- SubqueryAlias spark_catalog.default.t3
+                        +- Relation spark_catalog.default.t3[name#x,n#x] parquet
 
 
 -- !query

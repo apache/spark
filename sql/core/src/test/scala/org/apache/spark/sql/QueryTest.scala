@@ -236,7 +236,8 @@ abstract class QueryTest extends PlanTest {
   def assertEmptyMissingInput(query: Dataset[_]): Unit = {
     assert(query.queryExecution.analyzed.missingInput.isEmpty,
       s"The analyzed logical plan has missing inputs:\n${query.queryExecution.analyzed}")
-    assert(query.queryExecution.optimizedPlan.missingInput.isEmpty,
+    assert(query.queryExecution.optimizedPlan.children.isEmpty ||
+      query.queryExecution.optimizedPlan.missingInput.isEmpty,
       s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
       s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
