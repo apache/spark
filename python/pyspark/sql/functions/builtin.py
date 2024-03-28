@@ -552,6 +552,7 @@ def try_avg(col: "ColumnOrName") -> Column:
 
     Example 3: Overflow results in NULL when ANSI mode is on
 
+    >>> from decimal import Decimal
     >>> import pyspark.sql.functions as sf
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
@@ -784,6 +785,7 @@ def try_sum(col: "ColumnOrName") -> Column:
 
     Example 4: Overflow results in NULL when ANSI mode is on
 
+    >>> from decimal import Decimal
     >>> import pyspark.sql.functions as sf
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
@@ -1483,22 +1485,22 @@ def mean(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1982, 15), (1990, 2)], ["birth", "age"])
     >>> df.select(sf.mean("age")).show()
-    +---------+
-    |mean(age)|
-    +---------+
-    |      8.5|
-    +---------+
+    +--------+
+    |avg(age)|
+    +--------+
+    |     8.5|
+    +--------+
 
     Example 2: Calculating the average age with None
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1982, None), (1990, 2), (2000, 4)], ["birth", "age"])
     >>> df.select(sf.mean("age")).show()
-    +---------+
-    |mean(age)|
-    +---------+
-    |      3.0|
-    +---------+
+    +--------+
+    |avg(age)|
+    +--------+
+    |     3.0|
+    +--------+
     """
     return _invoke_function_over_columns("mean", col)
 
