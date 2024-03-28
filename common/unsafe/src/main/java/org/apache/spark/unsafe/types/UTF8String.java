@@ -549,6 +549,47 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return 0;
   }
 
+  public int findInSet(UTF8String match, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return this.findInSet(match);
+    }
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
+      return this.toLowerCase().findInSet(match.toLowerCase());
+    }
+    return collatedFindInSet(match, collationId);
+}
+
+  private int collatedFindInSet(UTF8String match, int collationId) {
+    if (match.contains(COMMA_UTF8)) {
+      return 0;
+    }
+
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, match, collationId);
+
+    String setString = this.toString();
+    int wordStart = 0;
+    while ((wordStart = stringSearch.next()) != StringSearch.DONE) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
+        boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
+                || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
+
+        if(isValidStart && isValidEnd) {
+          int pos = 0;
+          for(int i = 0; i < setString.length() && i < wordStart; i++) {
+            if(setString.charAt(i) == ',') {
+              pos++;
+            }
+          }
+
+          return pos + 1;
+        }
+      }
+    }
+
+    return 0;
+  }
+
   /**
    * Copy the bytes from the current UTF8String, and make a new UTF8String.
    * @param start the start position of the current UTF8String in bytes.
@@ -831,6 +872,33 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       i += numBytesForFirstByte(getByte(i));
       c += 1;
     } while (i < numBytes);
+
+    return -1;
+  }
+
+  public int indexOf(UTF8String substring, int start, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return this.indexOf(substring, start);
+    }
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
+      return this.toLowerCase().indexOf(substring.toLowerCase(), start);
+    }
+    return collatedIndexOf(substring, collationId);
+  }
+
+  private int collatedIndexOf(UTF8String substring, int collationId) {
+    if (substring.numBytes == 0) {
+      return 0;
+    }
+
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
+
+    int pos = 0;
+    while ((pos = stringSearch.next()) != StringSearch.DONE) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        return pos;
+      }
+    }
 
     return -1;
   }

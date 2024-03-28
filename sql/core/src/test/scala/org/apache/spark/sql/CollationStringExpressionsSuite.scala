@@ -21,7 +21,7 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, FindInSet, Literal, StringInstr, StringRepeat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -71,6 +71,52 @@ class CollationStringExpressionsSuite extends QueryTest
         )
       )
     })
+  }
+
+  test("INSTR check result on explicitly collated strings") {
+    def testInStr(str: String, substr: String, collationId: Integer, expected: Integer): Unit = {
+      val string = Literal.create(str, StringType(collationId))
+      val substring = Literal.create(substr, StringType(collationId))
+
+      checkEvaluation(StringInstr(string, substring), expected)
+    }
+
+    // UTF8_BINARY_LCASE
+    testInStr("aaads", "Aa", 1, 1)
+    testInStr("aaaDs", "de", 1, 0)
+    // UNICODE
+    testInStr("aaads", "Aa", 2, 0)
+    testInStr("aaads", "de", 2, 0)
+    // UNICODE_CI
+    testInStr("aaads", "AD", 3, 3)
+    testInStr("aaads", "dS", 3, 4)
+  }
+
+  test("FIND_IN_SET check result on explicitly collated strings") {
+    def testFindInSet(expected: Integer, stringType: Integer, word: String, set: String): Unit = {
+      val w = Literal.create(word, StringType(stringType))
+      val s = Literal.create(set, StringType(stringType))
+
+      checkEvaluation(FindInSet(w, s), expected)
+    }
+
+    // UTF8_BINARY
+    testFindInSet(0, 0, "AB", "abc,b,ab,c,def")
+    // UTF8_BINARY_LCASE
+    testFindInSet(0, 1, "a", "abc,b,ab,c,def")
+    testFindInSet(4, 1, "c", "abc,b,ab,c,def")
+    testFindInSet(3, 1, "AB", "abc,b,ab,c,def")
+    testFindInSet(1, 1, "AbC", "abc,b,ab,c,def")
+    testFindInSet(0, 1, "abcd", "abc,b,ab,c,def")
+    // UNICODE
+    testFindInSet(0, 2, "a", "abc,b,ab,c,def")
+    testFindInSet(3, 2, "ab", "abc,b,ab,c,def")
+    testFindInSet(0, 2, "Ab", "abc,b,ab,c,def")
+    // UNICODE_CI
+    testFindInSet(0, 3, "a", "abc,b,ab,c,def")
+    testFindInSet(4, 3, "C", "abc,b,ab,c,def")
+    testFindInSet(5, 3, "DeF", "abc,b,ab,c,dEf")
+    testFindInSet(0, 3, "DEFG", "abc,b,ab,c,def")
   }
 
   test("REPEAT check output type on explicitly collated string") {

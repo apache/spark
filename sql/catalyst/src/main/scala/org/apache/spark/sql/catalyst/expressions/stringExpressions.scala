@@ -1002,15 +1002,32 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
-  override protected def nullSafeEval(word: Any, set: Any): Any =
-    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
+  override protected def nullSafeEval(word: Any, set: Any): Any = {
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String], collationId)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (word, set) =>
-      s"${ev.value} = $set.findInSet($word);"
-    )
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      nullSafeCodeGen(ctx, ev, (word, set) => s"${ev.value} = $set.findInSet($word);")
+    } else {
+      nullSafeCodeGen(ctx, ev, (word, set) => s"${ev.value} = $set.findInSet($word, $collationId);")
+    }
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
   }
 
   override def dataType: DataType = IntegerType
@@ -1377,17 +1394,34 @@ case class StringInstr(str: Expression, substr: Expression)
   override def left: Expression = str
   override def right: Expression = substr
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
-    string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0) + 1
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+    string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0, collationId) + 1
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
+
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
   }
 
   override def prettyName: String = "instr"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (l, r) =>
-      s"($l).indexOf($r, 0) + 1")
+    val collationId = left.dataType.asInstanceOf[StringType].collationId
+
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      defineCodeGen(ctx, ev, (l, r) => s"($l).indexOf($r, 0) + 1")
+    } else {
+      defineCodeGen(ctx, ev, (l, r) => s"($l).indexOf($r, 0, $collationId) + 1")
+    }
   }
 
   override protected def withNewChildrenInternal(
