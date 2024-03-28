@@ -19,7 +19,6 @@ package org.apache.spark.serializer
 
 import java.io._
 import java.lang.reflect.{Field, Method}
-import java.security.AccessController
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -68,8 +67,8 @@ private[spark] object SerializationDebugger extends Logging {
   }
 
   private[serializer] var enableDebugging: Boolean = {
-    !AccessController.doPrivileged(new sun.security.action.GetBooleanAction(
-      "sun.io.serialization.extendedDebugInfo")).booleanValue()
+    !sun.security.action.GetBooleanAction
+      .privilegedGetProperty("sun.io.serialization.extendedDebugInfo")
   }
 
   private class SerializationDebugger {
