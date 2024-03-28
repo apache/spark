@@ -17,26 +17,34 @@
 package org.apache.spark.deploy.k8s.submit
 
 import java.io.File
+import java.net.HttpURLConnection
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
+import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinition, CustomResourceDefinitionBuilder}
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
+import io.fabric8.kubernetes.client.server.mock.KubernetesServer
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 import org.scalatestplus.mockito.MockitoSugar._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Config, _}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_DRIVER_POD_NAME
 import org.apache.spark.deploy.k8s.Config.WAIT_FOR_APP_COMPLETION
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.deploy.k8s.features.DriverServiceFeatureStep
 import org.apache.spark.deploy.k8s.submit.Client.submissionId
+import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.launcher.{InProcessLauncher, SparkAppHandle, SparkLauncher}
 import org.apache.spark.util.Utils
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
@@ -60,6 +68,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       .withNewSpec()
         .withHostname("localhost")
         .endSpec()
+      .withNewStatus()
+        .withPhase("Pending")
+        .endStatus()
       .build()
   private val BUILT_DRIVER_CONTAINER = new ContainerBuilder().withName(CONTAINER_NAME).build()
   private val ADDITIONAL_RESOURCES = Seq(
@@ -165,11 +176,14 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var resourceList: RESOURCE_LIST = _
 
+  private val server = new KubernetesServer(false, false)
+
   private var kconf: KubernetesDriverConf = _
   private var createdPodArgumentCaptor: ArgumentCaptor[Pod] = _
   private var createdResourcesArgumentCaptor: ArgumentCaptor[Array[HasMetadata]] = _
 
   before {
+    beforeAll()
     MockitoAnnotations.openMocks(this).close()
     kconf = KubernetesTestConf.createDriverConf(
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
@@ -190,6 +204,75 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     doReturn(resourceList)
       .when(kubernetesClient)
       .resourceList(createdResourcesArgumentCaptor.capture(): _*)
+    server.before()
+    server.expect().post()
+      .withPath("/api/v1/namespaces/default/pods")
+      .andReturn(HttpURLConnection.HTTP_OK, BUILT_DRIVER_POD)
+      .always()
+    server.expect().patch()
+      .withPath(
+        "/api/v1/namespaces/default/services/resource-example-driver-svc?" +
+        "fieldManager=fabric8&force=true"
+      )
+      .andReturn(HttpURLConnection.HTTP_OK,
+        new DriverServiceFeatureStep(kconf).getAdditionalKubernetesResources().head)
+      .always()
+    server.expect().patch()
+      .withPath(
+       s"/api/v1/namespaces/default/configmaps/${KubernetesClientUtils.configMapNameDriver}" +
+        "?fieldManager=fabric8&force=true"
+      )
+      .andReturn(HttpURLConnection.HTTP_OK,
+        new DriverServiceFeatureStep(kconf).getAdditionalKubernetesResources().head)
+      .always()
+    server.expect().get()
+      .withPath(
+       s"/api/v1/namespaces/default/pods/${POD_NAME}"
+      )
+      .andReturn(HttpURLConnection.HTTP_OK, BUILT_DRIVER_POD)
+      .once()
+    server.expect().withPath(
+        // Hint: different version of kubernetes client may cause the
+        //  url params in different order, which may cause the mock failed
+        s"/api/v1/namespaces/default/pods?allowWatchBookmarks=true&" +
+        s"fieldSelector=metadata.name%3D${POD_NAME}&watch=true"
+      )
+      .andUpgradeToWebSocket()
+      .open(new WatchEvent(BUILT_DRIVER_POD, "ADDED"))
+      .waitFor(1000L)
+      .andEmit(new WatchEvent(
+        new PodBuilder()
+          .withNewMetadata()
+            .withName(POD_NAME)
+            .endMetadata()
+          .withNewSpec()
+            .withHostname("localhost")
+            .endSpec()
+          .withNewStatus()
+            .withPhase("Running")
+            .endStatus()
+          .build()
+        , "MODIFIED"))
+      .waitFor(3000L)
+      .andEmit(new WatchEvent(
+        new PodBuilder()
+          .withNewMetadata()
+            .withName(POD_NAME)
+            .endMetadata()
+          .withNewSpec()
+            .withHostname("localhost")
+            .endSpec()
+          .withNewStatus()
+            .withPhase("Succeeded")
+            .endStatus()
+          .build()
+        , "MODIFIED"))
+      .done().always();
+  }
+
+  after {
+    server.after()
+    afterAll()
   }
 
   test("The client should configure the pod using the builder.") {
@@ -376,4 +459,54 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       s"Deployed Spark application $appName with application ID $appId " +
       s"and submission ID $sId into Kubernetes"))
   }
+
+  test("SPARK-36832: manage application using spark launcher handle") {
+    val kubeServer = server.getKubernetesMockServer
+    val handle = new InProcessLauncher()
+      .setConf(UI_ENABLED.key, "false")
+      .setConf(KUBERNETES_DRIVER_POD_NAME.key, POD_NAME)
+      .setConf(Config.CONTAINER_IMAGE.key, "spark-executor:latest")
+      .setConf(Config.KUBERNETES_DRIVER_POD_NAME_PREFIX.key, KUBERNETES_RESOURCE_PREFIX)
+      .setMaster(s"k8s://http://${kubeServer.getHostName}:${kubeServer.getPort}")
+      .setDeployMode("cluster")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
+      .setMainClass(KubernetesLauncherTestApp.getClass.getName.stripSuffix("$"))
+      .startApplication()
+
+    try {
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
+        assert(handle.getState == SparkAppHandle.State.SUBMITTED)
+      }
+
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
+        assert(handle.getState == SparkAppHandle.State.RUNNING)
+      }
+
+      assert(handle.getAppId != null)
+      handle.stop()
+
+      eventually(timeout(5.seconds), interval(100.milliseconds)) {
+        assert(handle.getState == SparkAppHandle.State.KILLED)
+      }
+    } finally {
+      handle.kill()
+    }
+
+    assert(server.getClient.pods().withName(POD_NAME).get() == null)
+  }
+}
+
+private object KubernetesLauncherTestApp {
+
+  def main(args: Array[String]): Unit = {
+    // Do not stop the application; the test will stop it using the launcher lib. Just run a task
+    // that will prevent the process from exiting.
+    val sc = new SparkContext(new SparkConf())
+    sc.parallelize(Seq(1)).foreach { i =>
+      this.synchronized {
+        wait()
+      }
+    }
+  }
+
 }
