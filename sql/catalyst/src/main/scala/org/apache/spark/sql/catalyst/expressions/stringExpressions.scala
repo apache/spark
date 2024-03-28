@@ -1420,21 +1420,31 @@ case class StringInstr(str: Expression, substr: Expression)
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def dataType: DataType = strExpr.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
   override def third: Expression = countExpr
   override def prettyName: String = "substring_index"
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
+    val collationId = first.dataType.asInstanceOf[StringType].collationId
+
     str.asInstanceOf[UTF8String].subStringIndex(
       delim.asInstanceOf[UTF8String],
-      count.asInstanceOf[Int])
+      count.asInstanceOf[Int], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
+    val collationId = first.dataType.asInstanceOf[StringType].collationId
+
+    if(CollationFactory.fetchCollation(collationId).supportsBinaryOrdering) {
+      defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
+    } else {
+      defineCodeGen(ctx, ev, (str, delim, count) =>
+        s"$str.subStringIndex($delim, $count, $collationId)")
+    }
   }
 
   override protected def withNewChildrenInternal(
