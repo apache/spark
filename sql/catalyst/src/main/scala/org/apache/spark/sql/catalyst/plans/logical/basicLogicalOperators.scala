@@ -2057,8 +2057,7 @@ case class LateralJoin(
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
 
-  override lazy val allAttributes: AttributeSeq = children.flatMap(_.output) ++
-    right.plan.output
+  override lazy val allAttributes: AttributeSeq = children.flatMap(_.output) ++ right.plan.output
 
   require(Seq(Inner, LeftOuter, Cross).contains(joinType),
     s"Unsupported lateral join type $joinType")
