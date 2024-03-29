@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts.{castStringType, getOutputCollation, hasStringType}
+import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts.{castStringType, getOutputCollation}
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.hasStringType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -609,9 +609,9 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
-        val collationId = getOutputCollation(c.children)
+        val collationId = getOutputCollation(c.children.map(_.dataType))
         val newChildren = c.children.map { e =>
-          implicitCast(e, StringType(collationId)).getOrElse(e)
+          implicitCast(e, StringType(collationId, isExplicit = false)).getOrElse(e)
         }
 
         c.copy(children = newChildren)
@@ -659,9 +659,9 @@ abstract class TypeCoercionBase {
         val newIndex = implicitCast(index, IntegerType).getOrElse(index)
         val newInputs = if (conf.eltOutputAsString ||
           !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-          val collationId = getOutputCollation(children)
+          val collationId = getOutputCollation(children.map(_.dataType))
           children.tail.map { e =>
-            implicitCast(e, StringType(collationId)).getOrElse(e)
+            implicitCast(e, StringType(collationId, isExplicit = false)).getOrElse(e)
           }
         } else {
           children.tail
@@ -710,7 +710,7 @@ abstract class TypeCoercionBase {
           // If we cannot do the implicit cast, just use the original input.
           case (in, expected) => implicitCast(in, expected).getOrElse(in)
         }
-        val collationId = getOutputCollation(e.children)
+        val collationId = getOutputCollation(e.children.map(_.dataType))
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
             castStringType(in, collationId).getOrElse(in)
@@ -729,7 +729,7 @@ abstract class TypeCoercionBase {
             in
           }
         }
-        val collationId = getOutputCollation(e.children)
+        val collationId = getOutputCollation(e.children.map(_.dataType))
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
             castStringType(in, collationId).getOrElse(in)
@@ -751,7 +751,7 @@ abstract class TypeCoercionBase {
             ).getOrElse(in)
           }
         }
-        val collationId = getOutputCollation(udf.children)
+        val collationId = getOutputCollation(udf.children.map(_.dataType))
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
             castStringType(in, collationId).getOrElse(in)

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  */
 @Stable
 class StringType private(val collationId: Int) extends AtomicType with Serializable {
+  var isExplicit: Boolean = false
   /**
    * Support for Binary Equality implies that strings are considered equal only if
    * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
@@ -78,6 +79,11 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
 @Stable
 case object StringType extends StringType(0) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
+  private[spark] def apply(collationId: Int, isExplicit: Boolean): StringType = {
+    val st = new StringType(collationId)
+    st.isExplicit = isExplicit
+    st
+  }
 
   def apply(collation: String): StringType = {
     val collationId = CollationFactory.collationNameToId(collation)
