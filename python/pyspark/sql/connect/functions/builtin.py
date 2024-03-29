@@ -2041,6 +2041,13 @@ def str_to_map(
 str_to_map.__doc__ = pysparkfuncs.str_to_map.__doc__
 
 
+def parse_json(col: "ColumnOrName") -> Column:
+    return _invoke_function("parse_json", _to_col(col))
+
+
+parse_json.__doc__ = pysparkfuncs.parse_json.__doc__
+
+
 def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 

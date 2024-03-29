@@ -645,7 +645,7 @@ class DataFrame:
             if isinstance(col, Column):
                 return col
             else:
-                return Column(ColumnReference(col, df._plan._plan_id))
+                return df._col(col)
 
         return DataFrame(
             plan.AsOfJoin(
@@ -1715,12 +1715,7 @@ class DataFrame:
                 error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
 
-        return Column(
-            ColumnReference(
-                unparsed_identifier=name,
-                plan_id=self._plan._plan_id,
-            )
-        )
+        return self._col(name)
 
     __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
@@ -1756,12 +1751,7 @@ class DataFrame:
                     if item not in self.columns:
                         self.select(item).isLocal()
 
-                return Column(
-                    ColumnReference(
-                        unparsed_identifier=item,
-                        plan_id=self._plan._plan_id,
-                    )
-                )
+                return self._col(item)
         elif isinstance(item, Column):
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
@@ -1773,6 +1763,14 @@ class DataFrame:
                 error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
                 message_parameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
+
+    def _col(self, name: str) -> Column:
+        return Column(
+            ColumnReference(
+                unparsed_identifier=name,
+                plan_id=self._plan._plan_id,
+            )
+        )
 
     def __dir__(self) -> List[str]:
         attrs = set(super().__dir__())

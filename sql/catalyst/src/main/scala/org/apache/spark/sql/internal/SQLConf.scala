@@ -3380,6 +3380,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val REPLACE_NULLIF_USING_WITH_EXPR =
+    buildConf("spark.databricks.sql.replaceNullIfUsingWithExpr")
+      .internal()
+      .doc("When true, NullIf expressions are rewritten using With expressions to avoid " +
+        "expression duplication.")
+      .booleanConf
+      .createWithDefault(true)
+
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
@@ -3522,6 +3530,15 @@ object SQLConf {
       .internal()
       .doc("If enabled, prevents constant folding in subqueries that contain" +
         " a COUNT-bug-susceptible Aggregate.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PULL_OUT_NESTED_DATA_OUTER_REF_EXPRESSIONS_ENABLED =
+    buildConf("spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled")
+      .internal()
+      .doc("Handle correlation over nested data extract expressions by pulling out the " +
+        "expression into the outer plan. This enables correlation on map attributes for example.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -5211,8 +5228,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
 
   def isParquetSchemaRespectSummaries: Boolean = getConf(PARQUET_SCHEMA_RESPECT_SUMMARIES)
-
-  def parquetOutputCommitterClass: String = getConf(PARQUET_OUTPUT_COMMITTER_CLASS)
 
   def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
 
