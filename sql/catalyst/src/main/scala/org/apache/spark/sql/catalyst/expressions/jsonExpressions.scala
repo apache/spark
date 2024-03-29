@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.io._
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -444,10 +445,7 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
   extends Generator
-  with CodegenFallback
   with QueryErrorsBase {
-
-  import SharedFactory._
 
   override def nullable: Boolean = {
     // a row is always returned
@@ -501,26 +499,6 @@ case class JsonTuple(children: Seq[Expression])
       return nullRow
     }
 
-    try {
-      /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
-      detect character encoding which could fail for some malformed strings */
-      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
-        parseRow(parser, input)
-      }
-    } catch {
-      case _: JsonProcessingException =>
-        nullRow
-    }
-  }
-
-  private def parseRow(parser: JsonParser, input: InternalRow): Seq[InternalRow] = {
-    // only objects are supported
-    if (parser.nextToken() != JsonToken.START_OBJECT) {
-      return nullRow
-    }
-
-    // evaluate the field names as String rather than UTF8String to
-    // optimize lookups from the json token, which is also a String
     val fieldNames = if (constantFields == fieldExpressions.length) {
       // typically the user will provide the field names as foldable expressions
       // so we can use the cached copy
@@ -540,7 +518,114 @@ case class JsonTuple(children: Seq[Expression])
       }
     }
 
-    val row = Array.ofDim[Any](fieldNames.length)
+    val evaluator = new JsonTupleEvaluator(json, fieldNames.asJava)
+    evaluator.evaluate()
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): JsonTuple =
+    copy(children = newChildren)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evaluatorClass = classOf[JsonTupleEvaluator].getName
+    val fieldNames = ctx.freshName("fieldNames")
+    val jsonEval = jsonExpr.genCode(ctx)
+
+    val parseCode = if (constantFields == fieldExpressions.length) {
+      val cacheName = ctx.freshName("foldableFieldNames")
+      val ref = ctx.addReferenceObj(cacheName, foldableFieldNames.map(_.orNull).asJava)
+      Seq(s"""$fieldNames = $ref;""")
+    } else if (constantFields == 0) {
+      // none are foldable so all field names need to be evaluated from the input row
+      fieldExpressions.map {
+        e =>
+          val eval = e.genCode(ctx)
+          s"""
+             |${eval.code}
+             |if (${eval.isNull}) {
+             |  $fieldNames.add(null);
+             |} else {
+             |  $fieldNames.add(${eval.value}.toString());
+             |}
+           """.stripMargin
+      }
+    } else {
+      val cacheName = ctx.freshName("foldableFieldNames")
+      val ref =
+        ctx.addReferenceObj(cacheName, foldableFieldNames.toBuffer.asJava)
+      val codeList = ArrayBuffer(s"""$fieldNames = $ref;""")
+      // if there is a mix of constant and non-constant expressions
+      // prefer the cached copy when available
+      foldableFieldNames.zip(fieldExpressions).zipWithIndex.foreach {
+        case ((null, e), i) =>
+          val eval = e.genCode(ctx)
+          codeList +=
+            s"""
+               |${eval.code}
+               |if (${eval.isNull}) {
+               |  $fieldNames.add($i, null);
+               |} else {
+               |  $fieldNames.add($i, ${eval.value}.toString());
+               |}
+           """.stripMargin
+        case ((fieldName, _), i) =>
+          s"""
+             |$fieldNames.add($i, ${fieldName.orNull});
+             |""".stripMargin
+      }
+      codeList
+    }
+
+    val splitParseCode = ctx.splitExpressionsWithCurrentInputs(
+      expressions = parseCode.toSeq,
+      funcName = "jsonTuple",
+      extraArguments = "java.util.List<String>" -> fieldNames :: Nil)
+
+    val resultType = "scala.collection.IterableOnce<InternalRow>"
+    val refNullRow = ctx.addReferenceObj("nullRow", nullRow)
+    ev.copy(code =
+      code"""
+            |$resultType ${ev.value};
+            |java.util.List<String> $fieldNames = new java.util.ArrayList<>();
+            |${jsonEval.code}
+            |if (${jsonEval.isNull}) {
+            |  ${ev.value} = $refNullRow;
+            |} else {
+            |  $splitParseCode
+            |  $evaluatorClass evaluator = new $evaluatorClass(${jsonEval.value}, $fieldNames);
+            |  ${ev.value} = ($resultType) evaluator.evaluate();
+            |}
+            |""".stripMargin
+    )
+  }
+}
+
+class JsonTupleEvaluator(jsonStr: UTF8String, fieldNames: java.util.List[String]) {
+
+  import SharedFactory._
+
+  @transient private lazy val nullRow: Seq[InternalRow] =
+    new GenericInternalRow(Array.ofDim[Any](fieldNames.size())) :: Nil
+
+  def evaluate(): IterableOnce[InternalRow] = {
+    try {
+      /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
+      detect character encoding which could fail for some malformed strings */
+      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, jsonStr)) { parser =>
+        parseRow(parser)
+      }
+    } catch {
+      case _: JsonProcessingException =>
+        nullRow
+    }
+  }
+
+  private def parseRow(parser: JsonParser): Seq[InternalRow] = {
+    // only objects are supported
+    if (parser.nextToken() != JsonToken.START_OBJECT) {
+      return nullRow
+    }
+
+    val row = Array.ofDim[Any](fieldNames.size)
 
     // start reading through the token stream, looking for any requested field names
     while (parser.nextToken() != JsonToken.END_OBJECT) {
@@ -601,9 +686,6 @@ case class JsonTuple(children: Seq[Expression])
         generator.copyCurrentStructure(parser)
     }
   }
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): JsonTuple =
-    copy(children = newChildren)
 }
 
 /**
