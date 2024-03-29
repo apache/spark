@@ -205,7 +205,9 @@ class PrefixKeyScanStateEncoder(
  * To encode a row for range scan, we first project the first numOrderingCols needed
  * for the range scan into an UnsafeRow; we then rewrite that UnsafeRow's fields in BIG_ENDIAN
  * to allow for scanning keys in sorted order using the byte-wise comparison method that
- * RocksDB uses. Negative values for numeric types are also supported.
+ * RocksDB uses.
+ * Negative values for numeric types such as short, integer and long are supported. Negative values
+ * for floating point types such as float and double are not supported.
  * Then, for the rest of the fields, we project those into another UnsafeRow.
  * We then effectively join these two UnsafeRows together, and finally take those bytes
  * to get the resulting row.
