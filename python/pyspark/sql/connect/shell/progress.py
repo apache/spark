@@ -56,7 +56,9 @@ class ProgressHandler(abc.ABC):
         pass
 
 
-def from_proto(proto: ExecutePlanResponse) -> typing.Tuple[Iterable[StageInfo], int]:
+def from_proto(
+    proto: ExecutePlanResponse.ExecutionProgress,
+) -> typing.Tuple[Iterable[StageInfo], int]:
     result = []
     for stage in proto.stages:
         result.append(
