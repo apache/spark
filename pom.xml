@@ -132,8 +132,8 @@
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.102</hive.version>
-    <hive23.version>2.3.102</hive23.version>
+    <hive.version>2.3.103</hive.version>
+    <hive23.version>2.3.103</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
@@ -360,7 +360,7 @@
 
     <repository>
       <id>github-deploy</id>
-      <url>https://raw.github.com/pan3793/mvn-repo/release-2.3.102/</url>
+      <url>https://raw.github.com/pan3793/mvn-repo/release-2.3.103/</url>
       <snapshots>
         <enabled>true</enabled>
         <updatePolicy>always</updatePolicy>
