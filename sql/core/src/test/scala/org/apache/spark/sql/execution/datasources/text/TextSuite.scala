@@ -253,6 +253,12 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     assert(TextOptions.isValidOption("encoding"))
     assert(TextOptions.isValidOption("lineSep"))
   }
+
+  test("the parameter `inputs` of the function `text(paths: String*)` non empty") {
+    intercept[IllegalArgumentException] {
+      spark.read.csv()
+    }
+  }
 }
 
 class TextV1Suite extends TextSuite {
