@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.Locale
+
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
