@@ -869,7 +869,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
   /**
    * (Scala-specific)
    * Invokes methods defined in the stateful processor used in arbitrary state API v2.
-   * Functions as the function above, but with additional initial state.
+   * Functions as the function above, but with additional initial state. Currently this operator
+   * is not supported with Spark Connect.
    *
    * @tparam U
    *   The type of the output objects. Must be encodable to Spark SQL types.
@@ -898,7 +899,8 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
   /**
    * (Java-specific)
    * Invokes methods defined in the stateful processor used in arbitrary state API v2.
-   * Functions as the function above, but with additional initial state.
+   * Functions as the function above, but with additional initial state. Currently this operator
+   * is not supported with Spark Connect.
    *
    * @tparam U
    *   The type of the output objects. Must be encodable to Spark SQL types.
