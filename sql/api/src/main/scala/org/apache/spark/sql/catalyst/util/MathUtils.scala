@@ -62,14 +62,14 @@ object MathUtils {
   }
 
   def negateExact(a: Byte): Byte = {
-    if (a == Byte.MinValue) {
+    if (a == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
       throw ExecutionErrors.arithmeticOverflowError("byte overflow")
     }
     (-a).toByte
   }
 
   def negateExact(a: Short): Short = {
-    if (a == Short.MinValue) {
+    if (a == Short.MinValue) { // if and only if x is Short.MinValue, overflow can happen
       throw ExecutionErrors.arithmeticOverflowError("short overflow")
     }
     (-a).toShort
