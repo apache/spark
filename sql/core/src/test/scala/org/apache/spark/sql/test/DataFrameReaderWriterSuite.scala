@@ -608,14 +608,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     testRead(spark.read.text(dir), data, textSchema)
 
     // Reader, without user specified schema
-    testRead(spark.read.text(), Seq.empty, textSchema)
     testRead(spark.read.text(dir, dir, dir), data ++ data ++ data, textSchema)
     testRead(spark.read.text(Seq(dir, dir): _*), data ++ data, textSchema)
     // Test explicit calls to single arg method - SPARK-16009
     testRead(Option(dir).map(spark.read.text).get, data, textSchema)
 
     // Reader, with user specified schema, should just apply user schema on the file data
-    testRead(spark.read.schema(userSchema).text(), Seq.empty, userSchema)
+    withTempDir { tmpDir =>
+      testRead(spark.read.schema(userSchema).text(tmpDir.getCanonicalPath), Seq.empty, userSchema)
+    }
     testRead(spark.read.schema(userSchema).text(dir), data, userSchema)
     testRead(spark.read.schema(userSchema).text(dir, dir), data ++ data, userSchema)
     testRead(spark.read.schema(userSchema).text(Seq(dir, dir): _*), data ++ data, userSchema)
@@ -625,7 +626,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
 
     // Reader, without user specified schema
-    testRead(spark.read.textFile().toDF(), Seq.empty, textSchema)
+    withTempDir { tmpDir =>
+      testRead(spark.read.textFile(tmpDir.getCanonicalPath).toDF(), Seq.empty, textSchema)
+    }
     testRead(spark.read.textFile(dir).toDF(), data, textSchema)
     testRead(spark.read.textFile(dir, dir).toDF(), data ++ data, textSchema)
     testRead(spark.read.textFile(Seq(dir, dir): _*).toDF(), data ++ data, textSchema)
@@ -633,7 +636,11 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     testRead(Option(dir).map(spark.read.text).get, data, textSchema)
 
     // Reader, with user specified schema, should just apply user schema on the file data
-    val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
+    val e = intercept[AnalysisException] {
+      withTempDir { tmpDir =>
+        spark.read.schema(userSchema).textFile(tmpDir.getCanonicalPath)
+      }
+    }
     assert(e.getMessage.toLowerCase(Locale.ROOT).contains(
       "user specified schema not supported"))
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
@@ -649,13 +656,15 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     val schema = df.schema
 
     // Reader, without user specified schema
-    checkError(
-      exception = intercept[AnalysisException] {
-        testRead(spark.read.csv(), Seq.empty, schema)
-      },
-      errorClass = "UNABLE_TO_INFER_SCHEMA",
-      parameters = Map("format" -> "CSV")
-    )
+    withTempDir { tmpDir =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          testRead(spark.read.csv(tmpDir.getCanonicalPath), Seq.empty, schema)
+        },
+        errorClass = "UNABLE_TO_INFER_SCHEMA",
+        parameters = Map("format" -> "CSV")
+      )
+    }
 
     testRead(spark.read.csv(dir), data, schema)
     testRead(spark.read.csv(dir, dir), data ++ data, schema)
@@ -664,7 +673,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     testRead(Option(dir).map(spark.read.csv).get, data, schema)
 
     // Reader, with user specified schema, should just apply user schema on the file data
-    testRead(spark.read.schema(userSchema).csv(), Seq.empty, userSchema)
+    withTempDir { tmpDir =>
+      testRead(spark.read.schema(userSchema).csv(tmpDir.getCanonicalPath),
+        Seq.empty, userSchema)
+    }
     testRead(spark.read.schema(userSchema).csv(dir), data, userSchema)
     testRead(spark.read.schema(userSchema).csv(dir, dir), data ++ data, userSchema)
     testRead(spark.read.schema(userSchema).csv(Seq(dir, dir): _*), data ++ data, userSchema)
@@ -679,7 +691,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
     // Reader, without user specified schema
     intercept[AnalysisException] {
-      testRead(spark.read.json(), Seq.empty, schema)
+      withTempDir { tmpDir =>
+        testRead(spark.read.json(tmpDir.getCanonicalPath), Seq.empty, schema)
+      }
     }
     testRead(spark.read.json(dir), data, schema)
     testRead(spark.read.json(dir, dir), data ++ data, schema)
@@ -690,7 +704,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     // Reader, with user specified schema, data should be nulls as schema in file different
     // from user schema
     val expData = Seq[String](null, null, null)
-    testRead(spark.read.schema(userSchema).json(), Seq.empty, userSchema)
+    withTempDir { tmpDir =>
+      testRead(spark.read.schema(userSchema).json(tmpDir.getCanonicalPath), Seq.empty, userSchema)
+    }
     testRead(spark.read.schema(userSchema).json(dir), expData, userSchema)
     testRead(spark.read.schema(userSchema).json(dir, dir), expData ++ expData, userSchema)
     testRead(spark.read.schema(userSchema).json(Seq(dir, dir): _*), expData ++ expData, userSchema)
@@ -705,7 +721,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
     // Reader, without user specified schema
     intercept[AnalysisException] {
-      testRead(spark.read.parquet(), Seq.empty, schema)
+      withTempDir { tmpDir =>
+         testRead(spark.read.parquet(tmpDir.getCanonicalPath), Seq.empty, schema)
+      }
     }
     testRead(spark.read.parquet(dir), data, schema)
     testRead(spark.read.parquet(dir, dir), data ++ data, schema)
@@ -716,7 +734,10 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     // Reader, with user specified schema, data should be nulls as schema in file different
     // from user schema
     val expData = Seq[String](null, null, null)
-    testRead(spark.read.schema(userSchema).parquet(), Seq.empty, userSchema)
+    withTempDir { tmpDir =>
+      testRead(spark.read.schema(userSchema).parquet(tmpDir.getCanonicalPath),
+        Seq.empty, userSchema)
+    }
     testRead(spark.read.schema(userSchema).parquet(dir), expData, userSchema)
     testRead(spark.read.schema(userSchema).parquet(dir, dir), expData ++ expData, userSchema)
     testRead(
@@ -733,7 +754,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
       // Reader, without user specified schema
       intercept[AnalysisException] {
-        testRead(spark.read.orc(), Seq.empty, schema)
+        withTempDir { tmpDir =>
+          testRead(spark.read.orc(tmpDir.getCanonicalPath), Seq.empty, schema)
+        }
       }
       testRead(spark.read.orc(dir), data, schema)
       testRead(spark.read.orc(dir, dir), data ++ data, schema)
@@ -744,7 +767,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       // Reader, with user specified schema, data should be nulls as schema in file different
       // from user schema
       val expData = Seq[String](null, null, null)
-      testRead(spark.read.schema(userSchema).orc(), Seq.empty, userSchema)
+      withTempDir { tmpDir =>
+        testRead(spark.read.schema(userSchema).orc(tmpDir.getCanonicalPath), Seq.empty, userSchema)
+      }
       testRead(spark.read.schema(userSchema).orc(dir), expData, userSchema)
       testRead(spark.read.schema(userSchema).orc(dir, dir), expData ++ expData, userSchema)
       testRead(
@@ -978,7 +1003,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
   test("SPARK-20431: Specify a schema by using a DDL-formatted string") {
     spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
-    testRead(spark.read.schema(userSchemaString).text(), Seq.empty, userSchema)
     testRead(spark.read.schema(userSchemaString).text(dir), data, userSchema)
     testRead(spark.read.schema(userSchemaString).text(dir, dir), data ++ data, userSchema)
     testRead(spark.read.schema(userSchemaString).text(Seq(dir, dir): _*), data ++ data, userSchema)

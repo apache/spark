@@ -17,6 +17,12 @@
 
 package test.org.apache.spark.sql;
 
+import java.io.File;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -26,18 +32,17 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.apache.spark.util.Utils;
 
 import static org.apache.spark.sql.functions.*;
 
 public class JavaDataFrameWriterV2Suite {
   private static StructType schema = new StructType().add("s", "string");
   private SparkSession spark = null;
+  private transient String input;
 
   public Dataset<Row> df() {
-    return spark.read().schema(schema).text();
+    return spark.read().schema(schema).text(input);
   }
 
   @BeforeEach
@@ -45,10 +50,12 @@ public class JavaDataFrameWriterV2Suite {
     this.spark = new TestSparkSession();
     spark.conf().set("spark.sql.catalog.testcat", InMemoryTableCatalog.class.getName());
     spark.sql("CREATE TABLE testcat.t (s string) USING foo");
+    input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
   }
 
   @AfterEach
   public void dropTestTable() {
+    Utils.deleteRecursively(new File(input));
     spark.sql("DROP TABLE testcat.t");
     spark.stop();
   }

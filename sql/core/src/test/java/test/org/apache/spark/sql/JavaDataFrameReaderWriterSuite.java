@@ -45,6 +45,7 @@ public class JavaDataFrameReaderWriterSuite {
 
   @AfterEach
   public void tearDown() {
+    Utils.deleteRecursively(new File(input));
     spark.stop();
     spark = null;
   }
@@ -71,7 +72,7 @@ public class JavaDataFrameReaderWriterSuite {
         .option("c", 1.0)
         .option("d", true)
         .options(map)
-        .text()
+        .text(input)
         .write()
         .option("a", "1")
         .option("b", 1)
@@ -102,7 +103,6 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testTextAPI() {
-    spark.read().text();
     spark.read().text(input);
     spark.read().text(input, input, input);
     spark.read().text(new String[]{input, input})
@@ -111,7 +111,6 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testTextFileAPI() {
-    spark.read().textFile();
     spark.read().textFile(input);
     spark.read().textFile(input, input, input);
     spark.read().textFile(new String[]{input, input});
@@ -119,7 +118,6 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testCsvAPI() {
-    spark.read().schema(schema).csv();
     spark.read().schema(schema).csv(input);
     spark.read().schema(schema).csv(input, input, input);
     spark.read().schema(schema).csv(new String[]{input, input})
@@ -128,7 +126,6 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testJsonAPI() {
-    spark.read().schema(schema).json();
     spark.read().schema(schema).json(input);
     spark.read().schema(schema).json(input, input, input);
     spark.read().schema(schema).json(new String[]{input, input})
@@ -137,7 +134,6 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testParquetAPI() {
-    spark.read().schema(schema).parquet();
     spark.read().schema(schema).parquet(input);
     spark.read().schema(schema).parquet(input, input, input);
     spark.read().schema(schema).parquet(new String[] { input, input })
@@ -149,7 +145,6 @@ public class JavaDataFrameReaderWriterSuite {
    * cannot be run without Hive classes.
    */
   public void testOrcAPI() {
-    spark.read().schema(schema).orc();
     spark.read().schema(schema).orc(input);
     spark.read().schema(schema).orc(input, input, input);
     spark.read().schema(schema).orc(new String[]{input, input})
