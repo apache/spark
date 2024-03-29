@@ -96,6 +96,11 @@ object StateStoreErrors {
     new StateStoreVariableSizeOrderingColsNotSupported(fieldName, index)
   }
 
+  def negativeValuesForOrderingColsNotSupported(fieldName: String, index: String):
+    StateStoreNegativeValuesForOrderingColsNotSupported = {
+    new StateStoreNegativeValuesForOrderingColsNotSupported(fieldName, index)
+  }
+
   def cannotCreateColumnFamilyWithReservedChars(colFamilyName: String):
     StateStoreCannotCreateColumnFamilyWithReservedChars = {
     new StateStoreCannotCreateColumnFamilyWithReservedChars(colFamilyName)
@@ -191,4 +196,9 @@ class StateStoreVariableSizeOrderingColsNotSupported(fieldName: String, index: S
 class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
+    messageParameters = Map("fieldName" -> fieldName, "index" -> index))
+
+class StateStoreNegativeValuesForOrderingColsNotSupported(fieldName: String, index: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_NEGATIVE_VALUES_FOR_ORDERING_COLS_NOT_SUPPORTED",
     messageParameters = Map("fieldName" -> fieldName, "index" -> index))

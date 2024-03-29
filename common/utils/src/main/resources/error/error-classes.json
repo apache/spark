@@ -3590,6 +3590,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_NEGATIVE_VALUES_FOR_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Negative values for ordering column with name=<fieldName> at index=<index> are not supported for range scan encoder."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
     "message" : [
       "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."

@@ -341,10 +341,20 @@ class RangeKeyScanStateEncoder(
           // stores exponent first and then the mantissa. So, we cannot simply prepend a byte
           // to achieve the desired ordering.
           case FloatType =>
+            // We do not support negative values for floating point types
+            if (value.asInstanceOf[Float] < 0.0F) {
+              throw StateStoreErrors.negativeValuesForOrderingColsNotSupported(field.name,
+                idx.toString)
+            }
             bbuf.putFloat(value.asInstanceOf[Float])
             writer.write(idx, bbuf.array())
 
           case DoubleType =>
+            // We do not support negative values for floating point types
+            if (value.asInstanceOf[Double] < 0.0D) {
+              throw StateStoreErrors.negativeValuesForOrderingColsNotSupported(field.name,
+                idx.toString)
+            }
             bbuf.putDouble(value.asInstanceOf[Double])
             writer.write(idx, bbuf.array())
         }
