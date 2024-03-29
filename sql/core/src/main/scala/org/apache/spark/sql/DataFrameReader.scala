@@ -198,7 +198,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    require(paths.nonEmpty, "The paths cannot be empty")
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
     }
@@ -362,6 +361,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def json(paths: String*): DataFrame = {
+    require(paths.nonEmpty, "The paths cannot be empty")
     userSpecifiedSchema.foreach(checkJsonSchema)
     format("json").load(paths : _*)
   }
@@ -539,7 +539,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+  def csv(paths: String*): DataFrame = {
+    require(paths.nonEmpty, "The paths cannot be empty")
+    format("csv").load(paths : _*)
+  }
 
   /**
    * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the
@@ -567,6 +570,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def xml(paths: String*): DataFrame = {
+    require(paths.nonEmpty, "The paths cannot be empty")
     userSpecifiedSchema.foreach(checkXmlSchema)
     format("xml").load(paths: _*)
   }
@@ -635,6 +639,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def parquet(paths: String*): DataFrame = {
+    require(paths.nonEmpty, "The paths cannot be empty")
     format("parquet").load(paths: _*)
   }
 
@@ -662,6 +667,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def orc(paths: String*): DataFrame = {
+    require(paths.nonEmpty, "The paths cannot be empty")
     format("orc").load(paths: _*)
   }
 
@@ -721,6 +727,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def text(paths: String*): DataFrame = {
+    require(paths.nonEmpty, "The paths cannot be empty")
     format("text").load(paths : _*)
   }
 
