@@ -268,8 +268,13 @@ case object VariantGet {
                   case _: ArithmeticException => invalidCast()
                 }
               case _ =>
-                val result = Cast(Literal(input), dataType, zoneId, EvalMode.TRY).eval()
-                if (result == null) invalidCast() else result
+                val inputLiteral = Literal(input)
+                if (Cast.canAnsiCast(inputLiteral.dataType, dataType)) {
+                  val result = Cast(inputLiteral, dataType, zoneId, EvalMode.TRY).eval()
+                  if (result == null) invalidCast() else result
+                } else {
+                  invalidCast()
+                }
             }
         }
       case ArrayType(elementType, _) =>

@@ -301,6 +301,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Source type is integer.
     testVariantGet("1", "$", BooleanType, true)
     testVariantGet("0", "$", BooleanType, false)
+    testInvalidVariantGet("1", "$", BinaryType)
     testVariantGet("127", "$", ByteType, 127.toByte)
     testInvalidVariantGet("128", "$", ByteType)
     testVariantGet("-32768", "$", ShortType, (-32768).toShort)
