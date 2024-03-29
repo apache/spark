@@ -1315,12 +1315,11 @@ class XmlSuite
   }
 
   test("schema_of_xml with DROPMALFORMED parse error test") {
-    val e = intercept[AnalysisException] {
-       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
-         .collect()
-    }
     checkError(
-      exception = e,
+      exception = intercept[AnalysisException] {
+        spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
+          .collect()
+      },
       errorClass = "_LEGACY_ERROR_TEMP_1099",
       parameters = Map(
         "funcName" -> "schema_of_xml",
@@ -1331,12 +1330,11 @@ class XmlSuite
   }
 
   test("schema_of_xml with FAILFAST parse error test") {
-    val e = intercept[SparkException] {
-       spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
-         .collect()
-    }
     checkError(
-      exception = e,
+      exception = intercept[SparkException] {
+        spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
+          .collect()
+      },
       errorClass = "_LEGACY_ERROR_TEMP_2165",
       parameters = Map(
         "failFastMode" -> FailFastMode.name)
@@ -1729,19 +1727,17 @@ class XmlSuite
   }
 
   test("Issue 588: Ensure fails when data is not present, with or without schema") {
-    val exception1 = intercept[AnalysisException] {
-      spark.read.xml("/this/file/does/not/exist")
-    }
     checkError(
-      exception = exception1,
+      exception = intercept[AnalysisException] {
+        spark.read.xml("/this/file/does/not/exist")
+      },
       errorClass = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
-    val exception2 = intercept[AnalysisException] {
-      spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
-    }
     checkError(
-      exception = exception2,
+      exception = intercept[AnalysisException] {
+        spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
+      },
       errorClass = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
@@ -2858,7 +2854,7 @@ class XmlSuite
             df.collect()
           },
           errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
-          parameters = Map("path" -> ".*")
+          parameters = Map("path" -> s".*$dir.*")
         )
       }
 

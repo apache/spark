@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
-import java.nio.file.{Files, Path => JPath}
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.util.Locale
@@ -1955,7 +1955,7 @@ abstract class JsonSuite
             df.collect()
           },
           errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
-          parameters = Map("path" -> ".*")
+          parameters = Map("path" -> s".*$dir.*")
         )
       }
 
@@ -2033,7 +2033,7 @@ abstract class JsonSuite
       val schema = new StructType().add("dummy", StringType)
 
       // `FAILFAST` mode should throw an exception for corrupt records.
-      checkError(
+      checkErrorMatchPVals(
         exception = intercept[SparkException] {
           spark.read
             .option("multiLine", true)
@@ -2041,7 +2041,7 @@ abstract class JsonSuite
             .json(path)
         },
         errorClass = "_LEGACY_ERROR_TEMP_2167",
-        parameters = Map("failFastMode" -> "FAILFAST", "dataType" -> "string"))
+        parameters = Map("failFastMode" -> "FAILFAST", "dataType" -> "string|bigint"))
 
       val ex = intercept[SparkException] {
         spark.read
@@ -2051,7 +2051,10 @@ abstract class JsonSuite
           .json(path)
           .collect()
       }
-      assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+      checkErrorMatchPVals(
+        exception = ex,
+        errorClass = "FAILED_READ_FILE.NO_HINT",
+        parameters = Map("path" -> s".*$path.*"))
       checkError(
         exception = ex.getCause.asInstanceOf[SparkException],
         errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -2365,10 +2368,10 @@ abstract class JsonSuite
         .json(inputFile)
         .count()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exception,
       errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> JPath.of(inputFile).toUri.toString))
+      parameters = Map("path" -> s".*$fileName.*"))
     checkError(
       exception = exception.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -2704,8 +2707,11 @@ abstract class JsonSuite
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
       .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS())
-    val e = intercept[SparkException] {df.collect()}
-    assert(e.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+    val e = intercept[SparkException] { df.collect() }
+    checkError(
+      exception = e,
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
     checkError(
       exception = e.getCause.asInstanceOf[SparkRuntimeException],
       errorClass = "EMPTY_JSON_FIELD_VALUE",
@@ -3793,7 +3799,6 @@ abstract class JsonSuite
     ).foreach { case (schema, jsonData) =>
       withTempDir { dir =>
         val colName = "col"
-        val msg = "can only contain STRING as a key type for a MAP"
         val jsonDataSchema = StructType(Seq(StructField(colName, schema)))
 
         checkError(
