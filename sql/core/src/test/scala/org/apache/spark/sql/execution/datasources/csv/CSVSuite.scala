@@ -1243,10 +1243,14 @@ abstract class CSVSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
+        val actualPath = path.toPath.toUri.toURL.toString
         val ex = intercept[SparkException] {
           exp.write.format("csv").option("timestampNTZFormat", pattern).save(path.getAbsolutePath)
         }
-        assert(ex.getErrorClass == "TASK_WRITE_FAILED")
+        checkError(
+          exception = ex,
+          errorClass = "TASK_WRITE_FAILED",
+          parameters = Map("path" -> actualPath))
         val msg = ex.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -1458,17 +1462,20 @@ abstract class CSVSuite
         Row(1, null, java.sql.Date.valueOf("1983-08-04")) ::
         Nil)
 
-      val errMsg = intercept[AnalysisException] {
-        spark
-          .read
-          .option("mode", "PERMISSIVE")
-          .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-          .option("multiLine", multiLine)
-          .schema(schema.add(columnNameOfCorruptRecord, IntegerType))
-          .csv(testFile(valueMalformedFile))
-          .collect()
-      }.getMessage
-      assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark
+            .read
+            .option("mode", "PERMISSIVE")
+            .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+            .option("multiLine", multiLine)
+            .schema(schema.add(columnNameOfCorruptRecord, IntegerType))
+            .csv(testFile(valueMalformedFile))
+            .collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1097",
+        parameters = Map.empty
+      )
     }
   }
 

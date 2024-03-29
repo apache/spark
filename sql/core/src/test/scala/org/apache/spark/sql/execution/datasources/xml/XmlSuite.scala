@@ -30,6 +30,7 @@ import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.lang3.StringUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
@@ -181,7 +182,6 @@ class XmlSuite
   }
 
   test("DSL test bad charset name") {
-    // val exception = intercept[UnsupportedCharsetException] {
     val exception = intercept[SparkException] {
       spark.read
         .option("rowTag", "ROW")
@@ -234,23 +234,29 @@ class XmlSuite
   }
 
   test("DSL test for failing fast") {
-    val exceptionInSchemaInference = intercept[SparkException] {
-      spark.read
-        .option("rowTag", "ROW")
-        .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
-    }.getMessage
-    assert(exceptionInSchemaInference.contains(
-      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val inputFile = getTestResourcePath(resDir + "cars-malformed.xml")
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read
+          .option("rowTag", "ROW")
+          .option("mode", FailFastMode.name)
+          .xml(inputFile)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map("failFastMode" -> "FAILFAST")
+    )
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("year string")
         .option("rowTag", "ROW")
         .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
+        .xml(inputFile)
         .collect()
     }
-    assert(exceptionInParsing.getErrorClass.startsWith("FAILED_READ_FILE"))
+    checkError(
+      exception = exceptionInParsing,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -261,23 +267,28 @@ class XmlSuite
   }
 
   test("test FAILFAST with unclosed tag") {
-    val exceptionInSchemaInference = intercept[SparkException] {
-      spark.read
-        .option("rowTag", "book")
-        .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
-    }.getMessage
-    assert(exceptionInSchemaInference.contains(
-      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val inputFile = getTestResourcePath(resDir + "unclosed_tag.xml")
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read
+          .option("rowTag", "book")
+          .option("mode", FailFastMode.name)
+          .xml(inputFile)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map("failFastMode" -> "FAILFAST"))
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("_id string")
         .option("rowTag", "book")
         .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
+        .xml(inputFile)
         .show()
     }
-    assert(exceptionInParsing.getErrorClass.startsWith("FAILED_READ_FILE"))
+    checkError(
+      exception = exceptionInParsing,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
@@ -2439,11 +2450,15 @@ class XmlSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
+        val actualPath = path.toPath.toUri.toURL.toString
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
         }
-        assert(err.getErrorClass == "TASK_WRITE_FAILED")
+        checkError(
+          exception = err,
+          errorClass = "TASK_WRITE_FAILED",
+          parameters = Map("path" -> actualPath))
         val msg = err.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -2937,7 +2952,11 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-            assert(e.getErrorClass == "TASK_WRITE_FAILED")
+            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString
+            checkError(
+              exception = e,
+              errorClass = "TASK_WRITE_FAILED",
+              parameters = Map("path" -> StringUtils.removeEnd(actualPath, "/")))
             assert(e.getCause.isInstanceOf[XMLStreamException])
             assert(e.getCause.getMessage.contains(errorMsg))
         }
