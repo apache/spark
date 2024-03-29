@@ -239,6 +239,11 @@ class RangeKeyScanStateEncoder(
     case _ => false
   }
 
+  private def supportsSignedValues(dataType: DataType): Boolean = dataType match {
+    case _: ShortType | _: IntegerType | _: LongType => true
+    case _ => false
+  }
+
   // verify that only fixed sized columns are used for ordering
   rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
     if (!isFixedSize(field.dataType)) {
@@ -292,7 +297,7 @@ class RangeKeyScanStateEncoder(
       // Note that we cannot allocate a smaller buffer here even if the value is null
       // because the effective byte array is considered variable size and needs to have
       // the same size across all rows for the ordering to work as expected.
-      val bbuf = if (field.dataType == BooleanType || field.dataType == ByteType) {
+      val bbuf = if (!supportsSignedValues(field.dataType)) {
         ByteBuffer.allocate(field.dataType.defaultSize + 1)
       } else {
         // for numeric types, we reserve 2 additional bytes. one to indicate if the value is null
@@ -331,15 +336,15 @@ class RangeKeyScanStateEncoder(
             bbuf.putLong(value.asInstanceOf[Long])
             writer.write(idx, bbuf.array())
 
+          // For floating point types, we cannot support ordering using additional byte for
+          // negative values. This is because the IEEE 754 floating point representation
+          // stores exponent first and then the mantissa. So, we cannot simply prepend a byte
+          // to achieve the desired ordering.
           case FloatType =>
-            val signByte: Byte = if (value.asInstanceOf[Float] < 0) 0x00.toByte else 0x01.toByte
-            bbuf.put(signByte)
             bbuf.putFloat(value.asInstanceOf[Float])
             writer.write(idx, bbuf.array())
 
           case DoubleType =>
-            val signByte: Byte = if (value.asInstanceOf[Double] < 0) 0x00.toByte else 0x01.toByte
-            bbuf.put(signByte)
             bbuf.putDouble(value.asInstanceOf[Double])
             writer.write(idx, bbuf.array())
         }
@@ -385,11 +390,9 @@ class RangeKeyScanStateEncoder(
             writer.write(idx, bbuf.getLong)
 
           case FloatType =>
-            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getFloat)
 
           case DoubleType =>
-            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getDouble)
         }
       }
