@@ -25,7 +25,6 @@ from pyspark.sql.datasource import (
     InputPartition,
     DataSourceStreamWriter,
     WriterCommitMessage,
-    CaseInsensitiveDict,
 )
 from pyspark.sql.types import Row, StructType
 from pyspark.testing.sqlutils import (
@@ -159,6 +158,7 @@ class BasePythonStreamingDataSourceTestsMixin:
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")
         output_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_output")
         checkpoint_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_checkpoint")
+
         self.spark.range(0, 30).repartition(2).write.format("json").mode("append").save(
             input_dir.name
         )
@@ -172,21 +172,28 @@ class BasePythonStreamingDataSourceTestsMixin:
         while not q.recentProgress:
             time.sleep(0.2)
 
-        # The first microbatch contain 30 rows and 2 partition, which is written in metadata during commit.
+        # Test stream writer write and commit.
+        # The first microbatch contain 30 rows and 2 partitions.
+        # Number of rows and partitions is writen by StreamWriter.commit().
         assertDataFrameEqual(self.spark.read.json(output_dir.name), [Row(2, 30)])
 
         self.spark.range(50, 80).repartition(2).write.format("json").mode("append").save(
             input_dir.name
         )
 
-        # when row id > 50, write task throw exception and abort, 1.txt is written to record the failure.
+        # Test StreamWriter write and abort.
+        # When row id > 50, write tasks throw exception and fail.
+        # 1.txt is written by StreamWriter.abort() to record the failure.
         while q.exception() is None:
             time.sleep(0.2)
         assertDataFrameEqual(
             self.spark.read.text(os.path.join(output_dir.name, "1.txt")), [Row("failed in batch 1")]
         )
-        q.stop()
         q.awaitTermination
+
+        input_dir.cleanup()
+        output_dir.cleanup()
+        checkpoint_dir.cleanup()
 
 
 class PythonStreamingDataSourceTests(BasePythonStreamingDataSourceTestsMixin, ReusedSQLTestCase):
