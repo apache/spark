@@ -109,7 +109,6 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
   }
 
   def fetchBlocks(
-      blockManager: BlockManager,
       blocks: collection.Seq[FetchBlockInfo],
       address: BlockManagerId,
       listener: BlockFetchingListener): Unit = {
@@ -118,19 +117,18 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
         blocks.foreach(block =>
           p.submit(new Runnable {
             override def run(): Unit = {
-              fetchShuffleBlocks(block, blockManager, listener)
+              fetchShuffleBlocks(block, listener)
             }
           })
         )
       case _ =>
         logInfo(s" fetchThreadPool does not exists for $address or shutdown")
-        blocks.foreach(block => fetchShuffleBlocks(block, blockManager, listener))
+        blocks.foreach(block => fetchShuffleBlocks(block, listener))
     }
   }
 
   private def fetchShuffleBlocks(
       block: FetchBlockInfo,
-      blockManager: BlockManager,
       listener: BlockFetchingListener): Unit = {
     try {
       listener.onBlockFetchSuccess(block.blockId.name,
@@ -161,7 +159,7 @@ private[spark] object FallbackStorage extends Logging {
   // There should be only one fallback storage thread pool per executor.
   var fallbackStorage: Option[FallbackStorage] = None
   def getFallbackStorage(conf: SparkConf): Option[FallbackStorage] = this.synchronized {
-    if (conf != null && conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
+    if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
       if (fallbackStorage.isDefined) {
         val fallbackPath = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get
         if (fallbackPath.equals(fallbackStorage.get.fallbackPath.toString)) {
@@ -182,8 +180,7 @@ private[spark] object FallbackStorage extends Logging {
   }
 
   def getNumReadThreads(conf: SparkConf): Int = {
-    val numShuffleThreads =
-      if (conf == null) None else conf.get(STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ)
+    val numShuffleThreads = conf.get(STORAGE_FALLBACK_STORAGE_NUM_THREADS_FOR_SHUFFLE_READ)
     if (numShuffleThreads.isDefined) numShuffleThreads.get else -1
   }
 

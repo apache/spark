@@ -373,7 +373,7 @@ final class ShuffleBlockFetcherIterator(
 
     if (req.address.executorId == FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId) {
       assert(fallbackStorage.isDefined)
-      fallbackStorage.get.fetchBlocks(blockManager, req.blocks, req.address, blockFetchingListener)
+      fallbackStorage.get.fetchBlocks(req.blocks, req.address, blockFetchingListener)
     }
     // Fetch remote shuffle blocks to disk when the request is too large. Since the shuffle data is
     // already encrypted and compressed over the wire(w.r.t. the related configs), we can just fetch

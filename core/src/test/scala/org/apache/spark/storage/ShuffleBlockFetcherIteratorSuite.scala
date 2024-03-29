@@ -211,10 +211,20 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
       doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
     val tContext = taskContext.getOrElse(TaskContext.empty())
+    val blockManagerWithConf = if (blockManager.isDefined) {
+      // ShuffleBlockFetcherIterator needs the conf to be set for blockManager
+      if (blockManager.get.conf == null) {
+        doReturn(new SparkConf()).when(blockManager.get).conf
+      }
+      blockManager.get
+    } else {
+      createMockBlockManager()
+    }
+
     new ShuffleBlockFetcherIterator(
       tContext,
       transfer,
-      blockManager.getOrElse(createMockBlockManager()),
+      blockManagerWithConf,
       mapOutputTracker,
       blocksByAddress.iterator,
       (_, in) => {
