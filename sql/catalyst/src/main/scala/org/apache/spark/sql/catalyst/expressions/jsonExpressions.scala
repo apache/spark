@@ -549,24 +549,27 @@ case class JsonTuple(children: Seq[Expression])
            """.stripMargin
       }
     } else {
+      val cacheName = ctx.freshName("foldableFieldNames")
+      val ref =
+        ctx.addReferenceObj(cacheName, foldableFieldNames.map(_.orNull).toBuffer.asJava)
+      val codeList = ArrayBuffer(s"""$fieldNames = $ref;""")
       // if there is a mix of constant and non-constant expressions
       // prefer the cached copy when available
-      foldableFieldNames.zip(fieldExpressions).zipWithIndex.map {
+      foldableFieldNames.zip(fieldExpressions).zipWithIndex.foreach {
         case ((null, e), i) =>
           val eval = e.genCode(ctx)
-          s"""
-             |${eval.code}
-             |if (${eval.isNull}) {
-             |  $fieldNames.add($i, null);
-             |} else {
-             |  $fieldNames.add($i, ${eval.value}.toString());
-             |}
+          codeList +=
+            s"""
+               |${eval.code}
+               |if (${eval.isNull}) {
+               |  $fieldNames.add($i, null);
+               |} else {
+               |  $fieldNames.add($i, ${eval.value}.toString());
+               |}
            """.stripMargin
-        case ((fieldName, _), i) =>
-          s"""
-             |$fieldNames.add($i, ${fieldName.orNull});
-             |""".stripMargin
+        case ((_, _), _) =>
       }
+      codeList
     }
 
     val splitParseCode = ctx.splitExpressionsWithCurrentInputs(
