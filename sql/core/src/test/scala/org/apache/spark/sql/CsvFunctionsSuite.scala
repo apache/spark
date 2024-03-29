@@ -105,10 +105,14 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Row(1, java.sql.Date.valueOf("1983-08-04"), null))))
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
-      val msg = intercept[SparkUpgradeException] {
-        df2.collect()
-      }.getMessage
-      assert(msg.contains("Fail to parse"))
+      checkError(
+        exception = intercept[SparkUpgradeException] {
+          df2.collect()
+        },
+        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
+        parameters = Map(
+          "datetime" -> "'2013-111-11 12:13:14'",
+          "config" -> "\"spark.sql.legacy.timeParserPolicy\""))
     }
   }
 
@@ -337,13 +341,16 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         parameters = Map("badRecord" -> "[null,null,\"]", "failFastMode" -> "FAILFAST")
       )
 
-      val exception2 = intercept[AnalysisException] {
-        df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED")))
-          .collect()
-      }.getMessage
-      assert(exception2.contains(
-        "from_csv() doesn't support the DROPMALFORMED mode. " +
-          "Acceptable modes are PERMISSIVE and FAILFAST."))
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
+        },
+        errorClass = "_LEGACY_ERROR_TEMP_1099",
+        parameters = Map(
+          "funcName" -> "from_csv",
+          "mode" -> "DROPMALFORMED",
+          "permissiveMode" -> "PERMISSIVE",
+          "failFastMode" -> "FAILFAST"))
     }
   }
 
@@ -476,16 +483,19 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234")).toDF("csv")
           .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
 
-        val err1 = intercept[SparkException] {
-          df.selectExpr("parsed.a").collect()
-        }
+        checkError(
+          exception = intercept[SparkException] {
+            df.selectExpr("parsed.a").collect()
+          },
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> "[1,null]", "failFastMode" -> "FAILFAST"))
 
-        val err2 = intercept[SparkException] {
-          df.selectExpr("parsed.b").collect()
-        }
-
-        assert(err1.getMessage.contains("Malformed records are detected in record parsing"))
-        assert(err2.getMessage.contains("Malformed records are detected in record parsing"))
+        checkError(
+          exception = intercept[SparkException] {
+            df.selectExpr("parsed.b").collect()
+          },
+          errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> "[1,null]", "failFastMode" -> "FAILFAST"))
       }
     }
   }
