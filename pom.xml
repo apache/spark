@@ -1209,6 +1209,16 @@
         <groupId>org.jmock</groupId>
         <artifactId>jmock-junit5</artifactId>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
         <version>2.13.1</version>
       </dependency>
       <dependency>
