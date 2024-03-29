@@ -24,14 +24,27 @@ import scala.jdk.javaapi.CollectionConverters;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
 
+/**
+ * A test stateful processor used with transformWithState arbitrary stateful operator in
+ * Structured Streaming. The processor primarily aims to test various functionality of the Java API
+ * based on various composite types.
+ */
 public class TestStatefulProcessor extends StatefulProcessor<Integer, String, String> {
 
   private transient ValueState<Long> countState;
+  private transient MapState<String, Long> keyCountMap;
+  private transient ListState<String> keysList;
 
   @Override
   public void init(OutputMode outputMode, TimeoutMode timeoutMode) {
     countState = this.getHandle().getValueState("countState",
       Encoders.LONG());
+
+    keyCountMap = this.getHandle().getMapState("keyCountMap",
+      Encoders.STRING(), Encoders.LONG());
+
+    keysList = this.getHandle().getListState("keyList",
+      Encoders.STRING());
   }
 
   @Override
@@ -44,6 +57,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
     java.util.List<String> result = new ArrayList<>();
     if (!expiredTimerInfo.isValid()) {
       long count = 0;
+      // Perform various operations on composite types to verify compatibility for the Java API
       if (countState.exists()) {
         count = countState.get();
       }
@@ -52,7 +66,22 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       StringBuilder sb = new StringBuilder(key.toString());
       while (rows.hasNext()) {
         numRows++;
-        sb.append(rows.next());
+        String value = rows.next();
+        if (keyCountMap.containsKey(value)) {
+          keyCountMap.updateValue(value, keyCountMap.getValue(value) + 1);
+        } else {
+          keyCountMap.updateValue(value, 1L);
+        }
+        assert(keyCountMap.containsKey(value));
+        keysList.appendValue(value);
+        sb.append(value);
+      }
+
+      scala.collection.Iterator<String> keys = keysList.get();
+      while (keys.hasNext()) {
+        String keyVal = keys.next();
+        assert(keyCountMap.containsKey(keyVal));
+        assert(keyCountMap.getValue(keyVal) > 0);
       }
 
       count += numRows;

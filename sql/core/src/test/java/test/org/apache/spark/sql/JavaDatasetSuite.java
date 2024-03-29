@@ -352,6 +352,24 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testTransformWithState() {
+    List<String> data = Arrays.asList("a", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    StatefulProcessor<Integer, String, String> testStatefulProcessor = new TestStatefulProcessor();
+    Dataset<String> transformWithStateMapped = grouped.transformWithState(
+      testStatefulProcessor,
+      TimeoutMode.NoTimeouts(),
+      OutputMode.Append(),
+      Encoders.STRING());
+
+    Assertions.assertEquals(asSet("1a", "3foobar"),
+      toSet(transformWithStateMapped.collectAsList()));
+  }
+
+  @Test
   public void testGroupByKey() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
@@ -420,16 +438,6 @@ public class JavaDatasetSuite implements Serializable {
         GroupStateTimeout.NoTimeout());
 
     Assertions.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
-
-    StatefulProcessor<Integer, String, String> testStatefulProcessor = new TestStatefulProcessor();
-    Dataset<String> transformWithStateMapped = grouped.transformWithState(
-      testStatefulProcessor,
-      TimeoutMode.NoTimeouts(),
-      OutputMode.Append(),
-      Encoders.STRING());
-
-    Assertions.assertEquals(asSet("1a", "3foobar"),
-      toSet(transformWithStateMapped.collectAsList()));
 
     Dataset<Tuple2<Integer, String>> reduced =
       grouped.reduceGroups((ReduceFunction<String>) (v1, v2) -> v1 + v2);
