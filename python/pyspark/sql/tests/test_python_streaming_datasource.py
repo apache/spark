@@ -26,7 +26,7 @@ from pyspark.sql.datasource import (
     DataSourceStreamWriter,
     WriterCommitMessage,
 )
-from pyspark.sql.types import Row, StructType
+from pyspark.sql.types import Row
 from pyspark.testing.sqlutils import (
     have_pyarrow,
     pyarrow_requirement_message,
