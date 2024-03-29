@@ -134,6 +134,20 @@ trait Logging {
     if (log.isWarnEnabled) log.warn(msg)
   }
 
+  protected def logWarning(entry: LogEntry): Unit = {
+    if (log.isWarnEnabled) {
+      log.warn(entry.message)
+      entry.context.map(_.close())
+    }
+  }
+
+  protected def logWarning(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isWarnEnabled) {
+      log.warn(entry.message, throwable)
+      entry.context.map(_.close())
+    }
+  }
+
   protected def logError(msg: => String): Unit = {
     if (log.isErrorEnabled) log.error(msg)
   }
