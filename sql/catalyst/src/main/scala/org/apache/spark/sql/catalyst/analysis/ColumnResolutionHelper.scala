@@ -537,7 +537,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       var currentLp = lp
       var depth = 0
       while (true) {
-        if (currentLp.getTagValue(LogicalPlan.DATASET_RESOLUTION_TAG).exists(
+        if (currentLp.getTagValue(LogicalPlan.DATASET_ID_TAG).exists(
           _.contains(datasetId))) {
           return Option(currentLp, depth)
         } else {

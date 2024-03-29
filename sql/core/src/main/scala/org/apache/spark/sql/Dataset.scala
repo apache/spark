@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.annotation.varargs
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -39,7 +38,7 @@ import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.Dataset.DATASET_ID_KEY
+import org.apache.spark.sql.Dataset.{DATASET_ID_KEY, DATASET_ID_TAG}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -49,7 +48,7 @@ import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -75,7 +74,7 @@ private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
   val DATASET_ID_KEY = LogicalPlan.DATASET_ID_KEY
   val COL_POS_KEY = LogicalPlan.COL_POS_KEY
-  val DATASET_ID_TAG = TreeNodeTag[mutable.HashSet[Long]]("dataset_id")
+  val DATASET_ID_TAG = LogicalPlan.DATASET_ID_TAG
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
@@ -224,14 +223,9 @@ class Dataset[T] private[sql](
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
     val plan = queryExecution.commandExecuted
-    if (sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
-      val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
-      dsIds.add(id)
-      plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
-    }
     val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
     dsIds.add(id)
-    plan.setTagValue(LogicalPlan.DATASET_RESOLUTION_TAG, dsIds)
+    plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
     plan
   }
 
@@ -1181,8 +1175,8 @@ class Dataset[T] private[sql](
       Join(logicalPlan, right.logicalPlan,
         JoinType(joinType), None, JoinHint.NONE)).queryExecution.analyzed.asInstanceOf[Join]
 
-    val leftTagIdMap = planPart1.left.getTagValue(LogicalPlan.DATASET_RESOLUTION_TAG)
-    val rightTagIdMap = planPart1.right.getTagValue(LogicalPlan.DATASET_RESOLUTION_TAG)
+    val leftTagIdMap = planPart1.left.getTagValue(DATASET_ID_TAG)
+    val rightTagIdMap = planPart1.right.getTagValue(DATASET_ID_TAG)
 
     val joinExprsRectified = joinExprs.map(_.expr transformUp {
       case attr: AttributeReference if attr.metadata.contains(DATASET_ID_KEY) =>
