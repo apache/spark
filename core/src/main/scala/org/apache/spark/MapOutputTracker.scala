@@ -34,9 +34,8 @@ import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOut
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.LogKey._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
@@ -726,13 +725,11 @@ private[spark] class MapOutputTrackerMaster(
   // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
   if (minSizeForBroadcast > maxRpcMessageSize) {
-    val msg = log"${MDC(CONFIG, SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST.key)} " +
-      log"(${MDC(MIN_SIZE, minSizeForBroadcast.toString)} bytes) " +
-      log"must be <= spark.rpc.message.maxSize (${MDC(MAX_SIZE, maxRpcMessageSize.toString)} " +
-      log"bytes) to prevent sending an rpc message that is too large."
-
+    val msg = s"${SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST.key} ($minSizeForBroadcast bytes) " +
+      s"must be <= spark.rpc.message.maxSize ($maxRpcMessageSize bytes) to prevent sending an " +
+      "rpc message that is too large."
     logError(msg)
-    throw new IllegalArgumentException(msg.message)
+    throw new IllegalArgumentException(msg)
   }
 
   def post(message: MapOutputTrackerMasterMessage): Unit = {
