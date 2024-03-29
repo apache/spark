@@ -714,4 +714,9 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("QqQQdddoooo") :: Row(null) :: Nil
     )
   }
+
+  test("SPARK-47646: try_to_number should return NULL for malformed input") {
+    val df = spark.createDataset(spark.sparkContext.parallelize(Seq("11")))
+    checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
+  }
 }

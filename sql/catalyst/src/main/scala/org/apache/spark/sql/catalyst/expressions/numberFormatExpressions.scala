@@ -86,6 +86,7 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         |if (!${ev.isNull}) {
         |  ${ev.value} = $builder.parse(${eval.value});
+        |  ${ev.isNull} = ${ev.isNull} || (${ev.value} == null);
         |}
       """.stripMargin)
   }
