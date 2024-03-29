@@ -259,7 +259,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1))
       }
 
-      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
+      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+        -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L)
       timerTimestamps.foreach { ts =>
         // non-timestamp col is of fixed size
         val keyRow = dataToKeyRowWithRangeScan(ts, "a")
@@ -277,7 +278,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       // test with a different set of power of 2 timestamps
       val store1 = provider.getStore(1)
-      val timerTimestamps1 = Seq(64L, 32L, 1024L, 4096L, 0L)
+      val timerTimestamps1 = Seq(-32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
       timerTimestamps1.foreach { ts =>
         // non-timestamp col is of fixed size
         val keyRow = dataToKeyRowWithRangeScan(ts, "a")
@@ -308,7 +309,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1))
       }
 
-      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L)
+      val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L,
+        -24L, -999L, -2L, -61L, -9808344L, -1020L)
       timerTimestamps.foreach { ts =>
         // non-timestamp col is of variable size
         val keyRow = dataToKeyRowWithRangeScan(ts,
@@ -327,7 +329,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       // test with a different set of power of 2 timestamps
       val store1 = provider.getStore(1)
-      val timerTimestamps1 = Seq(64L, 32L, 1024L, 4096L, 0L)
+      val timerTimestamps1 = Seq(64L, 32L, 1024L, 4096L, 0L, -512L, -8192L, -16L)
       timerTimestamps1.foreach { ts =>
         // non-timestamp col is of fixed size
         val keyRow = dataToKeyRowWithRangeScan(ts,
@@ -368,7 +370,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       val timerTimestamps = Seq((931L, 10), (8000L, 40), (452300L, 1), (4200L, 68), (90L, 2000),
-        (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112), (6L, 90118), (9L, 95118), (6L, 87210))
+        (1L, 27), (1L, 394), (1L, 5), (3L, 980),
+        (-1L, 232), (-1L, 3455), (-6109L, 921455), (-9808344L, 1), (-1020L, 2),
+        (35L, 2112), (6L, 90118), (9L, 95118), (6L, 87210), (-4344L, 2323), (-3122L, 323))
       timerTimestamps.foreach { ts =>
         // order by long col first and then by int col
         val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
@@ -411,7 +415,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       val timerTimestamps = Seq((931L, 10), (null, 40), (452300L, 1),
         (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
-        (6L, 90118), (9L, 95118), (6L, 87210), (null, 113), (null, 28))
+        (6L, 90118), (9L, 95118), (6L, 87210), (null, 113), (null, 28), (null, -23), (null, -5534),
+        (-67450L, 2434), (-803L, 3422))
       timerTimestamps.foreach { ts =>
         // order by long col first and then by int col
         val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
@@ -426,7 +431,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val keyRow = kv.key
         keyRow.isNullAt(0)
       }
-      assert(nullRows.size === 3)
+      assert(nullRows.size === 5)
 
       // filter out the null rows and verify the rest
       val result: Seq[(Long, Int)] = store.iterator(cfName).filter { kv =>
@@ -440,7 +445,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       val timerTimestampsWithoutNulls = Seq((931L, 10), (452300L, 1),
         (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
-        (6L, 90118), (9L, 95118), (6L, 87210))
+        (6L, 90118), (9L, 95118), (6L, 87210), (-67450L, 2434), (-803L, 3422))
 
       assert(result === timerTimestampsWithoutNulls.sorted)
 
@@ -453,7 +458,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         keyRow.getInt(1)
       }.toSeq
 
-      assert(nullRowsWithOrder === Seq(28, 40, 113))
+      assert(nullRowsWithOrder === Seq(-5534, -23, 28, 40, 113))
 
       store.abort()
 
@@ -464,7 +469,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           RangeKeyScanStateEncoderSpec(testSchema, 2))
       }
 
-      val timerTimestamps1 = Seq((null, 3), (null, 1), (null, 32), (null, 113), (null, 40872),
+      val timerTimestamps1 = Seq((null, 3), (null, 1), (null, 32),
+        (null, 113), (null, 40872), (null, -675456), (null, -924), (null, -666),
         (null, 66))
       timerTimestamps1.foreach { ts =>
         // order by long col first and then by int col
@@ -508,6 +514,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       val timerTimestamps = Seq((931L, 10), (40L, null), (452300L, 1),
+        (-133L, null), (-344555L, 2424), (-4342499L, null),
         (4200L, 68), (90L, 2000), (1L, 27), (1L, 394), (1L, 5), (3L, 980), (35L, 2112),
         (6L, 90118), (9L, 95118), (6L, 87210), (113L, null), (100L, null))
       timerTimestamps.foreach { ts =>
@@ -524,7 +531,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         val keyRow = kv.key
         keyRow.isNullAt(1)
       }
-      assert(nullRows.size === 3)
+      assert(nullRows.size === 5)
 
       // the ordering based on first col which has non-null values should be preserved
       val result: Seq[(Long, Int)] = store.iterator(cfName)
@@ -561,6 +568,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       val timerTimestamps: Seq[(Byte, Int)] = Seq((0x33, 10), (0x1A, 40), (0x1F, 1), (0x01, 68),
         (0x7F, 2000), (0x01, 27), (0x01, 394), (0x01, 5), (0x03, 980), (0x35, 2112),
+        (0x11, -190), (0x1A, -69), (0x01, -344245), (0x31, -901),
         (0x06, 90118), (0x09, 95118), (0x06, 87210))
       timerTimestamps.foreach { ts =>
         // order by byte col first and then by int col
@@ -594,7 +602,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           RangeKeyScanStateEncoderSpec(valueSchema, 1))
       }
 
-      val timerTimestamps = Seq(931, 8000, 452300, 4200, 90, 1, 2, 8, 3, 35, 6, 9, 5)
+      val timerTimestamps = Seq(931, 8000, 452300, 4200,
+        -3545, -343, 133, -90, -8014490, -79247,
+        90, 1, 2, 8, 3, 35, 6, 9, 5, -233)
       timerTimestamps.foreach { ts =>
         // non-timestamp col is of variable size
         val keyRow = dataToValueRow(ts)
@@ -634,7 +644,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1))
       }
 
-      val timerTimestamps = Seq(931L, 8000L, 1L)
+      val timerTimestamps = Seq(931L, -1331L, 8000L, 1L, -244L, -8350L, -55L)
       timerTimestamps.zipWithIndex.foreach { case (ts, idx) =>
         (1 to idx + 1).foreach { keyVal =>
           val keyRow = dataToKeyRowWithRangeScan(ts, keyVal.toString)

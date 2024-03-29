@@ -205,7 +205,7 @@ class PrefixKeyScanStateEncoder(
  * To encode a row for range scan, we first project the first numOrderingCols needed
  * for the range scan into an UnsafeRow; we then rewrite that UnsafeRow's fields in BIG_ENDIAN
  * to allow for scanning keys in sorted order using the byte-wise comparison method that
- * RocksDB uses.
+ * RocksDB uses. Negative values for numeric types are also supported.
  * Then, for the rest of the fields, we project those into another UnsafeRow.
  * We then effectively join these two UnsafeRows together, and finally take those bytes
  * to get the resulting row.
@@ -292,7 +292,13 @@ class RangeKeyScanStateEncoder(
       // Note that we cannot allocate a smaller buffer here even if the value is null
       // because the effective byte array is considered variable size and needs to have
       // the same size across all rows for the ordering to work as expected.
-      val bbuf = ByteBuffer.allocate(field.dataType.defaultSize + 1)
+      val bbuf = if (field.dataType == BooleanType || field.dataType == ByteType) {
+        ByteBuffer.allocate(field.dataType.defaultSize + 1)
+      } else {
+        // for numeric types, we reserve 2 additional bytes. one to indicate if the value is null
+        // and the other to indicate if the value is negative.
+        ByteBuffer.allocate(field.dataType.defaultSize + 2)
+      }
       bbuf.order(ByteOrder.BIG_ENDIAN)
       bbuf.put(isNullCol)
       if (isNullCol == 0x01.toByte) {
@@ -304,24 +310,36 @@ class RangeKeyScanStateEncoder(
             bbuf.put(value.asInstanceOf[Byte])
             writer.write(idx, bbuf.array())
 
-          // for other multi-byte types, we need to convert to big-endian
+          // For numeric types, we need to prepend a byte to indicate whether the value is negative
+          // or not. If the value is negative, we write 0x00, else we write 0x01. This is to ensure
+          // that the byte-wise sort ordering works as expected.
           case ShortType =>
+            val signByte: Byte = if (value.asInstanceOf[Short] < 0) 0x00.toByte else 0x01.toByte
+            bbuf.put(signByte)
             bbuf.putShort(value.asInstanceOf[Short])
             writer.write(idx, bbuf.array())
 
           case IntegerType =>
+            val signByte: Byte = if (value.asInstanceOf[Int] < 0) 0x00.toByte else 0x01.toByte
+            bbuf.put(signByte)
             bbuf.putInt(value.asInstanceOf[Int])
             writer.write(idx, bbuf.array())
 
           case LongType =>
+            val signByte: Byte = if (value.asInstanceOf[Long] < 0) 0x00.toByte else 0x01.toByte
+            bbuf.put(signByte)
             bbuf.putLong(value.asInstanceOf[Long])
             writer.write(idx, bbuf.array())
 
           case FloatType =>
+            val signByte: Byte = if (value.asInstanceOf[Float] < 0) 0x00.toByte else 0x01.toByte
+            bbuf.put(signByte)
             bbuf.putFloat(value.asInstanceOf[Float])
             writer.write(idx, bbuf.array())
 
           case DoubleType =>
+            val signByte: Byte = if (value.asInstanceOf[Double] < 0) 0x00.toByte else 0x01.toByte
+            bbuf.put(signByte)
             bbuf.putDouble(value.asInstanceOf[Double])
             writer.write(idx, bbuf.array())
         }
@@ -353,19 +371,25 @@ class RangeKeyScanStateEncoder(
           case ByteType =>
             writer.write(idx, bbuf.get)
 
+          // For numeric types, we need to skip the sign byte and read the rest of the bytes
           case ShortType =>
+            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getShort)
 
           case IntegerType =>
+            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getInt)
 
           case LongType =>
+            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getLong)
 
           case FloatType =>
+            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getFloat)
 
           case DoubleType =>
+            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getDouble)
         }
       }
