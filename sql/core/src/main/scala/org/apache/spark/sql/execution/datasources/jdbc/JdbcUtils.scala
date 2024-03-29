@@ -442,7 +442,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         var ans = 0L
         var j = 0
         while (j < bytes.length) {
-          ans = (ans << 8) | (bytes(j) & 0xFF)
+          ans = 256 * ans + (255 & bytes(j))
           j = j + 1
         }
         row.setLong(pos, ans)
