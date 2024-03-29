@@ -184,6 +184,39 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testInitialStateForTransformWithState() {
+    List<String> data = Arrays.asList("a", "xy", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    Dataset<Tuple2<Integer, String>> initialStateDS = spark.createDataset(
+      Arrays.asList(new Tuple2<Integer, String>(2, "pq")),
+      Encoders.tuple(Encoders.INT(), Encoders.STRING())
+    );
+
+    KeyValueGroupedDataset<Integer, Tuple2<Integer, String>> kvInitStateDS =
+      initialStateDS.groupByKey(
+        (MapFunction<Tuple2<Integer, String>, Integer>) f -> f._1, Encoders.INT());
+
+    KeyValueGroupedDataset<Integer, String> kvInitStateMappedDS = kvInitStateDS.mapValues(
+      (MapFunction<Tuple2<Integer, String>, String>) f -> f._2,
+      Encoders.STRING()
+    );
+
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    Dataset<String> transformWithStateMapped = grouped.transformWithState(
+      new TestStatefulProcessorWithInitialState(),
+      TimeoutMode.NoTimeouts(),
+      OutputMode.Append(),
+      kvInitStateMappedDS,
+      Encoders.STRING(),
+      Encoders.STRING());
+
+    Assertions.assertEquals(asSet("1a", "2pqxy", "3foobar"),
+      toSet(transformWithStateMapped.collectAsList()));
+  }
+
+  @Test
   public void testInitialStateFlatMapGroupsWithState() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
