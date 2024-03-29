@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.types.BinaryType
 import org.apache.spark.util.ArrayImplicits._
 
 
@@ -166,8 +167,14 @@ private[window] final class AggregateProcessor(
 
   /** Use HashSet to distinct. when window is too large may cause oom. */
   def contains(input: InternalRow): Boolean = {
-    val key = distinctBoundReferences.map(i => input.get(i.ordinal, i.dataType))
-    val contains = distinctSet.contains(key)
+    val key = distinctBoundReferences.map(bf => {
+      bf.dataType match {
+        case BinaryType => UnsafeArrayData.fromPrimitiveArray(
+          input.get(bf.ordinal, bf.dataType).asInstanceOf[Array[Byte]])
+        case _ => InternalRow.copyValue(input.get(bf.ordinal, bf.dataType))
+      }
+    })
+    val contains = if (key.contains(null)) true else distinctSet.contains(key)
     if (!contains) {
       distinctSet.add(key)
     }
