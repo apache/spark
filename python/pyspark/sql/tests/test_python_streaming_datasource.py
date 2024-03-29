@@ -36,10 +36,8 @@ from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonStreamingDataSourceTestsMixin:
-
     def test_basic_streaming_data_source_class(self):
         class MyDataSource(DataSource):
             ...
@@ -88,7 +86,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             def read(self, partition):
                 start, end = partition.start, partition.end
                 for i in range(start, end):
-                    yield (i, )
+                    yield (i,)
 
         import json
         import os
@@ -107,6 +105,7 @@ class BasePythonStreamingDataSourceTestsMixin:
 
             def write(self, iterator):
                 from pyspark import TaskContext
+
                 context = TaskContext.get()
                 partition_id = context.partitionId()
                 cnt = 0
@@ -148,6 +147,7 @@ class BasePythonStreamingDataSourceTestsMixin:
             nonlocal current_batch_id
             current_batch_id = batch_id
             assertDataFrameEqual(df, [Row(batch_id * 2), Row(batch_id * 2 + 1)])
+
         q = df.writeStream.foreachBatch(check_batch).start()
         while current_batch_id < 10:
             time.sleep(0.2)
@@ -159,23 +159,32 @@ class BasePythonStreamingDataSourceTestsMixin:
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")
         output_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_output")
         checkpoint_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_checkpoint")
-        self.spark.range(0, 30).repartition(2).write.format("json").mode("append").save(input_dir.name)
+        self.spark.range(0, 30).repartition(2).write.format("json").mode("append").save(
+            input_dir.name
+        )
         self.spark.dataSource.register(self._get_test_data_source())
         df = self.spark.readStream.schema("id int").json(input_dir.name)
-        q = df.writeStream.format("TestDataSource")\
-            .option("checkpointLocation", checkpoint_dir.name).start(output_dir.name)
+        q = (
+            df.writeStream.format("TestDataSource")
+            .option("checkpointLocation", checkpoint_dir.name)
+            .start(output_dir.name)
+        )
         while not q.recentProgress:
             time.sleep(0.2)
 
         # The first microbatch contain 30 rows and 2 partition, which is written in metadata during commit.
         assertDataFrameEqual(self.spark.read.json(output_dir.name), [Row(2, 30)])
 
-        self.spark.range(50, 80).repartition(2).write.format("json").mode("append").save(input_dir.name)
+        self.spark.range(50, 80).repartition(2).write.format("json").mode("append").save(
+            input_dir.name
+        )
 
         # when row id > 50, write task throw exception and abort, 1.txt is written to record the failure.
         while q.exception() is None:
             time.sleep(0.2)
-        assertDataFrameEqual(self.spark.read.text(os.path.join(output_dir.name, "1.txt")), [Row("failed in batch 1")])
+        assertDataFrameEqual(
+            self.spark.read.text(os.path.join(output_dir.name, "1.txt")), [Row("failed in batch 1")]
+        )
         q.stop()
         q.awaitTermination
 
