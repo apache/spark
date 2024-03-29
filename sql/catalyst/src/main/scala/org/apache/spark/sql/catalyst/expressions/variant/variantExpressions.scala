@@ -187,7 +187,7 @@ case object VariantGet {
    * of them. For nested types, we reject map types with a non-string key type.
    */
   def checkDataType(dataType: DataType): Boolean = dataType match {
-    case _: NumericType | BooleanType | StringType | BinaryType | TimestampType | DateType |
+    case _: NumericType | BooleanType | _: StringType | BinaryType | TimestampType | DateType |
         VariantType =>
       true
     case ArrayType(elementType, _) => checkDataType(elementType)
@@ -233,7 +233,11 @@ case object VariantGet {
       case _: AtomicType =>
         variantType match {
           case Type.OBJECT | Type.ARRAY =>
-            if (dataType == StringType) UTF8String.fromString(v.toJson) else invalidCast()
+            if (dataType.isInstanceOf[StringType]) {
+              UTF8String.fromString(v.toJson)
+            } else {
+              invalidCast()
+            }
           case _ =>
             val input = variantType match {
               case Type.BOOLEAN => v.getBoolean
