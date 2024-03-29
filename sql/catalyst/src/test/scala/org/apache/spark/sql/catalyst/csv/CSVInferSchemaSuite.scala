@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.csv
 
 import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.Locale
-
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -272,5 +271,20 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
       defaultTimeZoneId = "UTC")
     val inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "2884-06-24T02:45:51.138") == StringType)
+  }
+
+  test("SPARK-42846: Unsupported type should result in dataTypeUnexpectedError") {
+    val options = new CSVOptions(
+      Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
+      columnPruning = false,
+      defaultTimeZoneId = "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    checkErrorMatchPVals(
+      intercept[SparkUnsupportedOperationException] {
+        inferSchema.inferField(ShortType, "123")
+      },
+      "UNEXPECTED_DATA_TYPE",
+      Map("dataType" -> "smallint"))
   }
 }
