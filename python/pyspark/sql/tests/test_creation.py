@@ -168,7 +168,6 @@ class DataFrameCreationTestsMixin:
         # SPARK-47543: test for verifying if inferring `dict` as `MapType` work properly.
         import pandas as pd
 
-        cast
         pdf = pd.DataFrame({"str_col": ["second"], "dict_col": [{"first": 0.7, "second": 0.3}]})
 
         with self.sql_conf(
