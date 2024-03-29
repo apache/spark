@@ -58,33 +58,34 @@ abstract class LoggingSuiteBase extends AnyFunSuite // scalastyle:ignore funsuit
 
   def expectedPatternForMsgWithMDCAndException(level: String): String
 
-  test("Structured logging") {
+  test("Basic logging") {
     val msg = "This is a log message"
     Seq(
       ("ERROR", () => logError(msg)),
-      ("WARN", () => logWarning(msg))).foreach { case (level, logFunc) =>
+      ("WARN", () => logWarning(msg)),
+      ("INFO", () => logInfo(msg))).foreach { case (level, logFunc) =>
       val logOutput = captureLogOutput(logFunc)
       assert(expectedPatternForBasicMsg(level).r.matches(logOutput))
     }
   }
 
-  test("Structured logging with MDC") {
+  test("Logging with MDC") {
     Seq(
-      ("ERROR", () => logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.")),
-      ("WARN", () => logWarning(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.")))
-      .foreach {
+      ("ERROR", () => logError(msgWithMDC)),
+      ("WARN", () => logWarning(msgWithMDC)),
+      ("INFO", () => logInfo(msgWithMDC))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDC(level).r.matches(logOutput))
       }
   }
 
-  test("Structured exception logging with MDC") {
+  test("Logging with MDC and Exception") {
     val exception = new RuntimeException("OOM")
     Seq(
-      ("ERROR", () => logError(log"Error in executor ${MDC(EXECUTOR_ID, "1")}.", exception)),
-      ("WARN", () => logWarning(log"Error in executor ${MDC(EXECUTOR_ID, "1")}.", exception)))
-      .foreach {
+      ("ERROR", () => logError(msgWithMDCAndException, exception)),
+      ("WARN", () => logWarning(msgWithMDCAndException, exception)),
+      ("INFO", () => logInfo(msgWithMDCAndException, exception))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDCAndException(level).r.findFirstIn(logOutput).isDefined)
