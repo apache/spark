@@ -469,7 +469,7 @@
   },
   "COLLATION_MISMATCH" : {
     "message" : [
-      "Could not determine which collation to use for string comparison."
+      "Could not determine which collation to use for string functions and operators."
     ],
     "subClass" : {
       "EXPLICIT" : {

@@ -394,7 +394,7 @@ The value `<collationName>` does not represent a correct collation name. Suggest
 
 [SQLSTATE: 42P21](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Could not determine which collation to use for string comparison.
+Could not determine which collation to use for string functions and operators.
 
 For more details see [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
 

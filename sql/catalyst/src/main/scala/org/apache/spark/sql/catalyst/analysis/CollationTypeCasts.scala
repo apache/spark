@@ -29,18 +29,22 @@ import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, String
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
-    // Case when we do fail if resulting collation is indeterminate
-    case checkCastWithoutIndeterminate @ (_: BinaryExpression
-                                          | _: Predicate
-                                          | _: SortOrder
-                                          | _: ExpectsInputTypes
-                                          | _: ComplexTypeMergingExpression
-                                          | _: CreateArray)
-      if shouldCast(checkCastWithoutIndeterminate.children) =>
-      val newChildren = collateToSingleType(checkCastWithoutIndeterminate.children)
-      checkCastWithoutIndeterminate.withNewChildren(newChildren)
+    case sc @ (_: BinaryExpression
+              | _: Predicate
+              | _: SortOrder
+              | _: ExpectsInputTypes
+              | _: ComplexTypeMergingExpression
+              | _: CreateArray)
+      if shouldCast(sc.children) =>
+      val newChildren = collateToSingleType(sc.children)
+      sc.withNewChildren(newChildren)
   }
 
+  /**
+   * Checks whether we have differently collated strings in the given DataTypes
+   * @param types
+   * @return
+   */
   def shouldCast(types: Seq[Expression]): Boolean = {
     types.filter(e => hasStringType(e.dataType))
       .map(e => extractStringType(e.dataType).collationId).distinct.size > 1

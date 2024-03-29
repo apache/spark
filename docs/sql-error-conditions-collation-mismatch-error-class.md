@@ -26,7 +26,7 @@ license: |
 
 [SQLSTATE: 42P21](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Could not determine which collation to use for string comparison.
+Could not determine which collation to use for string functions and operators.
 
 This error class has the following derived error classes:
 
