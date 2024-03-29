@@ -21,5 +21,5 @@ package org.apache.spark.internal
  * All structured logging keys should be defined here for standardization.
  */
 object LogKey extends Enumeration {
-  val EXECUTOR_ID = Value
+  val EXECUTOR_ID, CONFIG, MIN_SIZE, MAX_SIZE = Value
 }

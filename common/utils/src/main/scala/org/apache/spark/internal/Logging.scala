@@ -43,7 +43,11 @@ case class MDC(key: LogKey.Value, value: String)
  * Wrapper class for log messages that include a logging context.
  * This is used as the return type of the string interpolator `LogStringContext`.
  */
-case class MessageWithContext(message: String, context: Option[Instance])
+case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
+  def +(mdc: MessageWithContext): MessageWithContext = {
+    MessageWithContext(message + mdc.message, context + mdc.context)
+  }
+}
 
 /**
  * Companion class for lazy evaluation of the MessageWithContext instance.
@@ -51,7 +55,7 @@ case class MessageWithContext(message: String, context: Option[Instance])
 class LogEntry(messageWithContext: => MessageWithContext) {
   def message: String = messageWithContext.message
 
-  def context: Option[Instance] = messageWithContext.context
+  def context: java.util.HashMap[String, String] = messageWithContext.context
 }
 
 /**
@@ -94,12 +98,12 @@ trait Logging {
     def log(args: MDC*): MessageWithContext = {
       val processedParts = sc.parts.iterator
       val sb = new StringBuilder(processedParts.next())
-      lazy val map = new java.util.HashMap[String, String]()
+      val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
         sb.append(mdc.value)
         if (Logging.isStructuredLoggingEnabled) {
-          map.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
+          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
         }
 
         if (processedParts.hasNext) {
@@ -107,13 +111,16 @@ trait Logging {
         }
       }
 
-      // Create a CloseableThreadContext and apply the context map
-      val closeableContext = if (Logging.isStructuredLoggingEnabled) {
-        Some(CloseableThreadContext.putAll(map))
-      } else {
-        None
-      }
-      MessageWithContext(sb.toString(), closeableContext)
+      MessageWithContext(sb.toString(), context)
+    }
+  }
+
+  private def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
+    val threadContext = CloseableThreadContext.putAll(context)
+    try {
+      body
+    } finally {
+      threadContext.close()
     }
   }
 
@@ -124,15 +131,17 @@ trait Logging {
 
   protected def logInfo(entry: LogEntry): Unit = {
     if (log.isInfoEnabled) {
-      log.info(entry.message)
-      entry.context.map(_.close())
+      withLogContext(entry.context) {
+        log.info(entry.message)
+      }
     }
   }
 
   protected def logInfo(entry: LogEntry, throwable: Throwable): Unit = {
     if (log.isInfoEnabled) {
-      log.info(entry.message, throwable)
-      entry.context.map(_.close())
+      withLogContext(entry.context) {
+        log.info(entry.message, throwable)
+      }
     }
   }
 
@@ -150,15 +159,17 @@ trait Logging {
 
   protected def logWarning(entry: LogEntry): Unit = {
     if (log.isWarnEnabled) {
-      log.warn(entry.message)
-      entry.context.map(_.close())
+      withLogContext(entry.context) {
+        log.warn(entry.message)
+      }
     }
   }
 
   protected def logWarning(entry: LogEntry, throwable: Throwable): Unit = {
     if (log.isWarnEnabled) {
-      log.warn(entry.message, throwable)
-      entry.context.map(_.close())
+      withLogContext(entry.context) {
+        log.warn(entry.message, throwable)
+      }
     }
   }
 
@@ -168,15 +179,17 @@ trait Logging {
 
   protected def logError(entry: LogEntry): Unit = {
     if (log.isErrorEnabled) {
-      log.error(entry.message)
-      entry.context.map(_.close())
+      withLogContext(entry.context) {
+        log.error(entry.message)
+      }
     }
   }
 
   protected def logError(entry: LogEntry, throwable: Throwable): Unit = {
     if (log.isErrorEnabled) {
-      log.error(entry.message, throwable)
-      entry.context.map(_.close())
+      withLogContext(entry.context) {
+        log.error(entry.message, throwable)
+      }
     }
   }
 
