@@ -36,4 +36,10 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
 
   override def expectedPatternForMsgWithMDCAndException(level: String): String =
     s""".*$level PatternLoggingSuite: Error in executor 1.\njava.lang.RuntimeException: OOM\n.*"""
+
+  override def verifyMsgWithConcat(level: String, logOutput: String): Unit = {
+    val pattern =
+      s""".*$level PatternLoggingSuite: Min Size: 2, Max Size: 4. Please double check.\n"""
+    assert(pattern.r.matches(logOutput))
+  }
 }

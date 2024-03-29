@@ -22,7 +22,7 @@ import java.nio.file.Files
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
-import org.apache.spark.internal.LogKey.EXECUTOR_ID
+import org.apache.spark.internal.LogKey.{EXECUTOR_ID, MAX_SIZE, MIN_SIZE}
 
 abstract class LoggingSuiteBase extends AnyFunSuite // scalastyle:ignore funsuite
   with Logging {
@@ -52,11 +52,18 @@ abstract class LoggingSuiteBase extends AnyFunSuite // scalastyle:ignore funsuit
 
   def msgWithMDCAndException: LogEntry = log"Error in executor ${MDC(EXECUTOR_ID, "1")}."
 
+  def msgWithConcat: LogEntry = log"Min Size: ${MDC(MIN_SIZE, "2")}, " +
+    log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
+    log"Please double check."
+
+
   def expectedPatternForBasicMsg(level: String): String
 
   def expectedPatternForMsgWithMDC(level: String): String
 
   def expectedPatternForMsgWithMDCAndException(level: String): String
+
+  def verifyMsgWithConcat(level: String, logOutput: String): Unit
 
   test("Basic logging") {
     val msg = "This is a log message"
@@ -91,6 +98,17 @@ abstract class LoggingSuiteBase extends AnyFunSuite // scalastyle:ignore funsuit
           assert(expectedPatternForMsgWithMDCAndException(level).r.findFirstIn(logOutput).isDefined)
       }
   }
+
+  test("Logging with concat") {
+    Seq(
+      ("ERROR", () => logError(msgWithConcat)),
+      ("WARN", () => logWarning(msgWithConcat)),
+      ("INFO", () => logInfo(msgWithConcat))).foreach {
+        case (level, logFunc) =>
+          val logOutput = captureLogOutput(logFunc)
+          verifyMsgWithConcat(level, logOutput)
+      }
+  }
 }
 
 class StructuredLoggingSuite extends LoggingSuiteBase {
@@ -109,4 +127,17 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
     // scalastyle:off line.size.limit
     s"""\\{"ts":"[^"]+","level":"$level","msg":"Error in executor 1.","context":\\{"executor_id":"1"},"exception":\\{"class":"java.lang.RuntimeException","msg":"OOM","stacktrace":.*},"logger":"$className"}\n"""
     // scalastyle:on
+
+  override def verifyMsgWithConcat(level: String, logOutput: String): Unit = {
+    // scalastyle:off line.size.limit
+    val pattern1 =
+      s"""\\{"ts":"[^"]+","level":"$level","msg":"Min Size: 2, Max Size: 4. Please double check.","context":\\{"min_size":"2","max_size": "4"},"logger":"$className"}\n"""
+
+    val pattern2 =
+      s"""\\{"ts":"[^"]+","level":"$level","msg":"Min Size: 2, Max Size: 4. Please double check.","context":\\{"max_size":"4","min_size":"2"},"logger":"$className"}\n"""
+
+    assert(pattern1.r.matches(logOutput) || pattern2.r.matches(logOutput))
+    // scalastyle:on
+  }
+
 }

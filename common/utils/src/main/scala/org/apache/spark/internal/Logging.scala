@@ -22,7 +22,6 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
-import org.apache.logging.log4j.CloseableThreadContext.Instance
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
@@ -45,7 +44,9 @@ case class MDC(key: LogKey.Value, value: String)
  */
 case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
   def +(mdc: MessageWithContext): MessageWithContext = {
-    MessageWithContext(message + mdc.message, context + mdc.context)
+    val resultMap = new java.util.HashMap(context)
+    resultMap.putAll(mdc.context)
+    MessageWithContext(message + mdc.message, resultMap)
   }
 }
 
