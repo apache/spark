@@ -442,7 +442,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         var ans = 0L
         var j = 0
         while (j < bytes.length) {
-          ans = 256 * ans + (255 & bytes(j))
+          ans = (ans << 8) | (bytes(j) & 0xFF)
           j = j + 1
         }
         row.setLong(pos, ans)
@@ -505,6 +505,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
           row.setLong(pos, localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t)))
+        } else {
+          row.update(pos, null)
+        }
+
+    case BinaryType if metadata.contains("binarylong") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val bytes = rs.getBytes(pos + 1)
+        if (bytes != null) {
+          val binary = bytes.flatMap(Integer.toBinaryString(_).getBytes(StandardCharsets.US_ASCII))
+          row.update(pos, binary)
         } else {
           row.update(pos, null)
         }
