@@ -360,7 +360,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       val timerTimestamps: Seq[Double] = Seq(6894.32, 345.2795, 24.466,
-        7860.0, 4535.55, 423.42, 0.0, 0.001, 0.233)
+        7860.0, 4535.55, 423.42, 0.0, 0.001, 0.233, 96456466.3536677, 14421434453.43524562)
       timerTimestamps.foreach { ts =>
         // non-timestamp col is of variable size
         val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts,
