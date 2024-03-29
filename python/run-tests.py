@@ -112,7 +112,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
     # Also override the JVM's temp directory by setting driver and executor options.
     java_options = "-Djava.io.tmpdir={0}".format(tmp_dir)
-    java_options = java_options + " -Dio.netty.tryReflectionSetAccessible=true -Xss4M"
+    java_options = java_options + " -Xss4M"
     spark_args = [
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),

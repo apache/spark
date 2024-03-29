@@ -417,6 +417,9 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
+    // HADOOP-19097 Set fs.s3a.connection.establish.timeout to 30s
+    // We can remove this after Apache Hadoop 3.4.1 releases
+    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30s")
     // This should be set as early as possible.
     SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
@@ -3288,7 +3291,7 @@ object SparkContext extends Logging {
   }
 
   /**
-   * SPARK-36796: This is a helper function to supplement `--add-opens` options to
+   * SPARK-36796: This is a helper function to supplement some JVM runtime options to
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {

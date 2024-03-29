@@ -94,12 +94,15 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
       case Types.VARBINARY if "BIT".equalsIgnoreCase(typeName) && size != 1 =>
+        // MariaDB connector behaviour
         // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
         // byte arrays instead of longs.
         md.putLong("binarylong", 1)
         Some(LongType)
-      case Types.BIT if "TINYINT".equalsIgnoreCase(typeName) =>
-        Some(BooleanType)
+      case Types.BIT if size > 1 =>
+        // MySQL connector behaviour
+        md.putLong("binarylong", 1)
+        Some(LongType)
       case Types.VARCHAR if "TINYTEXT".equalsIgnoreCase(typeName) =>
         // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
         Some(StringType)

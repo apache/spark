@@ -52,6 +52,37 @@ select *, (select count(*) from r where l.a = r.c having count(*) <= 1) from l;
 select *, (select count(*) from r where l.a = r.c having count(*) >= 2) from l;
 
 
+CREATE TEMPORARY VIEW null_view(a, b) AS SELECT CAST(null AS int), CAST(null as int);
+
+-- SPARK-46743: count bug is still detected on top of the subquery that can be constant folded.
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    WHERE
+      null_view.a = l.a
+  )
+FROM
+  l;
+
+
+-- Same as above but with a filter (HAVING) above the aggregate
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    WHERE
+      null_view.a = l.a
+    having count(*) > -1
+  )
+FROM
+  l;
+
+
 set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true;
 
 -- With legacy behavior flag set, both cases evaluate to 0

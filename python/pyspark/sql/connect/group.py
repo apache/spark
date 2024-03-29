@@ -21,7 +21,6 @@ check_dependencies(__name__)
 
 import warnings
 from typing import (
-    Any,
     Dict,
     List,
     Sequence,
@@ -85,12 +84,14 @@ class GroupedData:
         self._grouping_cols: List[Column] = grouping_cols
 
         self._pivot_col: Optional["Column"] = None
-        self._pivot_values: Optional[List[Any]] = None
+        self._pivot_values: Optional[List["Column"]] = None
         if group_type == "pivot":
             assert pivot_col is not None and isinstance(pivot_col, Column)
-            assert pivot_values is None or isinstance(pivot_values, list)
             self._pivot_col = pivot_col
-            self._pivot_values = pivot_values
+
+            if pivot_values is not None:
+                assert isinstance(pivot_values, list)
+                self._pivot_values = [F.lit(v) for v in pivot_values]
 
         self._grouping_sets: Optional[Sequence[Sequence["Column"]]] = None
         if group_type == "grouping_sets":

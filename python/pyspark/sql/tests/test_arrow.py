@@ -55,7 +55,6 @@ from pyspark.testing.sqlutils import (
     ExamplePoint,
     ExamplePointUDT,
 )
-from pyspark.testing.utils import QuietTest
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 
 if have_pandas:
@@ -388,7 +387,7 @@ class ArrowTestsMixin:
         self.assertTrue(pdf.empty)
 
     def test_propagates_spark_exception(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_propagates_spark_exception()
 
     def check_propagates_spark_exception(self):
@@ -459,7 +458,7 @@ class ArrowTestsMixin:
         assert_frame_equal(pdf_arrow, pdf)
 
     def test_createDataFrame_with_incorrect_schema(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_createDataFrame_with_incorrect_schema()
 
     def check_createDataFrame_with_incorrect_schema(self):
@@ -506,7 +505,7 @@ class ArrowTestsMixin:
         self.assertEqual(columns[0], "b")
 
     def test_createDataFrame_with_single_data_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_createDataFrame_with_single_data_type()
 
     def check_createDataFrame_with_single_data_type(self):
@@ -599,7 +598,7 @@ class ArrowTestsMixin:
                 self.assertTrue(expected[r][e] == result[r][e])
 
     def test_createDataFrame_with_map_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_createDataFrame_with_map_type(arrow_enabled)
@@ -670,7 +669,7 @@ class ArrowTestsMixin:
             assert_frame_equal(pandas_df, df.toPandas(), check_dtype=False)
 
     def test_toPandas_with_map_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_toPandas_with_map_type(arrow_enabled)
@@ -692,7 +691,7 @@ class ArrowTestsMixin:
                 assert_frame_equal(origin, pdf)
 
     def test_toPandas_with_map_type_nulls(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             for arrow_enabled in [True, False]:
                 with self.subTest(arrow_enabled=arrow_enabled):
                     self.check_toPandas_with_map_type_nulls(arrow_enabled)

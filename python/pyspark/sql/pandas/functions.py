@@ -153,7 +153,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         +------------------+
         |split_expand(name)|
         +------------------+
-        |       [John, Doe]|
+        |       {John, Doe}|
         +------------------+
 
         This type of Pandas UDF can use keyword arguments:

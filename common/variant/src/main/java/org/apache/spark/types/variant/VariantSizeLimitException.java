@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.variant;
+package org.apache.spark.types.variant;
 
 /**
  * An exception indicating that we are attempting to build a variant with it value or metadata

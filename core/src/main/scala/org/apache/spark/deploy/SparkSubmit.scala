@@ -228,6 +228,11 @@ private[spark] class SparkSubmit extends Logging {
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
     if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
+    if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
+      Logging.enableStructuredLogging()
+    } else {
+      Logging.disableStructuredLogging()
+    }
     var childMainClass = ""
 
     // Set the cluster manager
@@ -401,16 +406,23 @@ private[spark] class SparkSubmit extends Logging {
         // SPARK-33782 : This downloads all the files , jars , archiveFiles and pyfiles to current
         // working directory
         // SPARK-43540: add current working directory into driver classpath
+        // SPARK-47475: make download to driver optional so executors may fetch resource from remote
+        // url directly to avoid overwhelming driver network when resource is big and executor count
+        // is high
         val workingDirectory = "."
         childClasspath += workingDirectory
-        def downloadResourcesToCurrentDirectory(uris: String, isArchive: Boolean = false):
-        String = {
+        def downloadResourcesToCurrentDirectory(
+            uris: String,
+            isArchive: Boolean = false,
+            avoidDownload: String => Boolean = _ => false): String = {
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
+          val (avoidDownloads, toDownloads) =
+            resolvedUris.partition(uri => avoidDownload(uri.getScheme))
           val localResources = downloadFileList(
-            resolvedUris.map(
+            toDownloads.map(
               Utils.getUriBuilder(_).fragment(null).build().toString).mkString(","),
             targetDir, sparkConf, hadoopConf)
-          Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(resolvedUris).map {
+          (Utils.stringToSeq(localResources).map(Utils.resolveURI).zip(toDownloads).map {
             case (localResources, resolvedUri) =>
               val source = new File(localResources.getPath).getCanonicalFile
               val dest = new File(
@@ -427,14 +439,19 @@ private[spark] class SparkSubmit extends Logging {
               // Keep the URIs of local files with the given fragments.
               Utils.getUriBuilder(
                 localResources).fragment(resolvedUri.getFragment).build().toString
-          }.mkString(",")
+          } ++ avoidDownloads.map(_.toString)).mkString(",")
         }
+
+        val avoidJarDownloadSchemes = sparkConf.get(KUBERNETES_JARS_AVOID_DOWNLOAD_SCHEMES)
+
+        def avoidJarDownload(scheme: String): Boolean =
+          avoidJarDownloadSchemes.contains("*") || avoidJarDownloadSchemes.contains(scheme)
 
         val filesLocalFiles = Option(args.files).map {
           downloadResourcesToCurrentDirectory(_)
         }.orNull
-        val jarsLocalJars = Option(args.jars).map {
-          downloadResourcesToCurrentDirectory(_)
+        val updatedJars = Option(args.jars).map {
+          downloadResourcesToCurrentDirectory(_, avoidDownload = avoidJarDownload)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map {
           downloadResourcesToCurrentDirectory(_, true)
@@ -445,7 +462,7 @@ private[spark] class SparkSubmit extends Logging {
         args.files = filesLocalFiles
         args.archives = archiveLocalFiles
         args.pyFiles = pyLocalFiles
-        args.jars = jarsLocalJars
+        args.jars = updatedJars
       }
     }
 
