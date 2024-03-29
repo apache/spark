@@ -327,11 +327,6 @@ jobs:
             ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
-  maven-test:
-    name: "Run Maven Test"
-    permissions:
-      packages: write
-    uses: ./.github/workflows/maven_test.yml
 
   pyspark:
     needs: [precondition, infra-image]
