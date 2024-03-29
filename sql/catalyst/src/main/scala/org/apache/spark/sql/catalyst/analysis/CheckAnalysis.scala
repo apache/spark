@@ -542,10 +542,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             // for `partitionSpec` here because `orderSpec` has the type check itself.
             partitionSpec.foreach { p =>
               if (!RowOrdering.isOrderable(p.dataType)) {
-                p.dataTypeMismatch(p, TypeCheckResult.DataTypeMismatch(
-                  errorSubClass = "INVALID_ORDERING_TYPE",
-                  Map("functionName" -> toSQLId(p.prettyName), "dataType" -> toSQLType(p.dataType))
-                ))
+                p.failAnalysis(
+                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+                  messageParameters = Map(
+                    "expr" -> toSQLExpr(p),
+                    "exprType" -> toSQLType(p.dataType)))
               }
             }
 

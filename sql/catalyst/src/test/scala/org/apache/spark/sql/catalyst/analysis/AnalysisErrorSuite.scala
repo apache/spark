@@ -1326,9 +1326,8 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           CreateMap(Literal("key") :: UnresolvedAttribute("a") :: Nil) :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as("window")),
-    errorClass = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+    errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
     messageParameters = Map(
-      "functionName" -> "`attributereference`",
-      "dataType" -> "\"MAP<STRING, STRING>\"",
-      "sqlExpr" -> "\"_w0\""))
+      "expr" -> "\"_w0\"",
+      "exprType" -> "\"MAP<STRING, STRING>\""))
 }
