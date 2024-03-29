@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.MetadataBuilder
 
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
@@ -518,6 +519,15 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     case _ => e
   }
 
+  private def stripColumnReferenceMetadata(a: AttributeReference): AttributeReference = {
+    val metadataWithoutId = new MetadataBuilder()
+      .withMetadata(a.metadata)
+      .remove(LogicalPlan.DATASET_ID_KEY)
+      .remove(LogicalPlan.COL_POS_KEY)
+      .build()
+    a.withMetadata(metadataWithoutId)
+  }
+
   private def resolveUsingDatasetId(
       ua: UnresolvedAttribute,
       left: LogicalPlan,
@@ -527,7 +537,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       var currentLp = lp
       var depth = 0
       while (true) {
-        if (currentLp.getTagValue(LogicalPlan.DATASET_ID_TAG).exists(_.contains(datasetId))) {
+        if (currentLp.getTagValue(LogicalPlan.DATASET_RESOLUTION_TAG).exists(
+          _.contains(datasetId))) {
           return Option(currentLp, depth)
         } else {
           if (currentLp.children.size == 1) {
@@ -550,39 +561,61 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
       case (Some((lp, _)), None) => lp.output
 
-      case (Some((lp1, depth1)), Some((lp2, depth2))) =>
-        if (depth1 == depth2) {
-          lp1.output
-        } else if (depth1 < depth2) {
-          lp1.output
-        } else {
-          lp2.output
-        }
+      case (Some((lp1, depth1)), Some((lp2, depth2))) => if (depth1 == depth2) {
+        Seq.empty
+      } else if (depth1 < depth2) {
+        lp1.output
+      } else {
+        lp2.output
+      }
 
       case _ => Seq.empty
     }
-
-    AttributeSeq.fromNormalOutput(resolveOnAttribs).resolve(Seq(ua.name), conf.resolver)
+    if (resolveOnAttribs.isEmpty) {
+      None
+    } else {
+      AttributeSeq.fromNormalOutput(resolveOnAttribs).resolve(Seq(ua.name), conf.resolver)
+    }
   }
 
   private def resolveDataFrameColumn(
       u: UnresolvedAttribute,
       q: Seq[LogicalPlan]): Option[NamedExpression] = {
 
-    val attrWithDatasetIdOpt = u.getTagValue(LogicalPlan.ATTRIBUTE_DATASET_ID_TAG)
-    val resolvedOpt = if (attrWithDatasetIdOpt.isDefined) {
-      val did = attrWithDatasetIdOpt.get
-      if (q.size == 1) {
-        val binaryNodeOpt = q.head.collectFirst {
-          case bn: BinaryNode => bn
+    val origAttrOpt = u.getTagValue(LogicalPlan.UNRESOLVED_ATTRIBUTE_MD_TAG)
+    val resolvedOptWithDatasetId = if (origAttrOpt.isDefined) {
+      val md = origAttrOpt.get.metadata
+      if (md.contains(LogicalPlan.DATASET_ID_KEY)) {
+        val did = md.getLong(LogicalPlan.DATASET_ID_KEY)
+        val resolved = if (q.size == 1) {
+          val binaryNodeOpt = q.head.collectFirst {
+            case bn: BinaryNode => bn
+          }
+          binaryNodeOpt.flatMap(bn => resolveUsingDatasetId(u, bn.left, bn.right, did))
+        } else if (q.size == 2) {
+          resolveUsingDatasetId(u, q(0), q(1), did)
+        } else {
+          None
         }
-        binaryNodeOpt.flatMap(bn => resolveUsingDatasetId(u, bn.left, bn.right, did))
-      } else if (q.size == 2) {
-        resolveUsingDatasetId(u, q(0), q(1), did)
+        if (resolved.isEmpty) {
+          if (conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+            origAttrOpt
+          } else {
+            origAttrOpt.map(stripColumnReferenceMetadata)
+          }
+        } else {
+          resolved
+        }
       } else {
-        None
+        origAttrOpt
       }
     } else {
+      None
+    }
+    val resolvedOpt = if (resolvedOptWithDatasetId.isDefined) {
+      resolvedOptWithDatasetId
+    }
+    else {
       val planIdOpt = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
       if (planIdOpt.isEmpty) {
         None
