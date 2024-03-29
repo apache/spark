@@ -72,7 +72,6 @@ from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
-    SortOrder,
     ColumnReference,
     UnresolvedRegex,
     UnresolvedStar,
@@ -349,15 +348,6 @@ class DataFrame:
     def repartitionByRange(  # type: ignore[misc]
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
-        def _convert_col(col: "ColumnOrName") -> Column:
-            if isinstance(col, Column):
-                if isinstance(col._expr, SortOrder):
-                    return col
-                else:
-                    return col.asc()
-            else:
-                return F.col(col).asc()
-
         if isinstance(numPartitions, int):
             if not numPartitions > 0:
                 raise PySparkValueError(
@@ -375,14 +365,14 @@ class DataFrame:
             else:
                 return DataFrame(
                     plan.RepartitionByExpression(
-                        self._plan, numPartitions, [_convert_col(c) for c in cols]
+                        self._plan, numPartitions, [F._sort_col(c) for c in cols]
                     ),
                     self.sparkSession,
                 )
         elif isinstance(numPartitions, (str, Column)):
             return DataFrame(
                 plan.RepartitionByExpression(
-                    self._plan, None, [_convert_col(c) for c in [numPartitions] + list(cols)]
+                    self._plan, None, [F._sort_col(c) for c in [numPartitions] + list(cols)]
                 ),
                 self.sparkSession,
             )
@@ -729,7 +719,7 @@ class DataFrame:
                 message_parameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
             )
 
-        return _cols
+        return [F._sort_col(c) for c in _cols]
 
     def sort(
         self,
@@ -1041,7 +1031,7 @@ class DataFrame:
                     )
 
         return DataFrame(
-            plan.Hint(self._plan, name, list(parameters)),
+            plan.Hint(self._plan, name, [F.lit(p) for p in list(parameters)]),
             session=self._session,
         )
 
@@ -1443,8 +1433,25 @@ class DataFrame:
                 message_parameters={},
             )
 
+        def _convert_int_to_float(v: Any) -> Any:
+            # a bool is also an int
+            if v is not None and not isinstance(v, bool) and isinstance(v, int):
+                return float(v)
+            else:
+                return v
+
+        _replacements = []
+        for k, v in rep_dict.items():
+            _k = _convert_int_to_float(k)
+            _v = _convert_int_to_float(v)
+            _replacements.append((F.lit(_k), F.lit(_v)))
+
         return DataFrame(
-            plan.NAReplace(child=self._plan, cols=subset, replacements=rep_dict),
+            plan.NAReplace(
+                child=self._plan,
+                cols=subset,
+                replacements=_replacements,
+            ),
             session=self._session,
         )
 
@@ -1661,6 +1668,8 @@ class DataFrame:
                 error_class="NOT_DICT",
                 message_parameters={"arg_name": "fractions", "arg_type": type(fractions).__name__},
             )
+
+        _fractions = []
         for k, v in fractions.items():
             if not isinstance(k, (float, int, str)):
                 raise PySparkTypeError(
@@ -1672,10 +1681,16 @@ class DataFrame:
                         "item_type": type(k).__name__,
                     },
                 )
-            fractions[k] = float(v)
+            _fractions.append((F.lit(k), float(v)))
+
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         return DataFrame(
-            plan.StatSampleBy(child=self._plan, col=F._to_col(col), fractions=fractions, seed=seed),
+            plan.StatSampleBy(
+                child=self._plan,
+                col=F._to_col(col),
+                fractions=_fractions,
+                seed=seed,
+            ),
             session=self._session,
         )
 
@@ -1736,7 +1751,10 @@ class DataFrame:
 
                 # validate the column name
                 if not hasattr(self._session, "is_mock_session"):
-                    self.select(item).isLocal()
+                    # Different from __getattr__, the name here can be quoted like df['`id`'].
+                    # Only validate the name when it is not in the cached schema.
+                    if item not in self.columns:
+                        self.select(item).isLocal()
 
                 return Column(
                     ColumnReference(

@@ -239,7 +239,7 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         s = schema.decimal.scale if schema.decimal.HasField("scale") else 0
         return DecimalType(precision=p, scale=s)
     elif schema.HasField("string"):
-        return StringType(schema.string.collation_id)
+        return StringType.fromCollationId(schema.string.collation_id)
     elif schema.HasField("char"):
         return CharType(schema.char.length)
     elif schema.HasField("var_char"):

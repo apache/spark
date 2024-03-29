@@ -173,6 +173,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "CREATE FUNCTION test_null() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE plpgsql")
       .executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE test_bit_array (c1 bit(1)[], c2 bit(5)[])").executeUpdate()
+    conn.prepareStatement("INSERT INTO test_bit_array VALUES (ARRAY[B'1', B'0'], " +
+      "ARRAY[B'00001', B'00010'])").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -494,5 +497,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .load()
     assert(df.schema.head.dataType === NullType)
     checkAnswer(df, Seq(Row(null)))
+  }
+
+  test("SPARK-47628: Fix reading bit array type") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "test_bit_array", new Properties)
+    val expected = Row(Array(true, false), Array(
+      Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
+    checkAnswer(df, expected)
   }
 }

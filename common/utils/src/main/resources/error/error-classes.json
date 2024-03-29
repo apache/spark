@@ -304,14 +304,6 @@
     ],
     "sqlState" : "22007"
   },
-  "CANNOT_READ_FILE_FOOTER" : {
-    "message" : [
-      "Could not read footer for file: <file>. Please ensure that the file is in either ORC or Parquet format.",
-      "If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.",
-      "If it is, you can choose to either ignore it or fix the corruption."
-    ],
-    "sqlState" : "KD001"
-  },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
       "Cannot recognize hive type string: <fieldType>, column: <fieldName>. The specified data type for the field cannot be recognized by Spark SQL. Please check the data type of the specified field and ensure that it is a valid Spark SQL data type. Refer to the Spark SQL documentation for a list of valid data types and their format. If the data type is correct, please ensure that you are using a supported version of Spark SQL."
@@ -1257,6 +1249,31 @@
     "message" : [
       "Encountered error while reading file <path>."
     ],
+    "subClass" : {
+      "CANNOT_READ_FILE_FOOTER" : {
+        "message" : [
+          "Could not read footer. Please ensure that the file is in either ORC or Parquet format.",
+          "If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.",
+          "If it is, you can choose to either ignore it or fix the corruption."
+        ]
+      },
+      "FILE_NOT_EXIST" : {
+        "message" : [
+          "File does not exist. It is possible the underlying files have been updated.",
+          "You can explicitly invalidate the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by recreating the Dataset/DataFrame involved."
+        ]
+      },
+      "NO_HINT" : {
+        "message" : [
+          ""
+        ]
+      },
+      "PARQUET_COLUMN_DATA_TYPE_MISMATCH" : {
+        "message" : [
+          "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
+        ]
+      }
+    },
     "sqlState" : "KD001"
   },
   "FAILED_REGISTER_CLASS_WITH_KRYO" : {
@@ -1372,12 +1389,6 @@
       "GROUP BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
-  },
-  "GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE" : {
-    "message" : [
-      "The expression <sqlExpr> cannot be used as a grouping expression because its data type <dataType> is not an orderable data type."
-    ],
-    "sqlState" : "42822"
   },
   "HLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
@@ -1745,6 +1756,34 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead."
     ],
     "sqlState" : "22012"
+  },
+  "INVALID_AGGREGATE_FILTER" : {
+    "message" : [
+      "The FILTER expression <filterExpr> in an aggregate function is invalid."
+    ],
+    "subClass" : {
+      "CONTAINS_AGGREGATE" : {
+        "message" : [
+          "Expected a FILTER expression without an aggregation, but found <aggExpr>."
+        ]
+      },
+      "CONTAINS_WINDOW_FUNCTION" : {
+        "message" : [
+          "Expected a FILTER expression without a window function, but found <windowExpr>."
+        ]
+      },
+      "NON_DETERMINISTIC" : {
+        "message" : [
+          "Expected a deterministic FILTER expression."
+        ]
+      },
+      "NOT_BOOLEAN" : {
+        "message" : [
+          "Expected a FILTER expression of the BOOLEAN type."
+        ]
+      }
+    },
+    "sqlState" : "42903"
   },
   "INVALID_ARRAY_INDEX" : {
     "message" : [
@@ -3514,6 +3553,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
+    "message" : [
+      "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."
@@ -3533,6 +3578,24 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_INCORRECT_NUM_ORDERING_COLS_FOR_RANGE_SCAN" : {
+    "message" : [
+      "Incorrect number of ordering columns=<numOrderingCols> for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN" : {
+    "message" : [
+      "Incorrect number of prefix columns=<numPrefixCols> for prefix scan encoder. Prefix columns cannot be zero or greater than or equal to num of schema columns."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Null type ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -3542,6 +3605,12 @@
   "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY" : {
     "message" : [
       "State store operation=<operationType> not supported on missing column family=<colFamilyName>."
+    ],
+    "sqlState" : "42802"
+  },
+  "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED" : {
+    "message" : [
+      "Variable size ordering column with name=<fieldName> at index=<index> is not supported for range scan encoder."
     ],
     "sqlState" : "42802"
   },
@@ -4468,6 +4537,11 @@
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses: <sqlExprs>."
         ]
       },
+      "HIGHER_ORDER_FUNCTION" : {
+        "message" : [
+          "Subquery expressions are not supported within higher-order functions. Please remove all subquery expressions from higher-order functions and then try the query again."
+        ]
+      },
       "LATERAL_JOIN_CONDITION_NON_DETERMINISTIC" : {
         "message" : [
           "Lateral join condition cannot be non-deterministic: <condition>."
@@ -4888,26 +4962,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1024" : {
-    "message" : [
-      "FILTER expression is non-deterministic, it cannot be used in aggregate functions."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1025" : {
-    "message" : [
-      "FILTER expression is not of type boolean. It cannot be used in an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1026" : {
-    "message" : [
-      "FILTER expression contains aggregate. It cannot be used in an aggregate function."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1027" : {
-    "message" : [
-      "FILTER expression contains window function. It cannot be used in an aggregate function."
     ]
   },
   "_LEGACY_ERROR_TEMP_1030" : {
@@ -6088,12 +6142,6 @@
       "buildReader is not supported for <format>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2055" : {
-    "message" : [
-      "<message>",
-      "It is possible the underlying files have been updated. You can explicitly invalidate the cache in Spark by running 'REFRESH TABLE tableName' command in SQL or by recreating the Dataset/DataFrame involved."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2056" : {
     "message" : [
       "Unable to clear output directory <staticPrefixPath> prior to writing to it."
@@ -6124,17 +6172,6 @@
   "_LEGACY_ERROR_TEMP_2061" : {
     "message" : [
       "No records should be returned from EmptyDataReader."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2062" : {
-    "message" : [
-      "<message>",
-      "It is possible the underlying files have been updated. You can explicitly invalidate the cache in Spark by recreating the Dataset/DataFrame involved."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2063" : {
-    "message" : [
-      "Parquet column cannot be converted in file <filePath>. Column: <column>, Expected: <logicalType>, Found: <physicalType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2065" : {
