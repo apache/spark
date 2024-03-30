@@ -17,6 +17,7 @@
 
 from io import StringIO
 import unittest
+from typing import Iterable
 
 from pyspark.testing.connectutils import (
     should_test_connect,
@@ -72,16 +73,16 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         stages = [StageInfo(0, 0, 0, 0, False)]
 
         handler_called = 0
-        done = False
+        done_called = False
 
-        def handler(**kwargs):
-            nonlocal handler_called, done
+        def handler(stages: Iterable[StageInfo], inflight_tasks: int, done: bool):
+            nonlocal handler_called, done_called
             handler_called = 1
-            self.assertEqual(100, kwargs["total_tasks"])
-            self.assertEqual(50, kwargs["tasks_completed"])
-            self.assertEqual(999, kwargs["bytes_read"])
-            self.assertEqual(10, kwargs["inflight_tasks"])
-            done = kwargs["done"]
+            self.assertEqual(100, sum(map(lambda x: x.num_tasks, stages)))
+            self.assertEqual(50, sum(map(lambda x: x.num_completed_tasks, stages)))
+            self.assertEqual(999, sum(map(lambda x: x.num_bytes_read, stages)))
+            self.assertEqual(10, inflight_tasks)
+            done_called = done
 
         buffer = StringIO()
         p = Progress(char="+", output=buffer, enabled=True, handlers=[handler])
@@ -90,10 +91,10 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         p.update_ticks(stages, 10)
         self.assertIn("++++++", buffer.getvalue(), "Updating the char works.")
         self.assertEqual(1, handler_called, "Handler should be called.")
-        self.assertFalse(done, "Before finish, done should be False")
+        self.assertFalse(done_called, "Before finish, done should be False")
         p.finish()
         self.assertTrue(buffer.getvalue().endswith("\r"), "Last line should be empty")
-        self.assertTrue(done, "After finish, done should be True")
+        self.assertTrue(done_called, "After finish, done should be True")
 
 
 if __name__ == "__main__":

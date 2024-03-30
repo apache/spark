@@ -114,7 +114,7 @@ class Progress:
         self._out = output
         self._running = 0
         self._handlers = handlers
-        self._stages = []
+        self._stages: Iterable[StageInfo] = []
 
     def _notify(self, done: bool = False) -> None:
         for handler in self._handlers:
