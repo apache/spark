@@ -1243,10 +1243,20 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("disable filter pushdown for collated strings") {
-    Seq("parquet").foreach { format =>
-      withTempPath { path =>
-        val collation = "'UTF8_BINARY_LCASE'"
+  allFileBasedDataSources.foreach { format =>
+    test(s"disable filter push down for collated strings using $format") {
+      val tableName = s"dummy_$format"
+      val collation = "'UTF8_BINARY_LCASE'"
+
+      withTable(tableName) {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (c STRING)
+             |USING $format
+             |""".stripMargin
+        )
+        sql(s"INSERT INTO $tableName VALUES ('a'), ('A'), ('b')")
+
         val df = sql(
           s"""SELECT
              |  COLLATE(c, $collation) as c1,
@@ -1259,8 +1269,6 @@ class FileBasedDataSourceSuite extends QueryTest
              |as data(c)
              |""".stripMargin)
 
-        df.write.format(format).save(path.getAbsolutePath)
-
         // filter and expected result
         val filters = Seq(
           ("==", Seq(Row("aaa"), Row("AAA"))),
@@ -1271,8 +1279,7 @@ class FileBasedDataSourceSuite extends QueryTest
           (">=", Seq(Row("aaa"), Row("AAA"), Row("bbb"))))
 
         filters.foreach { filter =>
-          val readback = spark.read
-            .parquet(path.getAbsolutePath)
+          val query = df
             .where(s"c1 ${filter._1} collate('aaa', $collation)")
             .where(s"str ${filter._1} struct(collate('aaa', $collation))")
             .where(s"namedstr.f1.f2 ${filter._1} collate('aaa', $collation)")
@@ -1281,9 +1288,9 @@ class FileBasedDataSourceSuite extends QueryTest
             .where(s"map_values(map2) ${filter._1} array(collate('aaa', $collation))")
             .select("c1")
 
-          val explain = readback.queryExecution.explainString(ExplainMode.fromString("extended"))
+          val explain = query.queryExecution.explainString(ExplainMode.fromString("extended"))
           assert(explain.contains("PushedFilters: []"))
-          checkAnswer(readback, filter._2)
+          checkAnswer(query, filter._2)
         }
       }
     }
