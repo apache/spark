@@ -15,17 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions
+package org.apache.spark.sql.catalyst.expressions.variant
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.expressions.variant._
-import org.apache.spark.unsafe.types.VariantVal
-import org.apache.spark.variant.VariantUtil._
+import org.apache.spark.{SparkFunSuite, SparkThrowable}
+import org.apache.spark.types.variant.VariantUtil._
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
-class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
-  test("parse_json") {
+class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
+
+  test("parseJson type coercion") {
     def check(json: String, expectedValue: Array[Byte], expectedMetadata: Array[Byte]): Unit = {
-      checkEvaluation(ParseJson(Literal(json)), new VariantVal(expectedValue, expectedMetadata))
+      val actual = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+      val expected = new VariantVal(expectedValue, expectedMetadata)
+      assert(actual === expected)
     }
 
     // Dictionary size is `0` for value 0. An empty dictionary contains one offset `0` for the
@@ -100,15 +102,24 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Array(VERSION, 1, 0, 5, 'f', 'a', 'l', 's', 'e'))
   }
 
-  test("parse_json negative") {
+  test("parseJson negative") {
+    def checkException(json: String, errorClass: String, parameters: Map[String, String]): Unit = {
+      checkError(
+        exception = intercept[SparkThrowable] {
+          VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json))
+        },
+        errorClass = errorClass,
+        parameters = parameters
+      )
+    }
     for (json <- Seq("", "[", "+1", "1a", """{"a": 1, "b": 2, "a": "3"}""")) {
-      checkExceptionInExpression[SparkException](ParseJson(Literal(json)),
-        "Malformed records are detected in record parsing")
+      checkException(json, "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        Map("badRecord" -> json, "failFastMode" -> "FAILFAST"))
     }
     for (json <- Seq("\"" + "a" * (16 * 1024 * 1024) + "\"",
       (0 to 4 * 1024 * 1024).mkString("[", ",", "]"))) {
-      checkExceptionInExpression[SparkRuntimeException](ParseJson(Literal(json)),
-        "Cannot build variant bigger than 16.0 MiB")
+      checkException(json, "VARIANT_SIZE_LIMIT",
+        Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`parse_json`"))
     }
   }
 }

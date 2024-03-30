@@ -39,6 +39,7 @@ import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
@@ -883,23 +884,26 @@ private[yarn] class YarnAllocator(
               s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
             (true, message)
           case other_exit_status =>
-            // SPARK-26269: follow YARN's behaviour(see https://github
-            // .com/apache/hadoop/blob/228156cfd1b474988bc4fedfbf7edddc87db41e3/had
-            // oop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/ap
-            // ache/hadoop/yarn/util/Apps.java#L273 for details)
+            val exitStatus = completedContainer.getExitStatus
+            // SPARK-46920: Spark defines its own exit codes, which have overlap with
+            // exit codes defined by YARN, thus diagnostics reported by YARN may be
+            // misleading.
+            val sparkExitCodeReason = ExecutorExitCode.explainExitCode(exitStatus)
+            // SPARK-26269: follow YARN's behaviour, see details in
+            // org.apache.hadoop.yarn.util.Apps#shouldCountTowardsNodeBlacklisting
             if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
-              (false, s"Container marked as failed: $containerId$onHostStr" +
-                s". Exit status: ${completedContainer.getExitStatus}" +
-                s". Diagnostics: ${completedContainer.getDiagnostics}.")
+              (false, s"Container marked as failed: $containerId$onHostStr. " +
+                s"Exit status: $exitStatus. " +
+                s"Possible causes: $sparkExitCodeReason " +
+                s"Diagnostics: ${completedContainer.getDiagnostics}.")
             } else {
               // completed container from a bad node
               allocatorNodeHealthTracker.handleResourceAllocationFailure(hostOpt)
-              (true, s"Container from a bad node: $containerId$onHostStr" +
-                s". Exit status: ${completedContainer.getExitStatus}" +
-                s". Diagnostics: ${completedContainer.getDiagnostics}.")
+              (true, s"Container from a bad node: $containerId$onHostStr. " +
+                s"Exit status: $exitStatus. " +
+                s"Possible causes: $sparkExitCodeReason " +
+                s"Diagnostics: ${completedContainer.getDiagnostics}.")
             }
-
-
         }
         if (exitCausedByApp) {
           logWarning(containerExitReason)

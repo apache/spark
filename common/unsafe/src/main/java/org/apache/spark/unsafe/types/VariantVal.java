@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.types.variant.Variant;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -104,8 +105,7 @@ public class VariantVal implements Serializable {
    */
   @Override
   public String toString() {
-    // NOTE: the encoding is not yet implemented, this is not the final implementation.
-    return new String(value);
+    return new Variant(value, metadata).toJson();
   }
 
   /**

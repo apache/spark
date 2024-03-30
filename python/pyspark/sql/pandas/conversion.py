@@ -32,10 +32,18 @@ from pyspark.loose_version import LooseVersion
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
-from pyspark.sql.types import ArrayType, MapType, TimestampType, StructType, DataType, _create_row
+from pyspark.sql.types import (
+    ArrayType,
+    MapType,
+    TimestampType,
+    StructType,
+    DataType,
+    _create_row,
+    StringType,
+)
 from pyspark.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 if TYPE_CHECKING:
     import numpy as np
@@ -600,15 +608,39 @@ class SparkConversionMixin:
         )
         import pyarrow as pa
 
+        infer_pandas_dict_as_map = (
+            str(self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower() == "true"
+        )
+
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):
             arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
-            struct = StructType()
             prefer_timestamp_ntz = is_timestamp_ntz_preferred()
-            for name, field in zip(schema, arrow_schema):
-                struct.add(
-                    name, from_arrow_type(field.type, prefer_timestamp_ntz), nullable=field.nullable
-                )
+            struct = StructType()
+            if infer_pandas_dict_as_map:
+                spark_type: Union[MapType, DataType]
+                for name, field in zip(schema, arrow_schema):
+                    field_type = field.type
+                    if isinstance(field_type, pa.StructType):
+                        if len(field_type) == 0:
+                            raise PySparkValueError(
+                                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                                message_parameters={},
+                            )
+                        arrow_type = field_type.field(0).type
+                        spark_type = MapType(
+                            StringType(), from_arrow_type(arrow_type, prefer_timestamp_ntz)
+                        )
+                    else:
+                        spark_type = from_arrow_type(field_type)
+                    struct.add(name, spark_type, nullable=field.nullable)
+            else:
+                for name, field in zip(schema, arrow_schema):
+                    struct.add(
+                        name,
+                        from_arrow_type(field.type, prefer_timestamp_ntz),
+                        nullable=field.nullable,
+                    )
             schema = struct
 
         # Determine arrow types to coerce data when creating batches

@@ -6595,6 +6595,16 @@ object functions {
   }
 
   /**
+   * Parses a JSON string and constructs a Variant value.
+   *
+   * @param json a string column that contains JSON data.
+   *
+   * @group json_funcs
+   * @since 4.0.0
+   */
+  def parse_json(json: Column): Column = Column.fn("parse_json", json)
+
+  /**
    * Parses a JSON string and infers its schema in DDL format.
    *
    * @param json a JSON string.
@@ -6999,23 +7009,6 @@ object functions {
    */
   @scala.annotation.varargs
   def map_concat(cols: Column*): Column = Column.fn("map_concat", cols: _*)
-
-  /**
-   * Sorts the input map in ascending order based on the natural order of map keys.
-   *
-   * @group map_funcs
-   * @since 4.0.0
-   */
-  def map_sort(e: Column): Column = map_sort(e, asc = true)
-
-  /**
-   * Sorts the input map in ascending or descending order according to the natural ordering
-   * of the map keys.
-   *
-   * @group map_funcs
-   * @since 4.0.0
-   */
-  def map_sort(e: Column, asc: Boolean): Column = Column.fn("map_sort", e, lit(asc))
 
   // scalastyle:off line.size.limit
   /**

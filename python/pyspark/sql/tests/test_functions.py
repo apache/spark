@@ -1305,6 +1305,16 @@ class FunctionsTestsMixin:
         self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
         self.assertEqual(expected, actual["from_items"])
 
+    def test_parse_json(self):
+        df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}])
+        actual = df.select(
+            F.to_json(F.parse_json(df.json)).alias("var"),
+            F.to_json(F.parse_json(F.lit("""{"b": [{"c": "str2"}]}"""))).alias("var_lit"),
+        ).first()
+
+        self.assertEqual("""{"a":1}""", actual["var"])
+        self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
+
     def test_schema_of_json(self):
         with self.assertRaises(PySparkTypeError) as pe:
             F.schema_of_json(1)
@@ -1442,13 +1452,6 @@ class FunctionsTestsMixin:
         df = self.spark.sql("SELECT map(1, 'a', 2, 'b') as map1, map(3, 'c') as map2")
         self.assertEqual(
             df.select(F.map_concat(["map1", "map2"]).alias("map3")).first()[0],
-            {1: "a", 2: "b", 3: "c"},
-        )
-
-    def test_map_sort(self):
-        df = self.spark.sql("SELECT map(3, 'c', 1, 'a', 2, 'b') as map1")
-        self.assertEqual(
-            df.select(F.map_sort("map1").alias("map2")).first()[0],
             {1: "a", 2: "b", 3: "c"},
         )
 

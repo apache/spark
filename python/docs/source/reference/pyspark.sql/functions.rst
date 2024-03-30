@@ -396,7 +396,6 @@ Map Functions
     map_from_entries
     map_keys
     map_values
-    map_sort
     str_to_map
 
 
@@ -533,6 +532,7 @@ JSON Functions
     json_array_length
     json_object_keys
     json_tuple
+    parse_json
     schema_of_json
     to_json
 

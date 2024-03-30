@@ -1,0 +1,38 @@
+{
+  "ts": {
+    "$resolver": "timestamp"
+  },
+  "level": {
+    "$resolver": "level",
+    "field": "name"
+  },
+  "msg": {
+    "$resolver": "message",
+    "stringified": true
+  },
+  "context": {
+    "$resolver": "mdc"
+  },
+  "exception": {
+    "class": {
+      "$resolver": "exception",
+      "field": "className"
+    },
+    "msg": {
+      "$resolver": "exception",
+      "field": "message",
+      "stringified": true
+    },
+    "stacktrace": {
+      "$resolver": "exception",
+      "field": "stackTrace",
+      "stackTrace": {
+        "stringified": true
+      }
+    }
+  },
+  "logger": {
+    "$resolver": "logger",
+    "field": "name"
+  }
+}

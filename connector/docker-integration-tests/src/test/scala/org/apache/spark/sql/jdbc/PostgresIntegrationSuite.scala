@@ -155,6 +155,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
         "('-infinity', ARRAY[TIMESTAMP '-infinity'])")
       .executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE infinity_dates" +
+        "(id SERIAL PRIMARY KEY, date_column DATE, date_array DATE[])")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO infinity_dates (date_column, date_array)" +
+        " VALUES ('infinity', ARRAY[DATE 'infinity']), " +
+        "('-infinity', ARRAY[DATE '-infinity'])")
+      .executeUpdate()
+
     conn.prepareStatement("CREATE DOMAIN not_null_text AS TEXT DEFAULT ''").executeUpdate()
     conn.prepareStatement("create table custom_type(type_array not_null_text[]," +
       "type not_null_text)").executeUpdate()
@@ -165,6 +173,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "CREATE FUNCTION test_null() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE plpgsql")
       .executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE test_bit_array (c1 bit(1)[], c2 bit(5)[])").executeUpdate()
+    conn.prepareStatement("INSERT INTO test_bit_array VALUES (ARRAY[B'1', B'0'], " +
+      "ARRAY[B'00001', B'00010'])").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -462,6 +473,22 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(negativeInfinitySeq.head.getTime == minTimeStamp)
   }
 
+  test("SPARK-47501: infinity date test") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "infinity_dates", new Properties)
+    val row = df.collect()
+
+    assert(row.length == 2)
+    val infinity = row(0).getDate(1)
+    val negativeInfinity = row(1).getDate(1)
+    val infinitySeq = row(0).getAs[scala.collection.Seq[Date]]("date_array")
+    val negativeInfinitySeq = row(1).getAs[scala.collection.Seq[Date]]("date_array")
+    val minDate = -62135654400000L
+    val maxDate = 253402156800000L
+    assert(infinity.getTime == maxDate)
+    assert(negativeInfinity.getTime == minDate)
+    assert(infinitySeq.head.getTime == maxDate)
+    assert(negativeInfinitySeq.head.getTime == minDate)
+  }
 
   test("SPARK-47407: Support java.sql.Types.NULL for NullType") {
     val df = spark.read.format("jdbc")
@@ -470,5 +497,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .load()
     assert(df.schema.head.dataType === NullType)
     checkAnswer(df, Seq(Row(null)))
+  }
+
+  test("SPARK-47628: Fix reading bit array type") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "test_bit_array", new Properties)
+    val expected = Row(Array(true, false), Array(
+      Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
+    checkAnswer(df, expected)
   }
 }

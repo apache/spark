@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_tag=21-jre
+ARG java_image_tag=21
 
 FROM azul/zulu-openjdk:${java_image_tag}
 

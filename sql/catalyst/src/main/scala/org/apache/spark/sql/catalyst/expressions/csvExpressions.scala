@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
 
-import scala.annotation.tailrec
-
 import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.SparkException
@@ -277,12 +275,13 @@ case class StructsToCsv(
     }
   }
 
-  @tailrec
   private def isSupportedDataType(dataType: DataType): Boolean = dataType match {
-    case _: VariantType | BinaryType => false
-    case _: AtomicType | CalendarIntervalType => true
+    case _: VariantType => false
+    case array: ArrayType => isSupportedDataType(array.elementType)
+    case map: MapType => isSupportedDataType(map.keyType) && isSupportedDataType(map.valueType)
+    case st: StructType => st.map(_.dataType).forall(dt => isSupportedDataType(dt))
     case udt: UserDefinedType[_] => isSupportedDataType(udt.sqlType)
-    case _ => false
+    case _ => true
   }
 
   @transient

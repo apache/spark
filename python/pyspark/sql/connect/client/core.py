@@ -43,6 +43,7 @@ from typing import (
     NoReturn,
     cast,
     TYPE_CHECKING,
+    Type,
     Sequence,
 )
 
@@ -81,7 +82,9 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
+    CommonInlineUserDefinedDataSource,
     PythonUDTF,
+    PythonDataSource,
 )
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
@@ -95,6 +98,7 @@ from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_p
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark.sql.datasource import DataSource
 
 
 class ChannelBuilder:
@@ -815,6 +819,23 @@ class SparkConnectClient(object):
 
         self._execute(req)
         return name
+
+    def register_data_source(self, dataSource: Type["DataSource"]) -> None:
+        """
+        Register a data source in the session catalog.
+        """
+        data_source = PythonDataSource(
+            data_source=dataSource,
+            python_ver=get_python_ver(),
+        )
+        proto = CommonInlineUserDefinedDataSource(
+            name=dataSource.name(),
+            data_source=data_source,
+        ).to_data_source_proto(self)
+
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_data_source.CopyFrom(proto)
+        self._execute(req)
 
     def register_java(
         self,

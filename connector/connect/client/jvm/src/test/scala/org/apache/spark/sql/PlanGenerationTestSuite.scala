@@ -2533,10 +2533,6 @@ class PlanGenerationTestSuite
     fn.map_from_entries(fn.transform(fn.col("e"), (x, i) => fn.struct(i, x)))
   }
 
-  functionTest("map_sort") {
-    fn.map_sort(fn.col("f"))
-  }
-
   functionTest("arrays_zip") {
     fn.arrays_zip(fn.col("e"), fn.sequence(lit(1), lit(20)))
   }

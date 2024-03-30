@@ -864,7 +864,7 @@ abstract class AvroSuite
         val ex = intercept[SparkException] {
           spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
         }
-        assert(ex.getErrorClass == "FAILED_READ_FILE")
+        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[AnalysisException],
           errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -909,7 +909,7 @@ abstract class AvroSuite
           val ex = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
-          assert(ex.getErrorClass == "FAILED_READ_FILE")
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
             errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -946,7 +946,7 @@ abstract class AvroSuite
           val ex = intercept[SparkException] {
             spark.read.schema(s"a $sqlType").format("avro").load(path.toString).collect()
           }
-          assert(ex.getErrorClass == "FAILED_READ_FILE")
+          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
           checkError(
             exception = ex.getCause.asInstanceOf[AnalysisException],
             errorClass = "AVRO_INCOMPATIBLE_READ_TYPE",
@@ -2741,6 +2741,16 @@ abstract class AvroSuite
         val records = df.collect()
         assert(count == 58)
         assert(count == records.length)
+      }
+    }
+  }
+
+  test("SPARK-46990: read an empty file where pastSync returns false at EOF") {
+    for (maxPartitionBytes <- Seq(100, 100000, 100000000)) {
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> s"$maxPartitionBytes") {
+        val file = getResourceAvroFilePath("empty_file.avro")
+        val df = spark.read.format("avro").load(file)
+        assert(df.count() == 0)
       }
     }
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, SQLException, Timestamp, Types}
+import java.sql.{Connection, Date, SQLException, Timestamp, Types}
 import java.time.{LocalDateTime, ZoneOffset}
 import java.util
 import java.util.Locale
@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private object PostgresDialect extends JdbcDialect with SQLConfHelper {
+private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
@@ -70,10 +70,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       case Types.OTHER => Some(StringType)
       case _ if "text".equalsIgnoreCase(typeName) => Some(StringType) // sqlType is Types.VARCHAR
       case Types.ARRAY =>
-        val scale = md.build().getLong("scale").toInt
-        val isTimestampNTZ = md.build().getBoolean("isTimestampNTZ")
         // postgres array type names start with underscore
-        toCatalystType(typeName.drop(1), size, scale, isTimestampNTZ).map(ArrayType(_))
+        toCatalystType(typeName.drop(1), size, md).map(ArrayType(_))
       case _ => None
     }
   }
@@ -81,10 +79,12 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   private def toCatalystType(
       typeName: String,
       precision: Int,
-      scale: Int,
-      isTimestampNTZ: Boolean): Option[DataType] = typeName match {
+      md: MetadataBuilder): Option[DataType] = typeName match {
     case "bool" => Some(BooleanType)
-    case "bit" => Some(BinaryType)
+    case "bit" if precision == 1 => Some(BooleanType)
+    case "bit" =>
+      md.putBoolean("pg_bit_array_type", value = true)
+      Some(BinaryType)
     case "int2" => Some(ShortType)
     case "int4" => Some(IntegerType)
     case "int8" | "oid" => Some(LongType)
@@ -99,10 +99,11 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       Some(StringType)
     case "bytea" => Some(BinaryType)
     case "timestamptz" | "timetz" => Some(TimestampType)
-    case "timestamp" | "time" =>
-      Some(if (isTimestampNTZ) TimestampNTZType else TimestampType)
+    case "timestamp" | "time" => Some(getTimestampType(md.build()))
     case "date" => Some(DateType)
-    case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
+    case "numeric" | "decimal" if precision > 0 =>
+      val scale = md.build().getLong("scale").toInt
+      Some(DecimalType.bounded(precision, scale))
     case "numeric" | "decimal" =>
       // SPARK-26538: handle numeric without explicit precision and scale.
       Some(DecimalType.SYSTEM_DEFAULT)
@@ -307,24 +308,23 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   override def convertJavaTimestampToTimestamp(t: Timestamp): Timestamp = {
     // Variable names come from PostgreSQL "constant field docs":
     // https://jdbc.postgresql.org/documentation/publicapi/index.html?constant-values.html
-    val POSTGRESQL_DATE_NEGATIVE_INFINITY = -9223372036832400000L
-    val POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY = -185543533774800000L
-    val POSTGRESQL_DATE_POSITIVE_INFINITY = 9223372036825200000L
-    val POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY = 185543533774800000L
+   t.getTime match {
+     case 9223372036825200000L =>
+       new Timestamp(LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
+         .toInstant(ZoneOffset.UTC).toEpochMilli)
+     case -9223372036832400000L =>
+       new Timestamp(LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)
+     case _ => t
+   }
+  }
 
-    val minTimeStamp = LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli
-    val maxTimestamp =
-      LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999).toInstant(ZoneOffset.UTC).toEpochMilli
-
-    val time = t.getTime
-    if (time == POSTGRESQL_DATE_POSITIVE_INFINITY ||
-      time == POSTGRESQL_DATE_DATE_POSITIVE_SMALLER_INFINITY) {
-      new Timestamp(maxTimestamp)
-    } else if (time == POSTGRESQL_DATE_NEGATIVE_INFINITY ||
-      time == POSTGRESQL_DATE_NEGATIVE_SMALLER_INFINITY) {
-      new Timestamp(minTimeStamp)
-    } else {
-      t
+  override def convertJavaDateToDate(d: Date): Date = {
+    d.getTime match {
+      case 9223372036825200000L =>
+        new Date(LocalDateTime.of(9999, 12, 31, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)
+      case -9223372036832400000L =>
+        new Date(LocalDateTime.of(1, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC).toEpochMilli)
+      case _ => d
     }
   }
 }

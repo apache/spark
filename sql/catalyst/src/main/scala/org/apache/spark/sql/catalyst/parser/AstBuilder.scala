@@ -1255,7 +1255,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
       .flatMap(_.namedExpression.asScala)
       .map(typedVisit[Expression])
     val pivotColumn = if (ctx.pivotColumn.identifiers.size == 1) {
-      UnresolvedAttribute.quoted(ctx.pivotColumn.identifier.getText)
+      UnresolvedAttribute.quoted(ctx.pivotColumn.errorCapturingIdentifier.getText)
     } else {
       CreateStruct(
         ctx.pivotColumn.identifiers.asScala.map(
@@ -1270,8 +1270,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    */
   override def visitPivotValue(ctx: PivotValueContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
-    if (ctx.identifier != null) {
-      Alias(e, ctx.identifier.getText)()
+    if (ctx.errorCapturingIdentifier != null) {
+      Alias(e, ctx.errorCapturingIdentifier.getText)()
     } else {
       e
     }
@@ -1334,8 +1334,8 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     }
 
     // alias unpivot result
-    if (ctx.identifier() != null) {
-      val alias = ctx.identifier().getText
+    if (ctx.errorCapturingIdentifier() != null) {
+      val alias = ctx.errorCapturingIdentifier().getText
       SubqueryAlias(alias, filtered)
     } else {
       filtered
@@ -1346,7 +1346,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
    * Create an Unpivot column.
    */
   override def visitUnpivotColumn(ctx: UnpivotColumnContext): NamedExpression = withOrigin(ctx) {
-    UnresolvedAlias(UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier)))
+    UnresolvedAttribute(visitMultipartIdentifier(ctx.multipartIdentifier))
   }
 
   /**
@@ -1355,7 +1355,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitUnpivotColumnAndAlias(ctx: UnpivotColumnAndAliasContext):
   (NamedExpression, Option[String]) = withOrigin(ctx) {
     val attr = visitUnpivotColumn(ctx.unpivotColumn())
-    val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
+    val alias = Option(ctx.unpivotAlias()).map(_.errorCapturingIdentifier().getText)
     (attr, alias)
   }
 
@@ -1367,7 +1367,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   (Seq[NamedExpression], Option[String]) =
     withOrigin(ctx) {
       val exprs = ctx.unpivotColumns.asScala.map(visitUnpivotColumn).toSeq
-      val alias = Option(ctx.unpivotAlias()).map(_.identifier().getText)
+      val alias = Option(ctx.unpivotAlias()).map(_.errorCapturingIdentifier().getText)
       (exprs, alias)
     }
 

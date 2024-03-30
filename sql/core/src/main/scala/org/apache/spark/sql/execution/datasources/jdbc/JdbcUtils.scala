@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.charset.StandardCharsets
 import java.sql.{Connection, Date, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
@@ -404,7 +405,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         // DateTimeUtils.fromJavaDate does not handle null value, so we need to check it.
         val dateVal = rs.getDate(pos + 1)
         if (dateVal != null) {
-          row.setInt(pos, fromJavaDate(dateVal))
+          row.setInt(pos, fromJavaDate(dialect.convertJavaDateToDate(dateVal)))
         } else {
           row.update(pos, null)
         }
@@ -508,9 +509,34 @@ object JdbcUtils extends Logging with SQLConfHelper {
           row.update(pos, null)
         }
 
+    case BinaryType if metadata.contains("binarylong") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val bytes = rs.getBytes(pos + 1)
+        if (bytes != null) {
+          val binary = bytes.flatMap(Integer.toBinaryString(_).getBytes(StandardCharsets.US_ASCII))
+          row.update(pos, binary)
+        } else {
+          row.update(pos, null)
+        }
+
     case BinaryType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.update(pos, rs.getBytes(pos + 1))
+
+    case _: ArrayType if metadata.contains("pg_bit_array_type") =>
+      // SPARK-47628: Handle PostgreSQL bit(n>1) array type ahead. As in the pgjdbc driver,
+      // bit(n>1)[] is not distinguishable from bit(1)[], and they are all recognized as boolen[].
+      // This is wrong for bit(n>1)[], so we need to handle it first as byte array.
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val fieldString = rs.getString(pos + 1)
+        if (fieldString != null) {
+          val strArray = fieldString.substring(1, fieldString.length - 1).split(",")
+          // Charset is picked from the pgjdbc driver for consistency.
+          val bytesArray = strArray.map(_.getBytes(StandardCharsets.US_ASCII))
+          row.update(pos, new GenericArrayData(bytesArray))
+        } else {
+          row.update(pos, null)
+        }
 
     case ArrayType(et, _) =>
       val elementConversion = et match {
@@ -526,7 +552,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
         case StringType =>
           arrayConverter[Object]((obj: Object) => UTF8String.fromString(obj.toString))
 
-        case DateType => arrayConverter[Date](fromJavaDate)
+        case DateType => arrayConverter[Date] {
+          (d: Date) => fromJavaDate(dialect.convertJavaDateToDate(d))
+        }
 
         case dt: DecimalType =>
             arrayConverter[java.math.BigDecimal](d => Decimal(d, dt.precision, dt.scale))
