@@ -255,9 +255,10 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
   }
 
   test("the parameter `inputs` of the function `text(paths: String*)` non empty") {
-    intercept[IllegalArgumentException] {
+    val e = intercept[IllegalArgumentException] {
       spark.read.csv()
     }
+    assert(e.getMessage === "requirement failed: The paths cannot be empty")
   }
 }
 
