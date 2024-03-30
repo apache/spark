@@ -37,7 +37,6 @@ from typing import (
     Iterable,
     TYPE_CHECKING,
     ClassVar,
-    Callable,
 )
 
 import numpy as np
@@ -1031,7 +1030,7 @@ SparkSession.__doc__ = PySparkSession.__doc__
 
 def _test() -> None:
     import sys
-    import os
+    import os  # noqa: F401
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.session
