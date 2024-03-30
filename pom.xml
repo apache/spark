@@ -216,7 +216,7 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.77</bouncycastle.version>
-    <tink.version>1.9.0</tink.version>
+    <tink.version>1.12.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
     <netty.version>4.1.108.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
