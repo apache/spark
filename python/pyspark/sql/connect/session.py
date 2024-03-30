@@ -96,6 +96,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark.sql.connect.shell.progress import ProgressHandler
 
 
 try:
@@ -319,30 +320,17 @@ class SparkSession:
 
     readStream.__doc__ = PySparkSession.readStream.__doc__
 
-    def registerProgressHandler(self, handler: Callable) -> None:
+    def registerProgressHandler(self, handler: "ProgressHandler") -> None:
         """
         Register a progress handler to be called when a progress update is received from the server.
         .. versionadded:: 4.0
-
-        Examples
-        --------
-        >>> import os
-        >>> handler = lambda **kwargs: os.write(str(kwargs))
-        >>> spark.registerProgressHandler(handler)
         """
         self._client.register_progress_handler(handler)
 
-    def removeProgressHandler(self, handler: Callable) -> None:
+    def removeProgressHandler(self, handler: "ProgressHandler") -> None:
         """
         Remove a progress handler that was previously registered.
         .. versionadded:: 4.0
-
-        Examples
-        --------
-        >>> import os
-        >>> handler = lambda **kwargs: os.write(str(kwargs))
-        >>> spark.registerProgressHandler(handler)
-        >>> spark.removeProgressHandler(handler)
         """
         self._client.remove_progress_handler(handler)
 
@@ -990,6 +978,7 @@ SparkSession.__doc__ = PySparkSession.__doc__
 
 def _test() -> None:
     import sys
+    import os
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.session

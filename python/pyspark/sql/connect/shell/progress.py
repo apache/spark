@@ -49,7 +49,7 @@ class ProgressHandler(abc.ABC):
     @abc.abstractmethod
     def __call__(
         self,
-        stages: Iterable[StageInfo],
+        stages: typing.Optional[Iterable[StageInfo]],
         inflight_tasks: int,
         done: bool,
     ) -> None:
@@ -114,13 +114,12 @@ class Progress:
         self._out = output
         self._running = 0
         self._handlers = handlers
+        self._stages = []
 
     def _notify(self, done: bool = False) -> None:
         for handler in self._handlers:
             handler(
-                total_tasks=self._ticks,
-                tasks_completed=self._tick,
-                bytes_read=self._bytes_read,
+                stages=self._stages,
                 inflight_tasks=self._running,
                 done=done,
             )
@@ -147,6 +146,7 @@ class Progress:
             if self._tick > 0:
                 self.output()
             self._running = inflight_tasks
+            self._stages = stages
             self._notify(False)
 
     def finish(self) -> None:
