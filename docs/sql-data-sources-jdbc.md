@@ -453,8 +453,13 @@ are also available to connect MySQL, may have different mapping rules.
     </tr>
     <tr>
       <td>BIT( &gt;1 )</td>
+      <td>BinaryType</td>
+      <td>(Default)</td>
+    </tr>
+    <tr>
+      <td>BIT( &gt;1 )</td>
       <td>LongType</td>
-      <td></td>
+      <td>spark.sql.legacy.mysql.bitArrayMapping.enabled=true</td>
     </tr>
     <tr>
       <td>TINYINT(1)</td>

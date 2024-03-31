@@ -122,6 +122,20 @@ trait Logging {
     if (log.isInfoEnabled) log.info(msg)
   }
 
+  protected def logInfo(entry: LogEntry): Unit = {
+    if (log.isInfoEnabled) {
+      log.info(entry.message)
+      entry.context.map(_.close())
+    }
+  }
+
+  protected def logInfo(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isInfoEnabled) {
+      log.info(entry.message, throwable)
+      entry.context.map(_.close())
+    }
+  }
+
   protected def logDebug(msg: => String): Unit = {
     if (log.isDebugEnabled) log.debug(msg)
   }
@@ -132,6 +146,20 @@ trait Logging {
 
   protected def logWarning(msg: => String): Unit = {
     if (log.isWarnEnabled) log.warn(msg)
+  }
+
+  protected def logWarning(entry: LogEntry): Unit = {
+    if (log.isWarnEnabled) {
+      log.warn(entry.message)
+      entry.context.map(_.close())
+    }
+  }
+
+  protected def logWarning(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isWarnEnabled) {
+      log.warn(entry.message, throwable)
+      entry.context.map(_.close())
+    }
   }
 
   protected def logError(msg: => String): Unit = {
