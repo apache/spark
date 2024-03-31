@@ -283,6 +283,25 @@ abstract class ParquetPartitionDiscoverySuite
         Seq(TypedPartValue("10", IntegerType)))))
   }
 
+  test("parse partition with base paths_new") {
+
+    // when the basePaths is the path to a base directory of leaf directories
+    val partitionSpec2: Option[PartitionValues] = parsePartition(
+      path = new Path("file://path/CUSTOM_TYPE_STRUCT=10"),
+      typeInference = true,
+      basePaths = Set(new Path("file://path")),
+      Map("CUSTOM_TYPE_STRUCT" -> CalendarIntervalType),
+      true,
+      zoneId = timeZoneId,
+      df,
+      tf)._1
+
+    assert(partitionSpec2 ==
+      Option(PartitionValues(
+        Seq("a"),
+        Seq(TypedPartValue("10", IntegerType)))))
+  }
+
   test("parse partitions") {
     def check(
         paths: Seq[String],
