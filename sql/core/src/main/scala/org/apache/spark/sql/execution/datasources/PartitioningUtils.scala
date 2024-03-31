@@ -198,7 +198,6 @@ object PartitioningUtils extends SQLConfHelper {
         case (PartitionValues(columnNames, typedValues), (path, _)) =>
           val rowValues = columnNames.zip(typedValues).map { case (columnName, typedValue) =>
             try {
-              println("Testing", typedValue.dataType, typedValue.value);
               castPartValueToDesiredType(typedValue.dataType, typedValue.value, zoneId)
             } catch {
               case NonFatal(_) =>
