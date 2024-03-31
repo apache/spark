@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.TryToNumber
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -717,6 +718,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-47646: try_to_number should return NULL for malformed input") {
     val df = spark.createDataset(spark.sparkContext.parallelize(Seq("11")))
-    checkAnswer(df.select(try_to_number($"value", lit("$99.99"))), Seq(Row(null)))
+    val try_to_number = Column(TryToNumber($"value".expr, lit("$99.99").expr))
+    checkAnswer(df.select(try_to_number), Seq(Row(null)))
   }
 }
