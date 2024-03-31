@@ -16,24 +16,27 @@
  */
 package org.apache.spark.util
 
+import org.apache.logging.log4j.Level
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.internal.Logging
 
 class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
 
-  override protected def logFilePath: String = "target/pattern.log"
+  override def className: String = classOf[PatternLoggingSuite].getSimpleName
+  override def logFilePath: String = "target/pattern.log"
 
   override def beforeAll(): Unit = Logging.disableStructuredLogging()
 
   override def afterAll(): Unit = Logging.enableStructuredLogging()
 
-  override def expectedPatternForBasicMsg(level: String): String =
-    s""".*$level PatternLoggingSuite: This is a log message\n"""
+  override def expectedPatternForBasicMsg(level: Level): String = {
+    s""".*$level $className: This is a log message\n"""
+  }
 
-  override def expectedPatternForMsgWithMDC(level: String): String =
+  override def expectedPatternForMsgWithMDC(level: Level): String =
     s""".*$level PatternLoggingSuite: Lost executor 1.\n"""
 
-  override def expectedPatternForMsgWithMDCAndException(level: String): String =
+  override def expectedPatternForMsgWithMDCAndException(level: Level): String =
     s""".*$level PatternLoggingSuite: Error in executor 1.\njava.lang.RuntimeException: OOM\n.*"""
 }
