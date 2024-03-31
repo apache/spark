@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 
