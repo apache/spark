@@ -39,7 +39,7 @@ trait LoggingSuiteBase
     new File(pwd + "/" + logFilePath)
   }
 
-  // Returns the first line in the log file that contains the given substring.
+  // Return the newly added log contents in the log file after executing the function `f`
   private def captureLogOutput(f: () => Unit): String = {
     val content = if (logFile.exists()) {
       Files.readString(logFile.toPath)
