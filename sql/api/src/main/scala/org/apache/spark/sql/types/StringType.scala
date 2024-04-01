@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  * @param collationId The id of collation for this StringType.
  */
 @Stable
-class StringType private(val collationId: Int, var isExplicit: Boolean = false)
+class StringType private(val collationId: Int, val isExplicit: Boolean = false)
   extends AtomicType
     with Serializable {
   /**
@@ -81,9 +81,7 @@ class StringType private(val collationId: Int, var isExplicit: Boolean = false)
 case object StringType extends StringType(0, false) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
   private[spark] def apply(collationId: Int, isExplicit: Boolean): StringType = {
-    val st = new StringType(collationId)
-    st.isExplicit = isExplicit
-    st
+    new StringType(collationId, isExplicit)
   }
 
   def apply(collation: String): StringType = {
