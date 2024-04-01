@@ -84,7 +84,7 @@ abstract class StringRegexExpression extends BinaryExpression
     }
   }
 
-  override protected def expectedCost: Int = 100
+  override protected[spark] def expectedCost: Int = 100
 }
 
 private[catalyst] object StringRegexExpression {
