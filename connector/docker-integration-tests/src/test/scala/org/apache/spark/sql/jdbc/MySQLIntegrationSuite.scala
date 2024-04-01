@@ -339,17 +339,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     checkAnswer(df,
       Row(Array[Byte](0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
   }
-<<<<<<< Updated upstream
-=======
-
-  test("SPARK-47665: Read/write round-trip for ShortType") {
-    spark.range(3)
-      .selectExpr("CAST(id AS SMALLINT) AS id")
-      .write
-      .jdbc(jdbcUrl, "smallint_round_trip", new Properties)
-    val df = spark.read.jdbc(jdbcUrl, "smallint_round_trip", new Properties)
-    assert(df.schema.fields.head.dataType === ShortType)
-  }
 
   test("SPARK-47666: Check nulls for result set getters") {
     Seq("true", "false").foreach { flag =>
@@ -359,7 +348,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       }
     }
   }
->>>>>>> Stashed changes
 }
 
 
