@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Level
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
-import org.apache.spark.internal.LogKey.EXECUTOR_ID
+import org.apache.spark.internal.LogKey.{EXECUTOR_ID, MAX_SIZE, MIN_SIZE}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -59,9 +59,15 @@ trait LoggingSuiteBase
 
   def expectedPatternForBasicMsg(level: Level): String
 
+  def msgWithConcat: LogEntry = log"Min Size: ${MDC(MIN_SIZE, "2")}, " +
+    log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
+    log"Please double check."
+
   def expectedPatternForMsgWithMDC(level: Level): String
 
   def expectedPatternForMsgWithMDCAndException(level: Level): String
+
+  def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
   test("Basic logging") {
     Seq(
@@ -93,6 +99,17 @@ trait LoggingSuiteBase
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           assert(expectedPatternForMsgWithMDCAndException(level).r.findFirstIn(logOutput).isDefined)
+      }
+  }
+
+  test("Logging with concat") {
+    Seq(
+      (Level.ERROR, () => logError(msgWithConcat)),
+      (Level.WARN, () => logWarning(msgWithConcat)),
+      (Level.INFO, () => logInfo(msgWithConcat))).foreach {
+        case (level, logFunc) =>
+          val logOutput = captureLogOutput(logFunc)
+          verifyMsgWithConcat(level, logOutput)
       }
   }
 }
@@ -151,5 +168,34 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
           },
           "logger": "$className"
         }""")
+  }
+
+  override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {
+    val pattern1 = compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Min Size: 2, Max Size: 4. Please double check.",
+          "context": {
+            "min_size": "2",
+            "max_size": "4"
+          },
+          "logger": "$className"
+        }""")
+
+    val pattern2 = compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Min Size: 2, Max Size: 4. Please double check.",
+          "context": {
+            "max_size": "4",
+            "min_size": "2"
+          },
+          "logger": "$className"
+        }""")
+    assert(pattern1.r.matches(logOutput) || pattern2.r.matches(logOutput))
   }
 }
