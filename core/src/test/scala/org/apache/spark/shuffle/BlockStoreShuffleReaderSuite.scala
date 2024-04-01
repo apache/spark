@@ -21,7 +21,7 @@ import java.io.{ByteArrayOutputStream, InputStream}
 import java.nio.ByteBuffer
 
 import org.mockito.ArgumentMatchers.{eq => meq}
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Mockito.{doReturn, mock, when}
 
 import org.apache.spark._
 import org.apache.spark.internal.config
@@ -76,6 +76,7 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // Make a mock BlockManager that will return RecordingManagedByteBuffers of data, so that we
     // can ensure retain() and release() are properly called.
     val blockManager = mock(classOf[BlockManager])
+    doReturn(testConf).when(blockManager).conf
 
     // Create a buffer with some randomly generated key-value pairs to use as the shuffle data
     // from each mappers (all mappers return the same shuffle data).
