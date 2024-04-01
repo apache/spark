@@ -50,10 +50,13 @@ class FilterPushdownSuite extends PlanTest {
   val attrB = $"b".int
   val attrC = $"c".int
   val attrD = $"d".int
+  val attrE = $"e".string
 
   val testRelation = LocalRelation(attrA, attrB, attrC)
 
   val testRelation1 = LocalRelation(attrD)
+
+  val testStringRelation = LocalRelation(attrA, attrE)
 
   val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
@@ -163,6 +166,24 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-47672: Avoid double evaluation with projections") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f")
+      .where($"a" > 5 || $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .where($"a" > 5)
+      .select($"a", $"e".rlike("magic") as "f")
+      .where($"f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
 
   test("nondeterministic: can always push down filter through project with deterministic field") {
     val originalQuery = testRelation
