@@ -347,7 +347,8 @@ case class StaticInvoke(
       } else {
         val boxedResult = ctx.freshName("boxedResult")
         s"""
-          ${CodeGenerator.boxedType(dataType)} $boxedResult = ${CodeGenerator.defaultValue(dataType)};
+          ${CodeGenerator.boxedType(dataType)} $boxedResult =
+            ${CodeGenerator.defaultValue(dataType)};
           ${getFuncResult(boxedResult, callFunc)}
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
