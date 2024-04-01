@@ -228,7 +228,6 @@ trait FileFormat {
    * Returns whether the file format supports filter push down
    * for non utf8 binary collated columns.
    */
-
   def supportsCollationPushDown: Boolean = false
 }
 
