@@ -242,11 +242,6 @@ class RangeKeyScanStateEncoder(
     case _ => false
   }
 
-  private def supportsSignedValues(dataType: DataType): Boolean = dataType match {
-    case _: ShortType | _: IntegerType | _: LongType => true
-    case _ => false
-  }
-
   // verify that only fixed sized columns are used for ordering
   rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
     if (!isFixedSize(field.dataType)) {
