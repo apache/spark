@@ -2204,7 +2204,7 @@ Use absolute expiration time instead.
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-TTL duration cannot be negative for State store operation=`<operationType>` on state=`<stateName>`.
+TTL cannot be negative for State store operation=`<operationType>` on state=`<stateName>`.
 
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
