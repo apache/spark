@@ -18,11 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.hasStringType
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, ComplexTypeMergingExpression, CreateArray, ExpectsInputTypes, Expression, Predicate, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, ComplexTypeMergingExpression, CreateArray, Elt, ExpectsInputTypes, Expression, Predicate, SortOrder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
@@ -31,10 +30,11 @@ object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
     case sc @ (_: BinaryExpression
-              | _: Predicate
-              | _: SortOrder
-              | _: ExpectsInputTypes
-              | _: ComplexTypeMergingExpression) =>
+               | _: ComplexTypeMergingExpression
+               | _: Elt
+               | _: ExpectsInputTypes
+               | _: Predicate
+               | _: SortOrder) =>
       val newChildren = collateToSingleType(sc.children)
       sc.withNewChildren(newChildren)
     case pesc @ (_: CreateArray) =>
@@ -76,8 +76,9 @@ object CollationTypeCasts extends TypeCoercionRule {
   /**
    * Collates input expressions to a single collation.
    */
-  def collateToSingleType(exprs: Seq[Expression],
-                          preserveExplicit: Boolean = false): Seq[Expression] = {
+  def collateToSingleType(
+      exprs: Seq[Expression],
+      preserveExplicit: Boolean = false): Seq[Expression] = {
     val st = getOutputCollation(exprs.map(_.dataType), preserveExplicit)
 
     exprs.map(e => castStringType(e, st).getOrElse(e))
@@ -89,8 +90,9 @@ object CollationTypeCasts extends TypeCoercionRule {
    * any expressions, but will only be affected by collated StringTypes or
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
-  def getOutputCollation(dataTypes: Seq[DataType],
-                         preserveExplicit: Boolean = false): StringType = {
+  def getOutputCollation(
+      dataTypes: Seq[DataType],
+      preserveExplicit: Boolean = false): StringType = {
     val explicitTypes =
       dataTypes.filter(hasStringType)
         .map(extractStringType)

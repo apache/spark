@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  * @param collationId The id of collation for this StringType.
  */
 @Stable
-class StringType private(val collationId: Int) extends AtomicType with Serializable {
-  var isExplicit: Boolean = false
+class StringType private(val collationId: Int, var isExplicit: Boolean = false)
+  extends AtomicType
+    with Serializable {
   /**
    * Support for Binary Equality implies that strings are considered equal only if
    * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
