@@ -3591,6 +3591,12 @@
     ],
     "sqlState" : "42802"
   },
+  "STATEFUL_PROCESSOR_TTL_CANNOT_BE_NEGATIVE" : {
+    "message" : [
+      "TTL cannot be negative for State store operation=<operationType> on state=<stateName>."
+    ],
+    "sqlState" : "42802"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."

@@ -2200,6 +2200,12 @@ Cannot re-initialize state on the same grouping key during initial state handlin
 TTL duration is not allowed for event time ttl expiration on State store operation=`<operationType>` on state=`<stateName>`.
 Use absolute expiration time instead.
 
+### STATEFUL_PROCESSOR_TTL_CANNOT_BE_NEGATIVE
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+TTL duration cannot be negative for State store operation=`<operationType>` on state=`<stateName>`.
+
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

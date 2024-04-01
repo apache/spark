@@ -134,6 +134,11 @@ object StateStoreErrors {
       stateName: String): StatefulProcessorCannotUseTTLDurationInEventTimeTTLMode = {
     new StatefulProcessorCannotUseTTLDurationInEventTimeTTLMode(operationType, stateName)
   }
+
+  def ttlCannotBeNegative(operationType: String,
+      stateName: String): StatefulProcessorTTLCannotBeNegative = {
+    new StatefulProcessorTTLCannotBeNegative(operationType, stateName)
+  }
 }
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
@@ -222,4 +227,11 @@ class StatefulProcessorCannotUseTTLDurationInEventTimeTTLMode(
     stateName: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATEFUL_PROCESSOR_CANNOT_USE_TTL_DURATION_IN_EVENT_TIME_TTL_MODE",
+    messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))
+
+class StatefulProcessorTTLCannotBeNegative(
+    operationType: String,
+    stateName: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATEFUL_PROCESSOR_TTL_CANNOT_BE_NEGATIVE",
     messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))

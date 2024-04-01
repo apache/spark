@@ -107,6 +107,11 @@ class ValueStateImplWithTTL[S](
         "update", stateName)
     }
 
+    if (ttlDuration != null && ttlDuration.isNegative) {
+      throw StateStoreErrors.ttlCannotBeNegative(
+        "update", stateName)
+    }
+
     val expirationMs =
       if (ttlDuration != null && ttlDuration != Duration.ZERO) {
         StateTTL.calculateExpirationTimeForDuration(
@@ -115,13 +120,23 @@ class ValueStateImplWithTTL[S](
         -1
       }
 
-    update(newState, expirationMs)
+    doUpdate(newState, expirationMs)
   }
 
   override def update(
       newState: S,
       expirationMs: Long): Unit = {
 
+    if (expirationMs < 0) {
+      throw StateStoreErrors.ttlCannotBeNegative(
+        "update", stateName)
+    }
+
+    doUpdate(newState, expirationMs)
+  }
+
+  private def doUpdate(newState: S,
+      expirationMs: Long): Unit = {
     val encodedValue = stateTypesEncoder.encodeValue(newState, expirationMs)
 
     val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
