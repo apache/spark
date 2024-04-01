@@ -1746,9 +1746,11 @@ class DataFrame:
 
                 # validate the column name
                 if not hasattr(self._session, "is_mock_session"):
-                    # Different from __getattr__, the name here can be quoted like df['`id`'].
-                    # Only validate the name when it is not in the cached schema.
-                    if item not in self.columns:
+                    from pyspark.sql.connect.types import verify_col_name
+
+                    # Try best to verify the column name with cached schema
+                    # If fails, fall back to the server side validation
+                    if not verify_col_name(item, self.schema):
                         self.select(item).isLocal()
 
                 return self._col(item)

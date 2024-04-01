@@ -1209,6 +1209,91 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assert_eq(10, df.count())
         self.assertTrue(df.is_cached)
 
+    def test_parse_col_name(self):
+        from pyspark.sql.connect.types import parse_attr_name
+
+        self.assert_eq(parse_attr_name(""), [""])
+
+        self.assert_eq(parse_attr_name("a"), ["a"])
+        self.assert_eq(parse_attr_name("`a`"), ["a"])
+        self.assert_eq(parse_attr_name("`a"), None)
+        self.assert_eq(parse_attr_name("a`"), None)
+
+        self.assert_eq(parse_attr_name("a.b.c"), ["a", "b", "c"])
+        self.assert_eq(parse_attr_name("`a`.`b`.`c`"), ["a", "b", "c"])
+        self.assert_eq(parse_attr_name("a.`b`.c"), ["a", "b", "c"])
+
+        self.assert_eq(parse_attr_name("`a.b.c`"), ["a.b.c"])
+        self.assert_eq(parse_attr_name("a.`b.c`"), ["a", "b.c"])
+        self.assert_eq(parse_attr_name("`a.b`.c"), ["a.b", "c"])
+        self.assert_eq(parse_attr_name("`a.b.c"), None)
+        self.assert_eq(parse_attr_name("a.b.c`"), None)
+        self.assert_eq(parse_attr_name("`a.`b.`c"), None)
+        self.assert_eq(parse_attr_name("a`.b`.c`"), None)
+
+        self.assert_eq(parse_attr_name("`ab..c`e.f"), None)
+
+    def test_verify_col_name(self):
+        from pyspark.sql.connect.types import verify_col_name
+
+        cdf = (
+            self.connect.range(10)
+            .withColumn("v", CF.lit(123))
+            .withColumn("s", CF.struct("id", "v"))
+            .withColumn("m", CF.struct("s", "v"))
+            .withColumn("a", CF.array("s"))
+        )
+
+        # root
+        # |-- id: long (nullable = false)
+        # |-- v: integer (nullable = false)
+        # |-- s: struct (nullable = false)
+        # |    |-- id: long (nullable = false)
+        # |    |-- v: integer (nullable = false)
+        # |-- m: struct (nullable = false)
+        # |    |-- s: struct (nullable = false)
+        # |    |    |-- id: long (nullable = false)
+        # |    |    |-- v: integer (nullable = false)
+        # |    |-- v: integer (nullable = false)
+        # |-- a: array (nullable = false)
+        # |    |-- element: struct (containsNull = false)
+        # |    |    |-- id: long (nullable = false)
+        # |    |    |-- v: integer (nullable = false)
+
+        self.assertTrue(verify_col_name("id", cdf.schema))
+        self.assertTrue(verify_col_name("`id`", cdf.schema))
+
+        self.assertTrue(verify_col_name("v", cdf.schema))
+        self.assertTrue(verify_col_name("`v`", cdf.schema))
+
+        self.assertFalse(verify_col_name("x", cdf.schema))
+        self.assertFalse(verify_col_name("`x`", cdf.schema))
+
+        self.assertTrue(verify_col_name("s", cdf.schema))
+        self.assertTrue(verify_col_name("`s`", cdf.schema))
+        self.assertTrue(verify_col_name("s.id", cdf.schema))
+        self.assertTrue(verify_col_name("s.`id`", cdf.schema))
+        self.assertTrue(verify_col_name("`s`.id", cdf.schema))
+        self.assertTrue(verify_col_name("`s`.`id`", cdf.schema))
+        self.assertFalse(verify_col_name("`s.id`", cdf.schema))
+
+        self.assertTrue(verify_col_name("m", cdf.schema))
+        self.assertTrue(verify_col_name("`m`", cdf.schema))
+        self.assertTrue(verify_col_name("m.s.id", cdf.schema))
+        self.assertTrue(verify_col_name("m.s.`id`", cdf.schema))
+        self.assertTrue(verify_col_name("m.`s`.id", cdf.schema))
+        self.assertTrue(verify_col_name("`m`.`s`.`id`", cdf.schema))
+        self.assertFalse(verify_col_name("m.`s.id`", cdf.schema))
+        self.assertFalse(verify_col_name("m.`s.id`", cdf.schema))
+
+        self.assertTrue(verify_col_name("a", cdf.schema))
+        self.assertTrue(verify_col_name("`a`", cdf.schema))
+        self.assertTrue(verify_col_name("a.`v`", cdf.schema))
+        self.assertTrue(verify_col_name("a.`v`", cdf.schema))
+        self.assertTrue(verify_col_name("`a`.v", cdf.schema))
+        self.assertTrue(verify_col_name("`a`.`v`", cdf.schema))
+        self.assertFalse(verify_col_name("`a`.`x`", cdf.schema))
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_basic import *  # noqa: F401
