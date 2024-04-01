@@ -167,6 +167,23 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-47672: Avoid double evaluation with projections but push components that can be") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f")
+      .where($"a" > 5 && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .where($"a" > 5)
+      .select($"a", $"e".rlike("magic") as "f")
+      .where($"f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-47672: Avoid double evaluation with projections") {
     val originalQuery = testStringRelation
       .select($"a", $"e".rlike("magic") as "f")
@@ -176,9 +193,8 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     val correctAnswer = testStringRelation
-      .where($"a" > 5)
       .select($"a", $"e".rlike("magic") as "f")
-      .where($"f")
+      .where($"a" > 5 || $"f")
       .analyze
 
     comparePlans(optimized, correctAnswer)
