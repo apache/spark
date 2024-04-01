@@ -1049,7 +1049,6 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     trimStr match {
       case None => TypeCheckResult.TypeCheckSuccess
       case Some(trimChars) =>
-        val collationId = srcStr.dataType.asInstanceOf[StringType].collationId
         CollationTypeConstraints.checkCollationCompatibility(collationId, Seq(trimChars.dataType))
     }
   }
@@ -1219,8 +1218,6 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
 
   override protected def direction: String = "BOTH"
 
-  override val trimMethod: String = "trim"
-
   override def doEval(srcString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trim()
@@ -1238,6 +1235,8 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
       srcString.trim(trimString, collationId)
     }
   }
+
+  override val trimMethod: String = "trim"
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(
@@ -1340,8 +1339,6 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
 
   override protected def direction: String = "LEADING"
 
-  override val trimMethod: String = "trimLeft"
-
   override def doEval(srcString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trimLeft()
@@ -1359,6 +1356,8 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
       srcString.trimLeft(trimString, collationId)
     }
   }
+
+  override val trimMethod: String = "trimLeft"
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimLeft =
@@ -1414,8 +1413,6 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
 
   override protected def direction: String = "TRAILING"
 
-  override val trimMethod: String = "trimRight"
-
   override def doEval(srcString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trimRight()
@@ -1433,6 +1430,8 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
       srcString.trimRight(trimString, collationId)
     }
   }
+
+  override val trimMethod: String = "trimRight"
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): StringTrimRight =
