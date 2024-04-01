@@ -1140,54 +1140,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.replace(search, replace);
     }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return lowercaseReplace(search, replace);
-    }
     return collatedReplace(search, replace, collationId);
-  }
-
-  public UTF8String lowercaseReplace(UTF8String search, UTF8String replace) {
-    if (numBytes == 0 || search.numBytes == 0) {
-      return this;
-    }
-    UTF8String lowercaseString = this.toLowerCase();
-    UTF8String lowercaseSearch = search.toLowerCase();
-
-    int start = 0;
-    int end = lowercaseString.indexOf(lowercaseSearch, 0);
-    if (end == -1) {
-      // Search string was not found, so string is unchanged.
-      return this;
-    }
-
-    // Initialize byte positions
-    int c = 0;
-    int byteStart = 0; // position in byte
-    int byteEnd = 0; // position in byte
-    while (byteEnd < numBytes && c < end) {
-      byteEnd += numBytesForFirstByte(getByte(byteEnd));
-      c += 1;
-    }
-
-    // At least one match was found. Estimate space needed for result.
-    // The 16x multiplier here is chosen to match commons-lang3's implementation.
-    int increase = Math.max(0, replace.numBytes - search.numBytes) * 16;
-    final UTF8StringBuilder buf = new UTF8StringBuilder(numBytes + increase);
-    while (end != -1) {
-      buf.appendBytes(this.base, this.offset + byteStart, byteEnd - byteStart);
-      buf.append(replace);
-      // Update character positions
-      start = end + lowercaseSearch.numChars();
-      end = lowercaseString.indexOf(lowercaseSearch, start);
-      // Update byte positions
-      byteStart = byteEnd + search.numBytes;
-      while (byteEnd < numBytes && c < end) {
-        byteEnd += numBytesForFirstByte(getByte(byteEnd));
-        c += 1;
-      }
-    }
-    buf.appendBytes(this.base, this.offset + byteStart, numBytes - byteStart);
-    return buf.build();
   }
 
   private UTF8String collatedReplace(UTF8String search, UTF8String replace, int collationId) {
