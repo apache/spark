@@ -68,7 +68,7 @@ class CollationStringExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> """"' '"""",
+            "inputSql" -> s""""' ' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )

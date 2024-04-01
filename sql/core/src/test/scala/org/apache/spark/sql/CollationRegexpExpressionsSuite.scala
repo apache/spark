@@ -64,7 +64,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -103,7 +103,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""lower('${ct.s1}')"""",
+            "inputSql" -> s""""lower('${ct.s1}' collate ${ct.collation})"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -141,7 +141,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -180,7 +180,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -219,7 +219,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -258,7 +258,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -297,7 +297,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -336,7 +336,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -375,7 +375,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
@@ -414,7 +414,7 @@ class CollationRegexpExpressionsSuite
           messageParameters = Map(
             "paramIndex" -> "first",
             "requiredType" -> """"STRING"""",
-            "inputSql" -> s""""'${ct.s1}'"""",
+            "inputSql" -> s""""'${ct.s1}' collate ${ct.collation}"""",
             "inputType" -> s""""STRING COLLATE ${ct.collation}""""
           )
         )
