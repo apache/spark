@@ -208,13 +208,15 @@ class PrefixKeyScanStateEncoder(
  * for the range scan into an UnsafeRow; we then rewrite that UnsafeRow's fields in BIG_ENDIAN
  * to allow for scanning keys in sorted order using the byte-wise comparison method that
  * RocksDB uses.
- * Negative values for numeric types are also supported.
+ *
  * Then, for the rest of the fields, we project those into another UnsafeRow.
  * We then effectively join these two UnsafeRows together, and finally take those bytes
  * to get the resulting row.
+ *
  * We cannot support variable sized fields given the UnsafeRow format which stores variable
  * sized fields as offset and length pointers to the actual values, thereby changing the required
  * ordering.
+ *
  * Note that we also support "null" values being passed for these fixed size fields. We prepend
  * a single byte to indicate whether the column value is null or not. We cannot change the
  * nullability on the UnsafeRow itself as the expected ordering would change if non-first
@@ -222,7 +224,8 @@ class PrefixKeyScanStateEncoder(
  * the iterator. If non-first columns are null, ordering based on the previous columns will
  * still be honored. For rows with null column values, ordering for subsequent columns
  * will also be maintained within those set of rows. We use the same byte to also encode whether
- * the value is negative or not.
+ * the value is negative or not. For negative float/double values, we flip all the bits to ensure
+ * the right lexicographical ordering.
  *
  * @param keySchema - schema of the key to be encoded
  * @param numOrderingCols - number of columns to be used for range scan
@@ -280,9 +283,13 @@ class RangeKeyScanStateEncoder(
     rangeScanKeyProjection(key)
   }
 
+  // bit masks used for flipping all bits for negative float/double values
   private val floatBitMask = 0xFFFFFFFF
   private val doubleBitMask = 0xFFFFFFFFFFFFFFFFL
 
+  // Byte markers used to identify whether the value is null, negative or positive
+  // To ensure sorted ordering, we use the lowest byte value for negative numbers followed by
+  // positive numbers and then null values.
   private val negativeValMarker: Byte = 0x00.toByte
   private val positiveValMarker: Byte = 0x01.toByte
   private val nullValMarker: Byte = 0x02.toByte
@@ -290,7 +297,7 @@ class RangeKeyScanStateEncoder(
   // Rewrite the unsafe row by replacing fixed size fields with BIG_ENDIAN encoding
   // using byte arrays.
   // To handle "null" values, we prepend a byte to the byte array indicating whether the value
-  // is null or not. If the value is null, we write the null byte followed by a zero byte.
+  // is null or not. If the value is null, we write the null byte followed by zero bytes.
   // If the value is not null, we write the null byte followed by the value.
   // Note that setting null for the index on the unsafeRow is not feasible as it would change
   // the sorting order on iteration.
@@ -300,9 +307,9 @@ class RangeKeyScanStateEncoder(
     writer.resetRowWriter()
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = row.get(idx, field.dataType)
-      // initialize to 0x01 to indicate that the column is not null and positive
+      // initialize the value to indicate positive value to begin with
       var isNullOrSignCol: Byte = positiveValMarker
-      // Update the isNullOrSignCol byte to indicate null value
+      // Update the isNullOrSignCol byte (if required) to indicate null value
       if (value == null) {
         isNullOrSignCol = nullValMarker
       }
@@ -347,6 +354,7 @@ class RangeKeyScanStateEncoder(
             writer.write(idx, bbuf.array())
 
           case FloatType =>
+            // for negative values, we need to flip all the bits to ensure correct ordering
             if (value.asInstanceOf[Float] < 0.0F) {
               // get the raw binary bits for the float
               val rawBits = floatToRawIntBits(value.asInstanceOf[Float])
@@ -363,6 +371,7 @@ class RangeKeyScanStateEncoder(
             writer.write(idx, bbuf.array())
 
           case DoubleType =>
+            // for negative values, we need to flip all the bits to ensure correct ordering
             if (value.asInstanceOf[Double] < 0.0D) {
               // get the raw binary bits for the double
               val rawBits = doubleToRawLongBits(value.asInstanceOf[Double])
@@ -389,6 +398,7 @@ class RangeKeyScanStateEncoder(
   // to determine if the value is null or not. If the value is null, we set the ordinal on
   // the UnsafeRow to null. If the value is not null, we read the rest of the bytes to get the
   // actual value.
+  // For negative float/double values, we need to flip all the bits back to get the original value.
   private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
     writer.resetRowWriter()
