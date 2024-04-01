@@ -78,7 +78,7 @@ class StringType private(val collationId: Int, var isExplicit: Boolean = false)
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(0) {
+case object StringType extends StringType(0, false) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
   private[spark] def apply(collationId: Int, isExplicit: Boolean): StringType = {
     val st = new StringType(collationId)
