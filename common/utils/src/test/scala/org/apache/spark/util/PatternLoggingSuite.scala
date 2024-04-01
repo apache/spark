@@ -18,8 +18,7 @@ package org.apache.spark.util
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.EXECUTOR_ID
+import org.apache.spark.internal.Logging
 
 class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
 
@@ -29,30 +28,18 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
 
   override def afterAll(): Unit = Logging.enableStructuredLogging()
 
-  test("Pattern layout logging") {
-    val msg = "This is a log message"
+  override def expectedPatternForBasicMsg(level: String): String =
+    s""".*$level PatternLoggingSuite: This is a log message\n"""
 
-    val logOutput = captureLogOutput(() => logError(msg))
-    // scalastyle:off line.size.limit
-    val pattern = """.*ERROR PatternLoggingSuite: This is a log message\n""".r
-    // scalastyle:on
-    assert(pattern.matches(logOutput))
-  }
+  override def expectedPatternForMsgWithMDC(level: String): String =
+    s""".*$level PatternLoggingSuite: Lost executor 1.\n"""
 
-  test("Pattern layout logging with MDC") {
-    logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}.")
+  override def expectedPatternForMsgWithMDCAndException(level: String): String =
+    s""".*$level PatternLoggingSuite: Error in executor 1.\njava.lang.RuntimeException: OOM\n.*"""
 
-    val logOutput = captureLogOutput(() => logError(log"Lost executor ${MDC(EXECUTOR_ID, "1")}."))
-    val pattern = """.*ERROR PatternLoggingSuite: Lost executor 1.\n""".r
-    assert(pattern.matches(logOutput))
-  }
-
-  test("Pattern layout exception logging") {
-    val exception = new RuntimeException("OOM")
-
-    val logOutput = captureLogOutput(() =>
-      logError(log"Error in executor ${MDC(EXECUTOR_ID, "1")}.", exception))
-    assert(logOutput.contains("ERROR PatternLoggingSuite: Error in executor 1."))
-    assert(logOutput.contains("java.lang.RuntimeException: OOM"))
+  override def verifyMsgWithConcat(level: String, logOutput: String): Unit = {
+    val pattern =
+      s""".*$level PatternLoggingSuite: Min Size: 2, Max Size: 4. Please double check.\n"""
+    assert(pattern.r.matches(logOutput))
   }
 }
