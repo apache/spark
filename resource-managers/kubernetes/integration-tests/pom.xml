@@ -212,6 +212,7 @@
         <dependency>
           <groupId>software.amazon.awssdk</groupId>
           <artifactId>bundle</artifactId>
+          <version>${aws.java.sdk.v2.version}</version>
           <scope>test</scope>
         </dependency>
       </dependencies>
