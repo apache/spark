@@ -159,6 +159,12 @@
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-connect_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.apache.spark</groupId>
+              <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
         <dependency>
           <groupId>org.apache.spark</groupId>
