@@ -267,8 +267,9 @@ object Connect {
       .createWithDefault(1024)
 
   val CONNECT_PROGRESS_REPORT_INTERVAL =
-    buildStaticConf("spark.connect.progress.reportInterval")
-      .doc("The interval at which the progress of a query is reported to the client.")
+    buildConf("spark.connect.progress.reportInterval")
+      .doc("The interval at which the progress of a query is reported to the client." +
+        " If the value is set to a negative value the progress reports will be disabled.")
       .version("4.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("2s")

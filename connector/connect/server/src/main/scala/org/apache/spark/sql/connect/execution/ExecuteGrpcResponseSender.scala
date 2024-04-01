@@ -140,25 +140,27 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
    * client, but rather enqueued to in the response observer.
    */
   private def enqueueProgressMessage(): Unit = {
-    SparkConnectService.executionListener.foreach { listener =>
-      // It is possible, that the tracker is no longer available and in this
-      // case we simply ignore it and do not send any progress message. This avoids
-      // having to synchronize on the listener.
-      listener.tryGetTracker(executeHolder.jobTag).foreach { tracker =>
-        // Only send progress message if there is something new to report.
-        tracker.yieldWhenDirty { (stages, inflightTasks) =>
-          val response = ExecutePlanResponse
-            .newBuilder()
-            .setExecutionProgress(
-              ExecutePlanResponse.ExecutionProgress
-                .newBuilder()
-                .addAllStages(stages.map(_.toProto()).asJava)
-                .setNumInflightTasks(inflightTasks))
-            .build()
-          // There is a special case when the response observer has alreaady determined
-          // that the final message is send (and the stream will be closed) but we might want
-          // to send the progress message. In this case we ignore the result of the `onNext` call.
-          executeHolder.responseObserver.tryOnNext(response)
+    if (executeHolder.sessionHolder.session.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL) > 0) {
+      SparkConnectService.executionListener.foreach { listener =>
+        // It is possible, that the tracker is no longer available and in this
+        // case we simply ignore it and do not send any progress message. This avoids
+        // having to synchronize on the listener.
+        listener.tryGetTracker(executeHolder.jobTag).foreach { tracker =>
+          // Only send progress message if there is something new to report.
+          tracker.yieldWhenDirty { (stages, inflightTasks) =>
+            val response = ExecutePlanResponse
+              .newBuilder()
+              .setExecutionProgress(
+                ExecutePlanResponse.ExecutionProgress
+                  .newBuilder()
+                  .addAllStages(stages.map(_.toProto()).asJava)
+                  .setNumInflightTasks(inflightTasks))
+              .build()
+            // There is a special case when the response observer has alreaady determined
+            // that the final message is send (and the stream will be closed) but we might want
+            // to send the progress message. In this case we ignore the result of the `onNext` call.
+            executeHolder.responseObserver.tryOnNext(response)
+          }
         }
       }
     }
@@ -236,7 +238,14 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           // monitor, and will notify upon state change.
           if (response.isEmpty) {
             // Wake up more frequently to send the progress updates.
-            val timeout = SparkEnv.get.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL)
+            val progressTimeout =
+              executeHolder.sessionHolder.session.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL)
+            // If the progress feature is disabled, wait for the deadline.
+            val timeout = if (progressTimeout > 0) {
+              progressTimeout
+            } else {
+              Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+            }
             logTrace(s"Wait for response to become available with timeout=$timeout ms.")
             executionObserver.responseLock.wait(timeout)
             enqueueProgressMessage()

@@ -36,7 +36,7 @@ private[connect] class ConnectProgressExecutionListener extends SparkListener wi
    * A tracker for a given tag. This is used to track the progress of an operation is being
    * executed through the connect API.
    */
-  class ExecutionTracker(var tag: String) {
+  class ExecutionTracker(val tag: String) {
 
     class StageInfo(
         val stageId: Int,

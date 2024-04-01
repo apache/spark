@@ -140,3 +140,4 @@ if _pythonstartup and os.path.isfile(_pythonstartup):
     with open(_pythonstartup) as f:
         code = compile(f.read(), _pythonstartup, "exec")
         exec(code)
+

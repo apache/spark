@@ -93,13 +93,19 @@ class Progress:
         Constructs a new Progress bar. The progress bar is typically used in
         the blocking query execution path to process the execution progress
         methods from the server.
+
         Parameters
         ----------
-        char str the Default character to be used for printing the bar.
-        min_width numeric The minimum width of the progress bar
-        output file The output device to write the progress bar to.
-        enabled bool Whether the progress bar printing should be enabled or not.
-        handlers list A list of handlers that will be called when the progress bar is updated.
+        char : str
+          The Default character to be used for printing the bar.
+        min_width : numeric
+          The minimum width of the progress bar
+        output : file
+          The output device to write the progress bar to.
+        enabled : bool
+          Whether the progress bar printing should be enabled or not.
+        handlers : list of ProgressHandler
+          A list of handlers that will be called when the progress bar is updated.
         """
         self._ticks = 0
         self._tick = 0
@@ -130,12 +136,11 @@ class Progress:
         new tasks and so the total task number will be updated as well.
 
         Parameters
-        ==========
-        ticks int The total number of ticks to be processed
-        current int The current tick position
-        bytes_read int The number of bytes read
-        inflight_tasks int The number of tasks that are currently running
-
+        ----------
+        stages : list
+          A list of StageInfo objects reporting progress in each stage.
+        inflight_tasks : int
+          The number of tasks that are currently running.
         """
         total_tasks = sum(map(lambda x: x.num_tasks, stages))
         completed_tasks = sum(map(lambda x: x.num_completed_tasks, stages))

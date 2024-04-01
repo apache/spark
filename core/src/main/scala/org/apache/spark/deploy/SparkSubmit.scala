@@ -747,7 +747,7 @@ private[spark] class SparkSubmit extends Logging {
     // when Spark Connect is in local mode, because Spark Connect support its own progress
     // reporting.
     if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS) &&
-      !sparkConf.contains("spark.local.connect")) {
+        !sparkConf.contains("spark.local.connect")) {
       sparkConf.set(UI_SHOW_CONSOLE_PROGRESS, true)
     }
 

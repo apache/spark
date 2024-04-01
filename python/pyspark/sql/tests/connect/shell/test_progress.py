@@ -24,7 +24,9 @@ from pyspark.testing.connectutils import (
     connect_requirement_message,
 )
 from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark.sql.connect.shell.progress import Progress, StageInfo
+
+if should_test_connect:
+    from pyspark.sql.connect.shell.progress import Progress, StageInfo
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

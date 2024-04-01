@@ -700,9 +700,11 @@ class SparkConnectClient(object):
     def register_progress_handler(self, handler: ProgressHandler) -> None:
         """
         Register a progress handler to be called when a progress message is received.
+
         Parameters
         ----------
-        handler - The callable that will be called with the progress information.
+        handler : ProgressHandler
+          The callable that will be called with the progress information.
 
         """
         if handler in self._progress_handlers:
@@ -715,9 +717,11 @@ class SparkConnectClient(object):
     def remove_progress_handler(self, handler: ProgressHandler) -> None:
         """
         Remove a progress handler from the list of registered handlers.
+
         Parameters
         ----------
-        handler - The callable to remove from the list of progress handlers.
+        handler : ProgressHandler
+          The callable to remove from the list of progress handlers.
 
         """
         self._progress_handlers.remove(handler)
