@@ -72,7 +72,7 @@ Project [utf8_binary#x, utf8_binary_lcase#x]
 select * from t1 where utf8_binary_lcase = 'aaa' collate utf8_binary_lcase
 -- !query analysis
 Project [utf8_binary#x, utf8_binary_lcase#x]
-+- Filter (utf8_binary_lcase#x = cast(collate(aaa, utf8_binary_lcase) as string collate UTF8_BINARY_LCASE))
++- Filter (utf8_binary_lcase#x = collate(aaa, utf8_binary_lcase))
    +- SubqueryAlias spark_catalog.default.t1
       +- Relation spark_catalog.default.t1[utf8_binary#x,utf8_binary_lcase#x] parquet
 
@@ -90,7 +90,7 @@ Project [utf8_binary#x, utf8_binary_lcase#x]
 select * from t1 where utf8_binary_lcase < 'bbb' collate utf8_binary_lcase
 -- !query analysis
 Project [utf8_binary#x, utf8_binary_lcase#x]
-+- Filter (utf8_binary_lcase#x < cast(collate(bbb, utf8_binary_lcase) as string collate UTF8_BINARY_LCASE))
++- Filter (utf8_binary_lcase#x < collate(bbb, utf8_binary_lcase))
    +- SubqueryAlias spark_catalog.default.t1
       +- Relation spark_catalog.default.t1[utf8_binary#x,utf8_binary_lcase#x] parquet
 
@@ -254,14 +254,14 @@ DropTable false, false
 -- !query
 select array_contains(ARRAY('aaa' collate utf8_binary_lcase),'AAA' collate utf8_binary_lcase)
 -- !query analysis
-Project [array_contains(cast(array(collate(aaa, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>), cast(collate(AAA, utf8_binary_lcase) as string collate UTF8_BINARY_LCASE)) AS array_contains(array(collate(aaa)), collate(AAA))#x]
+Project [array_contains(array(collate(aaa, utf8_binary_lcase)), collate(AAA, utf8_binary_lcase)) AS array_contains(array(collate(aaa)), collate(AAA))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_position(ARRAY('aaa' collate utf8_binary_lcase, 'bbb' collate utf8_binary_lcase),'BBB' collate utf8_binary_lcase)
 -- !query analysis
-Project [array_position(cast(array(collate(aaa, utf8_binary_lcase), collate(bbb, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>), cast(collate(BBB, utf8_binary_lcase) as string collate UTF8_BINARY_LCASE)) AS array_position(array(collate(aaa), collate(bbb)), collate(BBB))#xL]
+Project [array_position(array(collate(aaa, utf8_binary_lcase), collate(bbb, utf8_binary_lcase)), collate(BBB, utf8_binary_lcase)) AS array_position(array(collate(aaa), collate(bbb)), collate(BBB))#xL]
 +- OneRowRelation
 
 
@@ -275,40 +275,40 @@ Project [nullif(collate(aaa, utf8_binary_lcase), collate(AAA, utf8_binary_lcase)
 -- !query
 select least('aaa' COLLATE utf8_binary_lcase, 'AAA' collate utf8_binary_lcase, 'a' collate utf8_binary_lcase)
 -- !query analysis
-Project [least(cast(collate(aaa, utf8_binary_lcase) as string collate UTF8_BINARY_LCASE), cast(collate(AAA, utf8_binary_lcase) as string collate UTF8_BINARY_LCASE), cast(collate(a, utf8_binary_lcase) as string collate UTF8_BINARY_LCASE)) AS least(collate(aaa), collate(AAA), collate(a))#x]
+Project [least(collate(aaa, utf8_binary_lcase), collate(AAA, utf8_binary_lcase), collate(a, utf8_binary_lcase)) AS least(collate(aaa), collate(AAA), collate(a))#x]
 +- OneRowRelation
 
 
 -- !query
 select arrays_overlap(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
 -- !query analysis
-Project [arrays_overlap(cast(array(collate(aaa, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>), cast(array(collate(AAA, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>)) AS arrays_overlap(array(collate(aaa)), array(collate(AAA)))#x]
+Project [arrays_overlap(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS arrays_overlap(array(collate(aaa)), array(collate(AAA)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_distinct(array('aaa' collate utf8_binary_lcase, 'AAA' collate utf8_binary_lcase))
 -- !query analysis
-Project [array_distinct(cast(array(collate(aaa, utf8_binary_lcase), collate(AAA, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>)) AS array_distinct(array(collate(aaa), collate(AAA)))#x]
+Project [array_distinct(array(collate(aaa, utf8_binary_lcase), collate(AAA, utf8_binary_lcase))) AS array_distinct(array(collate(aaa), collate(AAA)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_union(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
 -- !query analysis
-Project [array_union(cast(array(collate(aaa, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>), cast(array(collate(AAA, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>)) AS array_union(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_union(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS array_union(array(collate(aaa)), array(collate(AAA)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_intersect(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
 -- !query analysis
-Project [array_intersect(cast(array(collate(aaa, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>), cast(array(collate(AAA, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>)) AS array_intersect(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_intersect(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS array_intersect(array(collate(aaa)), array(collate(AAA)))#x]
 +- OneRowRelation
 
 
 -- !query
 select array_except(array('aaa' collate utf8_binary_lcase), array('AAA' collate utf8_binary_lcase))
 -- !query analysis
-Project [array_except(cast(array(collate(aaa, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>), cast(array(collate(AAA, utf8_binary_lcase)) as array<string collate UTF8_BINARY_LCASE>)) AS array_except(array(collate(aaa)), array(collate(AAA)))#x]
+Project [array_except(array(collate(aaa, utf8_binary_lcase)), array(collate(AAA, utf8_binary_lcase))) AS array_except(array(collate(aaa)), array(collate(AAA)))#x]
 +- OneRowRelation

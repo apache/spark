@@ -22,7 +22,7 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.hasStringType
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, ComplexTypeMergingExpression, CreateArray, Elt, ExpectsInputTypes, Expression, Predicate, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, CreateArray, Elt, ExpectsInputTypes, Expression, Predicate, SortOrder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
@@ -32,15 +32,13 @@ object CollationTypeCasts extends TypeCoercionRule {
     case e if !e.childrenResolved => e
     case sc @ (_: BinaryExpression
                | _: ComplexTypeMergingExpression
+               | _: CreateArray
                | _: Elt
                | _: ExpectsInputTypes
                | _: Predicate
                | _: SortOrder) =>
       val newChildren = collateToSingleType(sc.children)
       sc.withNewChildren(newChildren)
-    case pesc @ (_: CreateArray) =>
-      val newChildren = collateToSingleType(pesc.children, true)
-      pesc.withNewChildren(newChildren)
   }
 
   /**
@@ -62,13 +60,11 @@ object CollationTypeCasts extends TypeCoercionRule {
   def castStringType(expr: Expression, st: StringType): Option[Expression] =
     castStringType(expr.dataType, st).map { dt => Cast(expr, dt)}
 
-  private def castStringType(inType: AbstractDataType, st: StringType): Option[DataType] = {
+  private def castStringType(inType: AbstractDataType, castType: StringType): Option[DataType] = {
     @Nullable val ret: DataType = inType match {
-      case ost: StringType if ost.collationId == st.collationId
-        && ost.isExplicit == st.isExplicit => null
-      case _: StringType => st
+      case st: StringType if st.collationId != castType.collationId => castType
       case ArrayType(arrType, nullable) =>
-        castStringType(arrType, st).map(ArrayType(_, nullable)).orNull
+        castStringType(arrType, castType).map(ArrayType(_, nullable)).orNull
       case _ => null
     }
     Option(ret)
@@ -77,10 +73,8 @@ object CollationTypeCasts extends TypeCoercionRule {
   /**
    * Collates input expressions to a single collation.
    */
-  def collateToSingleType(
-      exprs: Seq[Expression],
-      preserveExplicit: Boolean = false): Seq[Expression] = {
-    val st = getOutputCollation(exprs.map(_.dataType), preserveExplicit)
+  def collateToSingleType(exprs: Seq[Expression]): Seq[Expression] = {
+    val st = getOutputCollation(exprs)
 
     exprs.map(e => castStringType(e, st).getOrElse(e))
   }
@@ -91,19 +85,14 @@ object CollationTypeCasts extends TypeCoercionRule {
    * any expressions, but will only be affected by collated StringTypes or
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
-  def getOutputCollation(
-      dataTypes: Seq[DataType],
-      preserveExplicit: Boolean = false): StringType = {
-    val explicitTypes =
-      dataTypes.filter(hasStringType)
-        .map(extractStringType)
-        .filter(_.isExplicit)
-        .map(_.collationId)
-        .distinct
+  def getOutputCollation(expr: Seq[Expression]): StringType = {
+    val explicitTypes = expr.filter(_.isInstanceOf[Collate])
+      .map(_.dataType.asInstanceOf[StringType].collationId)
+      .distinct
 
     explicitTypes.size match {
       // We have 1 explicit collation
-      case 1 => StringType(explicitTypes.head, preserveExplicit)
+      case 1 => StringType(explicitTypes.head)
       // Multiple explicit collations occurred
       case size if size > 1 =>
         throw QueryCompilationErrors
@@ -112,7 +101,9 @@ object CollationTypeCasts extends TypeCoercionRule {
           )
       // Only implicit or default collations present
       case 0 =>
-        val implicitTypes = dataTypes.filter(hasStringType).map(extractStringType)
+        val implicitTypes = expr.map(_.dataType)
+          .filter(hasStringType)
+          .map(extractStringType)
 
         if (hasMultipleImplicits(implicitTypes)) {
           throw QueryCompilationErrors.implicitCollationMismatchError()
