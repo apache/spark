@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, 
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -126,6 +126,8 @@ object Cast extends QueryErrorsBase {
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
+
+    case (VariantType, _) => variant.VariantGet.checkDataType(to)
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canAnsiCast(fromType, toType) && resolvableNullability(fn, tn)
@@ -233,6 +235,8 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: NumericType) => true
     case (_: NumericType, _: NumericType) => true
 
+    case (VariantType, _) => variant.VariantGet.checkDataType(to)
+
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
@@ -267,6 +271,7 @@ object Cast extends QueryErrorsBase {
    * * Cast.castToTimestamp
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (VariantType, _) => true
     case (StringType, TimestampType) => true
     case (TimestampType, StringType) => true
     case (DateType, TimestampType) => true
@@ -340,6 +345,7 @@ object Cast extends QueryErrorsBase {
   def forceNullable(from: DataType, to: DataType): Boolean = (from, to) match {
     case (NullType, _) => false // empty array or map case
     case (_, _) if from == to => false
+    case (VariantType, _) => true
 
     case (StringType, BinaryType) => false
     case (StringType, _) => true
@@ -1106,6 +1112,10 @@ case class Cast(
       // But for nested types like struct, we might reach here for nested null type field.
       // We won't call the returned function actually, but returns a placeholder.
       _ => throw QueryExecutionErrors.cannotCastFromNullTypeError(to)
+    } else if (from.isInstanceOf[VariantType]) {
+      buildCast[VariantVal](_, v => {
+        variant.VariantGet.cast(v, to, evalMode != EvalMode.TRY, timeZoneId)
+      })
     } else {
       to match {
         case dt if dt == from => identity[Any]
@@ -1198,6 +1208,20 @@ case class Cast(
 
     case _ if from == NullType => (c, evPrim, evNull) => code"$evNull = true;"
     case _ if to == from => (c, evPrim, evNull) => code"$evPrim = $c;"
+    case _ if from.isInstanceOf[VariantType] => (c, evPrim, evNull) =>
+      val tmp = ctx.freshVariable("tmp", classOf[Object])
+      val dataTypeArg = ctx.addReferenceObj("dataType", to)
+      val zoneIdArg = ctx.addReferenceObj("zoneId", timeZoneId)
+      val failOnError = evalMode != EvalMode.TRY
+      code"""
+        Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.cast(
+          $c, $dataTypeArg, $failOnError, $zoneIdArg);
+        if ($tmp == null) {
+          $evNull = true;
+        } else {
+          $evPrim = (${CodeGenerator.boxedType(to)})$tmp;
+        }
+      """
     case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
