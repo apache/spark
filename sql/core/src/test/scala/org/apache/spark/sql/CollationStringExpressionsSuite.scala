@@ -22,6 +22,7 @@ import scala.collection.immutable.Seq
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, Literal, StringRepeat, StringReplace}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -84,32 +85,35 @@ class CollationStringExpressionsSuite extends QueryTest
     }
 
     // scalastyle:off
-    // UTF8_BINARY
-    testReplace("r世eplace", "pl", "123", 0, "r世e123ace")
-    testReplace("replace", "pl", "", 0, "reace")
-    testReplace("repl世ace", "Pl", "", 0, "repl世ace")
-    testReplace("replace", "", "123", 0, "replace")
-    testReplace("abcabc", "b", "12", 0, "a12ca12c")
-    testReplace("abcdabcd", "bc", "", 0, "adad")
-    // UTF8_BINARY_LCASE
-    testReplace("r世eplace", "pl", "xx", 1, "r世exxace")
-    testReplace("repl世ace", "PL", "AB", 1, "reAB世ace")
-    testReplace("Replace", "", "123", 1, "Replace")
-    testReplace("re世place", "世", "x", 1, "rexplace")
-    testReplace("abcaBc", "B", "12", 1, "a12ca12c")
-    testReplace("AbcdabCd", "Bc", "", 1, "Adad")
-    // UNICODE
-    testReplace("re世place", "plx", "123", 2, "re世place")
-    testReplace("世Replace", "re", "", 2, "世Replace")
-    testReplace("replace世", "", "123", 2, "replace世")
-    testReplace("aBc世abc", "b", "12", 2, "aBc世a12c")
-    testReplace("abcdabcd", "bc", "", 2, "adad")
-    // UNICODE_CI
-    testReplace("replace", "plx", "123", 3, "replace")
-    testReplace("Replace", "re", "", 3, "place")
-    testReplace("replace", "", "123", 3, "replace")
-    testReplace("aBc世abc", "b", "12", 3, "a12c世a12c")
-    testReplace("a世Bcdabcd", "bC", "", 3, "a世dad")
+    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
+    testReplace("r世eplace", "pl", "123", collationId, "r世e123ace")
+    testReplace("replace", "pl", "", collationId, "reace")
+    testReplace("repl世ace", "Pl", "", collationId, "repl世ace")
+    testReplace("replace", "", "123", collationId, "replace")
+    testReplace("abcabc", "b", "12", collationId, "a12ca12c")
+    testReplace("abcdabcd", "bc", "", collationId, "adad")
+
+    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
+    testReplace("r世eplace", "pl", "xx", collationId, "r世exxace")
+    testReplace("repl世ace", "PL", "AB", collationId, "reAB世ace")
+    testReplace("Replace", "", "123", collationId, "Replace")
+    testReplace("re世place", "世", "x", collationId, "rexplace")
+    testReplace("abcaBc", "B", "12", collationId, "a12ca12c")
+    testReplace("AbcdabCd", "Bc", "", collationId, "Adad")
+
+    collationId = CollationFactory.collationNameToId("UNICODE")
+    testReplace("re世place", "plx", "123", collationId, "re世place")
+    testReplace("世Replace", "re", "", collationId, "世Replace")
+    testReplace("replace世", "", "123", collationId, "replace世")
+    testReplace("aBc世abc", "b", "12", collationId, "aBc世a12c")
+    testReplace("abcdabcd", "bc", "", collationId, "adad")
+
+    collationId = CollationFactory.collationNameToId("UNICODE_CI")
+    testReplace("replace", "plx", "123", collationId, "replace")
+    testReplace("Replace", "re", "", collationId, "place")
+    testReplace("replace", "", "123", collationId, "replace")
+    testReplace("aBc世abc", "b", "12", collationId, "a12c世a12c")
+    testReplace("a世Bcdabcd", "bC", "", collationId, "a世dad")
     // scalastyle:on
   }
 

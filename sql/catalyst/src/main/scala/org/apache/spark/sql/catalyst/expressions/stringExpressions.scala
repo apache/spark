@@ -735,19 +735,18 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
 case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
   def this(srcExpr: Expression, searchExpr: Expression) = {
     this(srcExpr, searchExpr, Literal(""))
   }
 
   override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
-    val collationId = first.dataType.asInstanceOf[StringType].collationId
     srcEval.asInstanceOf[UTF8String].replace(
       searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String], collationId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collationId = first.dataType.asInstanceOf[StringType].collationId
-
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       nullSafeCodeGen(ctx, ev, (src, search, replace) => {
         s"""${ev.value} = $src.replace($search, $replace);"""
