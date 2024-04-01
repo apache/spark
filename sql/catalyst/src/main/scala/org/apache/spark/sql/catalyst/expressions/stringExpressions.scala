@@ -1471,6 +1471,8 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     this(substr, str, Literal(1))
   }
 
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
   override def first: Expression = substr
   override def second: Expression = str
   override def third: Expression = start
@@ -1480,7 +1482,6 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
 
   override def eval(input: InternalRow): Any = {
-    val collationId = first.dataType.asInstanceOf[StringType].collationId
     val s = start.eval(input)
     if (s == null) {
       // if the start position is null, we need to return 0, (conform to Hive)
@@ -1508,7 +1509,6 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collationId = first.dataType.asInstanceOf[StringType].collationId
     val substrGen = substr.genCode(ctx)
     val strGen = str.genCode(ctx)
     val startGen = start.genCode(ctx)
