@@ -610,9 +610,9 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
-        val collationId = getOutputCollation(c.children.map(_.dataType))
+        val st = getOutputCollation(c.children.map(_.dataType))
         val newChildren = c.children.map { e =>
-          implicitCast(e, StringType(collationId, isExplicit = false)).getOrElse(e)
+          implicitCast(e, st).getOrElse(e)
         }
 
         c.copy(children = newChildren)
@@ -660,9 +660,9 @@ abstract class TypeCoercionBase {
         val newIndex = implicitCast(index, IntegerType).getOrElse(index)
         val newInputs = if (conf.eltOutputAsString ||
           !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-          val collationId = getOutputCollation(children.map(_.dataType))
+          val st = getOutputCollation(children.map(_.dataType))
           children.tail.map { e =>
-            implicitCast(e, StringType(collationId, isExplicit = false)).getOrElse(e)
+            implicitCast(e, st).getOrElse(e)
           }
         } else {
           children.tail
@@ -711,10 +711,10 @@ abstract class TypeCoercionBase {
           // If we cannot do the implicit cast, just use the original input.
           case (in, expected) => implicitCast(in, expected).getOrElse(in)
         }
-        val collationId = getOutputCollation(e.children.map(_.dataType))
+        val st = getOutputCollation(e.children.map(_.dataType))
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
-            castStringType(in, collationId).getOrElse(in)
+            castStringType(in, st).getOrElse(in)
           case in => in
         }
         e.withNewChildren(children)
@@ -730,10 +730,10 @@ abstract class TypeCoercionBase {
             in
           }
         }
-        val collationId = getOutputCollation(e.children.map(_.dataType))
+        val st = getOutputCollation(e.children.map(_.dataType))
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
-            castStringType(in, collationId).getOrElse(in)
+            castStringType(in, st).getOrElse(in)
           case in => in
         }
         e.withNewChildren(children)
@@ -752,10 +752,10 @@ abstract class TypeCoercionBase {
             ).getOrElse(in)
           }
         }
-        val collationId = getOutputCollation(udf.children.map(_.dataType))
+        val st = getOutputCollation(udf.children.map(_.dataType))
         val children: Seq[Expression] = childrenBeforeCollations.map {
           case in if hasStringType(in.dataType) =>
-            castStringType(in, collationId).getOrElse(in)
+            castStringType(in, st).getOrElse(in)
           case in => in
         }
         udf.copy(children = children)

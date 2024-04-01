@@ -638,6 +638,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.IMPLICIT"
       )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI)")
+        },
+        errorClass = "COLLATION_MISMATCH.EXPLICIT",
+        parameters = Map(
+          "explicitTypes" -> "`string collate UNICODE`.`string collate UNICODE_CI`"
+        )
+      )
     }
   }
 

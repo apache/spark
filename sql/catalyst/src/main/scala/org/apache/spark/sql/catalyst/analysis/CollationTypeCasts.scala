@@ -34,10 +34,12 @@ object CollationTypeCasts extends TypeCoercionRule {
               | _: Predicate
               | _: SortOrder
               | _: ExpectsInputTypes
-              | _: ComplexTypeMergingExpression
-              | _: CreateArray) =>
+              | _: ComplexTypeMergingExpression) =>
       val newChildren = collateToSingleType(sc.children)
       sc.withNewChildren(newChildren)
+    case pesc @ (_: CreateArray) =>
+      val newChildren = collateToSingleType(pesc.children, true)
+      pesc.withNewChildren(newChildren)
   }
 
   /**
@@ -56,15 +58,16 @@ object CollationTypeCasts extends TypeCoercionRule {
    * @param collationId
    * @return
    */
-  def castStringType(expr: Expression, collationId: Int): Option[Expression] =
-    castStringType(expr.dataType, collationId).map { dt => Cast(expr, dt)}
+  def castStringType(expr: Expression, st: StringType): Option[Expression] =
+    castStringType(expr.dataType, st).map { dt => Cast(expr, dt)}
 
-  private def castStringType(inType: AbstractDataType, collationId: Int): Option[DataType] = {
+  private def castStringType(inType: AbstractDataType, st: StringType): Option[DataType] = {
     @Nullable val ret: DataType = inType match {
-      case st: StringType if st.collationId == collationId && !st.isExplicit => null
-      case _: StringType => StringType(collationId, isExplicit = false)
+      case ost: StringType if ost.collationId == st.collationId
+        && ost.isExplicit == st.isExplicit => null
+      case _: StringType => st
       case ArrayType(arrType, nullable) =>
-        castStringType(arrType, collationId).map(ArrayType(_, nullable)).orNull
+        castStringType(arrType, st).map(ArrayType(_, nullable)).orNull
       case _ => null
     }
     Option(ret)
@@ -73,10 +76,11 @@ object CollationTypeCasts extends TypeCoercionRule {
   /**
    * Collates input expressions to a single collation.
    */
-  def collateToSingleType(exprs: Seq[Expression]): Seq[Expression] = {
-    val collationId = getOutputCollation(exprs.map(_.dataType))
+  def collateToSingleType(exprs: Seq[Expression],
+                          preserveExplicit: Boolean = false): Seq[Expression] = {
+    val st = getOutputCollation(exprs.map(_.dataType), preserveExplicit)
 
-    exprs.map(e => castStringType(e, collationId).getOrElse(e))
+    exprs.map(e => castStringType(e, st).getOrElse(e))
   }
 
   /**
@@ -85,7 +89,8 @@ object CollationTypeCasts extends TypeCoercionRule {
    * any expressions, but will only be affected by collated StringTypes or
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
-  def getOutputCollation(dataTypes: Seq[DataType]): Int = {
+  def getOutputCollation(dataTypes: Seq[DataType],
+                         preserveExplicit: Boolean = false): StringType = {
     val explicitTypes =
       dataTypes.filter(hasStringType)
         .map(extractStringType)
@@ -95,7 +100,7 @@ object CollationTypeCasts extends TypeCoercionRule {
 
     explicitTypes.size match {
       // We have 1 explicit collation
-      case 1 => explicitTypes.head
+      case 1 => StringType(explicitTypes.head, preserveExplicit)
       // Multiple explicit collations occurred
       case size if size > 1 =>
         throw QueryCompilationErrors
@@ -112,7 +117,6 @@ object CollationTypeCasts extends TypeCoercionRule {
         else {
           implicitTypes.find(dt => !(dt == SQLConf.get.defaultStringType))
             .getOrElse(SQLConf.get.defaultStringType)
-            .collationId
         }
     }
   }
