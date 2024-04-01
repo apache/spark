@@ -118,6 +118,7 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testCsvAPI() {
+    spark.read().schema(schema).csv();
     spark.read().schema(schema).csv(input);
     spark.read().schema(schema).csv(input, input, input);
     spark.read().schema(schema).csv(new String[]{input, input})
@@ -126,6 +127,7 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testJsonAPI() {
+    spark.read().schema(schema).json();
     spark.read().schema(schema).json(input);
     spark.read().schema(schema).json(input, input, input);
     spark.read().schema(schema).json(new String[]{input, input})
@@ -134,6 +136,7 @@ public class JavaDataFrameReaderWriterSuite {
 
   @Test
   public void testParquetAPI() {
+    spark.read().schema(schema).parquet();
     spark.read().schema(schema).parquet(input);
     spark.read().schema(schema).parquet(input, input, input);
     spark.read().schema(schema).parquet(new String[] { input, input })
@@ -145,6 +148,7 @@ public class JavaDataFrameReaderWriterSuite {
    * cannot be run without Hive classes.
    */
   public void testOrcAPI() {
+    spark.read().schema(schema).orc();
     spark.read().schema(schema).orc(input);
     spark.read().schema(schema).orc(input, input, input);
     spark.read().schema(schema).orc(new String[]{input, input})

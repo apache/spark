@@ -3001,6 +3001,21 @@ class XmlSuite
       }
     }
   }
+
+  test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` non empty " +
+    "when not explicitly specify the schema") {
+    val e = intercept[IllegalArgumentException] {
+      spark.read.xml()
+    }
+    assert(e.getMessage === "requirement failed: The paths cannot be empty")
+  }
+
+  test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` can empty " +
+    "when explicitly specify the schema") {
+    val schema = StructType(Seq(StructField("column", StringType)))
+    val df = spark.read.schema(schema).option("rowTag", "ROW").xml()
+    checkAnswer(df, spark.emptyDataFrame)
+  }
 }
 
 // Mock file system that checks the number of open files
