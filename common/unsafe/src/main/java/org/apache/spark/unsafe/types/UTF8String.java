@@ -851,15 +851,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
+    stringSearch.setOverlapping(true);
 
-    int pos = 0;
-    while ((pos = stringSearch.next()) != StringSearch.DONE && pos < start) {
-      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
-        return pos;
-      }
+    int pos = stringSearch.next();
+    while(pos != StringSearch.DONE && pos < start) {
+      pos = stringSearch.next();
     }
 
-    return -1;
+    return pos >= start ? pos : -1;
   }
 
   /**

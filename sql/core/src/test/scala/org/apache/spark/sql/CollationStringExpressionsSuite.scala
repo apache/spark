@@ -22,6 +22,7 @@ import scala.collection.immutable.Seq
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, Literal, StringLocate, StringRepeat}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -96,64 +97,64 @@ class CollationStringExpressionsSuite extends QueryTest
       checkEvaluation(StringLocate(substr, str, startFrom), expected)
     }
 
-    // UTF8_BINARY
-//    testStringLocate("aa", "aaads", 0, 0, 0)
-//    testStringLocate("aa", "aaads", 1, 0, 1)
-//    testStringLocate("aa", "aaads", 2, 0, 2)
-//    testStringLocate("aa", "aaads", 3, 0, 0)
-//    testStringLocate("Aa", "aaads", 1, 0, 0)
-//    testStringLocate("Aa", "aAads", 1, 0, 2)
-//    // scalastyle:off
-//    testStringLocate("界x", "test大千世界X大千世界", 1, 0, 0)
-//    testStringLocate("界X", "test大千世界X大千世界", 1, 0, 8)
-//    testStringLocate("界", "test大千世界X大千世界", 13, 0, 13)
-//    // scalastyle:on
-//    // UTF8_BINARY_LCASE
-//    testStringLocate("aa", "Aaads", 0, 1, 0)
-//    testStringLocate("AA", "aaads", 1, 1, 1)
-//    testStringLocate("aa", "aAads", 2, 1, 2)
-//    testStringLocate("aa", "aaAds", 3, 1, 0)
-//    testStringLocate("abC", "abcabc", 1, 1, 1)
-//    testStringLocate("abC", "abCabc", 2, 1, 4)
-//    testStringLocate("abc", "abcabc", 4, 1, 4)
-//    // scalastyle:off
-//    testStringLocate("界x", "test大千世界X大千世界", 1, 1, 8)
-//    testStringLocate("界X", "test大千世界Xtest大千世界", 1, 1, 8)
-//    testStringLocate("界", "test大千世界X大千世界", 13, 1, 13)
-//    testStringLocate("大千", "test大千世界大千世界", 1, 1, 5)
-//    testStringLocate("大千", "test大千世界大千世界", 9, 1, 9)
-//    testStringLocate("大千", "大千世界大千世界", 1, 1, 1)
-//    // scalastyle:on
-//    // UNICODE
-//    testStringLocate("aa", "Aaads", 0, 2, 0)
-//    testStringLocate("aa", "Aaads", 1, 2, 2)
-//    testStringLocate("AA", "aaads", 1, 2, 0)
-//    testStringLocate("aa", "aAads", 2, 2, 0)
-//    testStringLocate("aa", "aaAds", 3, 2, 0)
-//    testStringLocate("abC", "abcabc", 1, 2, 0)
-//    testStringLocate("abC", "abCabc", 2, 2, 0)
-//    testStringLocate("abC", "abCabC", 2, 2, 4)
-//    testStringLocate("abc", "abcabc", 1, 2, 1)
-//    testStringLocate("abc", "abcabc", 3, 2, 4)
-//    // scalastyle:off
-//    testStringLocate("界x", "test大千世界X大千世界", 1, 2, 0)
-//    testStringLocate("界X", "test大千世界X大千世界", 1, 2, 8)
-//    testStringLocate("界", "test大千世界X大千世界", 13, 2, 13)
-//    // scalastyle:on
-//    // UNICODE_CI
-//    testStringLocate("aa", "Aaads", 0, 3, 0)
-//    testStringLocate("AA", "aaads", 1, 3, 1)
-    testStringLocate("aa", "aAads", 2, 3, 2)
-    testStringLocate("aa", "aaAds", 3, 3, 0)
-    testStringLocate("abC", "abcabc", 1, 3, 1)
-    testStringLocate("abC", "abCabc", 2, 3, 4)
-    testStringLocate("abc", "abcabc", 4, 3, 4)
+    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
+    testStringLocate("aa", "aaads", 0, collationId, 0)
+    testStringLocate("aa", "aaads", 1, collationId, 1)
+    testStringLocate("aa", "aaads", 2, collationId, 2)
+    testStringLocate("aa", "aaads", 3, collationId, 0)
+    testStringLocate("Aa", "aaads", 1, collationId, 0)
+    testStringLocate("Aa", "aAads", 1, collationId, 2)
     // scalastyle:off
-    testStringLocate("界x", "test大千世界X大千世界", 1, 3, 8)
-    testStringLocate("界", "test大千世界X大千世界", 13, 3, 13)
-    testStringLocate("大千", "test大千世界大千世界", 1, 3, 5)
-    testStringLocate("大千", "test大千世界大千世界", 9, 3, 9)
-    testStringLocate("大千", "大千世界大千世界", 1, 3, 1)
+    testStringLocate("界x", "test大千世界X大千世界", 1, collationId, 0)
+    testStringLocate("界X", "test大千世界X大千世界", 1, collationId, 8)
+    testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
+    // scalastyle:on
+    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
+    testStringLocate("aa", "Aaads", 0, collationId, 0)
+    testStringLocate("AA", "aaads", 1, collationId, 1)
+    testStringLocate("aa", "aAads", 2, collationId, 2)
+    testStringLocate("aa", "aaAds", 3, collationId, 0)
+    testStringLocate("abC", "abcabc", 1, collationId, 1)
+    testStringLocate("abC", "abCabc", 2, collationId, 4)
+    testStringLocate("abc", "abcabc", 4, collationId, 4)
+    // scalastyle:off
+    testStringLocate("界x", "test大千世界X大千世界", 1, collationId, 8)
+    testStringLocate("界X", "test大千世界Xtest大千世界", 1, collationId, 8)
+    testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
+    testStringLocate("大千", "test大千世界大千世界", 1, collationId, 5)
+    testStringLocate("大千", "test大千世界大千世界", 9, collationId, 9)
+    testStringLocate("大千", "大千世界大千世界", 1, collationId, 1)
+    // scalastyle:on
+    collationId = CollationFactory.collationNameToId("UNICODE")
+    testStringLocate("aa", "Aaads", 0, collationId, 0)
+    testStringLocate("aa", "Aaads", 1, collationId, 2)
+    testStringLocate("AA", "aaads", 1, collationId, 0)
+    testStringLocate("aa", "aAads", 2, collationId, 0)
+    testStringLocate("aa", "aaAds", 3, collationId, 0)
+    testStringLocate("abC", "abcabc", 1, collationId, 0)
+    testStringLocate("abC", "abCabc", 2, collationId, 0)
+    testStringLocate("abC", "abCabC", 2, collationId, 4)
+    testStringLocate("abc", "abcabc", 1, collationId, 1)
+    testStringLocate("abc", "abcabc", 3, collationId, 4)
+    // scalastyle:off
+    testStringLocate("界x", "test大千世界X大千世界", 1, collationId, 0)
+    testStringLocate("界X", "test大千世界X大千世界", 1, collationId, 8)
+    testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
+    // scalastyle:on
+    collationId = CollationFactory.collationNameToId("UNICODE_CI")
+    testStringLocate("aa", "Aaads", 0, collationId, 0)
+    testStringLocate("AA", "aaads", 1, collationId, 1)
+    testStringLocate("aa", "aAads", 2, collationId, 2)
+    testStringLocate("aa", "aaAds", 3, collationId, 0)
+    testStringLocate("abC", "abcabc", 1, collationId, 1)
+    testStringLocate("abC", "abCabc", 2, collationId, 4)
+    testStringLocate("abc", "abcabc", 4, collationId, 4)
+    // scalastyle:off
+    testStringLocate("界x", "test大千世界X大千世界", 1, collationId, 8)
+    testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
+    testStringLocate("大千", "test大千世界大千世界", 1, collationId, 5)
+    testStringLocate("大千", "test大千世界大千世界", 9, collationId, 9)
+    testStringLocate("大千", "大千世界大千世界", 1, collationId, 1)
     // scalastyle:on
   }
 
