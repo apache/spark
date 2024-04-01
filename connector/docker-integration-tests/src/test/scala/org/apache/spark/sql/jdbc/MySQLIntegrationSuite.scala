@@ -58,7 +58,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "small SMALLINT, med MEDIUMINT, nor INT, big BIGINT, deci DECIMAL(40,20), flt FLOAT, "
       + "dbl DOUBLE, tiny TINYINT, u_tiny TINYINT UNSIGNED)").executeUpdate()
 
-    conn.prepareStatement("INSERT INTO numbers VALUES (, b'1000100101', "
+    conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
       + "42.75, 1.0000000000000002, -128, 255)").executeUpdate()
 
