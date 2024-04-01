@@ -168,8 +168,7 @@ class TransformWithStateTTLSuite
 
   test("validate state is evicted at ttl expiry - processing time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputStream = MemoryStream[InputEvent]
       val result = inputStream.toDS()
         .groupByKey(x => x.key)
@@ -215,8 +214,7 @@ class TransformWithStateTTLSuite
 
   test("validate ttl update updates the expiration timestamp - processing time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputStream = MemoryStream[InputEvent]
       val result = inputStream.toDS()
         .groupByKey(x => x.key)
@@ -277,8 +275,7 @@ class TransformWithStateTTLSuite
 
   test("validate ttl removal keeps value in state - processing time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputStream = MemoryStream[InputEvent]
       val result = inputStream.toDS()
         .groupByKey(x => x.key)
@@ -336,8 +333,7 @@ class TransformWithStateTTLSuite
 
   test("validate multiple value states - processing time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      classOf[RocksDBStateStoreProvider].getName) {
       val ttlKey = "k1"
       val noTtlKey = "k2"
 
@@ -392,8 +388,7 @@ class TransformWithStateTTLSuite
 
   test("validate state is evicted at ttl expiry - event time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputStream = MemoryStream[InputEvent]
       val result = inputStream.toDS()
         .withWatermark("eventTime", "1 second")
@@ -441,8 +436,7 @@ class TransformWithStateTTLSuite
 
   test("validate ttl update updates the expiration timestamp - event time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputStream = MemoryStream[InputEvent]
       val result = inputStream.toDS()
         .withWatermark("eventTime", "1 second")
@@ -491,8 +485,7 @@ class TransformWithStateTTLSuite
 
   test("validate ttl removal keeps value in state - event time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      classOf[RocksDBStateStoreProvider].getName) {
       val inputStream = MemoryStream[InputEvent]
       val result = inputStream.toDS()
         .withWatermark("eventTime", "1 second")
@@ -537,6 +530,49 @@ class TransformWithStateTTLSuite
         // validate that the older expiration value is removed from ttl state
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
         CheckNewAnswer()
+      )
+    }
+  }
+
+  test("validate only expired keys are removed from the state") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputStream = MemoryStream[InputEvent]
+      val result = inputStream.toDS()
+        .groupByKey(x => x.key)
+        .transformWithState(
+          new ValueStateTTLProcessor(),
+          TimeoutMode.NoTimeouts(),
+          TTLMode.ProcessingTimeTTL())
+
+      val clock = new StreamManualClock
+      testStream(result)(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputStream, InputEvent("k1", "put", 1, Duration.ofMinutes(1))),
+        AddData(inputStream, InputEvent("k2", "put", 2, Duration.ofMinutes(2))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        // advance clock so that key k1 is expired
+        AdvanceManualClock(60 * 1000),
+        AddData(inputStream, InputEvent("k1", "get", 1, null)),
+        AddData(inputStream, InputEvent("k2", "get", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        // validate k1 is expired and k2 is not
+        CheckNewAnswer(OutputEvent("k2", 2, isTTLValue = false, -1)),
+        // validate k1 is deleted from state
+        AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
+        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        // validate k2 exists in state
+        AddData(inputStream, InputEvent("k2", "get_ttl_value_from_state", -1, null)),
+        AddData(inputStream, InputEvent("k2", "get_values_in_ttl_state", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          OutputEvent("k2", -1, isTTLValue = true, 121000),
+          OutputEvent("k2", -1, isTTLValue = true, 121000))
       )
     }
   }
