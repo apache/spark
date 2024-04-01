@@ -130,7 +130,7 @@ class InitialStateInMemoryTestClass
 }
 
 /**
- * Class to test stateful processor with initial state with processing timers.
+ * Class to test stateful processor with initial state and processing timers.
  * Timers can be registered during initial state handling and can be emitted after timer
  * expires even if the grouping key in initial state is not seen in new input rows.
  */
@@ -148,7 +148,7 @@ class StatefulProcessorWithInitialStateProcTimerClass
 }
 
 /**
- * Class to test stateful processor with initial state with event timers.
+ * Class to test stateful processor with initial state and event timers.
  * Timers can be registered during initial state handling and can be emitted after timer
  * expires even if the grouping key in initial state is not seen in new input rows.
  */
