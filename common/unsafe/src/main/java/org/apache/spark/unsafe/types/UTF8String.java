@@ -569,21 +569,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     String setString = this.toString();
     int wordStart = 0;
     while ((wordStart = stringSearch.next()) != StringSearch.DONE) {
-      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
-        boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
-        boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
-                || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
+      boolean isValidStart = wordStart == 0 || setString.charAt(wordStart - 1) == ',';
+      boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
+              || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
 
-        if(isValidStart && isValidEnd) {
-          int pos = 0;
-          for(int i = 0; i < setString.length() && i < wordStart; i++) {
-            if(setString.charAt(i) == ',') {
-              pos++;
-            }
+      if(isValidStart && isValidEnd) {
+        int pos = 0;
+        for(int i = 0; i < setString.length() && i < wordStart; i++) {
+          if(setString.charAt(i) == ',') {
+            pos++;
           }
-
-          return pos + 1;
         }
+
+        return pos + 1;
       }
     }
 
@@ -883,24 +881,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().indexOf(substring.toLowerCase(), start);
     }
-    return collatedIndexOf(substring, collationId);
+    return collatedIndexOf(substring, start, collationId);
   }
 
-  private int collatedIndexOf(UTF8String substring, int collationId) {
+  private int collatedIndexOf(UTF8String substring, int start, int collationId) {
     if (substring.numBytes == 0) {
       return 0;
     }
 
     StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
+    stringSearch.setOverlapping(true);
 
-    int pos = 0;
-    while ((pos = stringSearch.next()) != StringSearch.DONE) {
-      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
-        return pos;
-      }
+    int pos = stringSearch.next();
+    while(pos != StringSearch.DONE && pos < start) {
+      pos = stringSearch.next();
     }
 
-    return -1;
+    return pos >= start ? pos : -1;
   }
 
   /**
