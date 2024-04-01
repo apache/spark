@@ -129,6 +129,10 @@ class InitialStateInMemoryTestClass
   }
 }
 
+/**
+ * Class to verify stateful processor usage with updating processing time timers
+ * can also handle initial state.
+ */
 class StatefulProcessorWithInitialStateProcTimerClass
   extends RunningCountStatefulProcessorWithProcTimeTimerUpdates
     with StatefulProcessorWithInitialState[String, String, (String, String), String] {
@@ -136,16 +140,24 @@ class StatefulProcessorWithInitialStateProcTimerClass
       key: String,
       initialState: String,
       timerValues: TimerValues): Unit = {
+    // keep a _countState to count the occurrence of grouping key
+    // Will register a timer if key "a" is met for the first time
     processUnexpiredRows(key, 0L, 1L, timerValues)
   }
 }
 
+/**
+ * Class to verify stateful processor usage with updating event time timers
+ * can also handle initial state.
+ */
 class StatefulProcessorWithInitialStateEventTimerClass extends MaxEventTimeStatefulProcessor
   with StatefulProcessorWithInitialState[String, (String, Long), (String, Int), (String, Long)]{
   override def handleInitialState(
       key: String,
       initialState: (String, Long),
       timerValues: TimerValues): Unit = {
+    // keep a _maxEventTimeState to track the max eventTime seen so far
+    // register a timer if bigger eventTime is seen
     val maxEventTimeSec = math.max(initialState._2,
       _maxEventTimeState.getOption().getOrElse(0L))
     processUnexpiredRows(maxEventTimeSec)
