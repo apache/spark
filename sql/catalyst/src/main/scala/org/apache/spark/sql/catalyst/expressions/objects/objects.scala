@@ -312,6 +312,25 @@ case class StaticInvoke(
 
     val callFunc = s"$objectName.$functionName($argString)"
 
+    val needTryCatch = method.getExceptionTypes.nonEmpty
+
+    def getFuncResult(resultVal: String, funcCall: String): String = if (needTryCatch) {
+      val catchCodes = method.getExceptionTypes.
+        filterNot(cls => cls.isAssignableFrom(classOf[RuntimeException])).
+        zipWithIndex.map {
+          case (cls: Class[_], index) =>
+            s""" catch (${cls.getName} e$index) {
+                  throw e$index;
+                }"""
+      }.mkString("\n")
+      s"""
+        try {
+          $resultVal = $funcCall;
+        }""" + catchCodes
+    } else {
+      s"$resultVal = $funcCall;"
+    }
+
     val prepareIsNull = if (nullable) {
       s"boolean ${ev.isNull} = $resultIsNull;"
     } else {
@@ -322,13 +341,14 @@ case class StaticInvoke(
     val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = $callFunc;
+          ${getFuncResult(ev.value, callFunc)}
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
         s"""
-          ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
+          ${CodeGenerator.boxedType(dataType)} $boxedResult = ${CodeGenerator.defaultValue(dataType)};
+          ${getFuncResult(boxedResult, callFunc)}
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -336,7 +356,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = $callFunc;"
+      s"${getFuncResult(ev.value, callFunc)}"
     }
 
     val code = code"""
