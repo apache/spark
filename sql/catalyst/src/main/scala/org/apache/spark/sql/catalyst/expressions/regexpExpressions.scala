@@ -76,7 +76,7 @@ abstract class StringRegexExpression extends BinaryExpression
     }
   }
 
-  override protected def expectedCost: Int = 100
+  override protected[spark] def expectedCost: Int = 100
 }
 
 // scalastyle:off line.contains.tab line.size.limit

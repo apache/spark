@@ -381,9 +381,9 @@ abstract class Expression extends TreeNode[Expression] {
    * evaluated for pre-emptive row filtering, in ordering filter expression, etc.
    * This is an internal API and may go away at any time.
    */
-  protected def expectedCost: Int = _expectedCost
+  protected[spark] def expectedCost: Int = _expectedCost
 
-  private lazy val _expectedCost = children.map(_.expectedCost).sum
+  private lazy val _expectedCost = children.map(_.expectedCost).sum + 1
 }
 
 

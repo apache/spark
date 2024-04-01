@@ -1760,20 +1760,35 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // state and all the input rows processed before. In another word, the order of input rows
     // matters for non-deterministic expressions, while pushing down predicates changes the order.
     // This also applies to Aggregate.
-    case Filter(condition, project @ Project(fields, grandChild))
+    case f @ Filter(condition, project @ Project(fields, grandChild))
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
-      println(s"Filter push $condition over $project")
       val aliasMap = getAliasMap(project)
       // SPARK-47672: If an operation is expensive and computed inside of the project
       // we don't want to push it since that would lead to a double execution (and slower eval)
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         val replaced = replaceAlias(cond, aliasMap)
-        println(s"Inner cond $cond became $replaced")
-        true
+        if (cond == replaced) {
+          // If nothing changes there's no double eval to be avoided.
+          true
+        } else {
+          // If the double eval is "cheap" paying the double eval for more aggressive filtering
+          // could be reasonable.
+          if (replaced.expectedCost >= 100) {
+            false
+          } else {
+            true
+          }
+        }
       }
 
-
-      project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      if (stayUp.isEmpty) {
+        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+      } else if (!pushDown.isEmpty) {
+        Filter(stayUp.reduce(And),
+          project.copy(child = Filter(pushDown.reduce(And), grandChild)))
+      } else {
+        f
+      }
 
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
