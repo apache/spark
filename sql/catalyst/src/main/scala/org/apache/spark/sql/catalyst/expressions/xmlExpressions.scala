@@ -60,6 +60,8 @@ case class XmlToStructs(
   with ExpectsInputTypes
   with QueryErrorsBase {
 
+  override protected[spark] def expectedCost = 200
+
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
       schema = ExprUtils.evalTypeExpr(schema),

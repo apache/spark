@@ -650,6 +650,8 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
     pairDelim = newSecond,
     keyValueDelim = newThird
   )
+
+  override protected[spark] def expectedCost = 100
 }
 
 /**
