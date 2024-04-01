@@ -60,6 +60,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
       + "42.75, 1.0000000000000002, -128)").executeUpdate()
+    conn.prepareStatement("INSERT INTO numbers VALUES (null, null, null, null, null," +
+      "null, null, null, null, null)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE unsigned_numbers (" +
       "tiny TINYINT UNSIGNED, small SMALLINT UNSIGNED, med MEDIUMINT UNSIGNED," +
@@ -336,6 +338,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = spark.read.jdbc(jdbcUrl, "TBL_GEOMETRY", new Properties)
     checkAnswer(df,
       Row(Array[Byte](0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+  }
+
+  test("SPARK-47666: Check nulls for result set getters") {
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED.key -> flag) {
+        val nulls = spark.read.jdbc(jdbcUrl, "numbers", new Properties).tail(1).head
+        assert(nulls === Row(null, null, null, null, null, null, null, null, null, null))
+      }
+    }
   }
 }
 

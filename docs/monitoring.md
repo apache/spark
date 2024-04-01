@@ -1187,7 +1187,7 @@ This is the component with the largest amount of instrumented metrics
 
 - namespace=appStatus (all metrics of type=counter)
   - **note:** Introduced in Spark 3.0. Conditional to a configuration parameter:
-   `spark.metrics.appStatusSource.enabled` (default is false)
+   `spark.metrics.appStatusSource.enabled` (default is true)
   - stages.failedStages.count
   - stages.skippedStages.count
   - stages.completedStages.count
