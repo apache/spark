@@ -115,13 +115,7 @@ class ValueStateImplWithTTL[S](
         -1
       }
 
-    val encodedValue = stateTypesEncoder.encodeValue(newState, expirationMs)
-
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
-      encodedValue, stateName)
-
-    ttlState.upsertTTLForStateKey(expirationMs, serializedGroupingKey)
+    update(newState, expirationMs)
   }
 
   override def update(
@@ -134,7 +128,9 @@ class ValueStateImplWithTTL[S](
     store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
       encodedValue, stateName)
 
-    ttlState.upsertTTLForStateKey(expirationMs, serializedGroupingKey)
+    if (expirationMs != -1) {
+      ttlState.upsertTTLForStateKey(expirationMs, serializedGroupingKey)
+    }
   }
 
   /** Function to remove state for given key */

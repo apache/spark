@@ -21,7 +21,7 @@ import java.time.Duration
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{RangeKeyScanStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.TTLMode
 import org.apache.spark.sql.types.{BinaryType, DataType, LongType, NullType, StructField, StructType}
 
@@ -104,9 +104,8 @@ class SingleKeyTTLStateImpl(
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
-  // TODO: use range scan once Range Scan PR is merged for StateStore
   store.createColFamilyIfAbsent(ttlColumnFamilyName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
-    NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA), isInternal = true)
+    RangeKeyScanStateEncoderSpec(KEY_ROW_SCHEMA, 1), isInternal = true)
 
   def upsertTTLForStateKey(
       expirationMs: Long,
@@ -116,7 +115,11 @@ class SingleKeyTTLStateImpl(
   }
 
   override def clearExpiredState(): Unit = {
-    store.iterator(ttlColumnFamilyName).foreach { kv =>
+    val iterator = store.iterator(ttlColumnFamilyName)
+    var reachedPastExpirationTime = false
+
+    while (iterator.hasNext && !reachedPastExpirationTime) {
+      val kv = iterator.next()
       val expirationMs = kv.key.getLong(0)
       val isExpired = StateTTL.isExpired(ttlMode, expirationMs,
         batchTimestampMs, eventTimeWatermarkMs)
@@ -126,6 +129,8 @@ class SingleKeyTTLStateImpl(
         state.clearIfExpired(groupingKey)
 
         store.remove(kv.key, ttlColumnFamilyName)
+      } else {
+        reachedPastExpirationTime = true
       }
     }
   }
