@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
@@ -121,7 +122,6 @@ case class VariantGet(
     with TimeZoneAwareExpression
     with NullIntolerant
     with ExpectsInputTypes
-    with CodegenFallback
     with QueryErrorsBase {
   override def checkInputDataTypes(): TypeCheckResult = {
     val check = super.checkInputDataTypes()
@@ -170,6 +170,29 @@ case class VariantGet(
       timeZoneId)
   }
 
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.genCode(ctx)
+    val tmp = ctx.freshVariable("tmp", classOf[Object])
+    val parsedPathArg = ctx.addReferenceObj("parsedPath", parsedPath)
+    val dataTypeArg = ctx.addReferenceObj("dataType", dataType)
+    val zoneIdArg = ctx.addReferenceObj("zoneId", timeZoneId)
+    val code = code"""
+      ${childCode.code}
+      boolean ${ev.isNull} = ${childCode.isNull};
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.variantGet(
+          ${childCode.value}, $parsedPathArg, $dataTypeArg, $failOnError, $zoneIdArg);
+        if ($tmp == null) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = (${CodeGenerator.boxedType(dataType)})$tmp;
+        }
+      }
+    """
+    ev.copy(code = code)
+  }
+
   override def left: Expression = child
 
   override def right: Expression = path
@@ -187,7 +210,7 @@ case object VariantGet {
    * of them. For nested types, we reject map types with a non-string key type.
    */
   def checkDataType(dataType: DataType): Boolean = dataType match {
-    case _: NumericType | BooleanType | _: StringType | BinaryType | TimestampType | DateType |
+    case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
         VariantType =>
       true
     case ArrayType(elementType, _) => checkDataType(elementType)
@@ -226,55 +249,52 @@ case object VariantGet {
     def invalidCast(): Any =
       if (failOnError) throw QueryExecutionErrors.invalidVariantCast(v.toJson, dataType) else null
 
+    if (dataType == VariantType) return new VariantVal(v.getValue, v.getMetadata)
     val variantType = v.getType
     if (variantType == Type.NULL) return null
     dataType match {
-      case VariantType => new VariantVal(v.getValue, v.getMetadata)
       case _: AtomicType =>
-        variantType match {
+        val input = variantType match {
           case Type.OBJECT | Type.ARRAY =>
-            if (dataType.isInstanceOf[StringType]) {
+            return if (dataType.isInstanceOf[StringType]) {
               UTF8String.fromString(v.toJson)
             } else {
               invalidCast()
             }
-          case _ =>
-            val input = variantType match {
-              case Type.BOOLEAN => v.getBoolean
-              case Type.LONG => v.getLong
-              case Type.STRING => UTF8String.fromString(v.getString)
-              case Type.DOUBLE => v.getDouble
-              case Type.DECIMAL => Decimal(v.getDecimal)
-              // We have handled other cases and should never reach here. This case is only intended
-              // to by pass the compiler exhaustiveness check.
-              case _ => throw QueryExecutionErrors.unreachableError()
+          case Type.BOOLEAN => v.getBoolean
+          case Type.LONG => v.getLong
+          case Type.STRING => UTF8String.fromString(v.getString)
+          case Type.DOUBLE => v.getDouble
+          case Type.DECIMAL => Decimal(v.getDecimal)
+          // We have handled other cases and should never reach here. This case is only intended
+          // to by pass the compiler exhaustiveness check.
+          case _ => throw QueryExecutionErrors.unreachableError()
+        }
+        // We mostly use the `Cast` expression to implement the cast. However, `Cast` silently
+        // ignores the overflow in the long/decimal -> timestamp cast, and we want to enforce
+        // strict overflow checks.
+        input match {
+          case l: Long if dataType == TimestampType =>
+            try Math.multiplyExact(l, MICROS_PER_SECOND)
+            catch {
+              case _: ArithmeticException => invalidCast()
             }
-            // We mostly use the `Cast` expression to implement the cast. However, `Cast` silently
-            // ignores the overflow in the long/decimal -> timestamp cast, and we want to enforce
-            // strict overflow checks.
-            input match {
-              case l: Long if dataType == TimestampType =>
-                try Math.multiplyExact(l, MICROS_PER_SECOND)
-                catch {
-                  case _: ArithmeticException => invalidCast()
-                }
-              case d: Decimal if dataType == TimestampType =>
-                try {
-                  d.toJavaBigDecimal
-                    .multiply(new java.math.BigDecimal(MICROS_PER_SECOND))
-                    .toBigInteger
-                    .longValueExact()
-                } catch {
-                  case _: ArithmeticException => invalidCast()
-                }
-              case _ =>
-                val inputLiteral = Literal(input)
-                if (Cast.canAnsiCast(inputLiteral.dataType, dataType)) {
-                  val result = Cast(inputLiteral, dataType, zoneId, EvalMode.TRY).eval()
-                  if (result == null) invalidCast() else result
-                } else {
-                  invalidCast()
-                }
+          case d: Decimal if dataType == TimestampType =>
+            try {
+              d.toJavaBigDecimal
+                .multiply(new java.math.BigDecimal(MICROS_PER_SECOND))
+                .toBigInteger
+                .longValueExact()
+            } catch {
+              case _: ArithmeticException => invalidCast()
+            }
+          case _ =>
+            val inputLiteral = Literal(input)
+            if (Cast.canAnsiCast(inputLiteral.dataType, dataType)) {
+              val result = Cast(inputLiteral, dataType, zoneId, EvalMode.TRY).eval()
+              if (result == null) invalidCast() else result
+            } else {
+              invalidCast()
             }
         }
       case ArrayType(elementType, _) =>

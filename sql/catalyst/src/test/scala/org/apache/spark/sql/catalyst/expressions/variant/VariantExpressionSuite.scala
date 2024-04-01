@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
@@ -319,6 +319,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     testVariantGet("-1", "$", TimestampType, -1000000L)
     testVariantGet("9223372036854", "$", TimestampType, 9223372036854000000L)
     testInvalidVariantGet("9223372036855", "$", TimestampType)
+    testInvalidVariantGet("0", "$", TimestampNTZType)
 
     // Source type is double. Always use scientific notation to avoid decimal.
     testVariantGet("1E0", "$", BooleanType, true)
@@ -505,17 +506,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("variant_get timestamp") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
-        def toMicros(time: LocalDateTime): Long = {
-          val instant = time.atZone(zid).toInstant
+        def toMicros(time: LocalDateTime, zoneId: ZoneId): Long = {
+          val instant = time.atZone(zoneId).toInstant
           instant.getEpochSecond * 1000000L + instant.getNano / 1000L
         }
 
-        testVariantGet(
-          "\"2026-04-05 5:16:07\"",
-          "$",
-          TimestampType,
-          toMicros(LocalDateTime.of(2026, 4, 5, 5, 16, 7, 0))
-        )
+        val input = "\"2026-04-05 5:16:07\""
+        val expected = LocalDateTime.of(2026, 4, 5, 5, 16, 7, 0)
+        testVariantGet(input, "$", TimestampType, toMicros(expected, zid))
+        testVariantGet(input, "$", TimestampNTZType, toMicros(expected, ZoneOffset.UTC))
       }
     }
   }
