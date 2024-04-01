@@ -130,8 +130,9 @@ class InitialStateInMemoryTestClass
 }
 
 /**
- * Class to verify stateful processor usage with updating processing time timers
- * can also handle initial state.
+ * Class to test stateful processor with initial state with processing timers.
+ * Timers can be registered during initial state handling and can be emitted after timer
+ * expires even if the grouping key in initial state is not seen in new input rows.
  */
 class StatefulProcessorWithInitialStateProcTimerClass
   extends RunningCountStatefulProcessorWithProcTimeTimerUpdates
@@ -147,8 +148,9 @@ class StatefulProcessorWithInitialStateProcTimerClass
 }
 
 /**
- * Class to verify stateful processor usage with updating event time timers
- * can also handle initial state.
+ * Class to test stateful processor with initial state with event timers.
+ * Timers can be registered during initial state handling and can be emitted after timer
+ * expires even if the grouping key in initial state is not seen in new input rows.
  */
 class StatefulProcessorWithInitialStateEventTimerClass extends MaxEventTimeStatefulProcessor
   with StatefulProcessorWithInitialState[String, (String, Long), (String, Int), (String, Long)]{
