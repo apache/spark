@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.lang.Double.{doubleToRawLongBits, longBitsToDouble}
+import java.lang.Float.{floatToRawIntBits, intBitsToFloat}
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.internal.Logging
@@ -206,8 +208,7 @@ class PrefixKeyScanStateEncoder(
  * for the range scan into an UnsafeRow; we then rewrite that UnsafeRow's fields in BIG_ENDIAN
  * to allow for scanning keys in sorted order using the byte-wise comparison method that
  * RocksDB uses.
- * Negative values for numeric types such as short, integer and long are supported. Negative values
- * for floating point types such as float and double are not supported.
+ * Negative values for numeric types are also supported.
  * Then, for the rest of the fields, we project those into another UnsafeRow.
  * We then effectively join these two UnsafeRows together, and finally take those bytes
  * to get the resulting row.
@@ -279,6 +280,13 @@ class RangeKeyScanStateEncoder(
     rangeScanKeyProjection(key)
   }
 
+  private val floatBitMask = 0xFFFFFFFF
+  private val doubleBitMask = 0xFFFFFFFFFFFFFFFFL
+
+  private val negativeValMarker: Byte = 0x00.toByte
+  private val positiveValMarker: Byte = 0x01.toByte
+  private val nullValMarker: Byte = 0x02.toByte
+
   // Rewrite the unsafe row by replacing fixed size fields with BIG_ENDIAN encoding
   // using byte arrays.
   // To handle "null" values, we prepend a byte to the byte array indicating whether the value
@@ -293,17 +301,17 @@ class RangeKeyScanStateEncoder(
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = row.get(idx, field.dataType)
       // initialize to 0x01 to indicate that the column is not null and positive
-      var isNullOrSignCol: Byte = 0x01.toByte
+      var isNullOrSignCol: Byte = positiveValMarker
       // Update the isNullOrSignCol byte to indicate null value
       if (value == null) {
-        isNullOrSignCol = 0x02.toByte
+        isNullOrSignCol = nullValMarker
       }
       // Note that we cannot allocate a smaller buffer here even if the value is null
       // because the effective byte array is considered variable size and needs to have
       // the same size across all rows for the ordering to work as expected.
       val bbuf = ByteBuffer.allocate(field.dataType.defaultSize + 1)
       bbuf.order(ByteOrder.BIG_ENDIAN)
-      if (isNullOrSignCol == 0x02.toByte) {
+      if (isNullOrSignCol == nullValMarker) {
         bbuf.put(isNullOrSignCol)
         writer.write(idx, bbuf.array())
       } else {
@@ -316,7 +324,7 @@ class RangeKeyScanStateEncoder(
 
           case ShortType =>
             if (value.asInstanceOf[Short] < 0) {
-              isNullOrSignCol = 0x00.toByte
+              isNullOrSignCol = negativeValMarker
             }
             bbuf.put(isNullOrSignCol)
             bbuf.putShort(value.asInstanceOf[Short])
@@ -324,7 +332,7 @@ class RangeKeyScanStateEncoder(
 
           case IntegerType =>
             if (value.asInstanceOf[Int] < 0) {
-              isNullOrSignCol = 0x00.toByte
+              isNullOrSignCol = negativeValMarker
             }
             bbuf.put(isNullOrSignCol)
             bbuf.putInt(value.asInstanceOf[Int])
@@ -332,34 +340,42 @@ class RangeKeyScanStateEncoder(
 
           case LongType =>
             if (value.asInstanceOf[Long] < 0) {
-              isNullOrSignCol = 0x00.toByte
+              isNullOrSignCol = negativeValMarker
             }
             bbuf.put(isNullOrSignCol)
             bbuf.putLong(value.asInstanceOf[Long])
             writer.write(idx, bbuf.array())
 
-          // For floating point types, we cannot support ordering using additional byte for
-          // negative values. This is because the IEEE 754 floating point representation
-          // stores exponent first and then the mantissa. So, we cannot simply prepend a byte
-          // to achieve the desired ordering.
           case FloatType =>
-            // We do not support negative values for floating point types
             if (value.asInstanceOf[Float] < 0.0F) {
-              throw StateStoreErrors.negativeValuesForOrderingColsNotSupported(field.name,
-                idx.toString)
+              // get the raw binary bits for the float
+              val rawBits = floatToRawIntBits(value.asInstanceOf[Float])
+              // flip all the bits
+              val updatedVal = rawBits ^ floatBitMask
+              isNullOrSignCol = negativeValMarker
+              bbuf.put(isNullOrSignCol)
+              // convert the bits back to float
+              bbuf.putFloat(intBitsToFloat(updatedVal))
+            } else {
+              bbuf.put(isNullOrSignCol)
+              bbuf.putFloat(value.asInstanceOf[Float])
             }
-            bbuf.put(isNullOrSignCol)
-            bbuf.putFloat(value.asInstanceOf[Float])
             writer.write(idx, bbuf.array())
 
           case DoubleType =>
-            // We do not support negative values for floating point types
             if (value.asInstanceOf[Double] < 0.0D) {
-              throw StateStoreErrors.negativeValuesForOrderingColsNotSupported(field.name,
-                idx.toString)
+              // get the raw binary bits for the double
+              val rawBits = doubleToRawLongBits(value.asInstanceOf[Double])
+              // flip all the bits
+              val updatedVal = rawBits ^ doubleBitMask
+              isNullOrSignCol = negativeValMarker
+              bbuf.put(isNullOrSignCol)
+              // convert the bits back to double
+              bbuf.putDouble(longBitsToDouble(updatedVal))
+            } else {
+              bbuf.put(isNullOrSignCol)
+              bbuf.putDouble(value.asInstanceOf[Double])
             }
-            bbuf.put(isNullOrSignCol)
-            bbuf.putDouble(value.asInstanceOf[Double])
             writer.write(idx, bbuf.array())
         }
       }
@@ -372,8 +388,7 @@ class RangeKeyScanStateEncoder(
   // For decode, we extract the byte array from the UnsafeRow, and then read the first byte
   // to determine if the value is null or not. If the value is null, we set the ordinal on
   // the UnsafeRow to null. If the value is not null, we read the rest of the bytes to get the
-  // actual value. Here we don't need to do anything special for negative or positive values
-  // given that their binary representation remains intact.
+  // actual value.
   private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
     writer.resetRowWriter()
@@ -382,7 +397,7 @@ class RangeKeyScanStateEncoder(
       val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
       bbuf.order(ByteOrder.BIG_ENDIAN)
       val isNullOrSignCol = bbuf.get()
-      if (isNullOrSignCol == 0x02.toByte) {
+      if (isNullOrSignCol == nullValMarker) {
         // set the column to null and skip reading the next byte(s)
         writer.setNullAt(idx)
       } else {
@@ -401,10 +416,24 @@ class RangeKeyScanStateEncoder(
             writer.write(idx, bbuf.getLong)
 
           case FloatType =>
-            writer.write(idx, bbuf.getFloat)
+            if (isNullOrSignCol == negativeValMarker) {
+              // if the number is negative, get the raw binary bits for the float
+              // and flip the bits back
+              val updatedVal = floatToRawIntBits(bbuf.getFloat) ^ floatBitMask
+              writer.write(idx, intBitsToFloat(updatedVal))
+            } else {
+              writer.write(idx, bbuf.getFloat)
+            }
 
           case DoubleType =>
-            writer.write(idx, bbuf.getDouble)
+            if (isNullOrSignCol == negativeValMarker) {
+              // if the number is negative, get the raw binary bits for the double
+              // and flip the bits back
+              val updatedVal = doubleToRawLongBits(bbuf.getDouble) ^ doubleBitMask
+              writer.write(idx, longBitsToDouble(updatedVal))
+            } else {
+              writer.write(idx, bbuf.getDouble)
+            }
         }
       }
     }

@@ -296,7 +296,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   testWithColumnFamilies("rocksdb range scan - variable size non-ordering columns with " +
-    "negative double type values is not supported",
+    "double type values are supported",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     val testSchema: StructType = StructType(
@@ -315,52 +315,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
           RangeKeyScanStateEncoderSpec(testSchema, 1))
       }
 
-      val ex = intercept[SparkUnsupportedOperationException] {
-        val timerTimestamps: Seq[Double] = Seq(6894.32, 345.2795, -23.24, 24.466,
-          7860.0, 4535.55, 423.42, -5350.355, 0.0, 0.001, 0.233)
-        timerTimestamps.foreach { ts =>
-          // non-timestamp col is of variable size
-          val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts,
-            UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString))))
-          val valueRow = dataToValueRow(1)
-          store.put(keyRow, valueRow, cfName)
-          assert(valueRowToData(store.get(keyRow, cfName)) === 1)
-        }
-      }
-
-      checkError(
-        ex,
-        errorClass = "STATE_STORE_NEGATIVE_VALUES_FOR_ORDERING_COLS_NOT_SUPPORTED",
-        parameters = Map(
-          "fieldName" -> testSchema.fields(0).name,
-          "index" -> "0"
-        ),
-        matchPVals = true
-      )
-    }
-  }
-
-  testWithColumnFamilies("rocksdb range scan - variable size non-ordering columns with double type",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
-
-    val testSchema: StructType = StructType(
-      Seq(StructField("key1", DoubleType, false),
-        StructField("key2", StringType, false)))
-
-    val schemaProj = UnsafeProjection.create(Array[DataType](DoubleType, StringType))
-    tryWithProviderResource(newStoreProvider(testSchema,
-      RangeKeyScanStateEncoderSpec(testSchema, 1), colFamiliesEnabled)) { provider =>
-      val store = provider.getStore(0)
-
-      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
-      if (colFamiliesEnabled) {
-        store.createColFamilyIfAbsent(cfName,
-          testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, 1))
-      }
-
-      val timerTimestamps: Seq[Double] = Seq(6894.32, 345.2795, 24.466,
-        7860.0, 4535.55, 423.42, 0.0, 0.001, 0.233, 96456466.3536677, 14421434453.43524562)
+      val timerTimestamps: Seq[Double] = Seq(6894.32, 345.2795, -23.24, 24.466,
+        7860.0, 4535.55, 423.42, -5350.355, 0.0, 0.001, 0.233, -53.255, -66.356, -244.452,
+        96456466.3536677, 14421434453.43524562)
       timerTimestamps.foreach { ts =>
         // non-timestamp col is of variable size
         val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts,
