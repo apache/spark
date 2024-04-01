@@ -1420,6 +1420,8 @@ case class StringInstr(str: Expression, substr: Expression)
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
   override def dataType: DataType = strExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
@@ -1429,8 +1431,6 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   override def prettyName: String = "substring_index"
 
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
-    val collationId = first.dataType.asInstanceOf[StringType].collationId
-
     if (CollationFactory.fetchCollation(collationId).supportsBinaryOrdering) {
       str.asInstanceOf[UTF8String].subStringIndex(
         delim.asInstanceOf[UTF8String],
@@ -1443,9 +1443,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collationId = first.dataType.asInstanceOf[StringType].collationId
-
-    if(CollationFactory.fetchCollation(collationId).supportsBinaryOrdering) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryOrdering) {
       defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
     } else {
       defineCodeGen(ctx, ev, (str, delim, count) =>
