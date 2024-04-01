@@ -1476,9 +1476,11 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   override def third: Expression = start
   override def nullable: Boolean = substr.nullable || str.nullable
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, IntegerType)
 
   override def eval(input: InternalRow): Any = {
+    val collationId = first.dataType.asInstanceOf[StringType].collationId
     val s = start.eval(input)
     if (s == null) {
       // if the start position is null, we need to return 0, (conform to Hive)
@@ -1498,7 +1500,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           } else {
             l.asInstanceOf[UTF8String].indexOf(
               r.asInstanceOf[UTF8String],
-              s.asInstanceOf[Int] - 1) + 1
+              s.asInstanceOf[Int] - 1, collationId) + 1
           }
         }
       }
@@ -1506,6 +1508,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val collationId = first.dataType.asInstanceOf[StringType].collationId
     val substrGen = substr.genCode(ctx)
     val strGen = str.genCode(ctx)
     val startGen = start.genCode(ctx)
@@ -1520,7 +1523,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
           if (!${strGen.isNull}) {
             if (${startGen.value} > 0) {
               ${ev.value} = ${strGen.value}.indexOf(${substrGen.value},
-                ${startGen.value} - 1) + 1;
+                ${startGen.value} - 1, ${collationId}) + 1;
             }
           } else {
             ${ev.isNull} = true;

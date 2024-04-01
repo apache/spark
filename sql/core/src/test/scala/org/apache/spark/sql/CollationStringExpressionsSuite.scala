@@ -21,7 +21,7 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, Literal, StringLocate, StringRepeat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -84,6 +84,77 @@ class CollationStringExpressionsSuite extends QueryTest
     testRepeat("UTF8_BINARY_LCASE", 1, "abc", 2)
     testRepeat("UNICODE", 2, "abc", 2)
     testRepeat("UNICODE_CI", 3, "abc", 2)
+  }
+
+  test("LOCATE check result on explicitly collated string") {
+    def testStringLocate(substring: String, string: String, start: Integer,
+                         collationId: Integer, expected: Integer): Unit = {
+      val substr = Literal.create(substring, StringType(collationId))
+      val str = Literal.create(string, StringType(collationId))
+      val startFrom = Literal.create(start)
+
+      checkEvaluation(StringLocate(substr, str, startFrom), expected)
+    }
+
+    // UTF8_BINARY
+//    testStringLocate("aa", "aaads", 0, 0, 0)
+//    testStringLocate("aa", "aaads", 1, 0, 1)
+//    testStringLocate("aa", "aaads", 2, 0, 2)
+//    testStringLocate("aa", "aaads", 3, 0, 0)
+//    testStringLocate("Aa", "aaads", 1, 0, 0)
+//    testStringLocate("Aa", "aAads", 1, 0, 2)
+//    // scalastyle:off
+//    testStringLocate("界x", "test大千世界X大千世界", 1, 0, 0)
+//    testStringLocate("界X", "test大千世界X大千世界", 1, 0, 8)
+//    testStringLocate("界", "test大千世界X大千世界", 13, 0, 13)
+//    // scalastyle:on
+//    // UTF8_BINARY_LCASE
+//    testStringLocate("aa", "Aaads", 0, 1, 0)
+//    testStringLocate("AA", "aaads", 1, 1, 1)
+//    testStringLocate("aa", "aAads", 2, 1, 2)
+//    testStringLocate("aa", "aaAds", 3, 1, 0)
+//    testStringLocate("abC", "abcabc", 1, 1, 1)
+//    testStringLocate("abC", "abCabc", 2, 1, 4)
+//    testStringLocate("abc", "abcabc", 4, 1, 4)
+//    // scalastyle:off
+//    testStringLocate("界x", "test大千世界X大千世界", 1, 1, 8)
+//    testStringLocate("界X", "test大千世界Xtest大千世界", 1, 1, 8)
+//    testStringLocate("界", "test大千世界X大千世界", 13, 1, 13)
+//    testStringLocate("大千", "test大千世界大千世界", 1, 1, 5)
+//    testStringLocate("大千", "test大千世界大千世界", 9, 1, 9)
+//    testStringLocate("大千", "大千世界大千世界", 1, 1, 1)
+//    // scalastyle:on
+//    // UNICODE
+//    testStringLocate("aa", "Aaads", 0, 2, 0)
+//    testStringLocate("aa", "Aaads", 1, 2, 2)
+//    testStringLocate("AA", "aaads", 1, 2, 0)
+//    testStringLocate("aa", "aAads", 2, 2, 0)
+//    testStringLocate("aa", "aaAds", 3, 2, 0)
+//    testStringLocate("abC", "abcabc", 1, 2, 0)
+//    testStringLocate("abC", "abCabc", 2, 2, 0)
+//    testStringLocate("abC", "abCabC", 2, 2, 4)
+//    testStringLocate("abc", "abcabc", 1, 2, 1)
+//    testStringLocate("abc", "abcabc", 3, 2, 4)
+//    // scalastyle:off
+//    testStringLocate("界x", "test大千世界X大千世界", 1, 2, 0)
+//    testStringLocate("界X", "test大千世界X大千世界", 1, 2, 8)
+//    testStringLocate("界", "test大千世界X大千世界", 13, 2, 13)
+//    // scalastyle:on
+//    // UNICODE_CI
+//    testStringLocate("aa", "Aaads", 0, 3, 0)
+//    testStringLocate("AA", "aaads", 1, 3, 1)
+    testStringLocate("aa", "aAads", 2, 3, 2)
+    testStringLocate("aa", "aaAds", 3, 3, 0)
+    testStringLocate("abC", "abcabc", 1, 3, 1)
+    testStringLocate("abC", "abCabc", 2, 3, 4)
+    testStringLocate("abc", "abcabc", 4, 3, 4)
+    // scalastyle:off
+    testStringLocate("界x", "test大千世界X大千世界", 1, 3, 8)
+    testStringLocate("界", "test大千世界X大千世界", 13, 3, 13)
+    testStringLocate("大千", "test大千世界大千世界", 1, 3, 5)
+    testStringLocate("大千", "test大千世界大千世界", 9, 3, 9)
+    testStringLocate("大千", "大千世界大千世界", 1, 3, 1)
+    // scalastyle:on
   }
 
   // TODO: Add more tests for other string expressions

@@ -835,6 +835,33 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  public int indexOf(UTF8String substring, int start, int collationId) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return this.indexOf(substring, start);
+    }
+    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
+      return this.toLowerCase().indexOf(substring.toLowerCase(), start);
+    }
+    return collatedIndexOf(substring, start, collationId);
+  }
+
+  private int collatedIndexOf(UTF8String substring, int start, int collationId) {
+    if (substring.numBytes == 0) {
+      return 0;
+    }
+
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
+
+    int pos = 0;
+    while ((pos = stringSearch.next()) != StringSearch.DONE && pos < start) {
+      if (stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
+        return pos;
+      }
+    }
+
+    return -1;
+  }
+
   /**
    * Find the `str` from left to right.
    */
