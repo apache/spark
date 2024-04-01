@@ -1431,9 +1431,15 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
   override def nullSafeEval(str: Any, delim: Any, count: Any): Any = {
     val collationId = first.dataType.asInstanceOf[StringType].collationId
 
-    str.asInstanceOf[UTF8String].subStringIndex(
-      delim.asInstanceOf[UTF8String],
-      count.asInstanceOf[Int], collationId)
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryOrdering) {
+      str.asInstanceOf[UTF8String].subStringIndex(
+        delim.asInstanceOf[UTF8String],
+        count.asInstanceOf[Int])
+    } else {
+      str.asInstanceOf[UTF8String].collatedSubStringIndex(
+        delim.asInstanceOf[UTF8String],
+        count.asInstanceOf[Int], collationId)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1443,7 +1449,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
       defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
     } else {
       defineCodeGen(ctx, ev, (str, delim, count) =>
-        s"$str.subStringIndex($delim, $count, $collationId)")
+        s"$str.collatedSubStringIndex($delim, $count, $collationId)")
     }
   }
 

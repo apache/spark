@@ -931,9 +931,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Find the `str` from left to right considering binary lowercase collation.
    */
   private int rfindLowercase(UTF8String str, int start) {
-    if(numBytes == 0 || str.numBytes == 0) {
-      return -1;
-    }
+    assert (str.numBytes > 0);
 
     UTF8String lowercaseThis = this.toLowerCase();
     UTF8String lowercaseStr = str.toLowerCase();
@@ -957,7 +955,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Find the `str` from left to right considering non-binary collations.
    */
   private int collatedRFind(UTF8String str, int start, int collationId) {
-    if(numBytes == 0 || str.numBytes == 0) {
+    assert (str.numBytes > 0);
+
+    if(numBytes == 0) {
       return -1;
     }
 
@@ -1028,14 +1028,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
   }
 
-  public UTF8String subStringIndex(UTF8String delim, int count, int collationId) {
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      return subStringIndex(delim, count);
-    }
-    return collatedSubStringIndex(delim, count, collationId);
-  }
-
-  private UTF8String collatedSubStringIndex(UTF8String delim, int count, int collationId) {
+  public UTF8String collatedSubStringIndex(UTF8String delim, int count, int collationId) {
     if (delim.numBytes == 0 || count == 0) {
       return EMPTY_UTF8;
     }
