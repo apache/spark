@@ -100,7 +100,8 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
  */
 @Experimental
 @Evolving
-private[sql] trait StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K, I, O] {
+private[sql] trait StatefulProcessorWithInitialState[K, I, O, S]
+  extends StatefulProcessor[K, I, O] {
 
   /**
    * Function that will be invoked only in the first batch for users to process initial states.
