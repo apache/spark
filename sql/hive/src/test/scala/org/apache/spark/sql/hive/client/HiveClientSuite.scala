@@ -558,7 +558,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   test("sql create index and reset") {
     // HIVE-18448 Since Hive 3.0, INDEX is not supported.
-    if (version != "3.0" && version != "3.1") {
+    if (version != "3.0" && version != "3.1" && version != "4.0") {
       client.runSqlHive("CREATE TABLE indexed_table (key INT)")
       client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
         "as 'COMPACT' WITH DEFERRED REBUILD")

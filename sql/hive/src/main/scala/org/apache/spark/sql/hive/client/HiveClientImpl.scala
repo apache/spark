@@ -120,6 +120,7 @@ private[hive] class HiveClientImpl(
     case hive.v2_3 => new Shim_v2_3()
     case hive.v3_0 => new Shim_v3_0()
     case hive.v3_1 => new Shim_v3_1()
+    case hive.v4_0 => new Shim_v4_0()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -175,8 +176,26 @@ private[hive] class HiveClientImpl(
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
     shim.setCurrentSessionState(state)
-    state.out = new PrintStream(outputBuffer, true, UTF_8.name())
-    state.err = new PrintStream(outputBuffer, true, UTF_8.name())
+    // Hive 4.0 uses org.apache.hadoop.hive.common.io.SessionStream instead of PrintStream
+    // (see HIVE-21033). For creating a new SessionStream instance reflection must be used
+    // as this class also was introduced by the same change (HIVE-21033)
+    // and it is not available in any eariler Hive version
+    if (Utils.classIsLoadable("org.apache.hadoop.hive.common.io.SessionStream")) {
+      val sessionStreamCtor = Utils
+          .classForName[Any]("org.apache.hadoop.hive.common.io.SessionStream")
+          .getConstructor(classOf[java.io.OutputStream])
+      val sessionStateClass =
+        Utils.classForName[SessionState](classOf[SessionState].getName)
+      val outField = sessionStateClass.getDeclaredField("out")
+      outField.set(state,
+        sessionStreamCtor.newInstance(new PrintStream(outputBuffer, true, UTF_8.name())))
+      val errField = sessionStateClass.getDeclaredField("err")
+      errField.set(state,
+        sessionStreamCtor.newInstance(new PrintStream(outputBuffer, true, UTF_8.name())))
+    } else {
+      state.out = new PrintStream(outputBuffer, true, UTF_8.name())
+      state.err = new PrintStream(outputBuffer, true, UTF_8.name())
+    }
     state
   }
 
@@ -857,7 +876,7 @@ private[hive] class HiveClientImpl(
       // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
       // and the CommandProcessorFactory.clean function removed.
       driver.getClass.getMethod("close").invoke(driver)
-      if (version != hive.v3_0 && version != hive.v3_1) {
+      if (version != hive.v3_0 && version != hive.v3_1 && version != hive.v4_0) {
         CommandProcessorFactory.clean(conf)
       }
     }

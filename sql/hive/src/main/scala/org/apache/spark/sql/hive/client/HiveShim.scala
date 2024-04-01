@@ -256,6 +256,9 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   protected lazy val throwExceptionInDropIndex = JBoolean.TRUE
   // txnId can be 0 unless isAcid == true
   protected lazy val txnIdInLoadDynamicPartitions: JLong = 0L
+  // Hive CHAR and VARCHAR are treated as catalyst strings but they cannot be pushed down
+  // before HIVE-26661 (which was introduced in Hive version 4.0)
+  protected val charVarcharPartionKeyPushDownSupported = false
 
   override def getMSC(hive: Hive): IMetaStoreClient = hive.getMSC
 
@@ -723,15 +726,15 @@ private[client] class Shim_v2_0 extends Shim with Logging {
     }
 
     object SupportedAttribute {
-      // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
-      private val varcharKeys = table.getPartitionKeys.asScala
+      private lazy val charVarcharKeys = table.getPartitionKeys.asScala
         .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
           col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
         .map(col => col.getName).toSet
 
       def unapply(attr: Attribute): Option[String] = {
         val resolver = SQLConf.get.resolver
-        if (varcharKeys.exists(c => resolver(c, attr.name))) {
+        if (!charVarcharPartionKeyPushDownSupported &&
+            charVarcharKeys.exists(c => resolver(c, attr.name))) {
           None
         } else if (attr.dataType.isInstanceOf[IntegralType] || attr.dataType == StringType ||
             attr.dataType == DateType) {
@@ -1277,3 +1280,7 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
 }
 
 private[client] class Shim_v3_1 extends Shim_v3_0
+
+private[client] class Shim_v4_0 extends Shim_v3_1 {
+  override protected val charVarcharPartionKeyPushDownSupported = true
+}

@@ -88,8 +88,14 @@ package object client {
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
 
+    case object v4_0 extends HiveVersion("4.0.0",
+      extraDeps = Seq("org.apache.derby:derby:10.14.2.0"),
+      exclusions = Seq("org.apache.calcite:calcite-druid",
+        "org.apache.curator:*",
+        "org.apache.hive:hive-vector-code-gen"))
+
     val allSupportedHiveVersions: Set[HiveVersion] =
-      Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1)
+      Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1, v4_0)
   }
   // scalastyle:on
 
