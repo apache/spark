@@ -62,6 +62,10 @@ class ErrorParserSuite extends AnalysisTest {
       errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-test"))
     checkError(
+      exception = parseException("SET CATALOG test-test"),
+      errorClass = "INVALID_IDENTIFIER",
+      parameters = Map("ident" -> "test-test"))
+    checkError(
       exception = parseException("CREATE DATABASE IF NOT EXISTS my-database"),
       errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "my-database"))
@@ -167,6 +171,10 @@ class ErrorParserSuite extends AnalysisTest {
       exception = parseException("ANALYZE TABLE test-table PARTITION (part1)"),
       errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
+    checkError(
+      exception = parseException("CREATE TABLE t(c1 struct<test-test INT, c2 INT>)"),
+      errorClass = "INVALID_IDENTIFIER",
+      parameters = Map("ident" -> "test-test"))
     checkError(
       exception = parseException("LOAD DATA INPATH \"path\" INTO TABLE my-tab"),
       errorClass = "INVALID_IDENTIFIER",
@@ -276,6 +284,19 @@ class ErrorParserSuite extends AnalysisTest {
         """.stripMargin),
       errorClass = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-table"))
+    checkError(
+      exception = parseException(
+        """
+          |SELECT * FROM (
+          |  SELECT year, course, earnings FROM courseSales
+          |)
+          |PIVOT (
+          |  sum(earnings)
+          |  FOR test-test IN ('dotNET', 'Java')
+          |);
+        """.stripMargin),
+      errorClass = "INVALID_IDENTIFIER",
+      parameters = Map("ident" -> "test-test"))
   }
 
   test("datatype not supported") {
