@@ -1,14 +1,6 @@
 Forward Secure Auth Protocol v2.0
 ==============================================
 
-Deprecation Notice
-------------------
-This is a bespoke key exchange protocol that was implemented before Spark supported TLS (aka SSL) for RPC
-calls. It is recommended that Spark users upgrade to using TLS for RPC calls between Spark processes.
-
-See the [Spark security documentation](https://github.com/apache/spark/blob/master/docs/security.md#ssl-encryption)
-for more information on how to configure TLS.
-
 Summary
 -------
 

@@ -214,6 +214,11 @@ public class TransportConf {
   }
 
   /**
+   * Version number to be used by the AuthEngine key agreement protocol. Value values are 1 or 2.
+   */
+  public int authEngineVersion() { return conf.getInt("spark.network.crypto.authEngineVersion", 2); }
+
+  /**
    * The cipher transformation to use for encrypting session data.
    */
   public String cipherTransformation() {

@@ -47,11 +47,13 @@ class AuthEngine implements Closeable {
   private static final String MAC_ALGORITHM = "HMACSHA256";
   private static final int AES_GCM_KEY_SIZE_BYTES = 16;
   private static final byte[] EMPTY_TRANSCRIPT = new byte[0];
+  private static final int UNSAFE_SKIP_HKDF_VERSION = 1;
 
   private final String appId;
   private final byte[] preSharedSecret;
   private final TransportConf conf;
   private final Properties cryptoConf;
+  private final boolean unsafeSkipFinalHkdf;
 
   private byte[] clientPrivateKey;
   private TransportCipher sessionCipher;
@@ -63,6 +65,8 @@ class AuthEngine implements Closeable {
     this.preSharedSecret = preSharedSecret.getBytes(UTF_8);
     this.conf = conf;
     this.cryptoConf = conf.cryptoConf();
+    // This is for backward compatibility with older versions of this protocol which did not perform a final HKDF
+    this.unsafeSkipFinalHkdf = conf.authEngineVersion() == UNSAFE_SKIP_HKDF_VERSION;
   }
 
   @VisibleForTesting
@@ -202,7 +206,8 @@ class AuthEngine implements Closeable {
       byte[] sharedSecret,
       boolean isClient,
       byte[] transcript) throws GeneralSecurityException {
-    byte[] derivedKey = Hkdf.computeHkdf(
+    byte[] derivedKey = unsafeSkipFinalHkdf ? sharedSecret :  // This is for backwards compatibility
+      Hkdf.computeHkdf(
         MAC_ALGORITHM,
         sharedSecret,
         transcript,
@@ -231,7 +236,7 @@ class AuthEngine implements Closeable {
 
   private byte[] getTranscript(AuthMessage... encryptedPublicKeys) {
     ByteBuf transcript = Unpooled.buffer(
-        Arrays.stream(encryptedPublicKeys).mapToInt(k -> k.encodedLength()).sum());
+        Arrays.stream(encryptedPublicKeys).mapToInt(AuthMessage::encodedLength).sum());
     Arrays.stream(encryptedPublicKeys).forEachOrdered(k -> k.encode(transcript));
     return transcript.array();
   }

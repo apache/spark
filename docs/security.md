@@ -156,8 +156,8 @@ requires keys and certificates to be properly configured. SSL is standardized an
 secure.
 
 The legacy method is an AES-based encryption mechanism relying on a shared secret. This requires
-RPC authentication to also be enabled. This method uses a bespoke protocol and should be considered
-deprecated in favor of SSL.
+RPC authentication to also be enabled. This method uses a bespoke protocol and it is recommended
+to use SSL instead.
 
 If both options are enabled in the configuration, the SSL based RPC encryption takes precedence
 and the AES based encryption will not be used (and a warning message will be emitted).

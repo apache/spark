@@ -20,6 +20,7 @@ package org.apache.spark.network.crypto;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.security.GeneralSecurityException;
+import java.util.Collections;
 import java.util.Random;
 
 import com.google.crypto.tink.subtle.Hex;
@@ -49,6 +50,9 @@ public class AuthEngineSuite {
       "e25e9d5c5a380b8e6d1a184692fac065ed84f8592c18e9629f9c636809dca2ffc041f20346eb53db78738" +
       "08ecad08b46b5ee3ff";
   private static final String derivedKey = "2d6e7a9048c8265c33a8f3747bfcc84c";
+  // This key would have been derived from an older version of the protocol that did not run a final HKDF pass
+  private static final String unsafeDerivedKey = "31963f15a320d5c90333f7ecf5cf3a31c7eaf151de07fef8494663a9f47cfd31";
+
   private static final String inputIv = "fc6a5dc8b90a9dad8f54f08b51a59ed2";
   private static final String outputIv = "a72709baf00785cad6329ce09f631f71";
   private static TransportConf conf;
@@ -174,6 +178,28 @@ public class AuthEngineSuite {
       client.deriveSessionCipher(clientChallenge, serverResponse);
       TransportCipher clientCipher = client.sessionCipher();
       assertEquals(Hex.encode(clientCipher.getKey().getEncoded()), derivedKey);
+      assertEquals(Hex.encode(clientCipher.getInputIv()), inputIv);
+      assertEquals(Hex.encode(clientCipher.getOutputIv()), outputIv);
+    }
+  }
+
+  @Test
+  public void testFixedChallengeResponseUnsafeVersion() throws Exception {
+    MapConfigProvider configProvider = new MapConfigProvider(Collections.singletonMap(
+      "spark.network.crypto.authEngineVersion", "1"));
+    TransportConf v1Conf = new TransportConf("rpc", configProvider);
+
+    try (AuthEngine client = new AuthEngine("appId", "secret", v1Conf)) {
+      byte[] clientPrivateKey = Hex.decode(clientPrivate);
+      client.setClientPrivateKey(clientPrivateKey);
+      AuthMessage clientChallenge =
+              AuthMessage.decodeMessage(ByteBuffer.wrap(Hex.decode(clientChallengeHex)));
+      AuthMessage serverResponse =
+              AuthMessage.decodeMessage(ByteBuffer.wrap(Hex.decode(serverResponseHex)));
+      // Verify that the client will accept an old transcript.
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher clientCipher = client.sessionCipher();
+      assertEquals(Hex.encode(clientCipher.getKey().getEncoded()), unsafeDerivedKey);
       assertEquals(Hex.encode(clientCipher.getInputIv()), inputIv);
       assertEquals(Hex.encode(clientCipher.getOutputIv()), outputIv);
     }
