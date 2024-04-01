@@ -897,7 +897,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       pos = stringSearch.next();
     }
 
-    return pos >= start ? pos : -1;
+    return pos;
   }
 
   /**
