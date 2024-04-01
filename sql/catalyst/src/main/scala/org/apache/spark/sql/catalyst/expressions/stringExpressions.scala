@@ -1025,7 +1025,6 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
       return defaultCheck
     }
 
-    val collationId = left.dataType.asInstanceOf[StringType].collationId
     CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
   }
 
@@ -1390,6 +1389,8 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
+  final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
+
   override def left: Expression = str
   override def right: Expression = substr
   override def dataType: DataType = IntegerType
@@ -1397,7 +1398,6 @@ case class StringInstr(str: Expression, substr: Expression)
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
-    val collationId = left.dataType.asInstanceOf[StringType].collationId
     string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0, collationId) + 1
   }
 
@@ -1407,15 +1407,12 @@ case class StringInstr(str: Expression, substr: Expression)
       return defaultCheck
     }
 
-    val collationId = left.dataType.asInstanceOf[StringType].collationId
     CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
   }
 
   override def prettyName: String = "instr"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val collationId = left.dataType.asInstanceOf[StringType].collationId
-
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       defineCodeGen(ctx, ev, (l, r) => s"($l).indexOf($r, 0) + 1")
     } else {
