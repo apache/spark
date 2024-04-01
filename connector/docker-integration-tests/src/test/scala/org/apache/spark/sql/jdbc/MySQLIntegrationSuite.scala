@@ -27,6 +27,7 @@ import scala.util.Using
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.ShortType
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -336,6 +337,15 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = spark.read.jdbc(jdbcUrl, "TBL_GEOMETRY", new Properties)
     checkAnswer(df,
       Row(Array[Byte](0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+  }
+
+  test("SPARK-47665: Read/write round-trip for ShortType") {
+    spark.range(3)
+      .selectExpr("CAST(id AS SMALLINT) AS id")
+      .write
+      .jdbc(jdbcUrl, "smallint_round_trip", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "smallint_round_trip", new Properties)
+    assert(df.schema.fields.head.dataType === ShortType)
   }
 }
 
