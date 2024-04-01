@@ -22,6 +22,7 @@ import scala.collection.immutable.Seq
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, FindInSet, Literal, StringInstr, StringRepeat}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -81,55 +82,70 @@ class CollationStringExpressionsSuite extends QueryTest
       checkEvaluation(StringInstr(string, substring), expected)
     }
 
-    // UTF8_BINARY_LCASE
-    testInStr("aaads", "Aa", 1, 1)
-    testInStr("aaaDs", "de", 1, 0)
-    // UNICODE
-    testInStr("aaads", "Aa", 2, 0)
-    testInStr("aaads", "de", 2, 0)
-    // UNICODE_CI
-    testInStr("aaads", "AD", 3, 3)
-    testInStr("aaads", "dS", 3, 4)
+    var collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
+    testInStr("aaads", "Aa", collationId, 1)
+    testInStr("aaaDs", "de", collationId, 0)
+
+    collationId = CollationFactory.collationNameToId("UNICODE")
+    testInStr("aaads", "Aa", collationId, 0)
+    testInStr("aaads", "de", collationId, 0)
+
+    collationId = CollationFactory.collationNameToId("UNICODE_CI")
+    testInStr("aaads", "AD", collationId, 3)
+    testInStr("aaads", "dS", collationId, 4)
   }
 
   test("FIND_IN_SET check result on explicitly collated strings") {
-    def testFindInSet(expected: Integer, stringType: Integer, word: String, set: String): Unit = {
-      val w = Literal.create(word, StringType(stringType))
-      val s = Literal.create(set, StringType(stringType))
+    def testFindInSet(word: String, set: String, collationId: Integer, expected: Integer): Unit = {
+      val w = Literal.create(word, StringType(collationId))
+      val s = Literal.create(set, StringType(collationId))
 
       checkEvaluation(FindInSet(w, s), expected)
     }
 
-    // UTF8_BINARY
-    testFindInSet(0, 0, "AB", "abc,b,ab,c,def")
-    // UTF8_BINARY_LCASE
-    testFindInSet(0, 1, "a", "abc,b,ab,c,def")
-    testFindInSet(4, 1, "c", "abc,b,ab,c,def")
-    testFindInSet(3, 1, "AB", "abc,b,ab,c,def")
-    testFindInSet(1, 1, "AbC", "abc,b,ab,c,def")
-    testFindInSet(0, 1, "abcd", "abc,b,ab,c,def")
-    // UNICODE
-    testFindInSet(0, 2, "a", "abc,b,ab,c,def")
-    testFindInSet(3, 2, "ab", "abc,b,ab,c,def")
-    testFindInSet(0, 2, "Ab", "abc,b,ab,c,def")
-    // UNICODE_CI
-    testFindInSet(0, 3, "a", "abc,b,ab,c,def")
-    testFindInSet(4, 3, "C", "abc,b,ab,c,def")
-    testFindInSet(5, 3, "DeF", "abc,b,ab,c,dEf")
-    testFindInSet(0, 3, "DEFG", "abc,b,ab,c,def")
+    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
+    testFindInSet("AB", "abc,b,ab,c,def", collationId, 0)
+
+    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
+    testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("c", "abc,b,ab,c,def", collationId, 4)
+    testFindInSet("AB", "abc,b,ab,c,def", collationId, 3)
+    testFindInSet("AbC", "abc,b,ab,c,def", collationId, 1)
+    testFindInSet("abcd", "abc,b,ab,c,def", collationId, 0)
+
+    collationId = CollationFactory.collationNameToId("UNICODE")
+    testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("ab", "abc,b,ab,c,def", collationId, 3)
+    testFindInSet("Ab", "abc,b,ab,c,def", collationId, 0)
+
+    collationId = CollationFactory.collationNameToId("UNICODE_CI")
+    testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("C", "abc,b,ab,c,def", collationId, 4)
+    testFindInSet("DeF", "abc,b,ab,c,dEf", collationId, 5)
+    testFindInSet("DEFG", "abc,b,ab,c,def", collationId, 0)
   }
 
   test("REPEAT check output type on explicitly collated string") {
-    def testRepeat(expected: String, collationId: Int, input: String, n: Int): Unit = {
+    def testRepeat(input: String, n: Int, collationId: Int, expected: String): Unit = {
       val s = Literal.create(input, StringType(collationId))
 
       checkEvaluation(Collation(StringRepeat(s, Literal.create(n))).replacement, expected)
     }
 
-    testRepeat("UTF8_BINARY", 0, "abc", 2)
-    testRepeat("UTF8_BINARY_LCASE", 1, "abc", 2)
-    testRepeat("UNICODE", 2, "abc", 2)
-    testRepeat("UNICODE_CI", 3, "abc", 2)
+    // Not important for this test
+    val repeatNum = 2;
+
+    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
+    testRepeat("abc", repeatNum, collationId, "UTF8_BINARY")
+
+    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
+    testRepeat("abc", repeatNum, collationId, "UTF8_BINARY_LCASE")
+
+    collationId = CollationFactory.collationNameToId("UNICODE")
+    testRepeat("abc", repeatNum, collationId, "UNICODE")
+
+    collationId = CollationFactory.collationNameToId("UNICODE_CI")
+    testRepeat("abc", repeatNum, collationId, "UNICODE_CI")
   }
 
   // TODO: Add more tests for other string expressions
