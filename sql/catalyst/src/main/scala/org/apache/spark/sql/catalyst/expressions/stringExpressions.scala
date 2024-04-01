@@ -1070,64 +1070,40 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
     val evals = children.map(_.genCode(ctx))
     val srcString = evals(0)
 
-    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
-      if (evals.length == 1) {
-        ev.copy(code = code"""
-          |${srcString.code}
-          |boolean ${ev.isNull} = false;
-          |UTF8String ${ev.value} = null;
-          |if (${srcString.isNull}) {
-          |  ${ev.isNull} = true;
-          |} else {
-          |  ${ev.value} = ${srcString.value}.$trimMethod();
-          |}""".stripMargin)
-      } else {
-        val trimString = evals(1)
-        ev.copy(code = code"""
-          |${srcString.code}
-          |boolean ${ev.isNull} = false;
-          |UTF8String ${ev.value} = null;
-          |if (${srcString.isNull}) {
-          |  ${ev.isNull} = true;
-          |} else {
-          |  ${trimString.code}
-          |  if (${trimString.isNull}) {
-          |    ${ev.isNull} = true;
-          |  } else {
-          |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
-          |  }
-          |}""".stripMargin)
-      }
-    }
-    else {
-      if (evals.length == 1) {
-        ev.copy(code = code"""
-          |${srcString.code}
-          |boolean ${ev.isNull} = false;
-          |UTF8String ${ev.value} = null;
-          |if (${srcString.isNull}) {
-          |  ${ev.isNull} = true;
-          |} else {
-          |  ${ev.value} = ${srcString.value}.$trimMethod($collationId);
-          |}""".stripMargin)
-      } else {
-        val trimString = evals(1)
-        ev.copy(code = code"""
-          |${srcString.code}
-          |boolean ${ev.isNull} = false;
-          |UTF8String ${ev.value} = null;
-          |if (${srcString.isNull}) {
-          |  ${ev.isNull} = true;
-          |} else {
-          |  ${trimString.code}
-          |  if (${trimString.isNull}) {
-          |    ${ev.isNull} = true;
-          |  } else {
-          |    ${ev.value} =
-          |      ${srcString.value}.$trimMethod(${trimString.value}, $collationId);
-          |  }
-          |}""".stripMargin)
-      }
+    if (evals.length == 1) {
+      val collationIdStr =
+        if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) ""
+        else collationId
+
+      ev.copy(code = code"""
+        |${srcString.code}
+        |boolean ${ev.isNull} = false;
+        |UTF8String ${ev.value} = null;
+        |if (${srcString.isNull}) {
+        |  ${ev.isNull} = true;
+        |} else {
+        |  ${ev.value} = ${srcString.value}.$trimMethod($collationIdStr);
+        |}""".stripMargin)
+    } else {
+      val trimString = evals(1)
+      val collationIdStr =
+        if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) ""
+        else ", " + collationId
+
+      ev.copy(code = code"""
+        |${srcString.code}
+        |boolean ${ev.isNull} = false;
+        |UTF8String ${ev.value} = null;
+        |if (${srcString.isNull}) {
+        |  ${ev.isNull} = true;
+        |} else {
+        |  ${trimString.code}
+        |  if (${trimString.isNull}) {
+        |    ${ev.isNull} = true;
+        |  } else {
+        |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value}$collationIdStr);
+        |  }
+        |}""".stripMargin)
     }
   }
 
