@@ -361,9 +361,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def json(paths: String*): DataFrame = {
-    if (userSpecifiedSchema.isEmpty) {
-      require(paths.nonEmpty, "The paths cannot be empty")
-    }
+    assertNonEmptyPaths(paths: _*)
     userSpecifiedSchema.foreach(checkJsonSchema)
     format("json").load(paths : _*)
   }
@@ -542,9 +540,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = {
-    if (userSpecifiedSchema.isEmpty) {
-      require(paths.nonEmpty, "The paths cannot be empty")
-    }
+    assertNonEmptyPaths(paths: _*)
     format("csv").load(paths : _*)
   }
 
@@ -574,9 +570,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def xml(paths: String*): DataFrame = {
-    if (userSpecifiedSchema.isEmpty) {
-      require(paths.nonEmpty, "The paths cannot be empty")
-    }
+    assertNonEmptyPaths(paths: _*)
     userSpecifiedSchema.foreach(checkXmlSchema)
     format("xml").load(paths: _*)
   }
@@ -645,9 +639,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def parquet(paths: String*): DataFrame = {
-    if (userSpecifiedSchema.isEmpty) {
-      require(paths.nonEmpty, "The paths cannot be empty")
-    }
+    assertNonEmptyPaths(paths: _*)
     format("parquet").load(paths: _*)
   }
 
@@ -675,9 +667,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def orc(paths: String*): DataFrame = {
-    if (userSpecifiedSchema.isEmpty) {
-      require(paths.nonEmpty, "The paths cannot be empty")
-    }
+    assertNonEmptyPaths(paths: _*)
     format("orc").load(paths: _*)
   }
 
@@ -737,9 +727,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def text(paths: String*): DataFrame = {
-    if (userSpecifiedSchema.isEmpty) {
-      require(paths.nonEmpty, "The paths cannot be empty")
-    }
+    assertNonEmptyPaths(paths: _*)
     format("text").load(paths : _*)
   }
 
@@ -787,6 +775,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   private def assertNoSpecifiedSchema(operation: String): Unit = {
     if (userSpecifiedSchema.nonEmpty) {
       throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedError(operation)
+    }
+  }
+
+  /**
+   * A convenient function for paths validation in APIs.
+   */
+  private def assertNonEmptyPaths(paths: String*): Unit = {
+    if (userSpecifiedSchema.isEmpty) {
+      require(paths.nonEmpty, "The paths cannot be empty")
     }
   }
 
