@@ -220,7 +220,8 @@ class PrefixKeyScanStateEncoder(
  * columns are marked as null. If the first col is null, those entries will appear last in
  * the iterator. If non-first columns are null, ordering based on the previous columns will
  * still be honored. For rows with null column values, ordering for subsequent columns
- * will also be maintained within those set of rows.
+ * will also be maintained within those set of rows. We use the same byte to also encode whether
+ * the value is negative or not.
  *
  * @param keySchema - schema of the key to be encoded
  * @param numOrderingCols - number of columns to be used for range scan
@@ -290,51 +291,55 @@ class RangeKeyScanStateEncoder(
   // If the value is not null, we write the null byte followed by the value.
   // Note that setting null for the index on the unsafeRow is not feasible as it would change
   // the sorting order on iteration.
+  // Also note that the same byte is used to indicate whether the value is negative or not.
   private def encodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
     writer.resetRowWriter()
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = row.get(idx, field.dataType)
-      val isNullCol: Byte = if (value == null) 0x01.toByte else 0x00.toByte
+      // initialize to 0x01 to indicate that the column is not null and positive
+      var isNullOrSignCol: Byte = 0x01.toByte
+      // Update the isNullOrSignCol byte to indicate null value
+      if (value == null) {
+        isNullOrSignCol = 0x02.toByte
+      }
       // Note that we cannot allocate a smaller buffer here even if the value is null
       // because the effective byte array is considered variable size and needs to have
       // the same size across all rows for the ordering to work as expected.
-      val bbuf = if (!supportsSignedValues(field.dataType)) {
-        ByteBuffer.allocate(field.dataType.defaultSize + 1)
-      } else {
-        // for numeric types, we reserve 2 additional bytes. one to indicate if the value is null
-        // and the other to indicate if the value is negative.
-        ByteBuffer.allocate(field.dataType.defaultSize + 2)
-      }
+      val bbuf = ByteBuffer.allocate(field.dataType.defaultSize + 1)
       bbuf.order(ByteOrder.BIG_ENDIAN)
-      bbuf.put(isNullCol)
-      if (isNullCol == 0x01.toByte) {
+      if (isNullOrSignCol == 0x02.toByte) {
+        bbuf.put(isNullOrSignCol)
         writer.write(idx, bbuf.array())
       } else {
         field.dataType match {
           case BooleanType =>
           case ByteType =>
+            bbuf.put(isNullOrSignCol)
             bbuf.put(value.asInstanceOf[Byte])
             writer.write(idx, bbuf.array())
 
-          // For numeric types, we need to prepend a byte to indicate whether the value is negative
-          // or not. If the value is negative, we write 0x00, else we write 0x01. This is to ensure
-          // that the byte-wise sort ordering works as expected.
           case ShortType =>
-            val signByte: Byte = if (value.asInstanceOf[Short] < 0) 0x00.toByte else 0x01.toByte
-            bbuf.put(signByte)
+            if (value.asInstanceOf[Short] < 0) {
+              isNullOrSignCol = 0x00.toByte
+            }
+            bbuf.put(isNullOrSignCol)
             bbuf.putShort(value.asInstanceOf[Short])
             writer.write(idx, bbuf.array())
 
           case IntegerType =>
-            val signByte: Byte = if (value.asInstanceOf[Int] < 0) 0x00.toByte else 0x01.toByte
-            bbuf.put(signByte)
+            if (value.asInstanceOf[Int] < 0) {
+              isNullOrSignCol = 0x00.toByte
+            }
+            bbuf.put(isNullOrSignCol)
             bbuf.putInt(value.asInstanceOf[Int])
             writer.write(idx, bbuf.array())
 
           case LongType =>
-            val signByte: Byte = if (value.asInstanceOf[Long] < 0) 0x00.toByte else 0x01.toByte
-            bbuf.put(signByte)
+            if (value.asInstanceOf[Long] < 0) {
+              isNullOrSignCol = 0x00.toByte
+            }
+            bbuf.put(isNullOrSignCol)
             bbuf.putLong(value.asInstanceOf[Long])
             writer.write(idx, bbuf.array())
 
@@ -348,6 +353,7 @@ class RangeKeyScanStateEncoder(
               throw StateStoreErrors.negativeValuesForOrderingColsNotSupported(field.name,
                 idx.toString)
             }
+            bbuf.put(isNullOrSignCol)
             bbuf.putFloat(value.asInstanceOf[Float])
             writer.write(idx, bbuf.array())
 
@@ -357,6 +363,7 @@ class RangeKeyScanStateEncoder(
               throw StateStoreErrors.negativeValuesForOrderingColsNotSupported(field.name,
                 idx.toString)
             }
+            bbuf.put(isNullOrSignCol)
             bbuf.putDouble(value.asInstanceOf[Double])
             writer.write(idx, bbuf.array())
         }
@@ -370,7 +377,8 @@ class RangeKeyScanStateEncoder(
   // For decode, we extract the byte array from the UnsafeRow, and then read the first byte
   // to determine if the value is null or not. If the value is null, we set the ordinal on
   // the UnsafeRow to null. If the value is not null, we read the rest of the bytes to get the
-  // actual value.
+  // actual value. Here we don't need to do anything special for negative or positive values
+  // given that their binary representation remains intact.
   private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
     val writer = new UnsafeRowWriter(numOrderingCols)
     writer.resetRowWriter()
@@ -378,9 +386,9 @@ class RangeKeyScanStateEncoder(
       val value = row.getBinary(idx)
       val bbuf = ByteBuffer.wrap(value.asInstanceOf[Array[Byte]])
       bbuf.order(ByteOrder.BIG_ENDIAN)
-      val isNullCol = bbuf.get()
-      if (isNullCol == 0x01.toByte) {
-        // set the column to null and skip reading the next byte
+      val isNullOrSignCol = bbuf.get()
+      if (isNullOrSignCol == 0x02.toByte) {
+        // set the column to null and skip reading the next byte(s)
         writer.setNullAt(idx)
       } else {
         field.dataType match {
@@ -388,17 +396,13 @@ class RangeKeyScanStateEncoder(
           case ByteType =>
             writer.write(idx, bbuf.get)
 
-          // For numeric types, we need to skip the sign byte and read the rest of the bytes
           case ShortType =>
-            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getShort)
 
           case IntegerType =>
-            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getInt)
 
           case LongType =>
-            bbuf.get() // skip the sign byte
             writer.write(idx, bbuf.getLong)
 
           case FloatType =>
