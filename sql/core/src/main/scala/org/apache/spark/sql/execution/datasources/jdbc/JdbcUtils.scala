@@ -438,14 +438,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case LongType if metadata.contains("binarylong") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val bytes = rs.getBytes(pos + 1)
-        var ans = 0L
-        var j = 0
-        while (j < bytes.length) {
-          ans = 256 * ans + (255 & bytes(j))
-          j = j + 1
-        }
-        row.setLong(pos, ans)
+        val l = nullSafeConvert[Array[Byte]](rs.getBytes(pos + 1), bytes => {
+          var ans = 0L
+          var j = 0
+          while (j < bytes.length) {
+            ans = 256 * ans + (255 & bytes(j))
+            j = j + 1
+          }
+          ans
+        })
+        row.update(pos, l)
 
     case LongType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
