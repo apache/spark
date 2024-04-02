@@ -60,4 +60,14 @@ object LogKey extends Enumeration {
   val TASK_STATE = Value
   val COUNT = Value
   val SIZE = Value
+  val APPLICATION_ID = Value
+  val APPLICATION_STATE = Value
+  val BUCKET = Value
+  val CONTAINER_ID = Value
+  val EXIT_CODE = Value
+  val MAX_EXECUTOR_FAILURES = Value
+  val REMOTE_ADDRESS = Value
+  val POD_ID = Value
+
+  type LogKey = Value
 }

@@ -66,6 +66,9 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
         // timetz represents time with time zone, currently it maps to Types.TIME.
         // We need to change to Types.TIME_WITH_TIMEZONE if the upstream changes.
         Some(TimestampType)
+      case Types.CHAR if "bpchar".equalsIgnoreCase(typeName) && size == Int.MaxValue =>
+        // bpchar with unspecified length same as text in postgres with blank-trimmed
+        Some(StringType)
       case Types.OTHER if "void".equalsIgnoreCase(typeName) => Some(NullType)
       case Types.OTHER => Some(StringType)
       case _ if "text".equalsIgnoreCase(typeName) => Some(StringType) // sqlType is Types.VARCHAR
@@ -91,6 +94,7 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
     case "float4" => Some(FloatType)
     case "float8" => Some(DoubleType)
     case "varchar" => Some(VarcharType(precision))
+    case "bpchar" if precision == Int.MaxValue => Some(StringType)
     case "char" | "bpchar" => Some(CharType(precision))
     case "text" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
          "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |

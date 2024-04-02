@@ -38,6 +38,7 @@ import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT,
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
+import org.apache.spark.internal.{LogKey, MDC}
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 
 private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
@@ -326,7 +327,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         s3client.createBucket(createBucketRequest)
       } catch {
         case e: Exception =>
-          logError(s"Failed to create bucket $BUCKET", e)
+          logError(log"Failed to create bucket ${MDC(LogKey.BUCKET, BUCKET)}", e)
           throw new SparkException(s"Failed to create bucket $BUCKET.", e)
       }
     }
