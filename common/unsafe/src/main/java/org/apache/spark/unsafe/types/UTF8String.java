@@ -1140,10 +1140,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.replace(search, replace);
     }
-    return collatedReplace(search, replace, collationId);
+    return collationAwareReplace(search, replace, collationId);
   }
 
-  private UTF8String collatedReplace(UTF8String search, UTF8String replace, int collationId) {
+  private UTF8String collationAwareReplace(UTF8String search, UTF8String replace, int collationId) {
     if (numBytes == 0 || search.numBytes == 0) {
       return this;
     }
