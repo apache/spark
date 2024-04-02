@@ -104,7 +104,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("Numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val rows = df.collect()
-    assert(rows.length == 1)
+    assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 11)
     assert(types(0).equals("class java.lang.Boolean"))
