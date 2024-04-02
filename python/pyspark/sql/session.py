@@ -1968,8 +1968,6 @@ class SparkSession(SparkConversionMixin):
             message_parameters={"feature": "SparkSession.client"},
         )
 
-    def
-
     def addArtifacts(
         self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
     ) -> None:
@@ -2059,7 +2057,6 @@ class SparkSession(SparkConversionMixin):
             error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
             message_parameters={"feature": "SparkSession.clearProgressHandlers"},
         )
-
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
