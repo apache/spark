@@ -2228,7 +2228,6 @@ def _test() -> None:
     pyspark.sql.session.SparkSession.removeProgressHandler.__doc__ = None
     pyspark.sql.session.SparkSession.clearProgressHandlers.__doc__ = None
 
-
     globs = pyspark.sql.session.__dict__.copy()
     globs["spark"] = (
         SparkSession.builder.master("local[4]").appName("sql.session tests").getOrCreate()
