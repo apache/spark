@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.jdk.CollectionConverters._
+
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, MDC}
@@ -29,12 +31,14 @@ class MDCSuite
   test("check MDC message") {
     val log = log"This is a log, exitcode ${MDC(EXIT_CODE, 10086)}"
     assert(log.message === "This is a log, exitcode 10086")
+    assert(log.context === Map("exit_code" -> "10086").asJava)
   }
 
   test("custom object as MDC value") {
     val cov = CustomObjectValue("spark", 10086)
     val log = log"This is a log, exitcode ${MDC(EXIT_CODE, cov)}"
     assert(log.message === "This is a log, exitcode CustomObjectValue: spark, 10086")
+    assert(log.context === Map("exit_code" -> "CustomObjectValue: spark, 10086").asJava)
   }
 
   case class CustomObjectValue(key: String, value: Int) {

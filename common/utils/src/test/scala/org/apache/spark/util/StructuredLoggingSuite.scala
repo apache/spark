@@ -62,12 +62,16 @@ trait LoggingSuiteBase
     log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
     log"Please double check."
 
+  // test for basic message (without any mdc)
   def expectedPatternForBasicMsg(level: Level): String
 
+  // test for basic message and exception
   def expectedPatternForBasicMsgWithException(level: Level): String
 
+  // test for message (with mdc)
   def expectedPatternForMsgWithMDC(level: Level): String
 
+  // test for message and exception
   def expectedPatternForMsgWithMDCAndException(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit

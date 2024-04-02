@@ -33,7 +33,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
-import org.apache.spark.internal.{Logging, LogKey => LK, MDC}
+import org.apache.spark.internal.{Logging, LogKey, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
@@ -144,7 +144,7 @@ class ExecutorPodsAllocator(
       onNewSnapshots(applicationId, schedulerBackend, executorPodsSnapshot)
       if (failureTracker.numFailedExecutors > maxNumExecutorFailures) {
         logError(log"Max number of executor failures " +
-          log"(${MDC(LK.MAX_EXECUTOR_FAILURES, maxNumExecutorFailures)}) reached")
+          log"(${MDC(LogKey.MAX_EXECUTOR_FAILURES, maxNumExecutorFailures)}) reached")
         stopApplication(EXCEED_MAX_EXECUTOR_FAILURES)
       }
     }
@@ -533,7 +533,8 @@ class ExecutorPodsAllocator(
       currentTime - creationTime > executorIdleTimeout
     } catch {
       case e: Exception =>
-        logError(log"Cannot get the creationTimestamp of the pod: ${MDC(LK.POD_ID, state.pod)}", e)
+        logError(log"Cannot get the creationTimestamp of the pod: " +
+          log"${MDC(LogKey.POD_ID, state.pod)}", e)
         true
     }
   }

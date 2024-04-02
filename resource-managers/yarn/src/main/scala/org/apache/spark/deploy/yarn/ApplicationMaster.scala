@@ -856,8 +856,8 @@ private[spark] class ApplicationMaster(
             logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
             finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           } else {
-            logError(log"Driver terminated with exit code " +
-              log"${MDC(EXIT_CODE, exitCode)}! Shutting down. $remoteAddress")
+            logError(log"Driver terminated with exit code ${MDC(EXIT_CODE, exitCode)}! " +
+              s"Shutting down. $remoteAddress")
             finish(FinalApplicationStatus.FAILED, exitCode)
           }
         } else {
