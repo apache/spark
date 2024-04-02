@@ -21,7 +21,6 @@ package org.apache.spark.sql.execution
  * A trait for a session extension to implement that provides addition explain plan
  * information.
  */
-
 trait ExtendedExplainGenerator {
   def generateExtendedInfo(plan: SparkPlan): String
 }

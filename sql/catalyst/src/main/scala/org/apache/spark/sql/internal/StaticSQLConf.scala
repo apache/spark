@@ -135,6 +135,13 @@ object StaticSQLConf {
     .toSequence
     .createOptional
 
+  val EXTENDED_EXPLAIN_PROVIDER = buildStaticConf("spark.sql.extendedExplainProvider")
+    .doc("If provided, Spark will print extended plan information from the provider (if any) in" +
+      " explain plan and in the UI")
+    .version("4.0.0")
+    .stringConf
+    .createOptional
+
   val SPARK_CACHE_SERIALIZER = buildStaticConf("spark.sql.cache.serializer")
     .doc("The name of a class that implements " +
       "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +

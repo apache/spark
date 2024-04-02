@@ -42,6 +42,7 @@ import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.EXTENDED_EXPLAIN_PROVIDER
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -372,21 +373,22 @@ class QueryExecution(
   }
 
   def extendedExplainInfo(append: String => Unit, plan: SparkPlan): Unit = {
-    sparkSession.sessionState.conf.extendedExplainProvider match {
-      case Some(generator) =>
-        try {
-          val extensionClass = Utils.classForName(generator)
-          val extension = extensionClass.getConstructor().newInstance()
-            .asInstanceOf[ExtendedExplainGenerator]
-          append("\n== Extended Information ==\n")
-          append(extension.generateExtendedInfo(plan))
-        } catch {
-          case e@(_: ClassCastException |
-                  _: ClassNotFoundException |
-                  _: NoClassDefFoundError) =>
-            logWarning(s"Cannot use $generator to get extended information.", e)
-        }
-      case _ =>
+    try {
+      val generator = sparkSession.sparkContext.conf.get(EXTENDED_EXPLAIN_PROVIDER.key)
+      try {
+        val extensionClass = Utils.classForName(generator)
+        val extension = extensionClass.getConstructor().newInstance()
+          .asInstanceOf[ExtendedExplainGenerator]
+        append("\n== Extended Information ==\n")
+        append(extension.generateExtendedInfo(plan))
+      } catch {
+        case e@(_: ClassCastException |
+                _: ClassNotFoundException |
+                _: NoClassDefFoundError) =>
+          logWarning(s"Cannot use $generator to get extended information.", e)
+      }
+    } catch {
+      case _: NoSuchElementException =>
     }
   }
 
