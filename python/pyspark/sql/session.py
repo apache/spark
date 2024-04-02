@@ -488,7 +488,7 @@ class SparkSession(SparkConversionMixin):
 
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
-                return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                return RemoteSparkSession.builder.config(map=opts).getOrCreate()  # type: ignore
 
             from pyspark.core.context import SparkContext
             from pyspark.core.conf import SparkConf
