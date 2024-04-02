@@ -101,6 +101,7 @@ final class ShuffleBlockFetcherIterator(
     checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
     doBatchFetch: Boolean,
+    doLocalDiskRead: Boolean = true,
   clock: Clock = new SystemClock())
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
@@ -417,7 +418,7 @@ final class ShuffleBlockFetcherIterator(
         numBlocksToFetch += mergedBlockInfos.size
         localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
         localBlockBytes += mergedBlockInfos.map(_.size).sum
-      } else if (blockManager.hostLocalDirManager.isDefined &&
+      } else if (doLocalDiskRead && blockManager.hostLocalDirManager.isDefined &&
         address.host == blockManager.blockManagerId.host) {
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
