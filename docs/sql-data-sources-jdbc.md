@@ -711,8 +711,8 @@ may have different mapping rules.
     </tr>
     <tr>
       <td>ShortType</td>
-      <td>INTEGER</td>
-      <td></td>
+      <td>SMALLINT</td>
+      <td>For Spark 3.5 and previous, it maps to INTEGER</td>
     </tr>
     <tr>
       <td>IntegerType</td>

@@ -19,6 +19,7 @@ from pyspark.errors.exceptions.base import (
     PySparkIndexError,
     PySparkAttributeError,
 )
+from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -2059,6 +2060,7 @@ class DataFrame:
         schema: Union[StructType, str],
         evalType: int,
         barrier: bool,
+        profile: Optional[ResourceProfile],
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -2070,7 +2072,11 @@ class DataFrame:
 
         return DataFrame(
             plan.MapPartitions(
-                child=self._plan, function=udf_obj, cols=self.columns, is_barrier=barrier
+                child=self._plan,
+                function=udf_obj,
+                cols=self.columns,
+                is_barrier=barrier,
+                profile=profile,
             ),
             session=self._session,
         )
@@ -2080,8 +2086,11 @@ class DataFrame:
         func: "PandasMapIterFunction",
         schema: Union[StructType, str],
         barrier: bool = False,
+        profile: Optional[ResourceProfile] = None,
     ) -> "DataFrame":
-        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, barrier)
+        return self._map_partitions(
+            func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, barrier, profile
+        )
 
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
@@ -2090,8 +2099,11 @@ class DataFrame:
         func: "ArrowMapIterFunction",
         schema: Union[StructType, str],
         barrier: bool = False,
+        profile: Optional[ResourceProfile] = None,
     ) -> "DataFrame":
-        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF, barrier)
+        return self._map_partitions(
+            func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF, barrier, profile
+        )
 
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
