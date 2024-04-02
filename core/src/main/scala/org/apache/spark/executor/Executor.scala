@@ -40,7 +40,8 @@ import org.slf4j.MDC
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC => LogMDC}
+import org.apache.spark.internal.LogKey.{ERROR, MAX_ATTEMPTS, TASK_ID, TASK_NAME, TIMEOUT}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
@@ -795,7 +796,7 @@ private[spark] class Executor(
         case t: Throwable if env.isStopped =>
           // Log the expected exception after executor.stop without stack traces
           // see: SPARK-19147
-          logError(s"Exception in $taskName: ${t.getMessage}")
+          logError(log"Exception in ${LogMDC(TASK_NAME, taskName)}: ${LogMDC(ERROR, t.getMessage)}")
 
         case t: Throwable =>
           // Attempt to exit cleanly by informing the driver of our failure.
@@ -1011,8 +1012,9 @@ private[spark] class Executor(
         if (!taskRunner.isFinished && timeoutExceeded()) {
           val killTimeoutMs = TimeUnit.NANOSECONDS.toMillis(killTimeoutNs)
           if (isLocal) {
-            logError(s"Killed task $taskId could not be stopped within $killTimeoutMs ms; " +
-              "not killing JVM because we are running in local mode.")
+            logError(log"Killed task ${LogMDC(TASK_ID, taskId)} could not be stopped within " +
+              log"${LogMDC(TIMEOUT, killTimeoutMs)} ms; " +
+              log"not killing JVM because we are running in local mode.")
           } else {
             // In non-local-mode, the exception thrown here will bubble up to the uncaught exception
             // handler and cause the executor JVM to exit.
@@ -1244,8 +1246,8 @@ private[spark] class Executor(
         logWarning("Issue communicating with driver in heartbeater", e)
         heartbeatFailures += 1
         if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
-          logError(s"Exit as unable to send heartbeats to driver " +
-            s"more than $HEARTBEAT_MAX_FAILURES times")
+          logError(log"Exit as unable to send heartbeats to driver " +
+            log"more than ${LogMDC(MAX_ATTEMPTS, HEARTBEAT_MAX_FAILURES)} times")
           System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
         }
     }
