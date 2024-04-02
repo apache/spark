@@ -1168,7 +1168,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     Map<String, String> collationAwareDict = new HashMap<>();
     for(String key : dict.keySet()) {
-      StringSearch stringSearch = CollationFactory.getStringSearch(this, UTF8String.fromString(key), collationId);
+      StringSearch stringSearch =
+        CollationFactory.getStringSearch(this, UTF8String.fromString(key), collationId);
 
       int pos = 0;
       while((pos = stringSearch.next()) != StringSearch.DONE) {
