@@ -529,7 +529,12 @@ case class JsonTuple(children: Seq[Expression])
       }
     }
 
-    val evaluator = new JsonTupleEvaluator(json, fieldNames.asJava)
+    val evaluator = new JsonTupleEvaluator(
+      json,
+      fieldNames
+        .filter{jsonPathIndex => jsonPathIndex != null && jsonPathIndex.path != null }
+        .asJava,
+      fieldExpressions.length)
     evaluator.evaluate()
   }
 
@@ -543,7 +548,9 @@ case class JsonTuple(children: Seq[Expression])
 
     val parseCode = if (constantFields == fieldExpressions.length) {
       val cacheName = ctx.freshName("foldableFieldNames")
-      val ref = ctx.addReferenceObj(cacheName, foldableFieldNames.map(_.orNull).asJava)
+      val ref = ctx.addReferenceObj(cacheName, foldableFieldNames.collect {
+        case Some(v) => v
+      }.asJava)
       Seq(s"""$fieldNames = $ref;""")
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
@@ -560,9 +567,9 @@ case class JsonTuple(children: Seq[Expression])
     } else {
       val cacheName = ctx.freshName("foldableFieldNames")
       val ref =
-        ctx.addReferenceObj(cacheName, foldableFieldNames.filter {
-          f => f != null && f.isDefined
-        }.map(_.get).toBuffer.asJava)
+        ctx.addReferenceObj(cacheName, foldableFieldNames.collect {
+          case Some(v) => v
+        }.toBuffer.asJava)
       val codeList = ArrayBuffer(s"""$fieldNames = $ref;""")
       // if there is a mix of constant and non-constant expressions
       // prefer the cached copy when available
@@ -597,7 +604,8 @@ case class JsonTuple(children: Seq[Expression])
             |  ${ev.value} = $refNullRow;
             |} else {
             |  $splitParseCode
-            |  $evaluatorClass evaluator = new $evaluatorClass(${jsonEval.value}, $fieldNames);
+            |  $evaluatorClass evaluator = new $evaluatorClass(
+            |    ${jsonEval.value}, $fieldNames, ${fieldExpressions.length});
             |  ${ev.value} = ($resultType) evaluator.evaluate();
             |}
             |""".stripMargin
@@ -605,12 +613,13 @@ case class JsonTuple(children: Seq[Expression])
   }
 }
 
-class JsonTupleEvaluator(jsonStr: UTF8String, fieldNames: java.util.List[JsonPathIndex]) {
+class JsonTupleEvaluator(
+    jsonStr: UTF8String, fieldNames: java.util.List[JsonPathIndex], colSize: Int) {
 
   import SharedFactory._
 
   @transient private lazy val nullRow: Seq[InternalRow] =
-    new GenericInternalRow(Array.ofDim[Any](fieldNames.size())) :: Nil
+    new GenericInternalRow(Array.ofDim[Any](colSize)) :: Nil
 
   def evaluate(): IterableOnce[InternalRow] = {
     try {
@@ -631,7 +640,7 @@ class JsonTupleEvaluator(jsonStr: UTF8String, fieldNames: java.util.List[JsonPat
       return nullRow
     }
 
-    val row = Array.ofDim[Any](fieldNames.size)
+    val row = Array.ofDim[Any](colSize)
 
     // start reading through the token stream, looking for any requested field names
     while (parser.nextToken() != JsonToken.END_OBJECT) {
