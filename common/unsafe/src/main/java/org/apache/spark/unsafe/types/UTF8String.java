@@ -597,8 +597,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
         || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
       return trim();
-    }
-    else {
+    } else {
       return trim(UTF8String.fromString(" "), collationId);
     }
   }
@@ -699,8 +698,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
         || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
       return trimLeft();
-    }
-    else {
+    } else {
       return trimLeft(UTF8String.fromString(" "), collationId);
     }
   }
@@ -761,7 +759,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return lowercaseTrimLeft(trimString);
     }
 
-    return collatedTrimLeft(trimString, collationId);
+    return collationAwareTrimLeft(trimString, collationId);
   }
 
   private UTF8String lowercaseTrimLeft(UTF8String trimString) {
@@ -787,8 +785,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (trimString.find(searchChar.toLowerCase(), 0) >= 0) {
         trimByteIdx += searchCharBytes;
         searchIdx += searchCharBytes;
-      }
-      else {
+      } else {
         // No matching, exit the search
         break;
       }
@@ -805,7 +802,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(trimByteIdx, numBytes - 1);
   }
 
-  private UTF8String collatedTrimLeft(UTF8String trimString, int collationId) {
+  private UTF8String collationAwareTrimLeft(UTF8String trimString, int collationId) {
     if (trimString == null) {
       return null;
     }
@@ -830,8 +827,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
           && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
         trimByteIdx += searchCharBytes;
         searchIdx += searchCharBytes;
-      }
-      else {
+      } else {
         // No matching, exit the search
         break;
       }
@@ -880,8 +876,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality
         || CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID == collationId) {
       return trimRight();
-    }
-    else {
+    } else {
       return trimRight(UTF8String.fromString(" "), collationId);
     }
   }
@@ -965,7 +960,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return lowercaseTrimRight(trimString);
     }
 
-    return collatedTrimRight(trimString, collationId);
+    return collationAwareTrimRight(trimString, collationId);
   }
 
   private UTF8String lowercaseTrimRight(UTF8String trimString) {
@@ -1006,8 +1001,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (trimString.find(searchChar.toLowerCase(), 0) >= 0) {
         trimByteIdx -= stringCharLen[numChars - 1];
         numChars--;
-      }
-      else {
+      } else {
         break;
       }
     }
@@ -1023,7 +1017,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return copyUTF8String(0, trimByteIdx);
   }
 
-  private UTF8String collatedTrimRight(UTF8String trimString, int collationId) {
+  private UTF8String collationAwareTrimRight(UTF8String trimString, int collationId) {
     if (trimString == null) {
       return null;
     }
@@ -1063,8 +1057,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
           && stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
         trimByteIdx -= stringCharLen[numChars - 1];
         numChars--;
-      }
-      else {
+      } else {
         break;
       }
     }

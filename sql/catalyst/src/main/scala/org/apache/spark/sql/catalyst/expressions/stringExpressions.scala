@@ -1197,8 +1197,7 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override def doEval(srcString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trim()
-    }
-    else {
+    } else {
       srcString.trim(collationId)
     }
   }
@@ -1206,8 +1205,7 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trim(trimString)
-    }
-    else {
+    } else {
       srcString.trim(trimString, collationId)
     }
   }
@@ -1318,8 +1316,7 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override def doEval(srcString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trimLeft()
-    }
-    else {
+    } else {
       srcString.trimLeft(collationId)
     }
   }
@@ -1327,8 +1324,7 @@ case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trimLeft(trimString)
-    }
-    else {
+    } else {
       srcString.trimLeft(trimString, collationId)
     }
   }
@@ -1392,8 +1388,7 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override def doEval(srcString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trimRight()
-    }
-    else {
+    } else {
       srcString.trimRight(collationId)
     }
   }
@@ -1401,8 +1396,7 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String = {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       srcString.trimRight(trimString)
-    }
-    else {
+    } else {
       srcString.trimRight(trimString, collationId)
     }
   }
