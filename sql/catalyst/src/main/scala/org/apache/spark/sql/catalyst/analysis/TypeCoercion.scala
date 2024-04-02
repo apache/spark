@@ -705,17 +705,16 @@ abstract class TypeCoercionBase {
         }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-          case (in, expected) => implicitCast(in, expected).getOrElse(in)
+          implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
         // general implicit casting.
-        val children: Seq[Expression] =
-          e.children.zip(e.inputTypes).map { case (in, expected) =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           if (in.dataType == NullType && !expected.acceptsType(NullType)) {
             Literal.create(null, expected.defaultConcreteType)
           } else {
@@ -1003,7 +1002,6 @@ object TypeCoercion extends TypeCoercionBase {
       case (any: AtomicType, _: StringType) if !any.isInstanceOf[StringType] => StringType
       case (any: AtomicType, st: StringTypeCollated)
         if !any.isInstanceOf[StringType] => st.defaultConcreteType
-
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.

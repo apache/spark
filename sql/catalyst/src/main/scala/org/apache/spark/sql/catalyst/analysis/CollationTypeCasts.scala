@@ -97,8 +97,7 @@ abstract class CollationTypeCasts extends TypeCoercionRule {
           throw QueryCompilationErrors.implicitCollationMismatchError()
         }
         else {
-          implicitTypes.find(dt => !(dt == SQLConf.get.defaultStringType))
-            .getOrElse(SQLConf.get.defaultStringType)
+          implicitTypes.headOption.getOrElse(SQLConf.get.defaultStringType)
         }
     }
   }
