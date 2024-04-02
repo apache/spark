@@ -61,6 +61,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
       + "42.75, 1.0000000000000002)").executeUpdate()
 
+    conn.prepareStatement("INSERT INTO numbers VALUES (null, null, "
+      + "null, null, null, null, null, null, null)").executeUpdate()
+
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, dt DATETIME, ts TIMESTAMP, "
       + "yr YEAR)").executeUpdate()
     conn.prepareStatement("INSERT INTO dates VALUES ('1991-11-09', '13:31:24', "
@@ -100,7 +103,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   test("Numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val rows = df.collect()
-    assert(rows.length == 1)
+    assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types.length == 9)
     assert(types(0).equals("class java.lang.Boolean"))
@@ -204,6 +207,11 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
          |OPTIONS (url '$jdbcUrl', query '$query')
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
+  }
+
+  test("SPARK-47666: Check nulls for result set getters") {
+    val nulls = spark.read.jdbc(jdbcUrl, "numbers", new Properties).tail(1).head
+    assert(nulls === Row(null, null, null, null, null, null, null, null, null))
   }
 }
 
