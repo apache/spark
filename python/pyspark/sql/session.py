@@ -131,6 +131,8 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
     if not is_remote_only():
+        from pyspark import RDD
+
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
