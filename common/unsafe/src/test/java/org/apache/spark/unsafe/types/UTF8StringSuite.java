@@ -107,6 +107,28 @@ public class UTF8StringSuite {
     assertTrue(fromString("你好123").binaryCompare(fromString("你好122")) > 0);
   }
 
+  @Test
+  public void lowercaseComparison() {
+    // ASCII
+    assertEquals(fromString("aaa").compareLowercase(fromString("AAA")), 0);
+    assertTrue(fromString("aaa").compareLowercase(fromString("AAAA")) < 0);
+    assertTrue(fromString("AAA").compareLowercase(fromString("aaaa")) < 0);
+    assertTrue(fromString("a").compareLowercase(fromString("B")) < 0);
+    assertTrue(fromString("b").compareLowercase(fromString("A")) > 0);
+    assertEquals(fromString("aAa").compareLowercase(fromString("AaA")), 0);
+    assertTrue(fromString("abcd").compareLowercase(fromString("abC")) > 0);
+    assertTrue(fromString("ABC").compareLowercase(fromString("abcd")) < 0);
+    assertEquals(fromString("abcd").compareLowercase(fromString("abcd")), 0);
+    // non-ASCII
+    assertEquals(fromString("ü").compareLowercase(fromString("Ü")), 0);
+    assertEquals(fromString("Äü").compareLowercase(fromString("äÜ")), 0);
+    assertTrue(fromString("a").compareLowercase(fromString("ä")) < 0);
+    assertTrue(fromString("a").compareLowercase(fromString("Ä")) < 0);
+    assertTrue(fromString("A").compareLowercase(fromString("ä")) < 0);
+    assertTrue(fromString("bä").compareLowercase(fromString("aü")) > 0);
+    assertTrue(fromString("bxxxxxxxxxx").compareLowercase(fromString("bü")) < 0);
+  }
+
   protected static void testUpperandLower(String upper, String lower) {
     UTF8String us = fromString(upper);
     UTF8String ls = fromString(lower);

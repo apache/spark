@@ -448,6 +448,37 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Optimized lowercase comparison for UTF8_BINARY_LCASE collation
+   */
+  public int compareLowercase(UTF8String other) {
+    int curr;
+    for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
+      byte left = getByte(curr);
+      byte right = other.getByte(curr);
+      if (numBytesForFirstByte(left) != 1 || numBytesForFirstByte(right) != 1) {
+        return compareLowercaseSuffixSlow(other, curr);
+      }
+      int lowerLeft = Character.toLowerCase(left);
+      int lowerRight = Character.toLowerCase(right);
+      if (lowerLeft > 127 || lowerRight > 127) {
+        return compareLowercaseSuffixSlow(other, curr);
+      }
+      if (lowerLeft != lowerRight) {
+        return lowerLeft - lowerRight;
+      }
+    }
+    return numBytes - other.numBytes;
+  }
+
+  private int compareLowercaseSuffixSlow(UTF8String other, int pref) {
+    UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
+            numBytes - pref);
+    UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
+            other.numBytes - pref);
+    return suffixLeft.toLowerCaseSlow().compareTo(suffixRight.toLowerCaseSlow());
+  }
+
+  /**
    * Returns the lower case of this string
    */
   public UTF8String toLowerCase() {
