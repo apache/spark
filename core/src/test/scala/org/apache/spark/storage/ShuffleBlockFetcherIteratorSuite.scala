@@ -194,7 +194,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       checksumEnabled: Boolean = true,
       checksumAlgorithm: String = "ADLER32",
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
-      doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
+      doBatchFetch: Boolean = false,
+      doLocalDiskRead: Boolean = true): ShuffleBlockFetcherIterator = {
     val tContext = taskContext.getOrElse(TaskContext.empty())
     new ShuffleBlockFetcherIterator(
       tContext,
@@ -220,7 +221,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       checksumEnabled,
       checksumAlgorithm,
       shuffleMetrics.getOrElse(tContext.taskMetrics().createTempShuffleReadMetrics()),
-      doBatchFetch)
+      doBatchFetch,
+      doLocalDiskRead)
   }
   // scalastyle:on argcount
 
@@ -362,6 +364,47 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // 2 remote blocks are read from the same block manager
     verifyFetchBlocksInvocationCount(1)
     assert(blockManager.hostLocalDirManager.get.getCachedHostLocalDirs.size === 1)
+  }
+
+  test("disable reading host local") {
+    val blockManager = createMockBlockManager()
+
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-remote-client-1", "test-remote-host", 2)
+    val remoteBlocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 5, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 6, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 7, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 8, 0) -> createMockManagedBuffer())
+
+    configureMockTransfer(remoteBlocks)
+
+    // Create a block manager running on the same host (host-local)
+    val hostLocalBmId = BlockManagerId("test-host-local-client-1", "test-local-host", 3)
+    val hostLocalBlocks = 5.to(8).map(ShuffleBlockId(0, _, 0) -> createMockManagedBuffer()).toMap
+
+    val iterator = createShuffleBlockIteratorWithDefaults(
+      Map(
+        remoteBmId -> toBlockList(remoteBlocks.keys, 1L, 1),
+        hostLocalBmId -> toBlockList(hostLocalBlocks.keys, 1L, 1)
+      ),
+      blockManager = Some(blockManager),
+      doLocalDiskRead = false
+    )
+
+    val allBlocks = remoteBlocks
+    for (i <- 0 until allBlocks.size) {
+      assert(iterator.hasNext,
+        s"iterator should have ${allBlocks.size} elements but actually has $i elements")
+      val (blockId, inputStream) = iterator.next()
+
+      // Make sure we release buffers when a wrapped input stream is closed.
+      val mockBuf = allBlocks(blockId)
+      verifyBufferRelease(mockBuf, inputStream)
+    }
+
+    // remote blocks and host local blocks were both read, thus count should be 2
+    verifyFetchBlocksInvocationCount(2)
   }
 
   test("error during accessing host local dirs for executors") {
