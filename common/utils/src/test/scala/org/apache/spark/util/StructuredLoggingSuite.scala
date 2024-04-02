@@ -71,7 +71,7 @@ trait LoggingSuiteBase
     (log"Lost executor ${MDC(EXECUTOR_ID, "1")}." ++ s" Hello $basicMsg.")
 
   def concatStringAndMDC: LogEntry =
-    (s"Hello $basicMsg, " ++ (log"Lost executor ${MDC(EXECUTOR_ID, "1")}."))
+    (s"Hello $basicMsg, " ++ log"Lost executor ${MDC(EXECUTOR_ID, "1")}.")
 
   def expectedPatternForMsgWithMDC(level: Level): String
 
