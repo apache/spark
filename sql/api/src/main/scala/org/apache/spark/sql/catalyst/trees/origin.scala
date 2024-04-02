@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.trees
 
+import scala.collection.mutable
+
 import org.apache.spark.QueryContext
 import org.apache.spark.util.ArrayImplicits._
 
@@ -35,8 +37,7 @@ case class Origin(
     stackTrace: Option[Array[StackTraceElement]] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
-    val pysparkCallSite = PySparkCurrentOrigin.get()
-    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkCallSite)
+    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq)
   } else {
     SQLQueryContext(
       line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
@@ -88,16 +89,19 @@ object CurrentOrigin {
 
 /**
  * Provides detailed call site information on PySpark.
- * This information is generated in PySpark in the form of a String.
+ * This information is generated in PySpark and stored in the form of a Map.
  */
 object PySparkCurrentOrigin {
-  private val pysparkCallSite = new ThreadLocal[String]() {
-    override def initialValue(): String = ""
+  private val pysparkCallSite = new ThreadLocal[mutable.Map[String, String]]() {
+    override def initialValue(): mutable.Map[String, String] = mutable.Map.empty
   }
 
-  def set(value: String): Unit = pysparkCallSite.set(value)
+  def set(fragment: String, callSite: String): Unit = {
+    pysparkCallSite.get().put("fragment", fragment)
+    pysparkCallSite.get().put("callSite", callSite)
+  }
 
-  def get(): String = pysparkCallSite.get()
+  def get(): mutable.Map[String, String] = pysparkCallSite.get()
 
   def clear(): Unit = pysparkCallSite.remove()
 }

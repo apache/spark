@@ -379,5 +379,17 @@ class QueryContext(BaseQueryContext):
     def callSite(self) -> str:
         return str(self._q.callSite())
 
+    def pysparkFragment(self) -> Optional[str]:
+        if self.contextType() == QueryContextType.DataFrame:
+            return str(self._q.pysparkFragment())
+        else:
+            return None
+
+    def pysparkCallSite(self) -> Optional[str]:
+        if self.contextType() == QueryContextType.DataFrame:
+            return str(self._q.pysparkCallSite())
+        else:
+            return None
+
     def summary(self) -> str:
         return str(self._q.summary())

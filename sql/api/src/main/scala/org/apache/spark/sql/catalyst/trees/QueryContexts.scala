@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import scala.collection.mutable
+
 import org.apache.spark.{QueryContext, QueryContextType, SparkUnsupportedOperationException}
 
 /** The class represents error context of a SQL query. */
@@ -134,7 +136,7 @@ case class SQLQueryContext(
   override def callSite: String = throw SparkUnsupportedOperationException()
 }
 
-case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement], pysparkCallSite: String)
+case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement])
   extends QueryContext {
   override val contextType = QueryContextType.DataFrame
 
@@ -156,6 +158,11 @@ case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement], pysparkCall
 
   override val callSite: String = stackTrace.tail.mkString("\n")
 
+  val pysparkOriginInfo: mutable.Map[String, String] = PySparkCurrentOrigin.get()
+
+  val pysparkFragment: String = pysparkOriginInfo.getOrElse("fragment", "")
+  val pysparkCallSite: String = pysparkOriginInfo.getOrElse("callSite", "")
+
   override lazy val summary: String = {
     val builder = new StringBuilder
     builder ++= "== DataFrame ==\n"
@@ -167,11 +174,19 @@ case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement], pysparkCall
     builder ++= callSite
     builder += '\n'
 
-    if (pysparkCallSite.nonEmpty) {
+    if (pysparkOriginInfo.nonEmpty) {
       builder ++= "\n== PySpark call site ==\n"
+      builder ++= "\""
+
+      builder ++= pysparkFragment
+      builder ++= "\""
+      builder ++= " was called from\n"
       builder ++= pysparkCallSite
       builder += '\n'
     }
+
+    PySparkCurrentOrigin.clear()
+
     builder.result()
   }
 }

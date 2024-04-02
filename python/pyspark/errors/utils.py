@@ -126,7 +126,7 @@ class ErrorClassesReader:
         return message_template
 
 
-def _capture_call_site(func_name: str) -> None:
+def _capture_call_site(fragment: str) -> None:
     """
     Capture the call site information including file name, line number, and function name.
 
@@ -150,13 +150,12 @@ def _capture_call_site(func_name: str) -> None:
 
     stack = inspect.stack()
     frame_info = stack[-1]
-    function = func_name
     filename = frame_info.filename
     lineno = frame_info.lineno
-    call_site = f'"{function}" was called from\n{filename}:{lineno}'
+    call_site = f"{filename}:{lineno}"
 
     pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
-    pyspark_origin.set(call_site)
+    pyspark_origin.set(fragment, call_site)
 
 
 def with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
