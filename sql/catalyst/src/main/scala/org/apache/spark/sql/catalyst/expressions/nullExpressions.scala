@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COALESCE, NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -158,11 +159,15 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
-    this(left, right, {
-      val commonExpr = CommonExpressionDef(left)
-      val ref = new CommonExpressionRef(commonExpr)
-      With(If(EqualTo(ref, right), Literal.create(null, left.dataType), ref), Seq(commonExpr))
-    })
+    this(left, right,
+      if (SQLConf.get.getConf(SQLConf.REPLACE_NULLIF_USING_WITH_EXPR)) {
+        With(left) { case Seq(ref) =>
+          If(EqualTo(ref, right), Literal.create(null, left.dataType), ref)
+        }
+      } else {
+        If(EqualTo(left, right), Literal.create(null, left.dataType), left)
+      }
+    )
   }
 
   override def parameters: Seq[Expression] = Seq(left, right)

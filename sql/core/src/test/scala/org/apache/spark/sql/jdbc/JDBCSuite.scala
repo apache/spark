@@ -930,12 +930,16 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("MySQLDialect catalyst type mapping") {
     val mySqlDialect = JdbcDialects.get("jdbc:mysql")
     val metadata = new MetadataBuilder().putBoolean("isSigned", value = true)
-    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ==
-      Some(LongType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ===
+      Some(BinaryType))
     assert(metadata.build().contains("binarylong"))
+    withSQLConf(SQLConf.LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED.key -> "true") {
+      metadata.remove("binarylong")
+      assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ===
+        Some(LongType))
+      assert(metadata.build().contains("binarylong"))
+    }
     assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 1, metadata) == None)
-    assert(mySqlDialect.getCatalystType(java.sql.Types.BIT, "TINYINT", 1, metadata) ==
-      Some(BooleanType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.TINYINT, "TINYINT", 1, metadata) ==
       Some(ByteType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.REAL, "FLOAT", 1, metadata) ===

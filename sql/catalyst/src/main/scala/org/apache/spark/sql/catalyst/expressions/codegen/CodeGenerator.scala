@@ -660,13 +660,8 @@ class CodegenContext extends Logging {
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
-      val elementA = freshName("elementA")
-      val isNullA = freshName("isNullA")
-      val elementB = freshName("elementB")
-      val isNullB = freshName("isNullB")
       val compareFunc = freshName("compareArray")
       val minLength = freshName("minLength")
-      val jt = javaType(elementType)
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
@@ -679,22 +674,7 @@ class CodegenContext extends Logging {
             int lengthB = b.numElements();
             int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
             for (int i = 0; i < $minLength; i++) {
-              boolean $isNullA = a.isNullAt(i);
-              boolean $isNullB = b.isNullAt(i);
-              if ($isNullA && $isNullB) {
-                // Nothing
-              } else if ($isNullA) {
-                return -1;
-              } else if ($isNullB) {
-                return 1;
-              } else {
-                $jt $elementA = ${getValue("a", elementType, "i")};
-                $jt $elementB = ${getValue("b", elementType, "i")};
-                int comp = ${genComp(elementType, elementA, elementB)};
-                if (comp != 0) {
-                  return comp;
-                }
-              }
+              ${genCompElementsAt("a", "b", "i", elementType)}
             }
 
             if (lengthA < lengthB) {
@@ -722,10 +702,69 @@ class CodegenContext extends Logging {
           }
         """
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
+    case map: MapType =>
+      val compareFunc = freshName("compareMapData")
+      val funcCode = genCompMapData(map.keyType, map.valueType, compareFunc)
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("compare", dataType)
+  }
+
+  private def genCompMapData(
+      keyType: DataType,
+      valueType: DataType,
+      compareFunc: String): String = {
+    s"""
+       |public int $compareFunc(MapData a, MapData b) {
+       |  int lengthA = a.numElements();
+       |  int lengthB = b.numElements();
+       |  ArrayData keyArrayA = a.keyArray();
+       |  ArrayData valueArrayA = a.valueArray();
+       |  ArrayData keyArrayB = b.keyArray();
+       |  ArrayData valueArrayB = b.valueArray();
+       |  int minLength = (lengthA > lengthB) ? lengthB : lengthA;
+       |  for (int i = 0; i < minLength; i++) {
+       |    ${genCompElementsAt("keyArrayA", "keyArrayB", "i", keyType)}
+       |    ${genCompElementsAt("valueArrayA", "valueArrayB", "i", valueType)}
+       |  }
+       |
+       |  if (lengthA < lengthB) {
+       |    return -1;
+       |  } else if (lengthA > lengthB) {
+       |    return 1;
+       |  }
+       |  return 0;
+       |}
+     """.stripMargin
+  }
+
+  private def genCompElementsAt(arrayA: String, arrayB: String, i: String,
+    elementType : DataType): String = {
+    val elementA = freshName("elementA")
+    val isNullA = freshName("isNullA")
+    val elementB = freshName("elementB")
+    val isNullB = freshName("isNullB")
+    val jt = javaType(elementType);
+    s"""
+       |boolean $isNullA = $arrayA.isNullAt($i);
+       |boolean $isNullB = $arrayB.isNullAt($i);
+       |if ($isNullA && $isNullB) {
+       |  // Nothing
+       |} else if ($isNullA) {
+       |  return -1;
+       |} else if ($isNullB) {
+       |  return 1;
+       |} else {
+       |  $jt $elementA = ${getValue(arrayA, elementType, i)};
+       |  $jt $elementB = ${getValue(arrayB, elementType, i)};
+       |  int comp = ${genComp(elementType, elementA, elementB)};
+       |  if (comp != 0) {
+       |    return comp;
+       |  }
+       |}
+     """.stripMargin
   }
 
   /**
