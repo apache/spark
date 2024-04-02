@@ -750,7 +750,7 @@ def is_remote_only() -> bool:
     if _is_remote_only is not None:
         return _is_remote_only
     try:
-        from pyspark import core  # type: ignore[import-not-found] # noqa: F401
+        from pyspark import core  # noqa: F401
 
         _is_remote_only = False
         return _is_remote_only
