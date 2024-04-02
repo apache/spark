@@ -475,7 +475,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
             numBytes - pref);
     UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
             other.numBytes - pref);
-    return suffixLeft.toLowerCaseSlow().compareTo(suffixRight.toLowerCaseSlow());
+    return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
   }
 
   /**
