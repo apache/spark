@@ -1821,26 +1821,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // output of the union. We check referential equality since semantic equality of a named field
       // may be false as the data type may have changed to include nullable during the union.
       val output = union.output
-      def semanticOrRefEqual(e1: Expression, e2: Expression): Boolean = {
-        val e1c = e1.canonicalized
-        val e2c = e2.canonicalized
-        if (e1c.semanticEquals(e2c)) {
-          true
-        } else if (e1c.isInstanceOf[NamedExpression] && e2c.isInstanceOf[NamedExpression]) {
-          val named1 = e1c.asInstanceOf[NamedExpression]
-          val named2 = e2c.asInstanceOf[NamedExpression]
-          if (named1.exprId == named2.exprId) {
-            true
-          } else {
-            false
-          }
-        } else {
-          false
-        }
-      }
       def eligibleForPushdown(e: Expression): Boolean = {
         e.deterministic && e.references.forall { ref =>
-          output.exists(e2 => semanticOrRefEqual(ref, e2))
+          output.exists(e2 => ref.exprId == e2.exprId)
         }
       }
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(eligibleForPushdown)
@@ -1852,8 +1835,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // output which is semantically equal to the filter being evaluated.
         val newGrandChildren = union.children.map { grandchild =>
           val newCond = pushDownCond transform {
-            case e if output.exists(semanticOrRefEqual(_, e)) =>
-              grandchild.output(output.indexWhere(semanticOrRefEqual(_, e)))
+            case a: Attribute if output.exists(_.exprId == a.exprId) =>
+              grandchild.output(output.indexWhere(_.exprId == a.exprId))
           }
           assert(newCond.references.subsetOf(grandchild.outputSet))
           Filter(newCond, grandchild)
