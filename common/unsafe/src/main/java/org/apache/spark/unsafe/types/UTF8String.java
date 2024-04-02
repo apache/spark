@@ -839,13 +839,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.indexOf(substring, start);
     }
-    if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return this.toLowerCase().indexOf(substring.toLowerCase(), start);
-    }
-    return collatedIndexOf(substring, start, collationId);
+    return collationAwareIndexOf(substring, start, collationId);
   }
 
-  private int collatedIndexOf(UTF8String substring, int start, int collationId) {
+  private int collationAwareIndexOf(UTF8String substring, int start, int collationId) {
     if (substring.numBytes == 0) {
       return 0;
     }
