@@ -58,26 +58,6 @@ class Expression(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    class _EvalMode:
-        ValueType = typing.NewType("ValueType", builtins.int)
-        V: typing_extensions.TypeAlias = ValueType
-
-    class _EvalModeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Expression._EvalMode.ValueType],
-        builtins.type,
-    ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        EVAL_MODE_UNSPECIFIED: Expression._EvalMode.ValueType  # 0
-        EVAL_MODE_LEGACY: Expression._EvalMode.ValueType  # 1
-        EVAL_MODE_ANSI: Expression._EvalMode.ValueType  # 2
-        EVAL_MODE_TRY: Expression._EvalMode.ValueType  # 3
-
-    class EvalMode(_EvalMode, metaclass=_EvalModeEnumTypeWrapper): ...
-    EVAL_MODE_UNSPECIFIED: Expression.EvalMode.ValueType  # 0
-    EVAL_MODE_LEGACY: Expression.EvalMode.ValueType  # 1
-    EVAL_MODE_ANSI: Expression.EvalMode.ValueType  # 2
-    EVAL_MODE_TRY: Expression.EvalMode.ValueType  # 3
-
     class Window(google.protobuf.message.Message):
         """Expression for the OVER clause or WINDOW clause."""
 
@@ -329,6 +309,28 @@ class Expression(google.protobuf.message.Message):
     class Cast(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        class _EvalMode:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _EvalModeEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                Expression.Cast._EvalMode.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            EVAL_MODE_UNSPECIFIED: Expression.Cast._EvalMode.ValueType  # 0
+            EVAL_MODE_LEGACY: Expression.Cast._EvalMode.ValueType  # 1
+            EVAL_MODE_ANSI: Expression.Cast._EvalMode.ValueType  # 2
+            EVAL_MODE_TRY: Expression.Cast._EvalMode.ValueType  # 3
+
+        class EvalMode(_EvalMode, metaclass=_EvalModeEnumTypeWrapper): ...
+        EVAL_MODE_UNSPECIFIED: Expression.Cast.EvalMode.ValueType  # 0
+        EVAL_MODE_LEGACY: Expression.Cast.EvalMode.ValueType  # 1
+        EVAL_MODE_ANSI: Expression.Cast.EvalMode.ValueType  # 2
+        EVAL_MODE_TRY: Expression.Cast.EvalMode.ValueType  # 3
+
         EXPR_FIELD_NUMBER: builtins.int
         TYPE_FIELD_NUMBER: builtins.int
         TYPE_STR_FIELD_NUMBER: builtins.int
@@ -340,7 +342,7 @@ class Expression(google.protobuf.message.Message):
         def type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         type_str: builtins.str
         """If this is set, Server will use Catalyst parser to parse this string to DataType."""
-        eval_mode: global___Expression.EvalMode.ValueType
+        eval_mode: global___Expression.Cast.EvalMode.ValueType
         """(Optional) The expression evaluation mode."""
         def __init__(
             self,
@@ -348,7 +350,7 @@ class Expression(google.protobuf.message.Message):
             expr: global___Expression | None = ...,
             type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
             type_str: builtins.str = ...,
-            eval_mode: global___Expression.EvalMode.ValueType = ...,
+            eval_mode: global___Expression.Cast.EvalMode.ValueType = ...,
         ) -> None: ...
         def HasField(
             self,

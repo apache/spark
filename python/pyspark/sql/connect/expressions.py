@@ -857,11 +857,11 @@ class CastExpression(Expression):
 
         if self._eval_mode is not None:
             if self._eval_mode == "legacy":
-                fun.cast.eval_mode = proto.Expression.EvalMode.EVAL_MODE_LEGACY
+                fun.cast.eval_mode = proto.Expression.Cast.EvalMode.EVAL_MODE_LEGACY
             elif self._eval_mode == "ansi":
-                fun.cast.eval_mode = proto.Expression.EvalMode.EVAL_MODE_ANSI
+                fun.cast.eval_mode = proto.Expression.Cast.EvalMode.EVAL_MODE_ANSI
             elif self._eval_mode == "try":
-                fun.cast.eval_mode = proto.Expression.EvalMode.EVAL_MODE_TRY
+                fun.cast.eval_mode = proto.Expression.Cast.EvalMode.EVAL_MODE_TRY
 
         return fun
 

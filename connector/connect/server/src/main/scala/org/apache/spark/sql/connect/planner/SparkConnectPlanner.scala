@@ -2102,9 +2102,9 @@ class SparkConnectPlanner(
       case _ => parser.parseDataType(cast.getTypeStr)
     }
     val mode = cast.getEvalMode match {
-      case proto.Expression.EvalMode.EVAL_MODE_LEGACY => Some(EvalMode.LEGACY)
-      case proto.Expression.EvalMode.EVAL_MODE_ANSI => Some(EvalMode.ANSI)
-      case proto.Expression.EvalMode.EVAL_MODE_TRY => Some(EvalMode.TRY)
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_LEGACY => Some(EvalMode.LEGACY)
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_ANSI => Some(EvalMode.ANSI)
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_TRY => Some(EvalMode.TRY)
       case _ => None
     }
     mode match {

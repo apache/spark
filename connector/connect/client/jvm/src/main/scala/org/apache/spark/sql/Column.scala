@@ -1108,7 +1108,7 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
     builder.getCastBuilder
       .setExpr(expr)
       .setType(DataTypeProtoConverter.toConnectProtoType(to))
-      .setEvalMode(proto.Expression.EvalMode.EVAL_MODE_TRY)
+      .setEvalMode(proto.Expression.Cast.EvalMode.EVAL_MODE_TRY)
   }
 
   /**
