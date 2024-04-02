@@ -556,10 +556,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().findInSet(match.toLowerCase());
     }
-    return collatedFindInSet(match, collationId);
+    return collationAwareFindInSet(match, collationId);
 }
 
-  private int collatedFindInSet(UTF8String match, int collationId) {
+  private int collationAwareFindInSet(UTF8String match, int collationId) {
     if (match.contains(COMMA_UTF8)) {
       return 0;
     }
@@ -881,10 +881,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
       return this.toLowerCase().indexOf(substring.toLowerCase(), start);
     }
-    return collatedIndexOf(substring, start, collationId);
+    return collationAwareIndexOf(substring, start, collationId);
   }
 
-  private int collatedIndexOf(UTF8String substring, int start, int collationId) {
+  private int collationAwareIndexOf(UTF8String substring, int start, int collationId) {
     if (substring.numBytes == 0) {
       return 0;
     }
