@@ -89,7 +89,9 @@ package object client {
         "org.apache.hive:hive-vector-code-gen"))
 
     case object v4_0 extends HiveVersion("4.0.0",
-      extraDeps = Seq("org.apache.derby:derby:10.14.2.0"),
+      extraDeps = Seq("org.datanucleus:datanucleus-api-jdo:5.2.8",
+        "org.datanucleus:datanucleus-rdbms:5.2.10",
+        "org.apache.derby:derby:10.14.2.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
         "org.apache.curator:*",
         "org.apache.hive:hive-vector-code-gen"))
