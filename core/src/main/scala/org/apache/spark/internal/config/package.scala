@@ -637,7 +637,7 @@ package object config {
       .createWithDefault(1.0)
 
   private[spark] val DYN_ALLOCATION_EXECUTOR_DEALLOCATION_RATIO =
-    ConfigBuilder("spark.dynamicAllocation.executorDeallocationRatio")
+    ConfigBuilder("spark.dynamicAllocation.streaming.executorDeallocationRatio")
       .version("3.5.0")
       .doubleConf
       .createWithDefault(1.0)
@@ -657,7 +657,7 @@ package object config {
       .createWithDefault(60)
 
   private[spark] val DYN_ALLOCATION_EXECUTOR_DEALLOCATION_TIMEOUT =
-    ConfigBuilder("spark.dynamicAllocation.executorDeallocationTimeout")
+    ConfigBuilder("spark.dynamicAllocation.streaming.executorDeallocationTimeout")
       .version("3.5.0")
       .fallbackConf(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT)
 

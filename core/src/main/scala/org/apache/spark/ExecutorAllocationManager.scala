@@ -96,6 +96,30 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *     If an executor with caching data blocks has been idle for more than this duration,
  *     the executor will be removed
  *
+ * Dynamic resource allocation is also extended to work for structured streaming use case.
+ * (micro-batch paradigm).
+ * For it to work we would still need the above configs + few additional configs.
+ *
+ * For executor allocation, In traditional DRA target number of executors are added based on the
+ * backlogged tasks waiting to be scheduled per stage, now they are added based on tasks waiting
+ * to be scheduled per Job (micro-batch).
+ * So we still use the M and N seconds to add executors.
+ *
+ * The remove policy is same as earlier, but now only P percentage of the idle executors will be
+ * removed with a delay of Q seconds after a set of executors are marked for removal.
+ * This helps in slowly reducing the executors across micro-batches.
+ *
+ * The additional properties required to work for structured streaming are.
+ *
+ *  spark.dynamicAllocation.streaming.enabled -
+ *    Whether DRA for structured streaming is enabled
+ *
+ *  spark.dynamicAllocation.streaming.executorDeallocationRatio (P) -
+ *    Remove only P percentage of idle executors.
+ *
+ *  spark.dynamicAllocation.streaming.executorDeallocationTimeout (Q) -
+ *  After a set of executors are removed, wait for duration before removing more.
+ *
  */
 private[spark] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
@@ -195,12 +219,6 @@ private[spark] class ExecutorAllocationManager(
    * If not, throw an appropriate exception.
    */
   private def validateSettings(): Unit = {
-
-    if ( streamingDRAFeatureEnabled && !Utils.isDynamicAllocationEnabled(conf) ) {
-      throw new SparkException(
-        s"${DYN_ALLOCATION_ENABLED.key} must be  enabled " +
-          s"for ${DYN_ALLOCATION_STREAMING_ENABLED.key} to work")
-    }
     if (minNumExecutors < 0 || maxNumExecutors < 0) {
       throw new SparkException(
         s"${DYN_ALLOCATION_MIN_EXECUTORS.key} and ${DYN_ALLOCATION_MAX_EXECUTORS.key} must be " +
@@ -220,7 +238,7 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
-    if (executorDeallocationTimeoutS <= 0) {
+    if (streamingDRAFeatureEnabled && executorDeallocationTimeoutS <= 0) {
       throw new SparkException(
         s"s${DYN_ALLOCATION_EXECUTOR_DEALLOCATION_TIMEOUT.key} must be > 0!")
     }
@@ -241,7 +259,8 @@ private[spark] class ExecutorAllocationManager(
         s"${DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO.key} must be > 0 and <= 1.0")
     }
 
-    if (executorDeallocationRatio > 1.0 || executorDeallocationRatio <= 0.0) {
+    if (streamingDRAFeatureEnabled &&
+      (executorDeallocationRatio > 1.0 || executorDeallocationRatio <= 0.0)) {
       throw new SparkException(
         s"${DYN_ALLOCATION_EXECUTOR_DEALLOCATION_RATIO.key} must be > 0 and <= 1.0")
     }
@@ -368,7 +387,13 @@ private[spark] class ExecutorAllocationManager(
 
   /**
    * Maximum number of executors to be removed per dra evaluation.
-   * This function executes logic only with `spark.dynamicAllocation.streaming.enabled` flag enabled
+   *
+   * This function limits the number of idle executors to be removed if the
+   * `streamingDRAFeatureEnabled` flag is enabled, otherwise it returns all the idle executors.
+   * The number of executors to be removed is based on
+   * the de-allocation ratio (`executorDeallocationRatio`) and timeout (`removeTime`).
+   * It helps in removing only few executors per evaluation cycle and helps in gradual removal of
+   * executors across micro-batches.
    */
   private def maxExecutorDeallocationsPerEvaluation(
                                                      timedOutExecs : Seq[(String, Int)]
@@ -731,20 +756,20 @@ private[spark] class ExecutorAllocationManager(
     // to track total no. of tasks in each stage of a micro-batch (streaming use case)
     // this will help in requesting resources by counting pending tasks in job,
     // rather than counting pending tasks in a stage.
-    private val jobStagesToNumTasks = new mutable.HashMap[Int, Int]
+    private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
       if (streamingDRAFeatureEnabled) {
         jobStart.stageInfos.foreach {stageInfo =>
-          jobStagesToNumTasks(stageInfo.stageId) = stageInfo.numTasks
+          stageIdToNumTasks(stageInfo.stageId) = stageInfo.numTasks
         }
-        logDebug(s"added stages $jobStagesToNumTasks to the Job ${jobStart.jobId}")
+        logDebug(s"added stages $stageIdToNumTasks to the Job ${jobStart.jobId}")
       }
     }
 
     override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
       if (streamingDRAFeatureEnabled) {
-        jobStagesToNumTasks.clear()
+        stageIdToNumTasks.clear()
         logDebug(s"cleared all stages of the Job ${jobEnd.jobId}")
       }
     }
@@ -783,7 +808,7 @@ private[spark] class ExecutorAllocationManager(
         updateExecutorPlacementHints()
 
         if (streamingDRAFeatureEnabled) {
-          jobStagesToNumTasks -= stageId
+          stageIdToNumTasks -= stageId
           logDebug(s"removed current stage $stageId from pending tasks of the job")
         }
 
@@ -827,7 +852,7 @@ private[spark] class ExecutorAllocationManager(
           if (streamingDRAFeatureEnabled) {
             if (!hasPendingTasksFromOtherStagesOfTheJob) {
               allocationManager.onSchedulerQueueEmpty()
-              logDebug("cleared timer when stages in a job are completed")
+              logDebug("cleared queue when all stages in a job are completed")
             }
           } else {
             allocationManager.onSchedulerQueueEmpty()
@@ -960,7 +985,7 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    def pendingTasksFromOtherStagesOfTheJob: Int = jobStagesToNumTasks.values.sum
+    def pendingTasksFromOtherStagesOfTheJob: Int = stageIdToNumTasks.values.sum
 
     def hasPendingTasksFromOtherStagesOfTheJob: Boolean =
       pendingTasksFromOtherStagesOfTheJob > 0
