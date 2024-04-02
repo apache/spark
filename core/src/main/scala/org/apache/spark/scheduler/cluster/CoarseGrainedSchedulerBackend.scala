@@ -26,13 +26,13 @@ import scala.concurrent.Future
 
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKey.ERROR
+import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.resource.ResourceProfile
@@ -240,7 +240,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         listenerBus.post(SparkListenerMiscellaneousProcessAdded(time, processId, info))
 
       case e =>
-        logError(s"Received unexpected message. ${e}")
+        logError(log"Received unexpected message. ${MDC(ERROR, e)}")
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -360,7 +360,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case IsExecutorAlive(executorId) => context.reply(isExecutorActive(executorId))
 
       case e =>
-        logError(s"Received unexpected ask ${e}")
+        logError(log"Received unexpected ask ${MDC(ERROR, e)}")
     }
 
     // Make fake resource offers on all executors
