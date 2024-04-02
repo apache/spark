@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 import scala.io.Source
+
 import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
