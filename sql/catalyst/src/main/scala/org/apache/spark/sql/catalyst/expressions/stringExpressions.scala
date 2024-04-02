@@ -979,8 +979,9 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     })
   }
 
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+  override def dataType: DataType = srcExpr.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
   override def first: Expression = srcExpr
   override def second: Expression = matchingExpr
   override def third: Expression = replaceExpr

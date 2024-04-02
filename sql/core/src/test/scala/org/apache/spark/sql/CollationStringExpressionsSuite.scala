@@ -87,30 +87,42 @@ class CollationStringExpressionsSuite extends QueryTest
       checkEvaluation(StringTranslate(srcExpr, matchExpr, replaceExpr), expected)
     }
 
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
-    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    collationId = CollationFactory.collationNameToId("UNICODE")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    collationId = CollationFactory.collationNameToId("UNICODE_CI")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
-//    testTranslate("abc", "a", "A", collationId, "Abc")
+    var collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
+    testTranslate("Translate", "Rnlt", "1234", collationId, "41a2s3a4e")
+    testTranslate("TRanslate", "rnlt", "XxXx", collationId, "xXaxsXaxe")
+    testTranslate("TRanslater", "Rrnlt", "xXxXx", collationId, "xxaxsXaxex")
+    testTranslate("TRanslater", "Rrnlt", "XxxXx", collationId, "xXaxsXaxeX")
+    // scalastyle:off
+    testTranslate("test大千世界X大千世界", "界x", "AB", collationId, "test大千世AB大千世A")
+    testTranslate("大千世界test大千世界", "TEST", "abcd", collationId, "大千世界abca大千世界")
+    testTranslate("Test大千世界大千世界", "tT", "oO", collationId, "oeso大千世界大千世界")
+    testTranslate("大千世界大千世界tesT", "Tt", "Oo", collationId, "大千世界大千世界OesO")
+    testTranslate("大千世界大千世界tesT", "大千", "世世", collationId, "世世世界世世世界tesT")
+    // scalastyle:on
+
+    collationId = CollationFactory.collationNameToId("UNICODE")
+    testTranslate("Translate", "Rnlt", "1234", collationId, "Tra2s3a4e")
+    testTranslate("TRanslate", "rnlt", "XxXx", collationId, "TRaxsXaxe")
+    testTranslate("TRanslater", "Rrnlt", "xXxXx", collationId, "TxaxsXaxeX")
+    testTranslate("TRanslater", "Rrnlt", "XxxXx", collationId, "TXaxsXaxex")
+    // scalastyle:off
+    testTranslate("test大千世界X大千世界", "界x", "AB", collationId, "test大千世AX大千世A")
+    testTranslate("Test大千世界大千世界", "tT", "oO", collationId, "Oeso大千世界大千世界")
+    testTranslate("大千世界大千世界tesT", "Tt", "Oo", collationId, "大千世界大千世界oesO")
+    // scalastyle:on
+
+    collationId = CollationFactory.collationNameToId("UNICODE_CI")
+    testTranslate("Translate", "Rnlt", "1234", collationId, "41a2s3a4e")
+    testTranslate("TRanslate", "rnlt", "XxXx", collationId, "xXaxsXaxe")
+    testTranslate("TRanslater", "Rrnlt", "xXxXx", collationId, "xxaxsXaxex")
+    testTranslate("TRanslater", "Rrnlt", "XxxXx", collationId, "xXaxsXaxeX")
+    // scalastyle:off
+    testTranslate("test大千世界X大千世界", "界x", "AB", collationId, "test大千世AB大千世A")
+    testTranslate("大千世界test大千世界", "TEST", "abcd", collationId, "大千世界abca大千世界")
+    testTranslate("Test大千世界大千世界", "tT", "oO", collationId, "oeso大千世界大千世界")
+    testTranslate("大千世界大千世界tesT", "Tt", "Oo", collationId, "大千世界大千世界OesO")
+    testTranslate("大千世界大千世界tesT", "大千", "世世", collationId, "世世世界世世世界tesT")
+    // scalastyle:on
   }
 
   test("REPEAT check output type on explicitly collated string") {
