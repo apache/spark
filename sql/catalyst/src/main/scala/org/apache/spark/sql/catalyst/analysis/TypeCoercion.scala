@@ -23,8 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts.{castStringType, getOutputCollation}
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.hasStringType
+import org.apache.spark.sql.catalyst.analysis.PreCollationTypeCasts.getOutputCollation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -660,9 +659,8 @@ abstract class TypeCoercionBase {
         val newIndex = implicitCast(index, IntegerType).getOrElse(index)
         val newInputs = if (conf.eltOutputAsString ||
           !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-          val st = getOutputCollation(children)
           children.tail.map { e =>
-            implicitCast(e, st).getOrElse(e)
+            implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
           }
         } else {
           children.tail
@@ -707,22 +705,16 @@ abstract class TypeCoercionBase {
         }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-        val childrenBeforeCollations: Seq[Expression] = e.children.zip(e.inputTypes).map {
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           // If we cannot do the implicit cast, just use the original input.
           case (in, expected) => implicitCast(in, expected).getOrElse(in)
-        }
-        val st = getOutputCollation(e.children)
-        val children: Seq[Expression] = childrenBeforeCollations.map {
-          case in if hasStringType(in.dataType) =>
-            castStringType(in, st).getOrElse(in)
-          case in => in
         }
         e.withNewChildren(children)
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
         // general implicit casting.
-        val childrenBeforeCollations: Seq[Expression] =
+        val children: Seq[Expression] =
           e.children.zip(e.inputTypes).map { case (in, expected) =>
           if (in.dataType == NullType && !expected.acceptsType(NullType)) {
             Literal.create(null, expected.defaultConcreteType)
@@ -730,16 +722,10 @@ abstract class TypeCoercionBase {
             in
           }
         }
-        val st = getOutputCollation(e.children)
-        val children: Seq[Expression] = childrenBeforeCollations.map {
-          case in if hasStringType(in.dataType) =>
-            castStringType(in, st).getOrElse(in)
-          case in => in
-        }
         e.withNewChildren(children)
 
       case udf: ScalaUDF if udf.inputTypes.nonEmpty =>
-        val childrenBeforeCollations = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
+        val children = udf.children.zip(udf.inputTypes).map { case (in, expected) =>
           // Currently Scala UDF will only expect `AnyDataType` at top level, so this trick works.
           // In the future we should create types like `AbstractArrayType`, so that Scala UDF can
           // accept inputs of array type of arbitrary element type.
@@ -751,12 +737,6 @@ abstract class TypeCoercionBase {
               udfInputToCastType(in.dataType, expected.asInstanceOf[DataType])
             ).getOrElse(in)
           }
-        }
-        val st = getOutputCollation(udf.children)
-        val children: Seq[Expression] = childrenBeforeCollations.map {
-          case in if hasStringType(in.dataType) =>
-            castStringType(in, st).getOrElse(in)
-          case in => in
         }
         udf.copy(children = children)
     }
@@ -860,7 +840,7 @@ object TypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
-      CollationTypeCasts ::
+      PreCollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -877,7 +857,8 @@ object TypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion :: Nil) :: Nil
+      StringLiteralCoercion ::
+      PostCollationTypeCasts :: Nil) :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
 

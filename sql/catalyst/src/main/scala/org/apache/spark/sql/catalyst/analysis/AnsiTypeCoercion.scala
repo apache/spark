@@ -77,7 +77,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new AnsiCombinedTypeCoercionRule(
-      CollationTypeCasts ::
+      PreCollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -93,7 +93,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      GetDateFieldOperations:: Nil) :: Nil
+      GetDateFieldOperations ::
+      PostCollationTypeCasts :: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
