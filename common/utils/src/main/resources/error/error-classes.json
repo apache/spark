@@ -3591,9 +3591,9 @@
     ],
     "sqlState" : "42802"
   },
-  "STATEFUL_PROCESSOR_TTL_CANNOT_BE_NEGATIVE" : {
+  "STATEFUL_PROCESSOR_TTL_VALUE_CANNOT_BE_NEGATIVE" : {
     "message" : [
-      "TTL cannot be negative for State store operation=<operationType> on state=<stateName>."
+      "TTL value cannot be negative for State store operation=<operationType> on state=<stateName>."
     ],
     "sqlState" : "42802"
   },

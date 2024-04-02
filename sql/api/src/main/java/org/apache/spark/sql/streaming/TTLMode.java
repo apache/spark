@@ -29,21 +29,21 @@ import org.apache.spark.sql.catalyst.plans.logical.*;
 @Evolving
 public class TTLMode {
 
-    /**
-     * Specifies that there is no TTL for the user state. User state would not
-     * be cleaned up by Spark automatically.
-     */
-    public static final TTLMode NoTTL() {
+  /**
+   * Specifies that there is no TTL for the user state. User state would not
+   * be cleaned up by Spark automatically.
+   */
+  public static final TTLMode NoTTL() {
         return NoTTL$.MODULE$;
     }
 
-    /**
-     * Specifies that all ttl durations for user state are in processing time.
-     */
-    public static final TTLMode ProcessingTimeTTL() { return ProcessingTimeTTL$.MODULE$; }
+  /**
+   * Specifies that all ttl durations for user state are in processing time.
+   */
+  public static final TTLMode ProcessingTimeTTL() { return ProcessingTimeTTL$.MODULE$; }
 
-    /**
-     * Specifies that all ttl durations for user state are in event time.
-     */
-    public static final TTLMode EventTimeTTL() { return EventTimeTTL$.MODULE$; }
+  /**
+   * Specifies that all ttl durations for user state are in event time.
+   */
+  public static final TTLMode EventTimeTTL() { return EventTimeTTL$.MODULE$; }
 }

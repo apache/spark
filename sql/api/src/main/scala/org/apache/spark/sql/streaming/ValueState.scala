@@ -45,9 +45,13 @@ private[sql] trait ValueState[S] extends Serializable {
 
   /**
    * Update the value of the state.
+   *
    * @param newState the new value
    * @param ttlDuration set the ttl to current batch processing time
    *                    (for processing time TTL mode) plus ttlDuration
+   *
+   * Note: This method only allows to set ttl for Processing Time.
+   * For setting ttl for eventTime, use [[update(newState, expirationTimeInMs)]] method.
    */
   def update(newState: S, ttlDuration: Duration = Duration.ZERO): Unit
 
@@ -56,9 +60,9 @@ private[sql] trait ValueState[S] extends Serializable {
    * Update the value of the state.
    *
    * @param newState    the new value
-   * @param expirationMs set the ttl to expirationMs (processingTime or eventTime)
+   * @param expirationTimeInMs set the ttl to expirationMs (processingTime or eventTime)
    */
-  def update(newState: S, expirationMs: Long): Unit
+  def update(newState: S, expirationTimeInMs: Long): Unit
 
   /** Remove this state. */
   def clear(): Unit

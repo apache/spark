@@ -48,9 +48,7 @@ class ValueStateImplWithTTL[S](
     ttlMode: TTLMode,
     batchTimestampMs: Option[Long],
     eventTimeWatermarkMs: Option[Long])
-  extends ValueState[S]
-    with Logging
-    with StateVariableWithTTLSupport {
+  extends ValueState[S] with Logging with StateVariableWithTTLSupport {
 
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder,
@@ -112,7 +110,7 @@ class ValueStateImplWithTTL[S](
         "update", stateName)
     }
 
-    val expirationMs =
+    val expirationTimeInMs =
       if (ttlDuration != null && ttlDuration != Duration.ZERO) {
         StateTTL.calculateExpirationTimeForDuration(
           ttlMode, ttlDuration, batchTimestampMs, eventTimeWatermarkMs)
@@ -120,31 +118,31 @@ class ValueStateImplWithTTL[S](
         -1
       }
 
-    doUpdate(newState, expirationMs)
+    doUpdate(newState, expirationTimeInMs)
   }
 
   override def update(
       newState: S,
-      expirationMs: Long): Unit = {
+      expirationTimeInMs: Long): Unit = {
 
-    if (expirationMs < 0) {
+    if (expirationTimeInMs < 0) {
       throw StateStoreErrors.ttlCannotBeNegative(
         "update", stateName)
     }
 
-    doUpdate(newState, expirationMs)
+    doUpdate(newState, expirationTimeInMs)
   }
 
   private def doUpdate(newState: S,
-      expirationMs: Long): Unit = {
-    val encodedValue = stateTypesEncoder.encodeValue(newState, expirationMs)
+      expirationTimeInMs: Long): Unit = {
+    val encodedValue = stateTypesEncoder.encodeValue(newState, expirationTimeInMs)
 
     val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
     store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
       encodedValue, stateName)
 
-    if (expirationMs != -1) {
-      ttlState.upsertTTLForStateKey(expirationMs, serializedGroupingKey)
+    if (expirationTimeInMs != -1) {
+      ttlState.upsertTTLForStateKey(expirationTimeInMs, serializedGroupingKey)
     }
   }
 

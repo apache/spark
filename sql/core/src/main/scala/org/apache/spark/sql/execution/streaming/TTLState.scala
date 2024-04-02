@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.time.Duration
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.streaming.state.{RangeKeyScanStateEncoderSpec, StateStore}
@@ -26,10 +25,10 @@ import org.apache.spark.sql.streaming.TTLMode
 import org.apache.spark.sql.types.{BinaryType, DataType, LongType, NullType, StructField, StructType}
 
 object StateTTLSchema {
-  val KEY_ROW_SCHEMA: StructType = new StructType()
+  val TTL_KEY_ROW_SCHEMA: StructType = new StructType()
     .add("expirationMs", LongType)
     .add("groupingKey", BinaryType)
-  val VALUE_ROW_SCHEMA: StructType =
+  val TTL_VALUE_ROW_SCHEMA: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 }
 
@@ -91,21 +90,20 @@ class SingleKeyTTLStateImpl(
     store: StateStore,
     batchTimestampMs: Option[Long],
     eventTimeWatermarkMs: Option[Long])
-  extends TTLState
-  with Logging {
+  extends TTLState {
 
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
 
   private val ttlColumnFamilyName = s"_ttl_$stateName"
-  private val ttlKeyEncoder = UnsafeProjection.create(KEY_ROW_SCHEMA)
+  private val ttlKeyEncoder = UnsafeProjection.create(TTL_KEY_ROW_SCHEMA)
   private var state: StateVariableWithTTLSupport = _
 
   // empty row used for values
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
-  store.createColFamilyIfAbsent(ttlColumnFamilyName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA,
-    RangeKeyScanStateEncoderSpec(KEY_ROW_SCHEMA, 1), isInternal = true)
+  store.createColFamilyIfAbsent(ttlColumnFamilyName, TTL_KEY_ROW_SCHEMA, TTL_VALUE_ROW_SCHEMA,
+    RangeKeyScanStateEncoderSpec(TTL_KEY_ROW_SCHEMA, 1), isInternal = true)
 
   def upsertTTLForStateKey(
       expirationMs: Long,

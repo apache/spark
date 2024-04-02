@@ -233,5 +233,5 @@ class StatefulProcessorTTLCannotBeNegative(
     operationType: String,
     stateName: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATEFUL_PROCESSOR_TTL_CANNOT_BE_NEGATIVE",
+    errorClass = "STATEFUL_PROCESSOR_TTL_VALUE_CANNOT_BE_NEGATIVE",
     messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))
