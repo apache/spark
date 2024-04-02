@@ -26,6 +26,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{LogEntry, Logging, MDC}
 import org.apache.spark.internal.LogKey.{EXECUTOR_ID, MAX_SIZE, MIN_SIZE}
+import org.apache.spark.internal.MDC._
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -63,8 +64,14 @@ trait LoggingSuiteBase
     log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
     log"Please double check."
 
-  def concatVariableAndMDC: LogEntry =
+  def logVariableAndMDC: LogEntry =
     log"Hello $basicMsg, Lost executor ${MDC(EXECUTOR_ID, "1")}."
+
+  def concatMDCAndString: LogEntry =
+    (log"Lost executor ${MDC(EXECUTOR_ID, "1")}." ++ s" Hello $basicMsg.")
+
+  def concatStringAndMDC: LogEntry =
+    (s"Hello $basicMsg, " ++ (log"Lost executor ${MDC(EXECUTOR_ID, "1")}."))
 
   def expectedPatternForMsgWithMDC(level: Level): String
 
@@ -72,7 +79,11 @@ trait LoggingSuiteBase
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
 
-  def expectedPatternForConcatVariableAndMDC(level: Level): String
+  def expectedPatternForVariableAndMDC(level: Level): String
+
+  def expectedPatternForConcatStringAndMDC(level: Level): String
+
+  def expectedPatternForConcatMDCAndString(level: Level): String
 
   test("Basic logging") {
     Seq(
@@ -118,14 +129,36 @@ trait LoggingSuiteBase
       }
   }
 
-  test("Logging concat variable and MDC") {
+  test("Logging variable and MDC") {
     Seq(
-      (Level.ERROR, () => logError(concatVariableAndMDC)),
-      (Level.WARN, () => logWarning(concatVariableAndMDC)),
-      (Level.INFO, () => logInfo(concatVariableAndMDC))).foreach {
+      (Level.ERROR, () => logError(logVariableAndMDC)),
+      (Level.WARN, () => logWarning(logVariableAndMDC)),
+      (Level.INFO, () => logInfo(logVariableAndMDC))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
-          assert(expectedPatternForConcatVariableAndMDC(level).r.matches(logOutput))
+          assert(expectedPatternForVariableAndMDC(level).r.matches(logOutput))
+      }
+  }
+
+  test("Logging concat string and MDC") {
+    Seq(
+      (Level.ERROR, () => logError(concatStringAndMDC)),
+      (Level.WARN, () => logWarning(concatStringAndMDC)),
+      (Level.INFO, () => logInfo(concatStringAndMDC))).foreach {
+        case (level, logFunc) =>
+          val logOutput = captureLogOutput(logFunc)
+          assert(expectedPatternForConcatStringAndMDC(level).r.matches(logOutput))
+      }
+  }
+
+  test("Logging concat MDC and string") {
+    Seq(
+      (Level.ERROR, () => logError(concatMDCAndString)),
+      (Level.WARN, () => logWarning(concatMDCAndString)),
+      (Level.INFO, () => logInfo(concatMDCAndString))).foreach {
+        case (level, logFunc) =>
+          val logOutput = captureLogOutput(logFunc)
+          assert(expectedPatternForConcatMDCAndString(level).r.matches(logOutput))
       }
   }
 }
@@ -186,13 +219,41 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
         }""")
   }
 
-  override def expectedPatternForConcatVariableAndMDC(level: Level): String = {
+  override def expectedPatternForVariableAndMDC(level: Level): String = {
     compactAndToRegexPattern(
       s"""
         {
           "ts": "<timestamp>",
           "level": "$level",
           "msg": "Hello This is a log message, Lost executor 1.",
+          "context": {
+             "executor_id": "1"
+          },
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForConcatStringAndMDC(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Hello This is a log message, Lost executor 1.",
+          "context": {
+             "executor_id": "1"
+          },
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForConcatMDCAndString(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Lost executor 1. Hello This is a log message.",
           "context": {
              "executor_id": "1"
           },
