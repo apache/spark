@@ -14,27 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-package org.apache.spark.variant;
+package org.apache.spark.internal
 
 /**
- * This class is structurally equivalent to {@link org.apache.spark.unsafe.types.VariantVal}. We
- * define a new class to avoid depending on or modifying Spark.
+ * Various keys used for mapped diagnostic contexts(MDC) in logging.
+ * All structured logging keys should be defined here for standardization.
  */
-public final class Variant {
-  private final byte[] value;
-  private final byte[] metadata;
-
-  public Variant(byte[] value, byte[] metadata) {
-    this.value = value;
-    this.metadata = metadata;
-  }
-
-  public byte[] getValue() {
-    return value;
-  }
-
-  public byte[] getMetadata() {
-    return metadata;
-  }
+object LogKey extends Enumeration {
+  val EXECUTOR_ID, MIN_SIZE, MAX_SIZE = Value
 }

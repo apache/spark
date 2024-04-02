@@ -85,16 +85,14 @@ class TimerStateImpl(
   }
 
   val keyToTsCFName = timerCFName + TimerStateUtils.KEY_TO_TIMESTAMP_CF
-  store.createColFamilyIfAbsent(keyToTsCFName,
-    schemaForKeyRow, numColsPrefixKey = 1,
-    schemaForValueRow, useMultipleValuesPerKey = false,
-    isInternal = true)
+  store.createColFamilyIfAbsent(keyToTsCFName, schemaForKeyRow,
+    schemaForValueRow, PrefixKeyScanStateEncoderSpec(schemaForKeyRow, 1),
+    useMultipleValuesPerKey = false, isInternal = true)
 
   val tsToKeyCFName = timerCFName + TimerStateUtils.TIMESTAMP_TO_KEY_CF
-  store.createColFamilyIfAbsent(tsToKeyCFName,
-    keySchemaForSecIndex, numColsPrefixKey = 0,
-    schemaForValueRow, useMultipleValuesPerKey = false,
-    isInternal = true)
+  store.createColFamilyIfAbsent(tsToKeyCFName, keySchemaForSecIndex,
+    schemaForValueRow, RangeKeyScanStateEncoderSpec(keySchemaForSecIndex, 1),
+    useMultipleValuesPerKey = false, isInternal = true)
 
   private def getGroupingKey(cfName: String): Any = {
     val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
@@ -112,7 +110,6 @@ class TimerStateImpl(
 
   // We maintain a secondary index that inverts the ordering of the timestamp
   // and grouping key
-  // TODO: use range scan encoder to encode the secondary index key
   private def encodeSecIndexKey(groupingKey: Any, expiryTimestampMs: Long): UnsafeRow = {
     val keyByteArr = keySerializer.apply(groupingKey).asInstanceOf[UnsafeRow].getBytes()
     val keyRow = secIndexKeyEncoder(InternalRow(expiryTimestampMs, keyByteArr))
@@ -189,10 +186,15 @@ class TimerStateImpl(
   }
 
   /**
-   * Function to get all the registered timers for all grouping keys
+   * Function to get all the expired registered timers for all grouping keys.
+   * Perform a range scan on timestamp and will stop iterating once the key row timestamp equals or
+   * exceeds the limit (as timestamp key is increasingly sorted).
+   * @param expiryTimestampMs Threshold for expired timestamp in milliseconds, this function
+   *                          will return all timers that have timestamp less than passed threshold.
    * @return - iterator of all the registered timers for all grouping keys
    */
-  def getExpiredTimers(): Iterator[(Any, Long)] = {
+  def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
+    // this iter is increasingly sorted on timestamp
     val iter = store.iterator(tsToKeyCFName)
 
     new NextIterator[(Any, Long)] {
@@ -201,7 +203,12 @@ class TimerStateImpl(
           val rowPair = iter.next()
           val keyRow = rowPair.key
           val result = getTimerRowFromSecIndex(keyRow)
-          result
+          if (result._2 < expiryTimestampMs) {
+            result
+          } else {
+            finished = true
+            null.asInstanceOf[(Any, Long)]
+          }
         } else {
           finished = true
           null.asInstanceOf[(Any, Long)]

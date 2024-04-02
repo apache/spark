@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
@@ -224,12 +223,7 @@ class FileScanRDD(
       }
 
       private def readCurrentFile(): Iterator[InternalRow] = {
-        try {
-          readFunction(currentFile)
-        } catch {
-          case e: FileNotFoundException =>
-            throw QueryExecutionErrors.readCurrentFileNotFoundError(e)
-        }
+        readFunction(currentFile)
       }
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */

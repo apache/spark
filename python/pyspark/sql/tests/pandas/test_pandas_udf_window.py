@@ -40,7 +40,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest, assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual
 
 if have_pandas:
     from pandas.testing import assert_frame_equal
@@ -283,7 +283,7 @@ class WindowPandasUDFTestsMixin:
         self.assertEqual(result1.first()["v2"], [1.0, 2.0])
 
     def test_invalid_args(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_invalid_args()
 
     def check_invalid_args(self):

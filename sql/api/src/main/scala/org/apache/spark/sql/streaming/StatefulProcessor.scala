@@ -91,3 +91,22 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
     statefulProcessorHandle
   }
 }
+
+/**
+ * Stateful processor with support for specifying initial state.
+ * Accepts a user-defined type as initial state to be initialized in the first batch.
+ * This can be used for starting a new streaming query with existing state from a
+ * previous streaming query.
+ */
+@Experimental
+@Evolving
+trait StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K, I, O] {
+
+  /**
+   * Function that will be invoked only in the first batch for users to process initial states.
+   *
+   * @param key - grouping key
+   * @param initialState - A row in the initial state to be processed
+   */
+  def handleInitialState(key: K, initialState: S): Unit
+}

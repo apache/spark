@@ -31,10 +31,15 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{MapType, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
+
+  private val collationPreservingSources = Seq("parquet")
+  private val collationNonPreservingSources = Seq("orc", "csv", "json", "text")
+  private val allFileBasedDataSources = collationPreservingSources ++  collationNonPreservingSources
 
   test("collate returns proper type") {
     Seq("utf8_binary", "utf8_binary_lcase", "unicode", "unicode_ci").foreach { collationName =>
@@ -424,22 +429,49 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("create table with collation") {
-    val tableName = "parquet_dummy_tbl"
+    val tableName = "dummy_tbl"
     val collationName = "UTF8_BINARY_LCASE"
     val collationId = CollationFactory.collationNameToId(collationName)
 
-    withTable(tableName) {
-      sql(
+    allFileBasedDataSources.foreach { format =>
+      withTable(tableName) {
+        sql(
         s"""
-           |CREATE TABLE $tableName (c1 STRING COLLATE $collationName)
-           |USING PARQUET
+           |CREATE TABLE $tableName (
+           |  c1 STRING COLLATE $collationName
+           |)
+           |USING $format
            |""".stripMargin)
 
-      sql(s"INSERT INTO $tableName VALUES ('aaa')")
-      sql(s"INSERT INTO $tableName VALUES ('AAA')")
+        sql(s"INSERT INTO $tableName VALUES ('aaa')")
+        sql(s"INSERT INTO $tableName VALUES ('AAA')")
 
-      checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
-      assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+        checkAnswer(sql(s"SELECT DISTINCT COLLATION(c1) FROM $tableName"), Seq(Row(collationName)))
+        assert(sql(s"select c1 FROM $tableName").schema.head.dataType == StringType(collationId))
+      }
+    }
+  }
+
+  test("write collated data to different data sources with dataframe api") {
+    val collationName = "UNICODE_CI"
+
+    allFileBasedDataSources.foreach { format =>
+      withTempPath { path =>
+        val df = sql(s"SELECT c COLLATE $collationName AS c FROM VALUES ('aaa') AS data(c)")
+        df.write.format(format).save(path.getAbsolutePath)
+
+        val readback = spark.read.format(format).load(path.getAbsolutePath)
+        val readbackCollation = if (collationPreservingSources.contains(format)) {
+          collationName
+        } else {
+          "UTF8_BINARY"
+        }
+
+        checkAnswer(readback, Row("aaa"))
+        checkAnswer(
+          readback.selectExpr(s"collation(${readback.columns.head})"),
+          Row(readbackCollation))
+      }
     }
   }
 
@@ -604,7 +636,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "SUBSTRING(c1, 0, 1)",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain non-binary orderable collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -621,7 +654,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "LOWER(c1)",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain non-binary orderable collated string type"))
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -638,7 +672,48 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map(
         "fieldName" -> "c2",
         "expressionStr" -> "UCASE(struct1.a)",
-        "reason" -> "generation expression cannot contain non-default collated string type"))
+        "reason" ->
+          "generation expression cannot contain non-binary orderable collated string type"))
+  }
+
+  test("SPARK-47431: Default collation set to UNICODE, literal test") {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      checkAnswer(sql(s"SELECT collation('aa')"), Seq(Row("UNICODE")))
+    }
+  }
+
+  test("SPARK-47431: Default collation set to UNICODE, column type test") {
+    withTable("t") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+        sql(s"CREATE TABLE t(c1 STRING) USING PARQUET")
+        sql(s"INSERT INTO t VALUES ('a')")
+        checkAnswer(sql(s"SELECT collation(c1) FROM t"), Seq(Row("UNICODE")))
+      }
+    }
+  }
+
+  test("SPARK-47431: Create table with UTF8_BINARY, make sure collation persists on read") {
+    withTable("t") {
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UTF8_BINARY") {
+        sql("CREATE TABLE t(c1 STRING) USING PARQUET")
+        sql("INSERT INTO t VALUES ('a')")
+        checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
+      }
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+        checkAnswer(sql("SELECT collation(c1) FROM t"), Seq(Row("UTF8_BINARY")))
+      }
+    }
+  }
+
+  test("Create dataframe with non utf8 binary collation") {
+    val schema = StructType(Seq(StructField("Name", StringType("UNICODE_CI"))))
+    val data = Seq(Row("Alice"), Row("Bob"), Row("bob"))
+    val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+
+    checkAnswer(
+      df.groupBy("name").count(),
+      Seq(Row("Alice", 1), Row("Bob", 2))
+    )
   }
 
   test("Aggregation on complex containing collated strings") {

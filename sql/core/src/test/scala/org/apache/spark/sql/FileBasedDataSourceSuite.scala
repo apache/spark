@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
@@ -246,16 +246,12 @@ class FileBasedDataSourceSuite extends QueryTest
           if (ignore.toBoolean) {
             testIgnoreMissingFiles(options)
           } else {
-            val errorClass = sources match {
-              case "" => "_LEGACY_ERROR_TEMP_2062"
-              case _ => "_LEGACY_ERROR_TEMP_2055"
-            }
             checkErrorMatchPVals(
-              exception = intercept[SparkFileNotFoundException] {
+              exception = intercept[SparkException] {
                 testIgnoreMissingFiles(options)
               },
-              errorClass = errorClass,
-              parameters = Map("message" -> ".*does not exist")
+              errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+              parameters = Map("path" -> ".*")
             )
           }
         }

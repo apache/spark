@@ -20,8 +20,10 @@ from decimal import Decimal
 import os
 import time
 import unittest
+from typing import cast
 
 from pyspark.sql import Row
+import pyspark.sql.functions as F
 from pyspark.sql.types import (
     DateType,
     TimestampType,
@@ -34,9 +36,10 @@ from pyspark.errors import (
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
+    have_pyarrow,
     pandas_requirement_message,
+    pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 
 class DataFrameCreationTestsMixin:
@@ -70,7 +73,7 @@ class DataFrameCreationTestsMixin:
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_create_dataframe_required_pandas_not_found(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             with self.assertRaisesRegex(
                 ImportError, "(Pandas >= .* must be installed|No module named '?pandas'?)"
             ):
@@ -156,6 +159,61 @@ class DataFrameCreationTestsMixin:
             error_class="CANNOT_DETERMINE_TYPE",
             message_parameters={},
         )
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    )
+    def test_schema_inference_from_pandas_with_dict(self):
+        # SPARK-47543: test for verifying if inferring `dict` as `MapType` work properly.
+        import pandas as pd
+
+        pdf = pd.DataFrame({"str_col": ["second"], "dict_col": [{"first": 0.7, "second": 0.3}]})
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+                "spark.sql.execution.arrow.pyspark.fallback.enabled": False,
+                "spark.sql.execution.pandas.inferPandasDictAsMap": True,
+            }
+        ):
+            sdf = self.spark.createDataFrame(pdf)
+            self.assertEqual(
+                sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
+                [Row(str_col="second", dict_col={"first": 0.7, "second": 0.3}, test=0.3)],
+            )
+
+            # Empty dict should fail
+            pdf_empty_struct = pd.DataFrame({"str_col": ["second"], "dict_col": [{}]})
+
+            with self.assertRaises(PySparkValueError) as pe:
+                self.spark.createDataFrame(pdf_empty_struct)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
+
+            # Dict has different types of values should fail
+            pdf_different_type = pd.DataFrame(
+                {"str_col": ["second"], "dict_col": [{"first": 0.7, "second": "0.3"}]}
+            )
+            self.assertRaises(
+                PySparkValueError, lambda: self.spark.createDataFrame(pdf_different_type)
+            )
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.pyspark.enabled": False,
+                "spark.sql.execution.pandas.inferPandasDictAsMap": True,
+            }
+        ):
+            sdf = self.spark.createDataFrame(pdf)
+            self.assertEqual(
+                sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
+                [Row(str_col="second", dict_col={"first": 0.7, "second": 0.3}, test=0.3)],
+            )
 
 
 class DataFrameCreationTests(

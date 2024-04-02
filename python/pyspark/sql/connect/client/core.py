@@ -43,6 +43,7 @@ from typing import (
     NoReturn,
     cast,
     TYPE_CHECKING,
+    Type,
     Sequence,
 )
 
@@ -81,7 +82,9 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
+    CommonInlineUserDefinedDataSource,
     PythonUDTF,
+    PythonDataSource,
 )
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
@@ -94,6 +97,7 @@ from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotI
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark.sql.datasource import DataSource
 
 
 class ChannelBuilder:
@@ -788,6 +792,23 @@ class SparkConnectClient(object):
         self._execute(req)
         return name
 
+    def register_data_source(self, dataSource: Type["DataSource"]) -> None:
+        """
+        Register a data source in the session catalog.
+        """
+        data_source = PythonDataSource(
+            data_source=dataSource,
+            python_ver=get_python_ver(),
+        )
+        proto = CommonInlineUserDefinedDataSource(
+            name=dataSource.name(),
+            data_source=data_source,
+        ).to_data_source_proto(self)
+
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_data_source.CopyFrom(proto)
+        self._execute(req)
+
     def register_java(
         self,
         name: str,
@@ -1300,6 +1321,9 @@ class SparkConnectClient(object):
                         + f"{num_records_in_batch}."
                     )
                 num_records += num_records_in_batch
+            if b.HasField("create_resource_profile_command_result"):
+                profile_id = b.create_resource_profile_command_result.profile_id
+                yield {"create_resource_profile_command_result": profile_id}
 
         try:
             if self._use_reattachable_execute:
@@ -1725,3 +1749,12 @@ class SparkConnectClient(object):
         else:
             # Update the server side session ID.
             self._server_session_id = response.server_side_session_id
+
+    def _create_profile(self, profile: pb2.ResourceProfile) -> int:
+        """Create the ResourceProfile on the server side and return the profile ID"""
+        logger.info("Creating the ResourceProfile")
+        cmd = pb2.Command()
+        cmd.create_resource_profile_command.profile.CopyFrom(profile)
+        (_, properties) = self.execute_command(cmd)
+        profile_id = properties["create_resource_profile_command_result"]
+        return profile_id

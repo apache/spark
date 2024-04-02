@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalShortType}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -853,16 +854,37 @@ private[parquet] class ParquetRowConverter(
     private[this] var currentValue: Any = _
     private[this] var currentMetadata: Any = _
 
-    private[this] val converters = Array(
-      // Converter for value
-      newConverter(parquetType.getType(0), BinaryType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentValue = value
-      }),
+    private[this] val converters = {
+      if (parquetType.getFieldCount() != 2) {
+        // We may allow more than two children in the future, so consider this unsupported.
+        throw QueryCompilationErrors.
+          parquetTypeUnsupportedYetError("variant column must contain exactly two fields")
+      }
+      val valueAndMetadata = Seq("value", "metadata").map { colName =>
+        val idx = (0 until parquetType.getFieldCount())
+            .find(parquetType.getFieldName(_) == colName)
+        if (idx.isEmpty) {
+          throw QueryCompilationErrors.illegalParquetTypeError(s"variant missing $colName field")
+        }
+        val child = parquetType.getType(idx.get)
+        if (!child.isPrimitive || child.getRepetition != Type.Repetition.REQUIRED ||
+            child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
+          throw QueryCompilationErrors.illegalParquetTypeError(
+            s"variant column must be a non-nullable binary")
+        }
+        child
+      }
+      Array(
+        // Converter for value
+        newConverter(valueAndMetadata(0), BinaryType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentValue = value
+        }),
 
-      // Converter for metadata
-      newConverter(parquetType.getType(1), BinaryType, new ParentContainerUpdater {
-        override def set(value: Any): Unit = currentMetadata = value
+        // Converter for metadata
+        newConverter(valueAndMetadata(1), BinaryType, new ParentContainerUpdater {
+          override def set(value: Any): Unit = currentMetadata = value
       }))
+    }
 
     override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 

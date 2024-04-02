@@ -122,18 +122,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE char_types (" +
-      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar(1))"
+      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar(1)," +
+      "c5 bpchar, c6 char)"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO char_types VALUES " +
-      "('abcd', 'efgh', 'ijkl', 'mnop', 'q')").executeUpdate()
+      "('abcd', 'efgh', 'ijkl', 'mnop', 'q', 'eason', 'c' )").executeUpdate()
 
-    // SPARK-42916: character/char/bpchar w/o length specifier defaults to int max value, this will
-    // cause OOM as it will be padded with ' ' to 2147483647.
     conn.prepareStatement("CREATE TABLE char_array_types (" +
-      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[], c4 bpchar(1)[])"
+      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[]," +
+      "c4 bpchar(1)[], c5 bpchar[])"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO char_array_types VALUES " +
-      """('{"a", "bcd"}', '{"ef", "gh"}', '{"i", "j", "kl"}', '{"mnop"}', '{"q", "r"}')"""
+      """('{"a", "bcd"}', '{"ef", "gh"}', '{"i", "j", "kl"}', '{"mnop"}', '{"q", "r"}',
+        | '{"Eason", "Ethan"}')""".stripMargin
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE money_types (" +
@@ -173,6 +174,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "CREATE FUNCTION test_null() RETURNS VOID AS $$ BEGIN RETURN; END; $$ LANGUAGE plpgsql")
       .executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE test_bit_array (c1 bit(1)[], c2 bit(5)[])").executeUpdate()
+    conn.prepareStatement("INSERT INTO test_bit_array VALUES (ARRAY[B'1', B'0'], " +
+      "ARRAY[B'00001', B'00010'])").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -181,7 +185,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.length == 2)
     // Test the types, and values using the first row.
     val types = rows(0).toSeq.map(x => x.getClass)
-    assert(types.length == 42)
+    assert(types.length == 45)
     assert(classOf[String].isAssignableFrom(types(0)))
     assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
     assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
@@ -384,26 +388,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("character type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_types", new Properties)
-    val row = df.collect()
-    assert(row.length == 1)
-    assert(row(0).length === 5)
-    assert(row(0).getString(0) === "abcd")
-    assert(row(0).getString(1) === "efgh")
-    assert(row(0).getString(2) === "ijkl")
-    assert(row(0).getString(3) === "mnop")
-    assert(row(0).getString(4) === "q")
+    checkAnswer(df, Row("abcd", "efgh", "ijkl", "mnop", "q", "eason", "c"))
   }
 
   test("SPARK-32576: character array type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_array_types", new Properties)
-    val row = df.collect()
-    assert(row.length == 1)
-    assert(row(0).length === 5)
-    assert(row(0).getSeq[String](0) === Seq("a   ", "bcd "))
-    assert(row(0).getSeq[String](1) === Seq("ef  ", "gh  "))
-    assert(row(0).getSeq[String](2) === Seq("i", "j", "kl"))
-    assert(row(0).getSeq[String](3) === Seq("mnop"))
-    assert(row(0).getSeq[String](4) === Seq("q", "r"))
+    checkAnswer(df, Row(Seq("a   ", "bcd "), Seq("ef  ", "gh  "), Seq("i", "j", "kl"),
+      Seq("mnop"), Seq("q", "r"), Seq("Eason", "Ethan")))
   }
 
   test("SPARK-34333: money type tests") {
@@ -494,5 +485,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .load()
     assert(df.schema.head.dataType === NullType)
     checkAnswer(df, Seq(Row(null)))
+  }
+
+  test("SPARK-47628: Fix reading bit array type") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "test_bit_array", new Properties)
+    val expected = Row(Array(true, false), Array(
+      Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
+    checkAnswer(df, expected)
   }
 }

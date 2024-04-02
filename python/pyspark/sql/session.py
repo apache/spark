@@ -499,12 +499,18 @@ class SparkSession(SparkConversionMixin):
 
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
-                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                            return cast(
+                                SparkSession,
+                                RemoteSparkSession.builder.config(map=opts).getOrCreate(),
+                            )
                         elif "SPARK_LOCAL_REMOTE" in os.environ:
                             url = "sc://localhost"
                             os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                             opts["spark.remote"] = url
-                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                            return cast(
+                                SparkSession,
+                                RemoteSparkSession.builder.config(map=opts).getOrCreate(),
+                            )
                         else:
                             raise PySparkRuntimeError(
                                 error_class="SESSION_ALREADY_EXIST",
@@ -560,14 +566,14 @@ class SparkSession(SparkConversionMixin):
                 # used in conjunction with Spark Connect mode.
                 os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
                 opts["spark.remote"] = url
-                return RemoteSparkSession.builder.config(map=opts).create()
+                return cast(SparkSession, RemoteSparkSession.builder.config(map=opts).create())
             else:
                 raise PySparkRuntimeError(
                     error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
                     message_parameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
+    # TODO(SPARK-38912): Replace classproperty with @classmethod + @property once support for
     # Python 3.8 is dropped.
     #
     # In Python 3.9, the @property decorator has been made compatible with the
@@ -575,14 +581,15 @@ class SparkSession(SparkConversionMixin):
     #
     # @classmethod + @property is also affected by a bug in Python's docstring which was backported
     # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-    @classproperty
-    def builder(cls) -> Builder:
-        """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
+    #
+    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
+    # If changing, make sure this bug is not reintroduced.
+    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
+    """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-        """
-        return cls.Builder()
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+    """
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
