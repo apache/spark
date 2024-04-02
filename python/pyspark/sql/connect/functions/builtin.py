@@ -45,6 +45,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
+    SortOrder,
     Expression,
     LiteralExpression,
     ColumnReference,
@@ -86,6 +87,17 @@ if TYPE_CHECKING:
 def _to_col(col: "ColumnOrName") -> Column:
     assert isinstance(col, (Column, str))
     return col if isinstance(col, Column) else column(col)
+
+
+def _sort_col(col: "ColumnOrName") -> Column:
+    assert isinstance(col, (Column, str))
+    if isinstance(col, Column):
+        if isinstance(col._expr, SortOrder):
+            return col
+        else:
+            return col.asc()
+    else:
+        return column(col).asc()
 
 
 def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
@@ -2027,6 +2039,13 @@ def str_to_map(
 
 
 str_to_map.__doc__ = pysparkfuncs.str_to_map.__doc__
+
+
+def parse_json(col: "ColumnOrName") -> Column:
+    return _invoke_function("parse_json", _to_col(col))
+
+
+parse_json.__doc__ = pysparkfuncs.parse_json.__doc__
 
 
 def posexplode(col: "ColumnOrName") -> Column:

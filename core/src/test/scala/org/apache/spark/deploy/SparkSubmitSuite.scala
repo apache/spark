@@ -558,6 +558,48 @@ class SparkSubmitSuite
     Files.delete(Paths.get("TestUDTF.jar"))
   }
 
+  test("SPARK-47475: Avoid jars download if scheme matches " +
+    "spark.kubernetes.jars.avoidDownloadSchemes " +
+    "in k8s client mode & driver runs inside a POD") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+    withTempDir { tmpDir =>
+      val notToDownload = File.createTempFile("NotToDownload", ".jar", tmpDir)
+      val remoteJarFile = s"s3a://${notToDownload.getAbsolutePath}"
+
+      val clArgs = Seq(
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--master", "k8s://host:port",
+        "--class", "org.SomeClass",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--conf", "spark.kubernetes.jars.avoidDownloadSchemes=s3a",
+        "--conf", "spark.hadoop.fs.s3a.impl=org.apache.spark.deploy.TestFileSystem",
+        "--conf", "spark.hadoop.fs.s3a.impl.disable.cache=true",
+        "--files", "src/test/resources/test_metrics_config.properties",
+        "--py-files", "src/test/resources/test_metrics_system.properties",
+        "--archives", "src/test/resources/log4j2.properties",
+        "--jars", s"src/test/resources/TestUDTF.jar,$remoteJarFile",
+        "/home/jarToIgnore.jar",
+        "arg1")
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
+      conf.get("spark.master") should be("k8s://https://host:port")
+      conf.get("spark.jars").contains(remoteJarFile) shouldBe true
+      conf.get("spark.jars").contains("TestUDTF") shouldBe true
+
+      Files.exists(Paths.get("test_metrics_config.properties")) should be(true)
+      Files.exists(Paths.get("test_metrics_system.properties")) should be(true)
+      Files.exists(Paths.get("log4j2.properties")) should be(true)
+      Files.exists(Paths.get("TestUDTF.jar")) should be(true)
+      Files.exists(Paths.get(notToDownload.getName)) should be(false)
+      Files.delete(Paths.get("test_metrics_config.properties"))
+      Files.delete(Paths.get("test_metrics_system.properties"))
+      Files.delete(Paths.get("log4j2.properties"))
+      Files.delete(Paths.get("TestUDTF.jar"))
+    }
+  }
+
   test("SPARK-43014: Set `spark.app.submitTime` if missing ") {
     val clArgs1 = Seq(
       "--deploy-mode", "client",

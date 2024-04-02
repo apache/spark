@@ -180,6 +180,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       UpdateAttributeNullability) ::
     Batch("Pullup Correlated Expressions", Once,
       OptimizeOneRowRelationSubquery,
+      PullOutNestedDataOuterRefExpressions,
       PullupCorrelatedPredicates) ::
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
@@ -243,6 +244,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
+    Batch("InsertMapSortInGroupingExpressions", Once,
+      InsertMapSortInGroupingExpressions) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)

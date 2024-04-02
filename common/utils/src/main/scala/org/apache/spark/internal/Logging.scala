@@ -17,9 +17,11 @@
 
 package org.apache.spark.internal
 
+import java.util.Locale
+
 import scala.jdk.CollectionConverters._
 
-import org.apache.logging.log4j.{Level, LogManager}
+import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
@@ -28,6 +30,44 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
 import org.apache.spark.util.SparkClassUtils
+
+/**
+ * Mapped Diagnostic Context (MDC) that will be used in log messages.
+ * The values of the MDC will be inline in the log message, while the key-value pairs will be
+ * part of the ThreadContext.
+ */
+case class MDC(key: LogKey.Value, value: String)
+
+/**
+ * Wrapper class for log messages that include a logging context.
+ * This is used as the return type of the string interpolator `LogStringContext`.
+ */
+case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
+  def +(mdc: MessageWithContext): MessageWithContext = {
+    val resultMap = new java.util.HashMap(context)
+    resultMap.putAll(mdc.context)
+    MessageWithContext(message + mdc.message, resultMap)
+  }
+}
+
+/**
+ * Companion class for lazy evaluation of the MessageWithContext instance.
+ */
+class LogEntry(messageWithContext: => MessageWithContext) {
+  def message: String = messageWithContext.message
+
+  def context: java.util.HashMap[String, String] = messageWithContext.context
+}
+
+/**
+ * Companion object for the wrapper to enable implicit conversions
+ */
+object LogEntry {
+  import scala.language.implicitConversions
+
+  implicit def from(msgWithCtx: => MessageWithContext): LogEntry =
+    new LogEntry(msgWithCtx)
+}
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
@@ -55,9 +95,55 @@ trait Logging {
     log_
   }
 
+  implicit class LogStringContext(val sc: StringContext) {
+    def log(args: MDC*): MessageWithContext = {
+      val processedParts = sc.parts.iterator
+      val sb = new StringBuilder(processedParts.next())
+      val context = new java.util.HashMap[String, String]()
+
+      args.foreach { mdc =>
+        sb.append(mdc.value)
+        if (Logging.isStructuredLoggingEnabled) {
+          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
+        }
+
+        if (processedParts.hasNext) {
+          sb.append(processedParts.next())
+        }
+      }
+
+      MessageWithContext(sb.toString(), context)
+    }
+  }
+
+  private def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
+    val threadContext = CloseableThreadContext.putAll(context)
+    try {
+      body
+    } finally {
+      threadContext.close()
+    }
+  }
+
   // Log methods that take only a String
   protected def logInfo(msg: => String): Unit = {
     if (log.isInfoEnabled) log.info(msg)
+  }
+
+  protected def logInfo(entry: LogEntry): Unit = {
+    if (log.isInfoEnabled) {
+      withLogContext(entry.context) {
+        log.info(entry.message)
+      }
+    }
+  }
+
+  protected def logInfo(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isInfoEnabled) {
+      withLogContext(entry.context) {
+        log.info(entry.message, throwable)
+      }
+    }
   }
 
   protected def logDebug(msg: => String): Unit = {
@@ -72,8 +158,40 @@ trait Logging {
     if (log.isWarnEnabled) log.warn(msg)
   }
 
+  protected def logWarning(entry: LogEntry): Unit = {
+    if (log.isWarnEnabled) {
+      withLogContext(entry.context) {
+        log.warn(entry.message)
+      }
+    }
+  }
+
+  protected def logWarning(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isWarnEnabled) {
+      withLogContext(entry.context) {
+        log.warn(entry.message, throwable)
+      }
+    }
+  }
+
   protected def logError(msg: => String): Unit = {
     if (log.isErrorEnabled) log.error(msg)
+  }
+
+  protected def logError(entry: LogEntry): Unit = {
+    if (log.isErrorEnabled) {
+      withLogContext(entry.context) {
+        log.error(entry.message)
+      }
+    }
+  }
+
+  protected def logError(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isErrorEnabled) {
+      withLogContext(entry.context) {
+        log.error(entry.message, throwable)
+      }
+    }
   }
 
   // Log methods that take Throwables (Exceptions/Errors) too
@@ -132,7 +250,11 @@ trait Logging {
       // scalastyle:off println
       if (Logging.islog4j2DefaultConfigured()) {
         Logging.defaultSparkLog4jConfig = true
-        val defaultLogProps = "org/apache/spark/log4j2-defaults.properties"
+        val defaultLogProps = if (Logging.isStructuredLoggingEnabled) {
+          "org/apache/spark/log4j2-defaults.properties"
+        } else {
+          "org/apache/spark/log4j2-pattern-layout-defaults.properties"
+        }
         Option(SparkClassUtils.getSparkClassLoader.getResource(defaultLogProps)) match {
           case Some(url) =>
             val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
@@ -190,6 +312,7 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
+  @volatile private var structuredLoggingEnabled = true
   @volatile private[spark] var sparkShellThresholdLevel: Level = null
   @volatile private[spark] var setLogLevelPrinted: Boolean = false
 
@@ -259,6 +382,26 @@ private[spark] object Logging {
           .getConfiguration.isInstanceOf[DefaultConfiguration])
   }
 
+  /**
+   * Enable Structured logging framework.
+   */
+  private[spark] def enableStructuredLogging(): Unit = {
+    structuredLoggingEnabled = true
+  }
+
+  /**
+   * Disable Structured logging framework.
+   */
+  private[spark] def disableStructuredLogging(): Unit = {
+    structuredLoggingEnabled = false
+  }
+
+  /**
+   * Return true if Structured logging framework is enabled.
+   */
+  private[spark] def isStructuredLoggingEnabled: Boolean = {
+    structuredLoggingEnabled
+  }
 
   private[spark] class SparkShellLoggingFilter extends AbstractFilter {
     private var status = LifeCycle.State.INITIALIZING
