@@ -131,7 +131,6 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     }
   }
 
-
   protected def testMetricsNonDynamicPartition(
       dataFormat: String,
       tableName: String): Unit = {
