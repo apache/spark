@@ -1235,6 +1235,8 @@ object TryToTimestampExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 1 || numArgs == 2) {
+      // The expression ParseToTimestamp will throw an SparkUpgradeException if the input is invalid
+      // even when failOnError is false. We need to catch the exception and return null.
       TryEval(ParseToTimestamp(
         expressions.head,
         expressions.drop(1).lastOption,
