@@ -45,4 +45,8 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
       s""".*$level $className: Min Size: 2, Max Size: 4. Please double check.\n"""
     assert(pattern.r.matches(logOutput))
   }
+
+  override def expectedPatternForConcatVariableAndMDC(level: Level): String = {
+     s""".*$level $className: Hello This is a log message, Lost executor 1.\n"""
+  }
 }

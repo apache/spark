@@ -63,11 +63,16 @@ trait LoggingSuiteBase
     log"Max Size: ${MDC(MAX_SIZE, "4")}. " +
     log"Please double check."
 
+  def concatVariableAndMDC: LogEntry =
+    log"Hello $basicMsg, Lost executor ${MDC(EXECUTOR_ID, "1")}."
+
   def expectedPatternForMsgWithMDC(level: Level): String
 
   def expectedPatternForMsgWithMDCAndException(level: Level): String
 
   def verifyMsgWithConcat(level: Level, logOutput: String): Unit
+
+  def expectedPatternForConcatVariableAndMDC(level: Level): String
 
   test("Basic logging") {
     Seq(
@@ -110,6 +115,18 @@ trait LoggingSuiteBase
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
           verifyMsgWithConcat(level, logOutput)
+      }
+  }
+
+  test("Logging concat variable and MDC") {
+    Seq(
+      (Level.ERROR, () => logError(concatVariableAndMDC)),
+      (Level.WARN, () => logWarning(concatVariableAndMDC)),
+      (Level.INFO, () => logInfo(concatVariableAndMDC))).foreach {
+        case (level, logFunc) =>
+          val logOutput = captureLogOutput(logFunc)
+          println(logOutput)
+          assert(expectedPatternForConcatVariableAndMDC(level).r.matches(logOutput))
       }
   }
 }
@@ -165,6 +182,20 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
             "class": "java.lang.RuntimeException",
             "msg": "OOM",
             "stacktrace": "<stacktrace>"
+          },
+          "logger": "$className"
+        }""")
+  }
+
+  override def expectedPatternForConcatVariableAndMDC(level: Level): String = {
+    compactAndToRegexPattern(
+      s"""
+        {
+          "ts": "<timestamp>",
+          "level": "$level",
+          "msg": "Hello This is a log message, Lost executor 1.",
+          "context": {
+             "executor_id": "1"
           },
           "logger": "$className"
         }""")
