@@ -82,9 +82,9 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     checkAnswer(variantDF, Seq(Row(expected)))
   }
 
-  test("variant_schema") {
+  test("schema_of_variant") {
     def check(json: String, expected: String): Unit = {
-      val df = Seq(json).toDF("j").selectExpr("variant_schema(parse_json(j))")
+      val df = Seq(json).toDF("j").selectExpr("schema_of_variant(parse_json(j))")
       checkAnswer(df, Seq(Row(expected)))
     }
 

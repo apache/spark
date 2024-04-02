@@ -418,14 +418,14 @@ object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(fa
   since = "4.0.0",
   group = "variant_funcs"
 )
-case class VariantSchema(child: Expression)
+case class SchemaOfVariant(child: Expression)
   extends UnaryExpression
     with RuntimeReplaceable
     with ExpectsInputTypes {
   override lazy val replacement: Expression = StaticInvoke(
-    VariantSchema.getClass,
+    SchemaOfVariant.getClass,
     StringType,
-    "variantSchema",
+    "schemaOfVariant",
     Seq(child),
     inputTypes,
     returnNullable = false)
@@ -434,15 +434,15 @@ case class VariantSchema(child: Expression)
 
   override def dataType: DataType = StringType
 
-  override def prettyName: String = "variant_schema"
+  override def prettyName: String = "schema_of_variant"
 
-  override protected def withNewChildInternal(newChild: Expression): VariantSchema =
+  override protected def withNewChildInternal(newChild: Expression): SchemaOfVariant =
     copy(child = newChild)
 }
 
-object VariantSchema {
-  /** The actual implementation of the `VariantSchema` expression. */
-  def variantSchema(input: VariantVal): UTF8String = {
+object SchemaOfVariant {
+  /** The actual implementation of the `SchemaOfVariant` expression. */
+  def schemaOfVariant(input: VariantVal): UTF8String = {
     val v = new Variant(input.getValue, input.getMetadata)
     UTF8String.fromString(schemaOf(v).sql)
   }
