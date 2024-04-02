@@ -570,6 +570,7 @@ pyspark_resource = Module(
         "pyspark.resource.profile",
         # unittests
         "pyspark.resource.tests.test_resources",
+        "pyspark.resource.tests.test_connect_resources",
     ],
 )
 
@@ -1058,6 +1059,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_window",
+        "pyspark.sql.tests.connect.test_resources",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
