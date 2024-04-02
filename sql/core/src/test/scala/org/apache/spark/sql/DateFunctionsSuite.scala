@@ -1392,4 +1392,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("try_to_timestamp(a)"), Seq(Row(ts)))
     checkAnswer(df.select(try_to_timestamp(col("a"))), Seq(Row(ts)))
   }
+
+  test("try_to_timestamp: return null on SparkUpgradeException") {
+    val df = spark.sql("SELECT try_to_timestamp('2016-12-1', 'yyyy-MM-dd')")
+    checkAnswer(df, Seq(Row(null)))
+  }
 }

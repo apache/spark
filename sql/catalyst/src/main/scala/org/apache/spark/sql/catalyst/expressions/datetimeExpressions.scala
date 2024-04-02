@@ -1235,11 +1235,11 @@ object TryToTimestampExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 1 || numArgs == 2) {
-      ParseToTimestamp(
+      TryEval(ParseToTimestamp(
         expressions.head,
         expressions.drop(1).lastOption,
         SQLConf.get.timestampType,
-        failOnError = false)
+        failOnError = false))
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
     }
