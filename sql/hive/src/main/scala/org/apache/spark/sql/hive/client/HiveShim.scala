@@ -1281,14 +1281,22 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
 
 private[client] class Shim_v3_1 extends Shim_v3_0
 
-// HIVE-21078 changed loadTable by removing hasFollowingStatsTask and adding resetStatistics
-// HIVE-21164 changed loadTable by adding isDirectInsert
 private[client] class Shim_v4_0 extends Shim_v3_1 {
   override protected val charVarcharPartionKeyPushDownSupported = true
 
   private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
     "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
+  private lazy val clazzAlterTableAddPartitionDesc = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.ql.ddl.table.partition.AlterTableAddPartitionDesc")
 
+  private lazy val alterTableMethod =
+    findMethod(
+      classOf[Hive],
+      "alterTable",
+      classOf[String],
+      classOf[Table],
+      classOf[EnvironmentContext],
+      JBoolean.TYPE)
   private lazy val loadTableMethod =
     findMethod(
       classOf[Hive],
@@ -1305,6 +1313,16 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       JBoolean.TYPE,
       JBoolean.TYPE)
 
+  // HIVE-19975 changed alterTable by adding transactional
+  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
+    recordHiveCall()
+    val transactional = false
+    alterTableMethod.invoke(hive, tableName, table, environmentContextInAlterTable,
+      transactional: JBoolean)
+  }
+
+  // HIVE-21078 changed loadTable by removing hasFollowingStatsTask and adding resetStatistics
+  // HIVE-21164 changed loadTable by adding isDirectInsert
   override def loadTable(
       hive: Hive,
       loadPath: Path,
@@ -1324,5 +1342,27 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       isSkewedStoreAsSubdir, isAcidIUDoperation, resetStatistics,
       writeIdInLoadTableOrPartition, stmtIdInLoadTableOrPartition: JInteger, replace: JBoolean,
       isDirectInsert: JBoolean)
+  }
+
+  // HIVE-21703 renamed AddPartitionDesc to AlterTableAddPartitionDesc
+  override def createPartitions(
+      hive: Hive,
+      dbName: String,
+      tableName: String,
+      parts: Seq[CatalogTablePartition],
+      ignoreIfExists: Boolean): Unit = {
+    /*
+    clazzAlterTableAddPartitionDesc.getConstructor().newInstance()
+    val addPartitionDesc = new AlterTableAddPartitionDesc(dbName, tableName, ignoreIfExists)
+    parts.zipWithIndex.foreach { case (s, i) =>
+      addPartitionDesc.addPartition(
+        s.spec.asJava, s.storage.locationUri.map(CatalogUtils.URIToString).orNull)
+      if (s.parameters.nonEmpty) {
+        addPartitionDesc.getPartition(i).setPartParams(s.parameters.asJava)
+      }
+    }
+    recordHiveCall()
+    hive.createPartitions(addPartitionDesc)
+    */
   }
 }
