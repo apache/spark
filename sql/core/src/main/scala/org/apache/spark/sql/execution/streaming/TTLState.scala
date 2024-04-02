@@ -21,7 +21,6 @@ import java.time.Duration
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.streaming.state.{RangeKeyScanStateEncoderSpec, StateStore}
-import org.apache.spark.sql.streaming.TTLMode
 import org.apache.spark.sql.types.{BinaryType, DataType, LongType, NullType, StructField, StructType}
 
 object StateTTLSchema {
@@ -43,9 +42,21 @@ case class SingleKeyTTLRow(
     expirationMs: Long)
 
 /**
- * Represents a State variable which supports TTL.
+ * Represents the underlying state for secondary TTL Index for a user defined
+ * state variable.
+ *
+ * This state allows Spark to query ttl values based on expiration time
+ * allowing efficient ttl cleanup.
  */
-trait StateVariableWithTTLSupport {
+trait TTLState {
+
+  /**
+   * Perform the user state clean up based on ttl values stored in
+   * this state. NOTE that its not safe to call this operation concurrently
+   * when the user can also modify the underlying State. Cleanup should be initiated
+   * after arbitrary state operations are completed by the user.
+   */
+  def clearExpiredState(): Unit
 
   /**
    * Clears the user state associated with this grouping key
@@ -64,39 +75,18 @@ trait StateVariableWithTTLSupport {
 }
 
 /**
- * Represents the underlying state for secondary TTL Index for a user defined
- * state variable.
- *
- * This state allows Spark to query ttl values based on expiration time
- * allowing efficient ttl cleanup.
- */
-trait TTLState {
-
-  /**
-   * Perform the user state clean up based on ttl values stored in
-   * this state. NOTE that its not safe to call this operation concurrently
-   * when the user can also modify the underlying State. Cleanup should be initiated
-   * after arbitrary state operations are completed by the user.
-   */
-  def clearExpiredState(): Unit
-}
-
-/**
  * Manages the ttl information for user state keyed with a single key (grouping key).
  */
-class SingleKeyTTLStateImpl(
-    ttlMode: TTLMode,
+abstract class SingleKeyTTLStateImpl(
     stateName: String,
     store: StateStore,
-    batchTimestampMs: Option[Long],
-    eventTimeWatermarkMs: Option[Long])
+    batchTtlExpirationMs: Long)
   extends TTLState {
 
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
 
   private val ttlColumnFamilyName = s"_ttl_$stateName"
   private val ttlKeyEncoder = UnsafeProjection.create(TTL_KEY_ROW_SCHEMA)
-  private var state: StateVariableWithTTLSupport = _
 
   // empty row used for values
   private val EMPTY_ROW =
@@ -117,21 +107,15 @@ class SingleKeyTTLStateImpl(
 
     iterator.takeWhile { kv =>
       val expirationMs = kv.key.getLong(0)
-      StateTTL.isExpired(ttlMode, expirationMs,
-        batchTimestampMs, eventTimeWatermarkMs)
+      StateTTL.isExpired(expirationMs, batchTtlExpirationMs)
     }.foreach { kv =>
       val groupingKey = kv.key.getBinary(1)
-      state.clearIfExpired(groupingKey)
+      clearIfExpired(groupingKey)
       store.remove(kv.key, ttlColumnFamilyName)
     }
   }
 
-  private[sql] def setStateVariable(
-      state: StateVariableWithTTLSupport): Unit = {
-    this.state = state
-  }
-
-  private[sql] def iterator(): Iterator[SingleKeyTTLRow] = {
+  private[sql] def ttlIndexIterator(): Iterator[SingleKeyTTLRow] = {
     val ttlIterator = store.iterator(ttlColumnFamilyName)
 
     new Iterator[SingleKeyTTLRow] {
@@ -153,32 +137,14 @@ class SingleKeyTTLStateImpl(
  */
 object StateTTL {
   def calculateExpirationTimeForDuration(
-      ttlMode: TTLMode,
       ttlDuration: Duration,
-      batchTimestampMs: Option[Long],
-      eventTimeWatermarkMs: Option[Long]): Long = {
-    if (ttlMode == TTLMode.ProcessingTimeTTL()) {
-      batchTimestampMs.get + ttlDuration.toMillis
-    } else if (ttlMode == TTLMode.EventTimeTTL()) {
-      eventTimeWatermarkMs.get + ttlDuration.toMillis
-    } else {
-      throw new IllegalStateException(s"cannot calculate expiration time for" +
-        s" unknown ttl Mode $ttlMode")
-    }
+      batchTtlExpirationMs: Long): Long = {
+    batchTtlExpirationMs + ttlDuration.toMillis
   }
 
   def isExpired(
-      ttlMode: TTLMode,
       expirationMs: Long,
-      batchTimestampMs: Option[Long],
-      eventTimeWatermarkMs: Option[Long]): Boolean = {
-    if (ttlMode == TTLMode.ProcessingTimeTTL()) {
-      batchTimestampMs.get >= expirationMs
-    } else if (ttlMode == TTLMode.EventTimeTTL()) {
-      eventTimeWatermarkMs.get >= expirationMs
-    } else {
-      throw new IllegalStateException(s"cannot evaluate expiry condition for" +
-        s" unknown ttl Mode $ttlMode")
-    }
+      batchTtlExpirationMs: Long): Boolean = {
+    batchTtlExpirationMs >= expirationMs
   }
 }

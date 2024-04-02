@@ -527,7 +527,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val eventTimeWatermarkMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        TTLMode.ProcessingTimeTTL(), TimeoutMode.NoTimeouts(),
+        TTLMode.EventTimeTTL(), TimeoutMode.NoTimeouts(),
         eventTimeWatermarkMs = Some(eventTimeWatermarkMs))
 
       val testState: ValueStateImplWithTTL[String] = handle.getValueState[String]("testState",

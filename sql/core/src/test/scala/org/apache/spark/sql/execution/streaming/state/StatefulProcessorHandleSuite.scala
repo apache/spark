@@ -22,7 +22,7 @@ import java.util.UUID
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, ValueStateImplWithTTL}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.streaming.{TimeoutMode, TTLMode}
 
 
@@ -232,13 +232,13 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
         val store = provider.getStore(0)
         val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTtlMode(ttlMode), TimeoutMode.NoTimeouts())
+          UUID.randomUUID(), keyExprEncoder, getTtlMode(ttlMode), TimeoutMode.NoTimeouts(),
+          batchTimestampMs = Some(10), eventTimeWatermarkMs = Some(100))
 
         val valueState = handle.getValueState("testState", Encoders.STRING)
-          .asInstanceOf[ValueStateImplWithTTL[String]]
 
         assert(handle.ttlStates.size() === 1)
-        assert(handle.ttlStates.get(0) === valueState.ttlState)
+        assert(handle.ttlStates.get(0) === valueState)
       }
     }
   }

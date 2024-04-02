@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.time.Duration
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -35,9 +34,7 @@ import org.apache.spark.sql.streaming.{TTLMode, ValueState}
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlMode    - TTL Mode for values  stored in this state
- * @param batchTimestampMs - processing timestamp of the current batch.
- * @param eventTimeWatermarkMs - event time watermark for streaming query
- *                               (same as watermark for state eviction)
+ * @param batchTtlExpirationMs - ttl expiration for the current batch.
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImplWithTTL[S](
@@ -46,14 +43,12 @@ class ValueStateImplWithTTL[S](
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
     ttlMode: TTLMode,
-    batchTimestampMs: Option[Long],
-    eventTimeWatermarkMs: Option[Long])
-  extends ValueState[S] with Logging with StateVariableWithTTLSupport {
+    batchTtlExpirationMs: Long)
+  extends SingleKeyTTLStateImpl(stateName, store, batchTtlExpirationMs) with ValueState[S] {
 
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder,
     stateName, hasTtl = true)
-  private[sql] var ttlState: SingleKeyTTLStateImpl = _
 
   initialize()
 
@@ -62,9 +57,6 @@ class ValueStateImplWithTTL[S](
 
     store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
-
-    ttlState = new SingleKeyTTLStateImpl(ttlMode, stateName, store,
-      batchTimestampMs, eventTimeWatermarkMs)
   }
 
   /** Function to check if state exists. Returns true if present and false otherwise */
@@ -110,8 +102,7 @@ class ValueStateImplWithTTL[S](
 
     val expirationTimeInMs =
       if (ttlDuration != null && ttlDuration != Duration.ZERO) {
-        StateTTL.calculateExpirationTimeForDuration(
-          ttlMode, ttlDuration, batchTimestampMs, eventTimeWatermarkMs)
+        StateTTL.calculateExpirationTimeForDuration(ttlDuration, batchTtlExpirationMs)
       } else {
         -1
       }
@@ -140,7 +131,7 @@ class ValueStateImplWithTTL[S](
       encodedValue, stateName)
 
     if (expirationTimeInMs != -1) {
-      ttlState.upsertTTLForStateKey(expirationTimeInMs, serializedGroupingKey)
+      upsertTTLForStateKey(expirationTimeInMs, serializedGroupingKey)
     }
   }
 
@@ -163,7 +154,7 @@ class ValueStateImplWithTTL[S](
   private def isExpired(valueRow: UnsafeRow): Boolean = {
     val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(valueRow)
     val isExpired = expirationMs.map(
-      StateTTL.isExpired(ttlMode, _, batchTimestampMs, eventTimeWatermarkMs))
+      StateTTL.isExpired(_, batchTtlExpirationMs))
 
     isExpired.isDefined && isExpired.get
   }
@@ -210,7 +201,7 @@ class ValueStateImplWithTTL[S](
    * grouping key.
    */
   private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    val ttlIterator = ttlState.iterator()
+    val ttlIterator = ttlIndexIterator()
     val implicitGroupingKey = stateTypesEncoder.serializeGroupingKey()
     var nextValue: Option[Long] = None
 

@@ -55,7 +55,6 @@ private[sql] trait ValueState[S] extends Serializable {
    */
   def update(newState: S, ttlDuration: Duration = Duration.ZERO): Unit
 
-
   /**
    * Update the value of the state.
    *

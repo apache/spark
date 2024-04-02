@@ -113,6 +113,15 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
+  private val ttlExpirationMs =
+    if (ttlMode == TTLMode.ProcessingTimeTTL()) {
+      batchTimestampMs.get
+    } else if (ttlMode == TTLMode.EventTimeTTL()) {
+      eventTimeWatermarkMs.get
+    } else {
+    -1
+    }
+
   def setHandleState(newState: StatefulProcessorHandleState): Unit = {
     currState = newState
   }
@@ -128,11 +137,8 @@ class StatefulProcessorHandleImpl(
       new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     } else {
       val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-        keyEncoder, valEncoder, ttlMode, batchTimestampMs, eventTimeWatermarkMs)
-
-      val ttlState = valueStateWithTTL.ttlState
-      ttlState.setStateVariable(valueStateWithTTL)
-      ttlStates.add(ttlState)
+        keyEncoder, valEncoder, ttlMode, ttlExpirationMs)
+      ttlStates.add(valueStateWithTTL)
 
       valueStateWithTTL
     }
