@@ -537,6 +537,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               }
             }
 
+          case Window(_, partitionSpec, _, _) =>
+            // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
+            // for `partitionSpec` here because `orderSpec` has the type check itself.
+            partitionSpec.foreach { p =>
+              if (!RowOrdering.isOrderable(p.dataType)) {
+                p.failAnalysis(
+                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+                  messageParameters = Map(
+                    "expr" -> toSQLExpr(p),
+                    "exprType" -> toSQLType(p.dataType)))
+              }
+            }
+
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
           case LocalLimit(limitExpr, child) =>

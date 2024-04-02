@@ -164,7 +164,4 @@ Package                    Supported version Note
 `googleapis-common-protos` >=1.56.4                  Required for Spark Connect
 ========================== ========================= ======================================================================================
 
-Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set.
-Need set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
-to |downloading|_.
-
+Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set and refer to |downloading|_.

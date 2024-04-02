@@ -41,7 +41,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{NextIterator, SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 
@@ -401,9 +401,10 @@ object FileFormatWriter extends Logging {
       }
 
     try {
+      val queryFailureCapturedIterator = new QueryFailureCapturedIterator(iterator)
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
-        dataWriter.writeWithIterator(iterator)
+        dataWriter.writeWithIterator(queryFailureCapturedIterator)
         dataWriter.commit()
       })(catchBlock = {
         // If there is an error, abort the task
@@ -413,6 +414,8 @@ object FileFormatWriter extends Logging {
         dataWriter.close()
       })
     } catch {
+      case e: QueryFailureDuringWrite =>
+        throw e.queryFailure
       case e: FetchFailedException =>
         throw e
       case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
@@ -451,4 +454,26 @@ object FileFormatWriter extends Logging {
       case (statsTracker, stats) => statsTracker.processStats(stats, jobCommitDuration)
     }
   }
+}
+
+// A exception wrapper to indicate that the error was thrown when executing the query, not writing
+// the data
+private class QueryFailureDuringWrite(val queryFailure: Throwable) extends Throwable
+
+// An iterator wrapper to rethrow any error from the given iterator with `QueryFailureDuringWrite`.
+private class QueryFailureCapturedIterator(data: Iterator[InternalRow])
+  extends NextIterator[InternalRow] {
+
+  override protected def getNext(): InternalRow = try {
+    if (data.hasNext) {
+      data.next()
+    } else {
+      finished = true
+      null
+    }
+  } catch {
+    case t: Throwable => throw new QueryFailureDuringWrite(t)
+  }
+
+  override protected def close(): Unit = {}
 }

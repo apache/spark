@@ -36,17 +36,11 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_createDataFrame_fallback_enabled(self):
         super().test_createDataFrame_fallback_enabled()
 
-    def test_createDataFrame_with_incorrect_schema(self):
-        self.check_createDataFrame_with_incorrect_schema()
-
     def test_createDataFrame_with_map_type(self):
         self.check_createDataFrame_with_map_type(True)
 
     def test_createDataFrame_with_ndarray(self):
         self.check_createDataFrame_with_ndarray(True)
-
-    def test_createDataFrame_with_single_data_type(self):
-        self.check_createDataFrame_with_single_data_type()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_no_partition_frame(self):
@@ -66,9 +60,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
             no_self_destruct_pdf = df.toPandas()
 
         self.assert_eq(self_destruct_pdf, no_self_destruct_pdf)
-
-    def test_propagates_spark_exception(self):
-        self.check_propagates_spark_exception()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_toPandas_batch_order(self):

@@ -1077,7 +1077,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         val e = intercept[SparkException] {
           readParquet("d DECIMAL(3, 2)", path).collect()
         }
-        assert(e.getErrorClass == "FAILED_READ_FILE")
+        assert(e.getErrorClass.startsWith("FAILED_READ_FILE"))
         assert(e.getCause.getMessage.contains("Please read this column/field as Spark BINARY type"))
       }
 
