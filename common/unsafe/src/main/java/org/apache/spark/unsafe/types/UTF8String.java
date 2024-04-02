@@ -1160,34 +1160,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if(CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return translate(dict);
     }
-    return collationAwareTranslate(dict, collationId);
-  }
-
-  public UTF8String collationAwareTranslate(Map<String, String> dict, int collationId) {
-    if (numBytes == 0) {
-      return this;
-    }
-
-    Map<String, String> collationAwareDict = getCollationAwareDict(dict, collationId);
-
-    String srcStr = this.toString();
-
-    StringBuilder sb = new StringBuilder();
-    int charCount = 0;
-    for (int k = 0; k < srcStr.length(); k += charCount) {
-      int codePoint = srcStr.codePointAt(k);
-      charCount = Character.charCount(codePoint);
-      String subStr = srcStr.substring(k, k + charCount);
-
-      String translated = collationAwareDict.get(subStr);
-
-      if (null == translated) {
-        sb.append(subStr);
-      } else if (!"\0".equals(translated)) {
-        sb.append(translated);
-      }
-    }
-    return fromString(sb.toString());
+    return translate(getCollationAwareDict(dict, collationId));
   }
 
   private Map<String, String> getCollationAwareDict(Map<String, String> dict, int collationId) {
