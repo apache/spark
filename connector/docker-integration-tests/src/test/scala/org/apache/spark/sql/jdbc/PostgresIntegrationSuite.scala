@@ -495,7 +495,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     checkAnswer(df, expected)
   }
 
-  test("multiple dimensional array") {
+  test("SPARK-47691: multiple dimensional array") {
     sql("select array(1, 2) as col0").write
       .jdbc(jdbcUrl, "single_dim_array", new Properties)
     checkAnswer(spark.read.jdbc(jdbcUrl, "single_dim_array", new Properties), Row(Seq(1, 2)))
