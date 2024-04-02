@@ -125,7 +125,6 @@ trait LoggingSuiteBase
       (Level.INFO, () => logInfo(concatVariableAndMDC))).foreach {
         case (level, logFunc) =>
           val logOutput = captureLogOutput(logFunc)
-          println(logOutput)
           assert(expectedPatternForConcatVariableAndMDC(level).r.matches(logOutput))
       }
   }
