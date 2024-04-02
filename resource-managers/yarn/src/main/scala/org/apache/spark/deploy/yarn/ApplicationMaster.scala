@@ -44,7 +44,7 @@ import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.EXIT_CODE
+import org.apache.spark.internal.LogKey.{EXIT_CODE, REMOTE_ADDRESS}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
@@ -857,7 +857,7 @@ private[spark] class ApplicationMaster(
             finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           } else {
             logError(log"Driver terminated with exit code ${MDC(EXIT_CODE, exitCode)}! " +
-              s"Shutting down. $remoteAddress")
+              log"Shutting down. ${MDC(REMOTE_ADDRESS, remoteAddress)}")
             finish(FinalApplicationStatus.FAILED, exitCode)
           }
         } else {
