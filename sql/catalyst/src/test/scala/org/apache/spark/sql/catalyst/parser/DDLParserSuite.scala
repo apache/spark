@@ -1987,7 +1987,7 @@ class DDLParserSuite extends AnalysisTest {
       Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
         UpdateStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))))),
       Seq(InsertStarAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))))),
-      Seq(DeleteAction(None)),
+      Seq.empty,
       withSchemaEvolution = false))
   }
 
