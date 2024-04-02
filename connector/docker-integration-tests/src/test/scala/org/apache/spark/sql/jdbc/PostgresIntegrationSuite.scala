@@ -388,27 +388,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("character type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_types", new Properties)
-    val row = df.collect()
-    assert(row.length == 1)
-    assert(row(0).getString(0) === "abcd")
-    assert(row(0).getString(1) === "efgh")
-    assert(row(0).getString(2) === "ijkl")
-    assert(row(0).getString(3) === "mnop")
-    assert(row(0).getString(4) === "q")
-    assert(row(0).getString(5) === "eason")
-    assert(row(0).getString(6) === "c")
+    checkAnswer(df, Row("abcd", "efgh", "ijkl", "mnop", "q", "eason", "c"))
   }
 
   test("SPARK-32576: character array type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_array_types", new Properties)
-    val row = df.collect()
-    assert(row.length == 1)
-    assert(row(0).getSeq[String](0) === Seq("a   ", "bcd "))
-    assert(row(0).getSeq[String](1) === Seq("ef  ", "gh  "))
-    assert(row(0).getSeq[String](2) === Seq("i", "j", "kl"))
-    assert(row(0).getSeq[String](3) === Seq("mnop"))
-    assert(row(0).getSeq[String](4) === Seq("q", "r"))
-    assert(row(0).getSeq[String](5) === Seq("Eason", "Ethan"))
+    checkAnswer(df, Row(Seq("a   ", "bcd "), Seq("ef  ", "gh  "), Seq("i", "j", "kl"),
+      Seq("mnop"), Seq("q", "r"), Seq("Eason", "Ethan")))
   }
 
   test("SPARK-34333: money type tests") {
