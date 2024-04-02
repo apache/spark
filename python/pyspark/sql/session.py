@@ -2223,6 +2223,12 @@ def _test() -> None:
 
     os.chdir(os.environ["SPARK_HOME"])
 
+    # Disable Doc Tests for Spark Connect only functions:
+    pyspark.sql.session.SparkSession.registerProgressHandler.__doc__ = None
+    pyspark.sql.session.SparkSession.removeProgressHandler.__doc__ = None
+    pyspark.sql.session.SparkSession.clearProgressHandlers.__doc__ = None
+
+
     globs = pyspark.sql.session.__dict__.copy()
     globs["spark"] = (
         SparkSession.builder.master("local[4]").appName("sql.session tests").getOrCreate()
