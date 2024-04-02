@@ -22,6 +22,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -1153,6 +1154,60 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
     return fromString(sb.toString());
+  }
+
+  public UTF8String translate(Map<String, String> dict, int collationId) {
+    if(CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      return translate(dict);
+    }
+    return collationAwareTranslate(dict, collationId);
+  }
+
+  public UTF8String collationAwareTranslate(Map<String, String> dict, int collationId) {
+    if (numBytes == 0) {
+      return this;
+    }
+
+    StringSearch stringSearch = CollationFactory.getStringSearch(this, UTF8String.fromString(""), collationId);
+    Map<String, String> collationAwareDict = getCollationAwareDict(dict, stringSearch);
+
+    String srcStr = this.toString();
+
+    StringBuilder sb = new StringBuilder();
+    int charCount = 0;
+    for (int k = 0; k < srcStr.length(); k += charCount) {
+      int codePoint = srcStr.codePointAt(k);
+      charCount = Character.charCount(codePoint);
+      String subStr = srcStr.substring(k, k + charCount);
+
+      String translated = collationAwareDict.get(subStr);
+
+      if (null == translated) {
+        sb.append(subStr);
+      } else if (!"\0".equals(translated)) {
+        sb.append(translated);
+      }
+    }
+    return fromString(sb.toString());
+  }
+
+  private Map<String, String> getCollationAwareDict(Map<String, String> dict, StringSearch stringSearch) {
+    String srcStr = this.toString();
+
+    Map<String, String> collationAwareDict = new HashMap<>();
+    for(String key : dict.keySet()) {
+      stringSearch.reset();
+      stringSearch.setPattern(key);
+
+      int pos = 0;
+      if((pos = stringSearch.next()) != StringSearch.DONE) {
+        int codePoint = srcStr.codePointAt(pos);
+        int charCount = Character.charCount(codePoint);
+        collationAwareDict.put(srcStr.substring(pos, pos + charCount), dict.get(key));
+      }
+    }
+
+    return collationAwareDict;
   }
 
   /**

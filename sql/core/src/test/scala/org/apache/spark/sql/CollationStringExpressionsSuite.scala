@@ -21,7 +21,8 @@ import scala.collection.immutable.Seq
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, Literal, StringRepeat}
+import org.apache.spark.sql.catalyst.expressions.{Collation, ExpressionEvalHelper, Literal, StringRepeat, StringTranslate}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -71,6 +72,45 @@ class CollationStringExpressionsSuite extends QueryTest
         )
       )
     })
+  }
+
+  test("TRANSLATE check result on explicitly collated string") {
+    def testTranslate(input: String,
+                      matchExpression: String,
+                      replaceExpression: String,
+                      collationId: Int,
+                      expected: String): Unit = {
+      val srcExpr = Literal.create(input, StringType(collationId))
+      val matchExpr = Literal.create(matchExpression, StringType(collationId))
+      val replaceExpr = Literal.create(replaceExpression, StringType(collationId))
+
+      checkEvaluation(StringTranslate(srcExpr, matchExpr, replaceExpr), expected)
+    }
+
+    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
+    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    collationId = CollationFactory.collationNameToId("UNICODE")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    collationId = CollationFactory.collationNameToId("UNICODE_CI")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
+//    testTranslate("abc", "a", "A", collationId, "Abc")
   }
 
   test("REPEAT check output type on explicitly collated string") {

@@ -934,13 +934,20 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   @transient private var lastReplace: UTF8String = _
   @transient private var dict: JMap[String, String] = _
 
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
   override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
       lastMatching = matchingEval.asInstanceOf[UTF8String].clone()
       lastReplace = replaceEval.asInstanceOf[UTF8String].clone()
       dict = StringTranslate.buildDict(lastMatching, lastReplace)
     }
-    srcEval.asInstanceOf[UTF8String].translate(dict)
+
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      srcEval.asInstanceOf[UTF8String].translate(dict)
+    } else {
+      srcEval.asInstanceOf[UTF8String].translate(dict, collationId)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -963,7 +970,11 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
         $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
           .buildDict($termLastMatching, $termLastReplace);
       }
-      ${ev.value} = $src.translate($termDict);
+      if (CollationFactory.fetchCollation(${collationId}).supportsBinaryEquality) {
+        ${ev.value} = $src.translate($termDict);
+      } else {
+        ${ev.value} = $src.translate($termDict, ${collationId});
+      }
       """
     })
   }
