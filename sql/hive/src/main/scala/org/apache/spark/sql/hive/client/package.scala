@@ -88,9 +88,13 @@ package object client {
         "org.pentaho:pentaho-aggdesigner-algorithm",
         "org.apache.hive:hive-vector-code-gen"))
 
+    // Since Hive 4.0, hadoop-hdfs, datanucleus-api-jdo and springframework is required.
     case object v4_0 extends HiveVersion("4.0.0",
-      extraDeps = Seq("org.datanucleus:datanucleus-api-jdo:5.2.8",
+      extraDeps = Seq("org.apache.hadoop:hadoop-hdfs:3.3.6",
+        "org.datanucleus:datanucleus-api-jdo:5.2.8",
         "org.datanucleus:datanucleus-rdbms:5.2.10",
+        "org.springframework:spring-core:5.3.21",
+        "org.springframework:spring-jdbc:5.3.21",
         "org.apache.derby:derby:10.14.2.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
         "org.apache.curator:*",
