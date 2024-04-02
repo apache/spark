@@ -1337,6 +1337,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertFalse(verify_col_name("`m```.s.s.v", cdf.schema))
         self.assertFalse(verify_col_name("`m```.s.`s`.v", cdf.schema))
         self.assertTrue(verify_col_name("`m```.`s.s`.v", cdf.schema))
+        self.assertTrue(verify_col_name("`m```.`s.s`.`v`", cdf.schema))
 
 
 if __name__ == "__main__":
