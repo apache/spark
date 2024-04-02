@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.util.Locale
 
-import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkRuntimeException
@@ -59,7 +58,7 @@ class RelationalGroupedDataset protected[sql](
   import RelationalGroupedDataset._
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
-    @nowarn("cat=deprecation")
+    @scala.annotation.nowarn("cat=deprecation")
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs match {
         // call `toList` because `Stream` and `LazyList` can't serialize in scala 2.13
