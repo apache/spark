@@ -9402,6 +9402,66 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    """
+    Gets the difference between the timestamps in the specified units by truncating
+    the fraction part.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    unit : str
+        This indicates the units of the difference between the given timestamps.
+        Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+    start : :class:`~pyspark.sql.Column` or str
+        A timestamp which the expression subtracts from `endTimestamp`.
+    end : :class:`~pyspark.sql.Column` or str
+        A timestamp from which the expression subtracts `startTimestamp`.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the difference between the timestamps.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), datetime.datetime(2024, 4, 2, 9, 0, 7))],
+    ... ).toDF("start", "end")
+    >>> df.select(sf.timestamp_diff("year", "start", "end")).show()
+    +-------------------------------+
+    |timestampdiff(year, start, end)|
+    +-------------------------------+
+    |                              8|
+    +-------------------------------+
+    >>> df.select(sf.timestamp_diff("WEEK", "start", "end")).show()
+    +-------------------------------+
+    |timestampdiff(WEEK, start, end)|
+    +-------------------------------+
+    |                            420|
+    +-------------------------------+
+    >>> df.select(sf.timestamp_diff("day", "end", "start")).show()
+    +------------------------------+
+    |timestampdiff(day, end, start)|
+    +------------------------------+
+    |                         -2944|
+    +------------------------------+
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function(
+        "timestamp_diff",
+        unit,
+        _to_java_column(start),
+        _to_java_column(end),
+    )
+
+
+@_try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,

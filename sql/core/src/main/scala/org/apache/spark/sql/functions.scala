@@ -5742,6 +5742,17 @@ object functions {
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
 
   /**
+   * Gets the difference between the timestamps in the specified units by truncating
+   * the fraction part.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def timestamp_diff(unit: String, start: Column, end: Column): Column = withExpr {
+    TimestampDiff(unit, start.expr, end.expr)
+  }
+
+  /**
    * Parses the `timestamp` expression with the `format` expression
    * to a timestamp without time zone. Returns null with invalid input.
    *
