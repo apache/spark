@@ -1420,4 +1420,28 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(plan.isInstanceOf[WholeStageCodegenExec])
     checkAnswer(df, Row(null))
   }
+
+  test("json_tuple codegen - all foldable") {
+    val data =
+      Seq(("""{"name": "alice", "age": 5}""", "name")).toDF("a", "b")
+    val df =
+      data.selectExpr("json_tuple(a, 'name', 'age', 'sex', 'name')")
+    checkAnswer(df, Seq(Row("alice", "5", null, "alice")))
+  }
+
+  test("json_tuple codegen - partially foldable") {
+    val data =
+      Seq(("""{"name": "alice", "age": 5}""", "name")).toDF("a", "b")
+    val df =
+      data.selectExpr("json_tuple(a, 'name', b, 'age', 'sex')")
+    checkAnswer(df, Seq(Row("alice", "alice", "5", null)))
+  }
+
+  test("json_tuple codegen - all not foldable") {
+    val data =
+      Seq(("""{"name": "alice", "age": 5}""", "name", "age", "sex")).toDF("a", "b", "c", "d")
+    val df =
+      data.selectExpr("json_tuple(a, b, c, d)")
+    checkAnswer(df, Seq(Row("alice", "5", null)))
+  }
 }

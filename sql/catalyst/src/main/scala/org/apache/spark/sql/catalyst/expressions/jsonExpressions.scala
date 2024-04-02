@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
+import java.util.stream.Collectors
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -432,6 +433,8 @@ class GetJsonObjectEvaluator(cachedPath: UTF8String) {
   }
 }
 
+case class JsonPathIndex(index: Int, path: String)
+
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
@@ -463,9 +466,10 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
   // eagerly evaluate any foldable the field names
-  @transient private lazy val foldableFieldNames: IndexedSeq[Option[String]] = {
-    fieldExpressions.map {
-      case expr if expr.foldable => Option(expr.eval()).map(_.asInstanceOf[UTF8String].toString)
+  @transient private lazy val foldableFieldNames: IndexedSeq[Option[JsonPathIndex]] = {
+    fieldExpressions.zipWithIndex.map {
+      case (expr, index) if expr.foldable =>
+        Option(expr.eval()).map(p => JsonPathIndex(index, p.asInstanceOf[UTF8String].toString))
       case _ => null
     }.toIndexedSeq
   }
@@ -505,16 +509,23 @@ case class JsonTuple(children: Seq[Expression])
       foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
-      fieldExpressions.map { expr =>
-        Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
+      fieldExpressions.zipWithIndex.map {
+        case (expr, index) =>
+          Option(expr.eval(input)).map {
+            path =>
+              JsonPathIndex(index, path.asInstanceOf[UTF8String].toString)
+          }.orNull
       }
     } else {
       // if there is a mix of constant and non-constant expressions
       // prefer the cached copy when available
-      foldableFieldNames.zip(fieldExpressions).map {
-        case (null, expr) =>
-          Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
-        case (fieldName, _) => fieldName.orNull
+      foldableFieldNames.zip(fieldExpressions).zipWithIndex.map {
+        case ((null, expr), index) =>
+          Option(expr.eval(input)).map {
+            path =>
+              JsonPathIndex(index, path.asInstanceOf[UTF8String].toString)
+          }.orNull
+        case ((fieldName, _), _) => fieldName.orNull
       }
     }
 
@@ -536,22 +547,22 @@ case class JsonTuple(children: Seq[Expression])
       Seq(s"""$fieldNames = $ref;""")
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
-      fieldExpressions.map {
-        e =>
+      fieldExpressions.zipWithIndex.map {
+        case (e, i) =>
           val eval = e.genCode(ctx)
           s"""
              |${eval.code}
-             |if (${eval.isNull}) {
-             |  $fieldNames.add(null);
-             |} else {
-             |  $fieldNames.add(${eval.value}.toString());
+             |if (!${eval.isNull}) {
+             |  $fieldNames.add(new JsonPathIndex($i, ${eval.value}.toString()));
              |}
            """.stripMargin
       }
     } else {
       val cacheName = ctx.freshName("foldableFieldNames")
       val ref =
-        ctx.addReferenceObj(cacheName, foldableFieldNames.map(_.orNull).toBuffer.asJava)
+        ctx.addReferenceObj(cacheName, foldableFieldNames.filter {
+          f => f != null && f.isDefined
+        }.map(_.get).toBuffer.asJava)
       val codeList = ArrayBuffer(s"""$fieldNames = $ref;""")
       // if there is a mix of constant and non-constant expressions
       // prefer the cached copy when available
@@ -561,10 +572,8 @@ case class JsonTuple(children: Seq[Expression])
           codeList +=
             s"""
                |${eval.code}
-               |if (${eval.isNull}) {
-               |  $fieldNames.add($i, null);
-               |} else {
-               |  $fieldNames.add($i, ${eval.value}.toString());
+               |if (!${eval.isNull}) {
+               |  $fieldNames.add(new JsonPathIndex($i, ${eval.value}.toString()));
                |}
            """.stripMargin
         case ((_, _), _) =>
@@ -575,14 +584,14 @@ case class JsonTuple(children: Seq[Expression])
     val splitParseCode = ctx.splitExpressionsWithCurrentInputs(
       expressions = parseCode.toSeq,
       funcName = "jsonTuple",
-      extraArguments = "java.util.List<String>" -> fieldNames :: Nil)
+      extraArguments = "java.util.List<JsonPathIndex>" -> fieldNames :: Nil)
 
     val resultType = "scala.collection.IterableOnce<InternalRow>"
     val refNullRow = ctx.addReferenceObj("nullRow", nullRow)
     ev.copy(code =
       code"""
             |$resultType ${ev.value};
-            |java.util.List<String> $fieldNames = new java.util.ArrayList<>();
+            |java.util.List<JsonPathIndex> $fieldNames = new java.util.ArrayList<>();
             |${jsonEval.code}
             |if (${jsonEval.isNull}) {
             |  ${ev.value} = $refNullRow;
@@ -596,7 +605,7 @@ case class JsonTuple(children: Seq[Expression])
   }
 }
 
-class JsonTupleEvaluator(jsonStr: UTF8String, fieldNames: java.util.List[String]) {
+class JsonTupleEvaluator(jsonStr: UTF8String, fieldNames: java.util.List[JsonPathIndex]) {
 
   import SharedFactory._
 
@@ -629,9 +638,12 @@ class JsonTupleEvaluator(jsonStr: UTF8String, fieldNames: java.util.List[String]
       if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
         // check to see if this field is desired in the output
         val jsonField = parser.currentName
-        var idx = fieldNames.indexOf(jsonField)
-        if (idx >= 0) {
-          // it is, copy the child tree to the correct location in the output row
+        val matched = fieldNames
+          .stream()
+          .filter(_.path.equals(jsonField))
+          .map(_.index)
+          .collect(Collectors.toList[Int])
+        if (!matched.isEmpty) {
           val output = new ByteArrayOutputStream()
 
           // write the output directly to UTF8 encoded byte array
@@ -641,13 +653,10 @@ class JsonTupleEvaluator(jsonStr: UTF8String, fieldNames: java.util.List[String]
             }
 
             val jsonValue = UTF8String.fromBytes(output.toByteArray)
-
-            // SPARK-21804: json_tuple returns null values within repeated columns
-            // except the first one; so that we need to check the remaining fields.
-            do {
-              row(idx) = jsonValue
-              idx = fieldNames.indexOf(jsonField, idx + 1)
-            } while (idx >= 0)
+            matched.forEach {
+              idx =>
+                row(idx) = jsonValue
+            }
           }
         }
       }
