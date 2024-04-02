@@ -1008,7 +1008,11 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override protected def nullSafeEval(word: Any, set: Any): Any = {
-    set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String], collationId)
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
+    } else {
+      set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String], collationId)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
