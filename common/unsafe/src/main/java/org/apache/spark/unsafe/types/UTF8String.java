@@ -880,16 +880,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.find(str, start);
     }
-    if(collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return charPosToByte(this.toLowerCase().indexOf(str.toLowerCase(), bytePosToChar(start)));
-    }
-    return collatedFind(str, start, collationId);
+    return collationAwareFind(str, start, collationId);
   }
 
   /**
    * Find the `str` from left to right considering non-binary collations.
    */
-  private int collatedFind(UTF8String str, int start, int collationId) {
+  private int collationAwareFind(UTF8String str, int start, int collationId) {
     assert (str.numBytes > 0);
 
     StringSearch stringSearch = CollationFactory.getStringSearch(this, str, collationId);
@@ -921,40 +918,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.rfind(str, start);
     }
-    if(collationId == CollationFactory.UTF8_BINARY_LCASE_COLLATION_ID) {
-      return rfindLowercase(str, start);
-    }
-    return collatedRFind(str, start, collationId);
-  }
-
-  /**
-   * Find the `str` from left to right considering binary lowercase collation.
-   */
-  private int rfindLowercase(UTF8String str, int start) {
-    assert (str.numBytes > 0);
-
-    UTF8String lowercaseThis = this.toLowerCase();
-    UTF8String lowercaseStr = str.toLowerCase();
-
-    int prevStart = -1;
-    int matchStart = lowercaseThis.indexOf(lowercaseStr, 0);
-    while(charPosToByte(matchStart) <= start) {
-      if(matchStart != -1) {
-        // Found a match, update the start position
-        prevStart = matchStart;
-        matchStart = lowercaseThis.indexOf(lowercaseStr, matchStart + 1);
-      } else {
-        return charPosToByte(prevStart);
-      }
-    }
-
-    return charPosToByte(prevStart);
+    return collationAwareRFind(str, start, collationId);
   }
 
   /**
    * Find the `str` from left to right considering non-binary collations.
    */
-  private int collatedRFind(UTF8String str, int start, int collationId) {
+  private int collationAwareRFind(UTF8String str, int start, int collationId) {
     assert (str.numBytes > 0);
 
     if(numBytes == 0) {
@@ -1028,7 +998,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
   }
 
-  public UTF8String collatedSubStringIndex(UTF8String delim, int count, int collationId) {
+  public UTF8String collationAwareSubStringIndex(UTF8String delim, int count, int collationId) {
     if (delim.numBytes == 0 || count == 0) {
       return EMPTY_UTF8;
     }

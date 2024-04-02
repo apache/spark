@@ -1436,7 +1436,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
         delim.asInstanceOf[UTF8String],
         count.asInstanceOf[Int])
     } else {
-      str.asInstanceOf[UTF8String].collatedSubStringIndex(
+      str.asInstanceOf[UTF8String].collationAwareSubStringIndex(
         delim.asInstanceOf[UTF8String],
         count.asInstanceOf[Int], collationId)
     }
@@ -1447,7 +1447,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
       defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
     } else {
       defineCodeGen(ctx, ev, (str, delim, count) =>
-        s"$str.collatedSubStringIndex($delim, $count, $collationId)")
+        s"$str.collationAwareSubStringIndex($delim, $count, $collationId)")
     }
   }
 

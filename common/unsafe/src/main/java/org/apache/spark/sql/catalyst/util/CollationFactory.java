@@ -179,10 +179,24 @@ public final class CollationFactory {
       final UTF8String left,
       final UTF8String right,
       final int collationId) {
+
+    if(collationId == UTF8_BINARY_LCASE_COLLATION_ID) {
+      return getStringSearch(left, right);
+    }
+
     String pattern = right.toString();
     CharacterIterator target = new StringCharacterIterator(left.toString());
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
     return new StringSearch(pattern, target, (RuleBasedCollator) collator);
+  }
+
+  private static StringSearch getStringSearch(
+          final UTF8String left,
+          final UTF8String right) {
+    String pattern = right.toLowerCase().toString();
+    String target = left.toLowerCase().toString();
+
+    return new StringSearch(pattern, target);
   }
 
   /**
