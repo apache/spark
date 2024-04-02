@@ -283,9 +283,12 @@ class RangeKeyScanStateEncoder(
     rangeScanKeyProjection(key)
   }
 
-  // bit masks used for flipping all bits for negative float/double values
-  private val floatBitMask = 0xFFFFFFFF
-  private val doubleBitMask = 0xFFFFFFFFFFFFFFFFL
+  // bit masks used for checking sign or flipping all bits for negative float/double values
+  private val floatFlipBitMask = 0xFFFFFFFF
+  private val floatSignBitMask = 0x80000000
+
+  private val doubleFlipBitMask = 0xFFFFFFFFFFFFFFFFL
+  private val doubleSignBitMask = 0x8000000000000000L
 
   // Byte markers used to identify whether the value is null, negative or positive
   // To ensure sorted ordering, we use the lowest byte value for negative numbers followed by
@@ -355,11 +358,12 @@ class RangeKeyScanStateEncoder(
 
           case FloatType =>
             // for negative values, we need to flip all the bits to ensure correct ordering
-            if (value.asInstanceOf[Float] < 0.0F) {
-              // get the raw binary bits for the float
-              val rawBits = floatToRawIntBits(value.asInstanceOf[Float])
+            val rawBits = floatToRawIntBits(value.asInstanceOf[Float])
+            // perform sign comparison using bit manipulation to ensure NaN values are handled
+            // correctly
+            if ((rawBits & floatSignBitMask) != 0) {
               // flip all the bits
-              val updatedVal = rawBits ^ floatBitMask
+              val updatedVal = rawBits ^ floatFlipBitMask
               isNullOrSignCol = negativeValMarker
               bbuf.put(isNullOrSignCol)
               // convert the bits back to float
@@ -372,11 +376,12 @@ class RangeKeyScanStateEncoder(
 
           case DoubleType =>
             // for negative values, we need to flip all the bits to ensure correct ordering
-            if (value.asInstanceOf[Double] < 0.0D) {
-              // get the raw binary bits for the double
-              val rawBits = doubleToRawLongBits(value.asInstanceOf[Double])
+            val rawBits = doubleToRawLongBits(value.asInstanceOf[Double])
+            // perform sign comparison using bit manipulation to ensure NaN values are handled
+            // correctly
+            if ((rawBits & doubleSignBitMask) != 0) {
               // flip all the bits
-              val updatedVal = rawBits ^ doubleBitMask
+              val updatedVal = rawBits ^ doubleFlipBitMask
               isNullOrSignCol = negativeValMarker
               bbuf.put(isNullOrSignCol)
               // convert the bits back to double
@@ -429,7 +434,7 @@ class RangeKeyScanStateEncoder(
             if (isNullOrSignCol == negativeValMarker) {
               // if the number is negative, get the raw binary bits for the float
               // and flip the bits back
-              val updatedVal = floatToRawIntBits(bbuf.getFloat) ^ floatBitMask
+              val updatedVal = floatToRawIntBits(bbuf.getFloat) ^ floatFlipBitMask
               writer.write(idx, intBitsToFloat(updatedVal))
             } else {
               writer.write(idx, bbuf.getFloat)
@@ -439,7 +444,7 @@ class RangeKeyScanStateEncoder(
             if (isNullOrSignCol == negativeValMarker) {
               // if the number is negative, get the raw binary bits for the double
               // and flip the bits back
-              val updatedVal = doubleToRawLongBits(bbuf.getDouble) ^ doubleBitMask
+              val updatedVal = doubleToRawLongBits(bbuf.getDouble) ^ doubleFlipBitMask
               writer.write(idx, longBitsToDouble(updatedVal))
             } else {
               writer.write(idx, bbuf.getDouble)
