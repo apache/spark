@@ -390,6 +390,14 @@ Cannot find a short name for the codec `<codecName>`.
 
 The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
 
+### [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
+
+[SQLSTATE: 42P21](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Could not determine which collation to use for string functions and operators.
+
+For more details see [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
+
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
 [SQLSTATE: 54000](sql-error-conditions-sqlstates.html#class-54-program-limit-exceeded)
@@ -944,6 +952,12 @@ For more details see [INCONSISTENT_BEHAVIOR_CROSS_VERSION](sql-error-conditions-
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Max offset with `<rowsPerSecond>` rowsPerSecond is `<maxSeconds>`, but 'rampUpTimeSeconds' is `<rampUpTimeSeconds>`.
+
+### INDETERMINATE_COLLATION
+
+[SQLSTATE: 42P22](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly.
 
 ### INDEX_ALREADY_EXISTS
 
