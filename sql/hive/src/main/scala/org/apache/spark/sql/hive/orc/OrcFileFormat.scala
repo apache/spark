@@ -140,7 +140,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
-        hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+        hadoopConf.setBoolean("hive.optimize.index.filter", true)
       }
     }
 
