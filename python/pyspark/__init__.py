@@ -49,14 +49,14 @@ Public classes:
 from functools import wraps
 from typing import cast, Any, Callable, TypeVar, Union
 
-try:
+from pyspark.util import is_remote_only
+
+if not is_remote_only():
     from pyspark.core.conf import SparkConf
     from pyspark.core.rdd import RDD, RDDBarrier
     from pyspark.core.files import SparkFiles
     from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo
     from pyspark.core.broadcast import Broadcast
-except ImportError:
-    pass
 from pyspark.util import InheritableThread, inheritable_thread_target
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
@@ -109,10 +109,8 @@ def keyword_only(func: _F) -> _F:
 
 
 # To avoid circular dependencies
-try:
+if not is_remote_only():
     from pyspark.core.context import SparkContext
-except ImportError:
-    pass
 
 # for back compatibility
 from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401

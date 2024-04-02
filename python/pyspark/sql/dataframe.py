@@ -47,6 +47,7 @@ from pyspark.errors import (
     PySparkAttributeError,
 )
 from pyspark.util import (
+    is_remote_only,
     _load_from_socket,
     _local_iterator_from_socket,
 )
@@ -203,8 +204,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self._session
 
-    try:
-        import pyspark.core
+    if not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":
@@ -230,9 +230,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer())
                 )
             return self._lazy_rdd
-
-    except ImportError:
-        pass
 
     @property
     def na(self) -> "DataFrameNaFunctions":
@@ -288,8 +285,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameStatFunctions(self)
 
-    try:
-        import pyspark.core
+    if not is_remote_only():
 
         def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
             """Converts a :class:`DataFrame` into a :class:`RDD` of string.
@@ -317,9 +313,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
             rdd = self._jdf.toJSON()
             return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
-
-    except ImportError:
-        pass
 
     def registerTempTable(self, name: str) -> None:
         """Registers this :class:`DataFrame` as a temporary table using the given name.

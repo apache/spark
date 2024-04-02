@@ -38,6 +38,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from pyspark.util import is_remote_only
 from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
@@ -129,12 +130,8 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
-    try:
-        from pyspark.core.rdd import RDD
-
+    if not is_remote_only():
         RDD.toDF = toDF  # type: ignore[method-assign]
-    except ImportError:
-        pass
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -473,9 +470,7 @@ class SparkSession(SparkConversionMixin):
             """
             opts = dict(self._options)
 
-            try:
-                import pyspark.core  # noqa: F401
-            except ImportError:
+            if is_remote_only():
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
@@ -677,8 +672,7 @@ class SparkSession(SparkConversionMixin):
         """Accessor for the JVM SQL-specific configurations"""
         return self._jsparkSession.sessionState().conf()
 
-    try:
-        import pyspark.core
+    if not is_remote_only():
 
         def newSession(self) -> "SparkSession":
             """
@@ -699,9 +693,6 @@ class SparkSession(SparkConversionMixin):
             <...SparkSession object ...>
             """
             return self.__class__(self._sc, self._jsparkSession.newSession())
-
-    except ImportError:
-        pass
 
     @classmethod
     @try_remote_session_classmethod
@@ -767,8 +758,7 @@ class SparkSession(SparkConversionMixin):
                 )
         return session
 
-    try:
-        import pyspark.core
+    if not is_remote_only():
 
         @property
         def sparkContext(self) -> "SparkContext":
@@ -793,9 +783,6 @@ class SparkSession(SparkConversionMixin):
             [1, 2, 3]
             """
             return self._sc
-
-    except ImportError:
-        pass
 
     @property
     def version(self) -> str:
@@ -1582,12 +1569,9 @@ class SparkSession(SparkConversionMixin):
             def prepare(obj: Any) -> Any:
                 return obj
 
-        has_core = True
-        try:
+        if not is_remote_only():
             from pyspark.core.rdd import RDD
-        except ImportError:
-            has_core = False
-        if has_core and isinstance(data, RDD):
+        if not is_remote_only() and isinstance(data, RDD):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
             rdd, struct = self._createFromLocal(

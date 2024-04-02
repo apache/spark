@@ -718,6 +718,47 @@ def _do_server_auth(conn: "io.IOBase", auth_secret: str) -> None:
         )
 
 
+_is_remote_only = None
+
+
+def is_remote_only() -> bool:
+    """
+    Returns if the current running environment is only for Spark Connect.
+    If users install pyspark-connect alone, RDD API does not exist.
+
+    .. versionadded:: 4.0.0
+
+    Notes
+    -----
+    This will only return ``True`` if installed PySpark is only for Spark Connect.
+    Otherwise, it returns ``False``.
+
+    This API is unstable, and for developers.
+
+    Returns
+    -------
+    bool
+
+    Examples
+    --------
+    >>> from pyspark.sql import is_remote
+    >>> is_remote()
+    False
+    """
+    global _is_remote_only
+
+    if _is_remote_only is not None:
+        return _is_remote_only
+    try:
+        from pyspark.rdd import RDD  # type: ignore[import-not-found] # noqa: F401
+
+        _is_remote_only = False
+        return _is_remote_only
+    except ImportError:
+        _is_remote_only = True
+        return _is_remote_only
+
+
 if __name__ == "__main__":
     if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 7):
         import doctest

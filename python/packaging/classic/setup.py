@@ -148,7 +148,8 @@ if in_spark:
 # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
-# Also don't forget to update python/docs/source/getting_started/install.rst.
+# Also don't forget to update python/docs/source/getting_started/install.rst, and
+# python/packaging/connect/setup.py
 _minimum_pandas_version = "1.4.4"
 _minimum_numpy_version = "1.21"
 _minimum_pyarrow_version = "4.0.0"

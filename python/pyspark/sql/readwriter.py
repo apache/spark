@@ -17,6 +17,7 @@
 import sys
 from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
+from pyspark.util import is_remote_only
 from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
@@ -465,13 +466,10 @@ class DataFrameReader(OptionUtils):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
-        has_core = True
-        try:
+        if not is_remote_only():
             from pyspark.core.rdd import RDD  # noqa: F401
-        except ImportError:
-            has_core = False
 
-        if has_core and isinstance(path, RDD):
+        if not is_remote_only() and isinstance(path, RDD):
 
             def func(iterator: Iterable) -> Iterable:
                 for x in iterator:
@@ -836,13 +834,10 @@ class DataFrameReader(OptionUtils):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
-        has_core = True
-        try:
+        if not is_remote_only():
             from pyspark.core.rdd import RDD  # noqa: F401
-        except ImportError:
-            has_core = False
 
-        if has_core and isinstance(path, RDD):
+        if not is_remote_only() and isinstance(path, RDD):
 
             def func(iterator):
                 for x in iterator:
@@ -966,13 +961,10 @@ class DataFrameReader(OptionUtils):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
-        has_core = True
-        try:
+        if not is_remote_only():
             from pyspark.core.rdd import RDD  # noqa: F401
-        except ImportError:
-            has_core = False
 
-        if has_core and isinstance(path, RDD):
+        if not is_remote_only() and isinstance(path, RDD):
 
             def func(iterator: Iterable) -> Iterable:
                 for x in iterator:

@@ -45,6 +45,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from pyspark.util import is_remote_only
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
 from pyspark.errors import (
@@ -2872,7 +2873,7 @@ class NumpyArrayConverter:
         return jarr
 
 
-try:
+if not is_remote_only():
     from py4j.protocol import register_input_converter
 
     # datetime is a subclass of date, we should register DatetimeConverter first
@@ -2884,8 +2885,6 @@ try:
     # NumPy array satisfies py4j.java_collections.ListConverter,
     # so prepend NumpyArrayConverter
     register_input_converter(NumpyArrayConverter(), prepend=True)
-except ImportError:
-    pass
 
 
 def _test() -> None:

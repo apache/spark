@@ -67,6 +67,7 @@ import pickle
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
+from pyspark.util import print_exec
 
 
 __all__ = [
@@ -454,8 +455,6 @@ class PickleSerializer(FramedSerializer):
 
 class CloudPickleSerializer(FramedSerializer):
     def dumps(self, obj):
-        from pyspark.util import print_exec
-
         try:
             return cloudpickle.dumps(obj, pickle_protocol)
         except pickle.PickleError:
