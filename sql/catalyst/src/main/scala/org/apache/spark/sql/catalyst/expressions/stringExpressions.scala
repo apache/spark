@@ -1402,7 +1402,11 @@ case class StringInstr(str: Expression, substr: Expression)
     Seq(StringTypeAnyCollation, StringTypeAnyCollation)
 
   override def nullSafeEval(string: Any, sub: Any): Any = {
-    string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0, collationId) + 1
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+      string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0) + 1
+    } else {
+      string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0, collationId) + 1
+    }
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
