@@ -3247,6 +3247,16 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val DISABLE_MAP_KEY_NORMALIZATION =
+    buildConf("spark.sql.legacy.disableMapKeyNormalization")
+      .internal()
+      .doc("Disables key normalization when creating a map with `ArrayBasedMapBuilder`. When " +
+        "set to `true` it will prevent key normalization when building a map, which will " +
+        "allow for values such as `-0.0` and `0.0` to be present as distinct keys.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val FASTFAIL_ON_FILEFORMAT_OUTPUT =
     buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
       .internal()
