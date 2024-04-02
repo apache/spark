@@ -84,8 +84,7 @@ class StateTypesEncoder[GK, V](
    * @param groupingKeyBytes serialized grouping key byte array
    * @return encoded UnsafeRow
    */
-  def encodeSerializedGroupingKey(
-      groupingKeyBytes: Array[Byte]): UnsafeRow = {
+  def encodeSerializedGroupingKey(groupingKeyBytes: Array[Byte]): UnsafeRow = {
     val keyRow = keyProjection(InternalRow(groupingKeyBytes))
     keyRow
   }

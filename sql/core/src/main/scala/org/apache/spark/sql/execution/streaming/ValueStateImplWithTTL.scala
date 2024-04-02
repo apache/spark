@@ -101,13 +101,11 @@ class ValueStateImplWithTTL[S](
       ttlDuration: Duration = Duration.ZERO): Unit = {
 
     if (ttlMode == TTLMode.EventTimeTTL() && ttlDuration != Duration.ZERO) {
-      throw StateStoreErrors.cannotProvideTTLDurationForEventTimeTTLMode(
-        "update", stateName)
+      throw StateStoreErrors.cannotProvideTTLDurationForEventTimeTTLMode("update", stateName)
     }
 
     if (ttlDuration != null && ttlDuration.isNegative) {
-      throw StateStoreErrors.ttlCannotBeNegative(
-        "update", stateName)
+      throw StateStoreErrors.ttlCannotBeNegative("update", stateName)
     }
 
     val expirationTimeInMs =
@@ -221,19 +219,16 @@ class ValueStateImplWithTTL[S](
         while (nextValue.isEmpty && ttlIterator.hasNext) {
           val nextTtlValue = ttlIterator.next()
           val groupingKey = nextTtlValue.groupingKey
-
           if (groupingKey sameElements implicitGroupingKey) {
             nextValue = Some(nextTtlValue.expirationMs)
           }
         }
-
         nextValue.isDefined
       }
 
       override def next(): Long = {
         val result = nextValue.get
         nextValue = None
-
         result
       }
     }

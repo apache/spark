@@ -22,7 +22,7 @@ import java.util.UUID
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
+import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, ValueStateImplWithTTL}
 import org.apache.spark.sql.streaming.{TimeoutMode, TTLMode}
 
 
@@ -41,6 +41,15 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       case "ProcessingTime" => TimeoutMode.ProcessingTime()
       case "EventTime" => TimeoutMode.EventTime()
       case _ => throw new IllegalArgumentException(s"Invalid timeoutMode=$timeoutMode")
+    }
+  }
+
+  private def getTtlMode(ttlMode: String): TTLMode = {
+    ttlMode match {
+      case "NoTTL" => TTLMode.NoTTL()
+      case "ProcessingTime" => TTLMode.ProcessingTimeTTL()
+      case "EventTime" => TTLMode.EventTimeTTL()
+      case _ => throw new IllegalArgumentException(s"Invalid ttlMode=$ttlMode")
     }
   }
 
@@ -215,6 +224,34 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
           }
         }
       }
+    }
+  }
+
+  Seq("ProcessingTime", "EventTime").foreach { ttlMode =>
+    test(s"ttl States are populated for ttlMode=$ttlMode") {
+      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+        val store = provider.getStore(0)
+        val handle = new StatefulProcessorHandleImpl(store,
+          UUID.randomUUID(), keyExprEncoder, getTtlMode(ttlMode), TimeoutMode.NoTimeouts())
+
+        val valueState = handle.getValueState("testState", Encoders.STRING)
+          .asInstanceOf[ValueStateImplWithTTL[String]]
+
+        assert(handle.ttlStates.size() === 1)
+        assert(handle.ttlStates.get(0) === valueState.ttlState)
+      }
+    }
+  }
+
+  test(s"ttl States are not populated for ttlMode=NoTTL") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), keyExprEncoder, TTLMode.NoTTL(), TimeoutMode.NoTimeouts())
+
+      handle.getValueState("testState", Encoders.STRING)
+
+      assert(handle.ttlStates.isEmpty)
     }
   }
 }
