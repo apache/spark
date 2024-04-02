@@ -1000,9 +1000,11 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (_: StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
-      case (any: AtomicType, _: StringType) if !any.isInstanceOf[StringType] => StringType
-      case (any: AtomicType, st: StringTypeCollated)
-        if !any.isInstanceOf[StringType] => st.defaultConcreteType
+      case (any: AtomicType, _: StringType) if !any.isInstanceOf[StringType] =>
+        SQLConf.get.defaultStringType
+      case (any: AtomicType, _: StringTypeCollated)
+        if !any.isInstanceOf[StringType] =>
+        SQLConf.get.defaultStringType
 
 
       // When we reach here, input type is not acceptable for any types in this type collection,

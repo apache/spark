@@ -19,6 +19,13 @@ package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.types.StringTypePriority.{ImplicitST, StringTypePriority}
+
+object StringTypePriority extends Enumeration {
+  type StringTypePriority = Value
+
+  val DefaultST, ImplicitST, ExplicitST = Value
+}
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -27,7 +34,10 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  * @param collationId The id of collation for this StringType.
  */
 @Stable
-class StringType private(val collationId: Int) extends AtomicType with Serializable {
+class StringType private(val collationId: Int,
+                         var priority: StringTypePriority = ImplicitST)
+  extends AtomicType
+    with Serializable {
   /**
    * Support for Binary Equality implies that strings are considered equal only if
    * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
@@ -76,8 +86,10 @@ class StringType private(val collationId: Int) extends AtomicType with Serializa
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(0) {
-  private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
+case object StringType extends StringType(0, ImplicitST) {
+  private[spark] def apply(collationId: Int,
+                           priority: StringTypePriority = ImplicitST): StringType =
+    new StringType(collationId, priority)
 
   def apply(collation: String): StringType = {
     val collationId = CollationFactory.collationNameToId(collation)

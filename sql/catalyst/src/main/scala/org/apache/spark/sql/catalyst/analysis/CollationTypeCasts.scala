@@ -22,10 +22,10 @@ import javax.annotation.Nullable
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.hasStringType
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, Cast, Collate, ComplexTypeMergingExpression, ConcatWs, CreateArray, Expression, In, InSubquery, Substring}
+import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, Cast, ComplexTypeMergingExpression, ConcatWs, CreateArray, Expression, In, InSubquery, String2StringExpression, Substring}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType, StringTypePriority}
 
 abstract class CollationTypeCasts extends TypeCoercionRule {
   /**
@@ -49,7 +49,8 @@ abstract class CollationTypeCasts extends TypeCoercionRule {
 
   private def castStringType(inType: AbstractDataType, castType: StringType): Option[DataType] = {
     @Nullable val ret: DataType = inType match {
-      case st: StringType if st.collationId != castType.collationId => castType
+      case st: StringType if st.collationId != castType.collationId
+        || st.priority != castType.priority => castType
       case ArrayType(arrType, nullable) =>
         castStringType(arrType, castType).map(ArrayType(_, nullable)).orNull
       case _ => null
@@ -73,8 +74,11 @@ abstract class CollationTypeCasts extends TypeCoercionRule {
    * complex DataTypes with collated StringTypes (e.g. ArrayType)
    */
   def getOutputCollation(expr: Seq[Expression]): StringType = {
-    val explicitTypes = expr.filter(_.isInstanceOf[Collate])
-      .map(_.dataType.asInstanceOf[StringType].collationId)
+    val explicitTypes = expr.map(_.dataType)
+      .filter(hasStringType)
+      .map(extractStringType)
+      .filter(dt => dt.priority == StringTypePriority.ExplicitST)
+      .map(_.collationId)
       .distinct
 
     explicitTypes.size match {
@@ -91,14 +95,17 @@ abstract class CollationTypeCasts extends TypeCoercionRule {
         val implicitTypes = expr.map(_.dataType)
           .filter(hasStringType)
           .map(extractStringType)
-          .filter(dt => dt.collationId != SQLConf.get.defaultStringType.collationId)
+          .filter(dt => dt.priority == StringTypePriority.ImplicitST)
 
         if (hasMultipleImplicits(implicitTypes)) {
           throw QueryCompilationErrors.implicitCollationMismatchError()
         }
         else {
-          implicitTypes.find(dt => !(dt == SQLConf.get.defaultStringType))
-            .getOrElse(SQLConf.get.defaultStringType)
+          implicitTypes.headOption.getOrElse{
+            val st = SQLConf.get.defaultStringType
+            st.priority = StringTypePriority.ImplicitST
+            st
+          }
         }
     }
   }
@@ -110,9 +117,8 @@ abstract class CollationTypeCasts extends TypeCoercionRule {
    * @param dataTypes
    * @return
    */
-  private def hasMultipleImplicits(dataTypes: Seq[StringType]): Boolean =
-    dataTypes.map(_.collationId)
-      .filter(dt => !(dt == SQLConf.get.defaultStringType.collationId)).distinct.size > 1
+  private def hasMultipleImplicits(implicitTypes: Seq[StringType]): Boolean =
+    implicitTypes.map(_.collationId).distinct.size > 1
 
 }
 
@@ -145,7 +151,8 @@ object PostCollationTypeCasts extends CollationTypeCasts {
     case e if !e.childrenResolved => e
     case sc@(_: ArrayJoin
              | _: BinaryExpression
-             | _: Substring) =>
+             | _: Substring
+             | _: String2StringExpression) =>
       val newChildren = collateToSingleType(sc.children)
       sc.withNewChildren(newChildren)
   }
