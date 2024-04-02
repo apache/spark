@@ -3164,6 +3164,7 @@ class MapPartitions(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
     IS_BARRIER_FIELD_NUMBER: builtins.int
+    PROFILE_ID_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
@@ -3172,6 +3173,8 @@ class MapPartitions(google.protobuf.message.Message):
         """(Required) Input user-defined function."""
     is_barrier: builtins.bool
     """(Optional) Whether to use barrier mode execution or not."""
+    profile_id: builtins.int
+    """(Optional) ResourceProfile id used for the stage level scheduling."""
     def __init__(
         self,
         *,
@@ -3179,18 +3182,23 @@ class MapPartitions(google.protobuf.message.Message):
         func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
         | None = ...,
         is_barrier: builtins.bool | None = ...,
+        profile_id: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_is_barrier",
             b"_is_barrier",
+            "_profile_id",
+            b"_profile_id",
             "func",
             b"func",
             "input",
             b"input",
             "is_barrier",
             b"is_barrier",
+            "profile_id",
+            b"profile_id",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -3198,17 +3206,26 @@ class MapPartitions(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_is_barrier",
             b"_is_barrier",
+            "_profile_id",
+            b"_profile_id",
             "func",
             b"func",
             "input",
             b"input",
             "is_barrier",
             b"is_barrier",
+            "profile_id",
+            b"profile_id",
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_is_barrier", b"_is_barrier"]
     ) -> typing_extensions.Literal["is_barrier"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_profile_id", b"_profile_id"]
+    ) -> typing_extensions.Literal["profile_id"] | None: ...
 
 global___MapPartitions = MapPartitions
 

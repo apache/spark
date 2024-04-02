@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.{ByteArrayInputStream, InputStream, InputStreamReader}
+import java.io.{ByteArrayInputStream, InputStream, InputStreamReader, Reader}
 import java.nio.channels.Channels
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.io.Text
-import sun.nio.cs.StreamDecoder
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
@@ -58,13 +57,13 @@ object CreateJacksonParser extends Serializable {
   //    a reader with specific encoding.
   // The method creates a reader for an array with given encoding and sets size of internal
   // decoding buffer according to size of input array.
-  private def getStreamDecoder(enc: String, in: Array[Byte], length: Int): StreamDecoder = {
+  private def getStreamDecoder(enc: String, in: Array[Byte], length: Int): Reader = {
     val bais = new ByteArrayInputStream(in, 0, length)
     val byteChannel = Channels.newChannel(bais)
     val decodingBufferSize = Math.min(length, 8192)
     val decoder = Charset.forName(enc).newDecoder()
 
-    StreamDecoder.forDecoder(byteChannel, decoder, decodingBufferSize)
+    Channels.newReader(byteChannel, decoder, decodingBufferSize)
   }
 
   def text(enc: String, jsonFactory: JsonFactory, record: Text): JsonParser = {

@@ -255,6 +255,52 @@ public class VariantUtil {
     }
   }
 
+  // Compute the size in bytes of the variant value `value[pos...]`. `value.length - pos` is an
+  // upper bound of the size, but the actual size can be smaller.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static int valueSize(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    switch (basicType) {
+      case SHORT_STR:
+        return 1 + typeInfo;
+      case OBJECT:
+        return handleObject(value, pos,
+            (size, idSize, offsetSize, idStart, offsetStart, dataStart) ->
+                dataStart - pos + readUnsigned(value, offsetStart + size * offsetSize, offsetSize));
+      case ARRAY:
+        return handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) ->
+            dataStart - pos + readUnsigned(value, offsetStart + size * offsetSize, offsetSize));
+      default:
+        switch (typeInfo) {
+          case NULL:
+          case TRUE:
+          case FALSE:
+            return 1;
+          case INT1:
+            return 2;
+          case INT2:
+            return 3;
+          case INT4:
+            return 5;
+          case INT8:
+          case DOUBLE:
+            return 9;
+          case DECIMAL4:
+            return 6;
+          case DECIMAL8:
+            return 10;
+          case DECIMAL16:
+            return 18;
+          case LONG_STR:
+            return 1 + U32_SIZE + readUnsigned(value, pos + 1, U32_SIZE);
+          default:
+            throw malformedVariant();
+        }
+    }
+  }
+
   static IllegalStateException unexpectedType(Type type) {
     return new IllegalStateException("Expect type to be " + type);
   }
