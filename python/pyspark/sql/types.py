@@ -50,6 +50,7 @@ from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject,
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
+from pyspark.sql.variant_utils import VariantUtils
 from pyspark.errors import (
     PySparkNotImplementedError,
     PySparkTypeError,
@@ -1344,7 +1345,13 @@ class VariantType(AtomicType):
     .. versionadded:: 4.0.0
     """
 
-    pass
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> "VariantVal":
+        if obj is None or not all(key in obj for key in ["value", "metadata"]):
+            return
+        return VariantVal(obj["value"], obj["metadata"])
 
 
 class UserDefinedType(DataType):
@@ -1466,6 +1473,36 @@ class UserDefinedType(DataType):
 
     def __eq__(self, other: Any) -> bool:
         return type(self) == type(other)
+
+
+class VariantVal:
+    """
+    A class to represent a Variant value in Python.
+    """
+
+    def __init__(self, value: bytes, metadata: bytes):
+        self.value = value
+        self.metadata = metadata
+
+    def __str__(self) -> str:
+        return self.toString()
+
+    def __repr__(self) -> str:
+        return "VariantVal(%s, %s)" % (self.value, self.metadata)
+
+    def toString(self) -> str:
+        """
+        Convert the VariantVal to a string.
+        :return: a string representation of the Variant
+        """
+        return VariantUtils.to_json(self.value, self.metadata)
+
+    def toPython(self) -> str:
+        """
+        Convert the VariantVal to a Python data structure.
+        :return: a Python object
+        """
+        return VariantUtils.to_python(self.value, self.metadata)
 
 
 _atomic_types: List[Type[DataType]] = [
