@@ -678,3 +678,114 @@ are also available to connect MySQL, may have different mapping rules.
     </tr>
   </tbody>
 </table>
+
+### Mapping Spark SQL Data Types to MySQL
+
+The below table describe the data type conversions from Spark SQL Data Types to MySQL data types,
+when creating, altering, or writing data to a MySQL table using the built-in jdbc data source with
+the MySQL Connector/J as the activated JDBC Driver.
+
+Note that, different JDBC drivers, such as Maria Connector/J, which are also available to connect MySQL,
+may have different mapping rules.
+
+
+
+<table>
+  <thead>
+    <tr>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>MySQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>BooleanType</td>
+      <td>BIT(1)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ByteType</td>
+      <td>TINYINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ShortType</td>
+      <td>SMALLINT</td>
+      <td>For Spark 3.5 and previous, it maps to INTEGER</td>
+    </tr>
+    <tr>
+      <td>IntegerType</td>
+      <td>INTEGER</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>LongType</td>
+      <td>BIGINT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>FloatType</td>
+      <td>FLOAT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DoubleType</td>
+      <td>DOUBLE PRECISION</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DecimalType(p, s)</td>
+      <td>DECIMAL(p,s)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>DateType</td>
+      <td>DATE</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampType</td>
+      <td>TIMESTAMP</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>TimestampNTZType</td>
+      <td>DATETIME</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>StringType</td>
+      <td>LONGTEXT</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>BinaryType</td>
+      <td>BLOB</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>CharType(n)</td>
+      <td>CHAR(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>VarcharType(n)</td>
+      <td>VARCHAR(n)</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+The Spark Catalyst data types below are not supported with suitable MYSQL types.
+
+- DayTimeIntervalType
+- YearMonthIntervalType
+- CalendarIntervalType
+- ArrayType
+- MapType
+- StructType
+- UserDefinedType
+- NullType
+- ObjectType
+- VariantType

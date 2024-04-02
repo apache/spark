@@ -375,8 +375,11 @@ message ExecutePlanResponse {
     // Response type informing if the stream is complete in reattachable execution.
     ResultComplete result_complete = 14;
 
+    // Response for command that creates ResourceProfile.
+    CreateResourceProfileCommandResult create_resource_profile_command_result = 17;
+
     // (Optional) Intermediate query progress reports.
-    ExecutionProgress execution_progress = 17;
+    ExecutionProgress execution_progress = 18;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
@@ -1089,4 +1092,3 @@ service SparkConnectService {
   // FetchErrorDetails retrieves the matched exception with details based on a provided error id.
   rpc FetchErrorDetails(FetchErrorDetailsRequest) returns (FetchErrorDetailsResponse) {}
 }
-

@@ -820,6 +820,8 @@ object FunctionRegistry {
 
     // Variant
     expression[ParseJson]("parse_json"),
+    expressionBuilder("variant_get", VariantGetExpressionBuilder),
+    expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
 
     // cast
     expression[Cast]("cast"),
