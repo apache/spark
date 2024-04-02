@@ -184,7 +184,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.length == 2)
     // Test the types, and values using the first row.
     val types = rows(0).toSeq.map(x => x.getClass)
-    assert(types.length == 42)
+    assert(types.length == 45)
     assert(classOf[String].isAssignableFrom(types(0)))
     assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
     assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
