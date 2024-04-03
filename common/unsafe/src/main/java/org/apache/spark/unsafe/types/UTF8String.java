@@ -1028,7 +1028,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(result);
   }
 
-  public UTF8String[] split(UTF8String pattern, int limit) {
+  public UTF8String[] split(UTF8String pattern, int limit, int regexFlags) {
     // For the empty `pattern` a `split` function ignores trailing empty strings unless original
     // string is empty.
     if (numBytes() != 0 && pattern.numBytes() == 0) {
@@ -1044,7 +1044,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
       return result;
     }
-    return split(pattern.toString(), limit);
+    return split(pattern.toString(), limit, regexFlags);
+  }
+
+  public UTF8String[] split(UTF8String pattern, int limit) {
+    return split(pattern, limit, 0); // Pattern without regex flags
   }
 
   public UTF8String[] splitSQL(UTF8String delimiter, int limit) {
@@ -1061,19 +1065,29 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
   }
 
-  private UTF8String[] split(String delimiter, int limit) {
+  private UTF8String[] split(String delimiter, int limit, int regexFlags) {
     // Java String's split method supports "ignore empty string" behavior when the limit is 0
     // whereas other languages do not. To avoid this java specific behavior, we fall back to
     // -1 when the limit is 0.
     if (limit == 0) {
       limit = -1;
     }
-    String[] splits = toString().split(delimiter, limit);
+    String[] splits;
+    if (regexFlags == 0) {
+      // Pattern without regex flags
+      splits = toString().split(delimiter, limit);
+    } else {
+      splits = Pattern.compile(delimiter, regexFlags).split(toString(), limit);
+    }
     UTF8String[] res = new UTF8String[splits.length];
     for (int i = 0; i < res.length; i++) {
       res[i] = fromString(splits[i]);
     }
     return res;
+  }
+
+  private UTF8String[] split(String delimiter, int limit) {
+    return split(delimiter, limit, 0);
   }
 
   public UTF8String replace(UTF8String search, UTF8String replace) {

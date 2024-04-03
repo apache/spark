@@ -33,8 +33,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, TreePattern}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
+import org.apache.spark.sql.catalyst.util.{CollationSupport, GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.types.{StringTypeAnyCollation, StringTypeBinaryLcase}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -543,17 +544,21 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = ArrayType(StringType, containsNull = false)
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeBinaryLcase, StringTypeAnyCollation, IntegerType)
+
   override def first: Expression = str
   override def second: Expression = regex
   override def third: Expression = limit
 
+  final lazy val collationId: Int = str.dataType.asInstanceOf[StringType].collationId
+
   def this(exp: Expression, regex: Expression) = this(exp, regex, Literal(-1))
 
   override def nullSafeEval(string: Any, regex: Any, limit: Any): Any = {
-    val strings = string.asInstanceOf[UTF8String].split(
-      regex.asInstanceOf[UTF8String], limit.asInstanceOf[Int])
+    val strings = CollationSupport.StringSplit.exec(string.asInstanceOf[UTF8String],
+      regex.asInstanceOf[UTF8String], limit.asInstanceOf[Int], collationId)
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
@@ -561,7 +566,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, regex, limit) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.split($regex,$limit));""".stripMargin
+      val genCode = CollationSupport.StringSplit.genCode(str, regex, limit, collationId)
+      s"""${ev.value} = new $arrayClass($genCode);""".stripMargin
     })
   }
 

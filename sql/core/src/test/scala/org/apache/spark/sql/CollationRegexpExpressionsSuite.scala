@@ -115,27 +115,34 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support StringSplit string expression with collation") {
-    // Supported collations
-    case class StringSplitTestCase[R](l: String, r: String, c: String, result: R)
+    case class StringSplitTestCase[R](l: String, r: String, c: String, result: R, limit: Int = -1)
     val testCases = Seq(
-      StringSplitTestCase("ABC", "[B]", "UTF8_BINARY", Seq("A", "C"))
+      StringSplitTestCase("ABC", "[B]", "UTF8_BINARY", Seq("A", "C")),
+      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY", Seq("ABC")),
+      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("A", "C")),
+      StringSplitTestCase("AAA", "[a]", "UTF8_BINARY_LCASE", Seq("", "", "", "")),
+      StringSplitTestCase("AAA", "[b]", "UTF8_BINARY_LCASE", Seq("AAA")),
+      StringSplitTestCase("aAbB", "[ab]", "UTF8_BINARY_LCASE", Seq("", "", "", "", "")),
+      StringSplitTestCase("", "", "UTF8_BINARY_LCASE", Seq("")),
+      StringSplitTestCase("", "[a]", "UTF8_BINARY_LCASE", Seq("")),
+      StringSplitTestCase("xAxBxaxbx", "[AB]", "UTF8_BINARY_LCASE", Seq("x", "x", "x", "x", "x")),
+      StringSplitTestCase("ABC", "", "UTF8_BINARY_LCASE", Seq("A", "B", "C")),
+      // test split with limit
+      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("ABC"), 1),
+      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("A", "C"), 2),
+      StringSplitTestCase("ABC", "[b]", "UTF8_BINARY_LCASE", Seq("A", "C"), 3),
+      StringSplitTestCase("ABC", "[B]", "UNICODE", Seq("A", "C")),
+      StringSplitTestCase("ABC", "[b]", "UNICODE", Seq("ABC"))
     )
     testCases.foreach(t => {
-      val query = s"SELECT split(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
-      // Result & data type
-      checkAnswer(sql(query), Row(t.result))
+      val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}', ${t.limit})"
+      checkAnswer(sql(query), Seq(Row(t.result)))
       assert(sql(query).schema.fields.head.dataType.sameType(ArrayType(StringType(t.c))))
-      // TODO: Implicit casting (not currently supported)
     })
-    // Unsupported collations
-    case class StringSplitTestFail(l: String, r: String, c: String)
-    val failCases = Seq(
-      StringSplitTestFail("ABC", "[b]", "UTF8_BINARY_LCASE"),
-      StringSplitTestFail("ABC", "[B]", "UNICODE"),
-      StringSplitTestFail("ABC", "[b]", "UNICODE_CI")
-    )
+    case class StringSplitFail(l: String, r: String, c: String)
+    val failCases = Seq(StringSplitFail("ABC", "[b]", "UNICODE_CI"))
     failCases.foreach(t => {
-      val query = s"SELECT split(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}')"
       val unsupportedCollation = intercept[AnalysisException] { sql(query) }
       assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
     })
