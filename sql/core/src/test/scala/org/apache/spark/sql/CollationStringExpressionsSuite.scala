@@ -76,10 +76,10 @@ class CollationStringExpressionsSuite extends QueryTest
 
   test("TRANSLATE check result on explicitly collated string") {
     def testTranslate(input: String,
-                      matchExpression: String,
-                      replaceExpression: String,
-                      collationId: Int,
-                      expected: String): Unit = {
+        matchExpression: String,
+        replaceExpression: String,
+        collationId: Int,
+        expected: String): Unit = {
       val srcExpr = Literal.create(input, StringType(collationId))
       val matchExpr = Literal.create(matchExpression, StringType(collationId))
       val replaceExpr = Literal.create(replaceExpression, StringType(collationId))

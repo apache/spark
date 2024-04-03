@@ -1157,7 +1157,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String translate(Map<String, String> dict, int collationId) {
-    if(CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
+    if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return translate(dict);
     }
     return translate(getCollationAwareDict(dict, collationId));
@@ -1167,26 +1167,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     String srcStr = this.toString();
 
     Map<String, String> collationAwareDict = new HashMap<>();
-    for(String key : dict.keySet()) {
+    for (String key : dict.keySet()) {
       StringSearch stringSearch =
         CollationFactory.getStringSearch(this, UTF8String.fromString(key), collationId);
 
       int pos = 0;
-      while((pos = stringSearch.next()) != StringSearch.DONE) {
+      while ((pos = stringSearch.next()) != StringSearch.DONE) {
         int codePoint = srcStr.codePointAt(pos);
         int charCount = Character.charCount(codePoint);
         String newKey = srcStr.substring(pos, pos + charCount);
 
         boolean exists = false;
-        for(String existingKey : collationAwareDict.keySet()) {
-          if(stringSearch.getCollator().compare(existingKey, newKey) == 0) {
+        for (String existingKey : collationAwareDict.keySet()) {
+          if (stringSearch.getCollator().compare(existingKey, newKey) == 0) {
             collationAwareDict.put(newKey, collationAwareDict.get(existingKey));
             exists = true;
             break;
           }
         }
 
-        if(!exists) {
+        if (!exists) {
           collationAwareDict.put(newKey, dict.get(key));
         }
       }
