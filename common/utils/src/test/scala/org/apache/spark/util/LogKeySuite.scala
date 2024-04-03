@@ -17,10 +17,14 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.SparkFunSuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+
 import org.apache.spark.internal.{Logging, LogKey}
 
-class LogKeySuite extends SparkFunSuite with Logging {
+class LogKeySuite
+    extends AnyFunSuite // scalastyle:ignore funsuite
+    with Logging {
+
   test("LogKey enumeration fields must be sorted alphabetically") {
     val keys = LogKey.values.toSeq
     assert(keys === keys.sorted, "LogKey enumeration fields must be sorted alphabetically")
