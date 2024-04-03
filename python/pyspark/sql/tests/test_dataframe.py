@@ -829,6 +829,7 @@ class DataFrameTestsMixin:
         self.assertEqual(df.collect(), data)
 
     def test_dataframe_error_context(self):
+        # SPARK-47274: Add more useful contexts for PySpark DataFrame API errors.
         with self.sql_conf({"spark.sql.ansi.enabled": True}):
             df = self.spark.range(10)
 

@@ -136,8 +136,7 @@ case class SQLQueryContext(
   override def callSite: String = throw SparkUnsupportedOperationException()
 }
 
-case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement])
-  extends QueryContext {
+case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement]) extends QueryContext {
   override val contextType = QueryContextType.DataFrame
 
   override def objectType: String = throw SparkUnsupportedOperationException()
