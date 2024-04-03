@@ -23,7 +23,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.PreCollationTypeCasts.getOutputCollation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -609,11 +608,9 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
-        val st = getOutputCollation(c.children)
         val newChildren = c.children.map { e =>
-          implicitCast(e, st).getOrElse(e)
+          implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
         }
-
         c.copy(children = newChildren)
     }
   }
@@ -705,17 +702,16 @@ abstract class TypeCoercionBase {
         }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
-        val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           // If we cannot do the implicit cast, just use the original input.
-          case (in, expected) => implicitCast(in, expected).getOrElse(in)
+          implicitCast(in, expected).getOrElse(in)
         }
         e.withNewChildren(children)
 
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
         // general implicit casting.
-        val children: Seq[Expression] =
-          e.children.zip(e.inputTypes).map { case (in, expected) =>
+        val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
           if (in.dataType == NullType && !expected.acceptsType(NullType)) {
             Literal.create(null, expected.defaultConcreteType)
           } else {
@@ -737,6 +733,7 @@ abstract class TypeCoercionBase {
               udfInputToCastType(in.dataType, expected.asInstanceOf[DataType])
             ).getOrElse(in)
           }
+
         }
         udf.copy(children = children)
     }
@@ -840,7 +837,7 @@ object TypeCoercion extends TypeCoercionBase {
     UnpivotCoercion ::
     WidenSetOperationTypes ::
     new CombinedTypeCoercionRule(
-      PreCollationTypeCasts ::
+      CollationTypeCasts ::
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
@@ -857,8 +854,7 @@ object TypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion ::
-      PostCollationTypeCasts :: Nil) :: Nil
+      StringLiteralCoercion :: Nil) :: Nil
 
   override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
 
@@ -1005,7 +1001,6 @@ object TypeCoercion extends TypeCoercionBase {
       case (any: AtomicType, _: StringTypeCollated)
         if !any.isInstanceOf[StringType] =>
         SQLConf.get.defaultStringType
-
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.

@@ -29,18 +29,18 @@ import org.apache.spark.sql.types.StringType
 
 class CollationStringExpressionsSuite
   extends QueryTest
-    with SharedSparkSession
-    with ExpressionEvalHelper {
+  with SharedSparkSession
+  with ExpressionEvalHelper {
 
   case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
-
   case class CollationTestFail[R](s1: String, s2: String, collation: String)
 
 
   test("Support ConcatWs string expression with Collation") {
-    def prepareConcatWs(sep: String,
-                        collation: String,
-                        inputs: Any*): ConcatWs = {
+    def prepareConcatWs(
+        sep: String,
+        collation: String,
+        inputs: Any*): ConcatWs = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExprs = inputs.map(s => Literal.create(s, StringType(collationId)))
       val sepExpr = Literal.create(sep, StringType(collationId))

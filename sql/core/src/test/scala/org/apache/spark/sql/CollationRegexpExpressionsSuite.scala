@@ -29,16 +29,17 @@ import org.apache.spark.sql.types.StringType
 
 class CollationRegexpExpressionsSuite
   extends QueryTest
-    with SharedSparkSession
-    with ExpressionEvalHelper {
+  with SharedSparkSession
+  with ExpressionEvalHelper {
 
   case class CollationTestCase[R](s1: String, s2: String, collation: String, expectedResult: R)
   case class CollationTestFail[R](s1: String, s2: String, collation: String)
 
   test("Support Like string expression with Collation") {
-    def prepareLike(input: String,
-                    regExp: String,
-                    collation: String): Expression = {
+    def prepareLike(
+        input: String,
+        regExp: String,
+        collation: String): Expression = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
@@ -73,9 +74,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support ILike string expression with Collation") {
-    def prepareILike(input: String,
-                    regExp: String,
-                    collation: String): Expression = {
+    def prepareILike(
+        input: String,
+        regExp: String,
+        collation: String): Expression = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
@@ -112,9 +114,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support RLike string expression with Collation") {
-    def prepareRLike(input: String,
-                    regExp: String,
-                    collation: String): Expression = {
+    def prepareRLike(
+        input: String,
+        regExp: String,
+        collation: String): Expression = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
@@ -150,9 +153,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support StringSplit string expression with Collation") {
-    def prepareStringSplit(input: String,
-                           splitBy: String,
-                           collation: String): Expression = {
+    def prepareStringSplit(
+        input: String,
+        splitBy: String,
+        collation: String): Expression = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val splitByExpr = Literal.create(splitBy, StringType(collationId))
@@ -189,9 +193,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support RegExpReplace string expression with Collation") {
-    def prepareRegExpReplace(input: String,
-                             regExp: String,
-                             collation: String): RegExpReplace = {
+    def prepareRegExpReplace(
+        input: String,
+        regExp: String,
+        collation: String): RegExpReplace = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
@@ -228,9 +233,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support RegExpExtract string expression with Collation") {
-    def prepareRegExpExtract(input: String,
-                             regExp: String,
-                             collation: String): RegExpExtract = {
+    def prepareRegExpExtract(
+        input: String,
+        regExp: String,
+        collation: String): RegExpExtract = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
@@ -267,9 +273,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support RegExpExtractAll string expression with Collation") {
-    def prepareRegExpExtractAll(input: String,
-                             regExp: String,
-                             collation: String): RegExpExtractAll = {
+    def prepareRegExpExtractAll(
+        input: String,
+        regExp: String,
+        collation: String): RegExpExtractAll = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
@@ -306,9 +313,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support RegExpCount string expression with Collation") {
-    def prepareRegExpCount(input: String,
-                           regExp: String,
-                           collation: String): Expression = {
+    def prepareRegExpCount(
+        input: String,
+        regExp: String,
+        collation: String): Expression = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
@@ -345,9 +353,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support RegExpSubStr string expression with Collation") {
-    def prepareRegExpSubStr(input: String,
-                           regExp: String,
-                           collation: String): Expression = {
+    def prepareRegExpSubStr(
+        input: String,
+        regExp: String,
+        collation: String): Expression = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
@@ -384,9 +393,10 @@ class CollationRegexpExpressionsSuite
   }
 
   test("Support RegExpInStr string expression with Collation") {
-    def prepareRegExpInStr(input: String,
-                                regExp: String,
-                                collation: String): RegExpInStr = {
+    def prepareRegExpInStr(
+        input: String,
+        regExp: String,
+        collation: String): RegExpInStr = {
       val collationId = CollationFactory.collationNameToId(collation)
       val inputExpr = Literal.create(input, StringType(collationId))
       val regExpExpr = Literal.create(regExp, StringType(collationId))
