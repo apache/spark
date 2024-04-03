@@ -113,7 +113,7 @@ class DataFrameCreationTestsMixin:
 
     # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
     @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower(),
+        "pypy" in platform.python_implementation().lower() or not have_pandas,
         "Fails in PyPy Python 3.8, should enable.",
     )
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
