@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.submit
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util
 
 import scala.collection.JavaConverters._
 
@@ -33,9 +34,12 @@ import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Config, _}
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_RESOURCES_MAX_RETRIES
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.util.Utils
+
+
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -86,6 +90,12 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       .withName(SPARK_CONF_VOLUME_DRIVER)
       .withMountPath(SPARK_CONF_DIR_INTERNAL)
       .endVolumeMount()
+    .build()
+
+  private val SPARK_DRIVER_CONFIG_MAP = new ConfigMapBuilder()
+    .withNewMetadata()
+      .withName(KubernetesClientUtils.configMapNameDriver)
+      .endMetadata()
     .build()
 
   private val KEY_TO_PATH =
@@ -190,6 +200,22 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       loggingPodStatusWatcher)
     submissionClient.run()
     verify(podOperations).create(fullExpectedPod())
+  }
+
+  test("SPARK-44050: The client should retry when create Kubernetes resources failed") {
+    kconf.sparkConf.set(KUBERNETES_RESOURCES_MAX_RETRIES, 3)
+    when(resourceList.get())
+      .thenReturn(
+        util.Arrays.asList(ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES.head),
+        util.Arrays.asList(ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES.head, SPARK_DRIVER_CONFIG_MAP)
+      )
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+    submissionClient.run()
+    verify(resourceList, org.mockito.Mockito.times(2)).get()
   }
 
   test("The client should create Kubernetes resources") {

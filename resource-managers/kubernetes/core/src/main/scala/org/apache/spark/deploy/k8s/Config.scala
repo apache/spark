@@ -675,6 +675,14 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  val KUBERNETES_RESOURCES_MAX_RETRIES =
+    ConfigBuilder("spark.kubernetes.resource.maxRetries")
+      .doc("Maximum number of retries when creating other kubernetes resources.")
+      .version("3.3.5")
+      .intConf
+      .checkValue(value => value > 0, "Maximum number of retries should be a positive integer")
+      .createOptional
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX = "spark.kubernetes.driver.service.annotation."
