@@ -835,6 +835,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  /**
+   * Returns the position of the first occurrence of substr in
+   * current string from the specified position (0-based index).
+   * This is a collation aware implementation of indexOf.
+   *
+   * @param substring the string to be searched
+   * @param start the start position of the current string for searching
+   * @param collationId id of the collation used for comparison
+   * @return the position of the first occurrence of substr, if not found, -1 returned.
+   */
   public int indexOf(UTF8String substring, int start, int collationId) {
     if (CollationFactory.fetchCollation(collationId).supportsBinaryEquality) {
       return this.indexOf(substring, start);
