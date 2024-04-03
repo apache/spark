@@ -568,7 +568,8 @@ case class EnsureRequirements(
         child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
   }
 
-  private def reduceCommonPartValues(commonPartValues: Seq[(InternalRow, Int)],
+  private def reduceCommonPartValues(
+      commonPartValues: Seq[(InternalRow, Int)],
       expressions: Seq[Expression],
       reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
     reducers match {
