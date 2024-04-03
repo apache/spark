@@ -41,7 +41,7 @@ public class TestStatefulProcessorWithInitialState
   }
 
   @Override
-  public void handleInitialState(Integer key, String initialState) {
+  public void handleInitialState(Integer key, String initialState, TimerValues timerValues) {
     testState.update(initialState);
   }
 
