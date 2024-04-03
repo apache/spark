@@ -37,7 +37,7 @@ import org.apache.spark.util.SparkClassUtils
  * The values of the MDC will be inline in the log message, while the key-value pairs will be
  * part of the ThreadContext.
  */
-case class MDC(key: LogKey, value: Any)
+case class MDC(key: LogKey, value: Any) extends Serializable
 
 /**
  * Wrapper class for log messages that include a logging context.
