@@ -441,6 +441,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val result = inputData.toDS().groupByKey(x => x)
         .transformWithState(
           new StatefulProcessorWithInitialStateProcTimerClass(),
+          TTLMode.NoTTL(),
           TimeoutMode.ProcessingTime(),
           OutputMode.Update(),
           initDf)
@@ -485,6 +486,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val result = eventTimeDf(inputData.toDS())
         .transformWithState(
           new StatefulProcessorWithInitialStateEventTimerClass(),
+          TTLMode.NoTTL(),
           TimeoutMode.EventTime(),
           OutputMode.Update(),
           initDf)
