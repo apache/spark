@@ -3856,7 +3856,7 @@ abstract class JsonSuite
             .json(path.getAbsolutePath)
 
           if (enablePartialResults) {
-            checkAnswer(df, Seq(Row(Map("key" -> Array(Row(null))))))
+            checkAnswer(df, Seq(Row(Map("key" -> Seq(Row(null))))))
           } else {
             checkAnswer(df, Seq(Row(null)))
           }
