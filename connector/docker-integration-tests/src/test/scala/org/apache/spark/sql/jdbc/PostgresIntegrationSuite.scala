@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
@@ -492,5 +493,27 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val expected = Row(Array(true, false), Array(
       Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
     checkAnswer(df, expected)
+  }
+
+  test("SPARK-47691: multiple dimensional array") {
+    sql("select array(1, 2) as col0").write
+      .jdbc(jdbcUrl, "single_dim_array", new Properties)
+    checkAnswer(spark.read.jdbc(jdbcUrl, "single_dim_array", new Properties), Row(Seq(1, 2)))
+
+    sql("select array(array(1, 2), array(3, 4)) as col0").write
+      .jdbc(jdbcUrl, "double_dim_array", new Properties)
+    sql("select array(array(array(1, 2), array(3, 4)), array(array(5, 6), array(7, 8))) as col0")
+      .write.jdbc(jdbcUrl, "triple_dim_array", new Properties)
+    // Reading multi-dimensional array is not supported yet.
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read.jdbc(jdbcUrl, "double_dim_array", new Properties).collect()
+      },
+      errorClass = null)
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read.jdbc(jdbcUrl, "triple_dim_array", new Properties).collect()
+      },
+      errorClass = null)
   }
 }
