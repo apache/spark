@@ -34,7 +34,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.{config, Logging, LogKey, MDC}
-import org.apache.spark.internal.LogKey.{REASON, TASK_ID, TASK_SET_NAME, TASK_STATE}
+import org.apache.spark.internal.LogKey.{REASON, TASK_SET_NAME, TASK_STATE, TID}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEndpoint
@@ -808,7 +808,7 @@ private[spark] class TaskSchedulerImpl(
             }
           case None =>
             logError(
-              log"Ignoring update with state ${MDC(TASK_STATE, state)} for TID ${MDC(TASK_ID, tid)} because its task set is gone (this is " +
+              log"Ignoring update with state ${MDC(TASK_STATE, state)} for TID ${MDC(TID, tid)} because its task set is gone (this is " +
                 log"likely the result of receiving duplicate task finished status updates) or its executor has been marked as failed.")
         }
       } catch {
