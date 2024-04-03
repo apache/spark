@@ -333,6 +333,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
+    .doc("A comma-separated list of classes that implement the" +
+      " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
+      " extended plan information from the providers in explain plan and in the UI")
+    .version("4.0.0")
+    .stringConf
+    .toSequence
+    .createOptional
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")

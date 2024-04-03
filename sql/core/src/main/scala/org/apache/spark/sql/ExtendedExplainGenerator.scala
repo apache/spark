@@ -15,12 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql
+
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * A trait for a session extension to implement that provides addition explain plan
  * information.
  */
+@DeveloperApi
+@Since("4.0.0")
 trait ExtendedExplainGenerator {
   def generateExtendedInfo(plan: SparkPlan): String
 }

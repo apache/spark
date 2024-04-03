@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable
 import scala.io.Source
 
-import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
+import org.apache.spark.sql.{AnalysisException, Dataset, ExtendedExplainGenerator, FastOperator}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
-import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -344,9 +344,7 @@ class QueryExecutionSuite extends SharedSparkSession {
     val concat = new PlanStringConcat()
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      StaticSQLConf.EXTENDED_EXPLAIN_PROVIDER.key ->
-        "org.apache.spark.sql.execution.ExtendedInfo"
-    ) {
+      SQLConf.EXTENDED_EXPLAIN_PROVIDERS.key -> "org.apache.spark.sql.execution.ExtendedInfo") {
       val left = Seq((1, 10L), (2, 100L), (3, 1000L)).toDF("l1", "l2")
       val right = Seq((1, 2), (2, 3), (3, 5)).toDF("r1", "r2")
       val data = left.join(right, $"l1" === $"r1")

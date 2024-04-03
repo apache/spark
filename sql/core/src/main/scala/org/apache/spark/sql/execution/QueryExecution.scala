@@ -21,12 +21,14 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
@@ -42,7 +44,6 @@ import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, WatermarkPropagator}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.StaticSQLConf.EXTENDED_EXPLAIN_PROVIDER
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -373,22 +374,19 @@ class QueryExecution(
   }
 
   def extendedExplainInfo(append: String => Unit, plan: SparkPlan): Unit = {
-    try {
-      val generator = sparkSession.sparkContext.conf.get(EXTENDED_EXPLAIN_PROVIDER.key)
-      try {
-        val extensionClass = Utils.classForName(generator)
-        val extension = extensionClass.getConstructor().newInstance()
-          .asInstanceOf[ExtendedExplainGenerator]
-        append("\n== Extended Information ==\n")
-        append(extension.generateExtendedInfo(plan))
-      } catch {
-        case e@(_: ClassCastException |
-                _: ClassNotFoundException |
-                _: NoClassDefFoundError) =>
-          logWarning(s"Cannot use $generator to get extended information.", e)
-      }
-    } catch {
-      case _: NoSuchElementException =>
+    val generators = sparkSession.sessionState.conf.getConf(SQLConf.EXTENDED_EXPLAIN_PROVIDERS)
+      .getOrElse(Seq.empty)
+    val extensions = Utils.loadExtensions(classOf[ExtendedExplainGenerator],
+      generators,
+      sparkSession.sparkContext.conf)
+    if (extensions.nonEmpty) {
+      append("\n== Extended Information ==\n")
+      extensions.foreach(extension =>
+        try {
+          append(extension.generateExtendedInfo(plan))
+        } catch {
+          case NonFatal(e) => logWarning(s"Cannot use $extension to get extended information.", e)
+        })
     }
   }
 
