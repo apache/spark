@@ -790,3 +790,31 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     )
   }
 }
+
+class TransformWithStateMetricsSuite extends StateStoreMetricsTest {
+
+  import testImplicits._
+
+  test("metrics test") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessor(),
+          TimeoutMode.NoTimeouts(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        AddData(inputData, "a"),
+        CheckNewAnswer(("a", "1")),
+        AddData(inputData, "a", "b"),
+        CheckNewAnswer(("a", "2"), ("b", "1")),
+        Execute { q =>
+          println("print some metrics: " + q.lastProgress)
+        },
+        StopStream
+      )
+    }
+  }
+}

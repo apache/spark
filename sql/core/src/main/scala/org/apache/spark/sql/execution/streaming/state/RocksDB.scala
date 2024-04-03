@@ -611,6 +611,7 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
+      println("Just before RocksDB - recordedMetrics")
       recordedMetrics = Some(metrics)
       logInfo(s"Committed $newVersion, stats = ${recordedMetrics.get.json}")
       loadedVersion
@@ -726,6 +727,7 @@ class RocksDB(
   /** Get current instantaneous statistics */
   private def metrics: RocksDBMetrics = {
     import HistogramType._
+    println("Inside RocksDB - metrics()")
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
     val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
@@ -762,7 +764,11 @@ class RocksDB(
     val nativeOpsMetrics = nativeOpsMetricTickers.transform { (_, typ) =>
       nativeStats.getTickerCount(typ)
     }
-
+    // TODO "default" counts a col family? sum of all partition, or only count once?
+    val numInternalColFamily = colFamilyNameToHandleMap.keys
+      .filter(checkInternalColumnFamilies).size.toLong
+    val numExternalColFamily = colFamilyNameToHandleMap.keys.size - numInternalColFamily
+    println("Inside RocksDB - RocksDBMetrics()")
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
@@ -775,6 +781,8 @@ class RocksDB(
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
+      numExternalColFamily = numExternalColFamily,
+      numInternalColFamily = numInternalColFamily,
       nativeOpsMetrics = nativeOpsMetrics)
   }
 
@@ -1179,6 +1187,8 @@ case class RocksDBMetrics(
     bytesCopied: Long,
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
+    numExternalColFamily: Long,
+    numInternalColFamily: Long,
     nativeOpsMetrics: Map[String, Long]) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
