@@ -334,10 +334,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       var nanCnt = 0
-      val result = store.iterator(cfName).zipWithIndex.map { case (kv, idx) =>
+      val result = store.iterator(cfName).map { kv =>
         val keyRow = kv.key
         val key = (keyRow.getDouble(0), keyRow.getString(1))
-        // verify that NaN is only at the beginning or end of the sorted list
         if (key._1.isNaN) {
           nanCnt = nanCnt + 1
         }
