@@ -557,7 +557,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return this.toLowerCase().findInSet(match.toLowerCase());
     }
     return collationAwareFindInSet(match, collationId);
-}
+  }
 
   private int collationAwareFindInSet(UTF8String match, int collationId) {
     if (match.contains(COMMA_UTF8)) {
