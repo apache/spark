@@ -177,6 +177,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE test_bit_array (c1 bit(1)[], c2 bit(5)[])").executeUpdate()
     conn.prepareStatement("INSERT INTO test_bit_array VALUES (ARRAY[B'1', B'0'], " +
       "ARRAY[B'00001', B'00010'])").executeUpdate()
+
+    conn.prepareStatement(
+      """
+        |CREATE TYPE complex AS (
+        |    b       bool,
+        |    d       double precision
+        |)""".stripMargin).executeUpdate()
+    conn.prepareStatement("CREATE TABLE complex_table (c1 complex)").executeUpdate()
+    conn.prepareStatement("INSERT INTO complex_table VALUES (ROW(true, 1.0))").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -492,5 +501,14 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val expected = Row(Array(true, false), Array(
       Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
     checkAnswer(df, expected)
+  }
+
+  test("SPARK-47701: Reading complex type") {
+    val df = spark.read.jdbc(jdbcUrl, "complex_table", new Properties)
+    checkAnswer(df, Row("(t,1)"))
+    val df2 = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT (c1).b, (c1).d FROM complex_table").load()
+    checkAnswer(df2, Row(true, 1.0d))
   }
 }
