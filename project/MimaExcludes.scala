@@ -84,7 +84,21 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.MySQLDialect#MySQLSQLBuilder.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.MySQLDialect#MySQLSQLQueryBuilder.this"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.OracleDialect#OracleSQLBuilder.this"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.OracleDialect#OracleSQLQueryBuilder.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.jdbc.OracleDialect#OracleSQLQueryBuilder.this"),
+    // SPARK-47706: Bump json4s from 3.7.0-M11 to 4.0.7
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.types.DataType#JSortedObject.unapplySeq"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.expressions.MutableAggregationBuffer.jsonValue"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.params"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.defaultParams"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.metadata"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.getParamValue"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.copy$default$5"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.copy$default$6"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.copy$default$7"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.util.DefaultParamsReader#Metadata.apply"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.model.TreeEnsembleModel#SaveLoadV1_0.readMetadata")
   )
 
   // Default exclude rules
