@@ -126,6 +126,30 @@ case class TransformWithStateExec(
     groupingAttributes.map(SortOrder(_, Ascending)),
     initialStateGroupingAttrs.map(SortOrder(_, Ascending)))
 
+  // operator specific metrics
+  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
+    val timerMetrics = if (timeoutMode != NoTimeouts) {
+      Seq(
+        StatefulOperatorCustomSumMetric("numOfNewlyRegisteredTimer",
+          "Number of newly registered timers"),
+        StatefulOperatorCustomSumMetric("numOfDeletedTimer", "Number of deleted timers"),
+        StatefulOperatorCustomSumMetric("numOfExpiredTimer", "Number of expired timers"),
+        StatefulOperatorCustomSumMetric("numOfActiveTimer", "Number of active timers")
+      )
+    } else Seq.empty
+
+    Seq(StatefulOperatorCustomSumMetric("outputMode", "output mode of TransformWithState operator"),
+      StatefulOperatorCustomSumMetric("timeoutMode", "timeout mode of TransformWithState operator"),
+      StatefulOperatorCustomSumMetric("initialStateProcessorEnabled",
+        "whether or not use initial state stateful processor"),
+      StatefulOperatorCustomSumMetric("numOfValueStateVar", "Number of value state variables"),
+      StatefulOperatorCustomSumMetric("numOfListStateVar", "Number of list state variables"),
+      StatefulOperatorCustomSumMetric("numOfMapStateVar", "Number of map state variables"),
+      StatefulOperatorCustomSumMetric("numOfAllStateVar", "Number of all state variables"),
+      StatefulOperatorCustomSumMetric("numOfRemovedStateVar", "Number of removed state variables")
+    ) ++ timerMetrics
+  }
+
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
     val getKeyObj =
@@ -208,20 +232,30 @@ case class TransformWithStateExec(
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     timeoutMode match {
       case ProcessingTime =>
+        val expiredTimerMetrics = longMetric("numOfExpiredTimer")
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
-        processorHandle.getExpiredTimers(batchTimestamp)
+        val iter = processorHandle.getExpiredTimers(batchTimestamp)
           .flatMap { case (keyObj, expiryTimestampMs) =>
+            expiredTimerMetrics += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
+        val activeTimers = processorHandle.listTimers().length - expiredTimerMetrics.value
+        longMetric("numOfActiveTimer").set(activeTimers)
+        iter
 
       case EventTime =>
+        val expiredTimerMetrics = longMetric("numOfExpiredTimer")
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        processorHandle.getExpiredTimers(watermark)
+        val iter = processorHandle.getExpiredTimers(watermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
+            expiredTimerMetrics += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
+        val activeTimers = processorHandle.listTimers().length - expiredTimerMetrics.value
+        longMetric("numOfActiveTimer").set(activeTimers)
+        iter
 
       case _ => Iterator.empty
     }
@@ -235,6 +269,12 @@ case class TransformWithStateExec(
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
     val timeoutLatencyMs = longMetric("allRemovalsTimeMs")
+    val sumOfAllStateVars = longMetric("numOfAllStateVar")
+    sumOfAllStateVars.set(
+      metrics.get("numOfValueStateVar").get.value +
+      metrics.get("numOfListStateVar").get.value +
+      metrics.get("numOfMapStateVar").get.value
+    )
 
     val currentTimeNs = System.nanoTime
     val updatesStartTimeNs = currentTimeNs
@@ -298,6 +338,10 @@ case class TransformWithStateExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
+
+    // set string metrics
+    // TODO find a way to append string metrics -
+    //  outputMode, TimeoutMode, initialStateProcessorEnabled
 
     timeoutMode match {
       case ProcessingTime =>
@@ -426,7 +470,7 @@ case class TransformWithStateExec(
   private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
-      store, getStateInfo.queryRunId, keyEncoder, timeoutMode, isStreaming)
+      store, getStateInfo.queryRunId, keyEncoder, timeoutMode, isStreaming, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeoutMode)
@@ -440,7 +484,7 @@ case class TransformWithStateExec(
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeoutMode, isStreaming)
+      keyEncoder, timeoutMode, isStreaming, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeoutMode)

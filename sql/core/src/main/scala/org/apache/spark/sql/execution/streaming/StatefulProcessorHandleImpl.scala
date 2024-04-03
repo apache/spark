@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, ValueState}
 import org.apache.spark.util.Utils
@@ -78,7 +79,8 @@ class StatefulProcessorHandleImpl(
     runId: UUID,
     keyEncoder: ExpressionEncoder[Any],
     timeoutMode: TimeoutMode,
-    isStreaming: Boolean = true)
+    isStreaming: Boolean = true,
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -113,10 +115,25 @@ class StatefulProcessorHandleImpl(
     currState = newState
   }
 
+  private def incrementMetricVal(metricsKey: String): Unit = {
+    val metricsEntry = metrics.get(metricsKey)
+    if (metricsEntry.isDefined) {
+      metricsEntry.get += 1
+    }
+  }
+
+  private def setMetricVal(metricsKey: String, newVal: Long): Unit = {
+    val metricsEntry = metrics.get(metricsKey)
+    if (metricsEntry.isDefined) {
+      metricsEntry.get.set(newVal)
+    }
+  }
+
   def getHandleState: StatefulProcessorHandleState = currState
 
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
+    incrementMetricVal("numOfValueStateVar")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
@@ -150,6 +167,7 @@ class StatefulProcessorHandleImpl(
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
+    incrementMetricVal("numOfNewlyRegisteredTimer")
     timerState.registerTimer(expiryTimestampMs)
   }
 
@@ -159,6 +177,7 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("delete_timer")
+    incrementMetricVal("numOfDeletedTimer")
     timerState.deleteTimer(expiryTimestampMs)
   }
 
@@ -192,11 +211,13 @@ class StatefulProcessorHandleImpl(
    */
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists")
+    incrementMetricVal("numOfRemovedStateVar")
     store.removeColFamilyIfExists(stateName)
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
+    incrementMetricVal("numOfListStateVar")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
@@ -206,6 +227,7 @@ class StatefulProcessorHandleImpl(
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
+    incrementMetricVal("numOfMapStateVar")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
   }
