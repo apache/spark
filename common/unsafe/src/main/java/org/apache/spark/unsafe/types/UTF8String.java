@@ -573,10 +573,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       boolean isValidEnd = wordStart + stringSearch.getMatchLength() == setString.length()
               || setString.charAt(wordStart + stringSearch.getMatchLength()) == ',';
 
-      if(isValidStart && isValidEnd) {
+      if (isValidStart && isValidEnd) {
         int pos = 0;
-        for(int i = 0; i < setString.length() && i < wordStart; i++) {
-          if(setString.charAt(i) == ',') {
+        for (int i = 0; i < setString.length() && i < wordStart; i++) {
+          if (setString.charAt(i) == ',') {
             pos++;
           }
         }
@@ -893,7 +893,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     stringSearch.setOverlapping(true);
 
     int pos = stringSearch.next();
-    while(pos != StringSearch.DONE && pos < start) {
+    while (pos != StringSearch.DONE && pos < start) {
       pos = stringSearch.next();
     }
 
