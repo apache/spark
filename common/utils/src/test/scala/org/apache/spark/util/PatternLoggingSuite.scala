@@ -34,15 +34,15 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
     s""".*$level $className: This is a log message\n"""
   }
 
+  override def expectedPatternForBasicMsgWithException(level: Level): String = {
+    s""".*$level $className: This is a log message\n[\\s\\S]*"""
+  }
+
   override def expectedPatternForMsgWithMDC(level: Level): String =
     s""".*$level $className: Lost executor 1.\n"""
 
   override def expectedPatternForMsgWithMDCAndException(level: Level): String =
-    s""".*$level $className: Error in executor 1.\njava.lang.RuntimeException: OOM\n.*"""
-
-  override def expectedPatternForVariableAndMDC(level: Level): String = {
-     s""".*$level $className: Hello This is a log message, Lost executor 1.\n"""
-  }
+    s""".*$level $className: Error in executor 1.\njava.lang.RuntimeException: OOM\n[\\s\\S]*"""
 
   override def expectedPatternForConcatStringAndMDC(level: Level): String = {
     s""".*$level $className: Hello This is a log message, Lost executor 1.\n"""
