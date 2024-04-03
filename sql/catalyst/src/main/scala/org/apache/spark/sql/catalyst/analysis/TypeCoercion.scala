@@ -733,6 +733,7 @@ abstract class TypeCoercionBase {
               udfInputToCastType(in.dataType, expected.asInstanceOf[DataType])
             ).getOrElse(in)
           }
+          
         }
         udf.copy(children = children)
     }
