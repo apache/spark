@@ -213,8 +213,8 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
                 assert(attr.values.get === origValueSet.toArray.sorted.map(_.toString))
                 assert(attr.isOrdinal.get === false)
               case _ =>
-                throw new RuntimeException(errMsg + s". Categorical feature $feature failed" +
-                  s" metadata check. Found feature attribute: $featureAttr.")
+                throw new RuntimeException(errMsg.message + s". Categorical feature $feature " +
+                  s"failed metadata check. Found feature attribute: $featureAttr.")
             }
           }
           // Check numerical feature metadata.
@@ -225,8 +225,8 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
               case attr: NumericAttribute =>
                 assert(featureAttr.index.get === feature)
               case _ =>
-                throw new RuntimeException(errMsg + s". Numerical feature $feature failed" +
-                  s" metadata check. Found feature attribute: $featureAttr.")
+                throw new RuntimeException(errMsg.message + s". Numerical feature $feature " +
+                  s"failed metadata check. Found feature attribute: $featureAttr.")
             }
           }
         }

@@ -49,8 +49,6 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
     resultMap.putAll(mdc.context)
     MessageWithContext(message + mdc.message, resultMap)
   }
-
-  override def toString: String = message
 }
 
 /**
