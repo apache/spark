@@ -21,27 +21,30 @@ import javax.annotation.Nullable
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least, Substring}
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
+import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
+
     case ifExpr: If =>
       ifExpr.withNewChildren(
         ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue)))
-    case caseWhenExpr: CaseWhen =>
-      val newValues = collateToSingleType(
-        caseWhenExpr.branches.map(b => b._2) ++ caseWhenExpr.elseValue)
-      caseWhenExpr.withNewChildren(
-        interleave(Seq.empty, caseWhenExpr.branches.map(b => b._1), newValues))
-    case substrExpr: Substring =>
-      // This case is necessary for changing Substring input to implicit collation
-      substrExpr.withNewChildren(
-        collateToSingleType(Seq(substrExpr.str)) :+ substrExpr.pos :+ substrExpr.len)
+
+    case caseWhenExpr: CaseWhen if !haveSameType(caseWhenExpr.inputTypesForMerging) =>
+      val outputStringType =
+        getOutputCollation(caseWhenExpr.branches.map(_._2) ++ caseWhenExpr.elseValue)
+        val newBranches = caseWhenExpr.branches.map { case (condition, value) =>
+          (condition, castStringType(value, outputStringType).getOrElse(value))
+        }
+        val newElseValue =
+          caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
+        CaseWhen(newBranches, newElseValue)
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
@@ -67,7 +70,7 @@ object CollationTypeCasts extends TypeCoercionRule {
   def castStringType(expr: Expression, st: StringType): Option[Expression] =
     castStringType(expr.dataType, st).map { dt => Cast(expr, dt)}
 
-  private def castStringType(inType: AbstractDataType, castType: StringType): Option[DataType] = {
+  private def castStringType(inType: DataType, castType: StringType): Option[DataType] = {
     @Nullable val ret: DataType = inType match {
       case st: StringType if st.collationId != castType.collationId => castType
       case ArrayType(arrType, nullable) =>
@@ -121,11 +124,5 @@ object CollationTypeCasts extends TypeCoercionRule {
           implicitTypes.headOption.getOrElse(SQLConf.get.defaultStringType)
         }
     }
-  }
-
-  @tailrec
-  final def interleave[A](base: Seq[A], a: Seq[A], b: Seq[A]): Seq[A] = a match {
-    case elt :: aTail => interleave(base :+ elt, b, aTail)
-    case _ => base ++ b
   }
 }
