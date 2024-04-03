@@ -23,6 +23,10 @@ import scala.collection.immutable.Map$;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 
 /**
  * This class defines constants related to the variant format and provides functions for
@@ -101,6 +105,21 @@ public class VariantUtil {
   public static final int DECIMAL8 = 9;
   // 16-byte decimal. Content is 1-byte scale + 16-byte little-endian signed integer.
   public static final int DECIMAL16 = 10;
+  // Date value. Content is 4-byte little-endian signed integer that represents the number of days
+  // from the Unix epoch.
+  public static final int DATE = 11;
+  // Timestamp value. Content is 8-byte little-endian signed integer that represents the number of
+  // microseconds elapsed since the Unix epoch, 1970-01-01 00:00:00 UTC. It is displayed to users in
+  // their local time zones and may be displayed differently depending on the execution environment.
+  public static final int TIMESTAMP = 12;
+  // Timestamp_ntz value. It has the same content as `TIMESTAMP` but should always be interpreted
+  // as if the local time zone is UTC.
+  public static final int TIMESTAMP_NTZ = 13;
+  // 4-byte IEEE float.
+  public static final int FLOAT = 14;
+  // Binary value. The content is (4-byte little-endian unsigned integer representing the binary
+  // size) + (size bytes of binary content).
+  public static final int BINARY = 15;
   // Long string value. The content is (4-byte little-endian unsigned integer representing the
   // string size) + (size bytes of string content).
   public static final int LONG_STR = 16;
@@ -212,6 +231,11 @@ public class VariantUtil {
     STRING,
     DOUBLE,
     DECIMAL,
+    DATE,
+    TIMESTAMP,
+    TIMESTAMP_NTZ,
+    FLOAT,
+    BINARY,
   }
 
   // Get the value type of variant value `value[pos...]`. It is only legal to call `get*` if
@@ -247,6 +271,16 @@ public class VariantUtil {
           case DECIMAL8:
           case DECIMAL16:
             return Type.DECIMAL;
+          case DATE:
+            return Type.DATE;
+          case TIMESTAMP:
+            return Type.TIMESTAMP;
+          case TIMESTAMP_NTZ:
+            return Type.TIMESTAMP_NTZ;
+          case FLOAT:
+            return Type.FLOAT;
+          case BINARY:
+            return Type.BINARY;
           case LONG_STR:
             return Type.STRING;
           default:
@@ -283,9 +317,13 @@ public class VariantUtil {
           case INT2:
             return 3;
           case INT4:
+          case DATE:
+          case FLOAT:
             return 5;
           case INT8:
           case DOUBLE:
+          case TIMESTAMP:
+          case TIMESTAMP_NTZ:
             return 9;
           case DECIMAL4:
             return 6;
@@ -293,6 +331,7 @@ public class VariantUtil {
             return 10;
           case DECIMAL16:
             return 18;
+          case BINARY:
           case LONG_STR:
             return 1 + U32_SIZE + readUnsigned(value, pos + 1, U32_SIZE);
           default:
@@ -378,6 +417,65 @@ public class VariantUtil {
         throw unexpectedType(Type.DECIMAL);
     }
     return result.stripTrailingZeros();
+  }
+
+  // Get a raw date value (number of days from the Unix epoch) from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static int getRawDate(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || typeInfo != DATE) throw unexpectedType(Type.DATE);
+    return (int) readLong(value, pos + 1, 4);
+  }
+
+  // Get a date value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static LocalDate getDate(byte[] value, int pos) {
+    return LocalDate.ofEpochDay(getRawDate(value, pos));
+  }
+
+  // Get a raw timestamp/timestamp_ntz value (number of microseconds from the Unix epoch) from
+  // variant value `value[pos...]`. The variant library doesn't distinguish the content of these two
+  // types. Instead, the user interprets them differently.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static long getRawTimestamp(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || (typeInfo != TIMESTAMP && typeInfo != TIMESTAMP_NTZ)) {
+      throw new IllegalStateException("Expect type to be TIMESTAMP/TIMESTAMP_NTZ");
+    }
+    return readLong(value, pos + 1, 8);
+  }
+
+  // Get a timestamp/timestamp_ntz value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static Instant getTimestamp(byte[] value, int pos) {
+    return Instant.EPOCH.plus(getRawTimestamp(value, pos), ChronoUnit.MICROS);
+  }
+
+  // Get a float value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static float getFloat(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || typeInfo != FLOAT) throw unexpectedType(Type.FLOAT);
+    return Float.intBitsToFloat((int) readLong(value, pos + 1, 4));
+  }
+
+  // Get a binary value from variant value `value[pos...]`.
+  // Throw `MALFORMED_VARIANT` if the variant is malformed.
+  public static byte[] getBinary(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+    if (basicType != PRIMITIVE || typeInfo != BINARY) throw unexpectedType(Type.BINARY);
+    int start = pos + 1 + U32_SIZE;
+    int length = readUnsigned(value, pos + 1, U32_SIZE);
+    checkIndex(start + length - 1, value.length);
+    return Arrays.copyOfRange(value, start, start + length);
   }
 
   // Get a string value from variant value `value[pos...]`.
