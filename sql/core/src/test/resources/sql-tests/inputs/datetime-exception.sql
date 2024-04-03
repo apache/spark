@@ -1,0 +1,3 @@
+--SET spark.sql.legacy.timeParserPolicy=EXCEPTION
+--IMPORT date.sql
+--IMPORT timestamp.sql

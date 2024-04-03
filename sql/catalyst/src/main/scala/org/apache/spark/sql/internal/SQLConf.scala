@@ -4016,13 +4016,13 @@ object SQLConf {
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
       "dates/timestamps in a locale-sensitive manner, which is the approach before Spark 3.0. " +
       "When set to CORRECTED, classes from java.time.* packages are used for the same purpose. " +
-      "The default value is EXCEPTION, RuntimeException is thrown when we will get different " +
-      "results.")
+      "When set to EXCEPTION, RuntimeException is thrown when we will get different " +
+      "results. The default is CORRECTED.")
     .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-    .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+    .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
