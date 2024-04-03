@@ -23,7 +23,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.CollationTypeCasts.getOutputCollation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -609,11 +608,9 @@ abstract class TypeCoercionBase {
       case c @ Concat(children) if !c.childrenResolved || children.isEmpty => c
       case c @ Concat(children) if conf.concatBinaryAsString ||
         !children.map(_.dataType).forall(_ == BinaryType) =>
-        val st = getOutputCollation(c.children)
         val newChildren = c.children.map { e =>
-          implicitCast(e, st).getOrElse(e)
+          implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
         }
-
         c.copy(children = newChildren)
     }
   }

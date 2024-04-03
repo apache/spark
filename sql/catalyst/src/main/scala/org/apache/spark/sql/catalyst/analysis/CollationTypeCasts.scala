@@ -30,21 +30,30 @@ import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, String
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
-    case sc@(_: In
-             | _: InSubquery
-             | _: CreateArray
-             | _: If
-             | _: ArrayJoin
-             | _: CaseWhen
-             | _: Concat
-             | _: Greatest
-             | _: Least
-             | _: Coalesce
-             | _: BinaryExpression
-             | _: ConcatWs
-             | _: Substring) =>
-      val newChildren = collateToSingleType(sc.children)
-      sc.withNewChildren(newChildren)
+    case ifExpr: If =>
+      ifExpr.withNewChildren(
+        ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue)))
+    case caseWhenExpr: CaseWhen =>
+      val newValues = collateToSingleType(
+        caseWhenExpr.branches.map(b => b._2) ++ caseWhenExpr.elseValue)
+      caseWhenExpr.withNewChildren(
+        interleave(Seq.empty, caseWhenExpr.branches.map(b => b._1), newValues))
+    case substrExpr: Substring =>
+      // This case is necessary for changing Substring input to implicit collation
+      substrExpr.withNewChildren(
+        collateToSingleType(Seq(substrExpr.str)) :+ substrExpr.pos :+ substrExpr.len)
+    case otherExpr @ (_: In
+                      | _: InSubquery
+                      | _: CreateArray
+                      | _: ArrayJoin
+                      | _: Concat
+                      | _: Greatest
+                      | _: Least
+                      | _: Coalesce
+                      | _: BinaryExpression
+                      | _: ConcatWs) =>
+      val newChildren = collateToSingleType(otherExpr.children)
+      otherExpr.withNewChildren(newChildren)
   }
   /**
    * Extracts StringTypes from filtered hasStringType
@@ -112,7 +121,7 @@ object CollationTypeCasts extends TypeCoercionRule {
           .filter(dt => dt.collationId != SQLConf.get.defaultStringType.collationId)
           .distinctBy(_.collationId)
 
-        if (hasMultipleImplicits(implicitTypes)) {
+        if (implicitTypes.length > 1) {
           throw QueryCompilationErrors.implicitCollationMismatchError()
         }
         else {
@@ -121,15 +130,9 @@ object CollationTypeCasts extends TypeCoercionRule {
     }
   }
 
-  /**
-   * This check is always preformed when we have no explicit collation. It returns true
-   * if there are more than one implicit collations. Collations are distinguished by their
-   * collationId.
-   * @param dataTypes
-   * @return
-   */
-  private def hasMultipleImplicits(dataTypes: Seq[StringType]): Boolean =
-    dataTypes.map(_.collationId)
-      .filter(dt => !(dt == SQLConf.get.defaultStringType.collationId)).distinct.size > 1
-
+  @tailrec
+  final def interleave[A](base: Seq[A], a: Seq[A], b: Seq[A]): Seq[A] = a match {
+    case elt :: aTail => interleave(base :+ elt, b, aTail)
+    case _ => base ++ b
+  }
 }
