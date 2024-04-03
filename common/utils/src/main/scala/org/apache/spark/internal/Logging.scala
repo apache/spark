@@ -22,7 +22,6 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.{CloseableThreadContext, Level, LogManager}
-import org.apache.logging.log4j.CloseableThreadContext.Instance
 import org.apache.logging.log4j.core.{Filter, LifeCycle, LogEvent, Logger => Log4jLogger, LoggerContext}
 import org.apache.logging.log4j.core.appender.ConsoleAppender
 import org.apache.logging.log4j.core.config.DefaultConfiguration
@@ -30,6 +29,7 @@ import org.apache.logging.log4j.core.filter.AbstractFilter
 import org.slf4j.{Logger, LoggerFactory}
 
 import org.apache.spark.internal.Logging.SparkShellLoggingFilter
+import org.apache.spark.internal.LogKey.LogKey
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -37,13 +37,19 @@ import org.apache.spark.util.SparkClassUtils
  * The values of the MDC will be inline in the log message, while the key-value pairs will be
  * part of the ThreadContext.
  */
-case class MDC(key: LogKey.Value, value: String)
+case class MDC(key: LogKey, value: Any)
 
 /**
  * Wrapper class for log messages that include a logging context.
  * This is used as the return type of the string interpolator `LogStringContext`.
  */
-case class MessageWithContext(message: String, context: Option[Instance])
+case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
+  def +(mdc: MessageWithContext): MessageWithContext = {
+    val resultMap = new java.util.HashMap(context)
+    resultMap.putAll(mdc.context)
+    MessageWithContext(message + mdc.message, resultMap)
+  }
+}
 
 /**
  * Companion class for lazy evaluation of the MessageWithContext instance.
@@ -51,7 +57,7 @@ case class MessageWithContext(message: String, context: Option[Instance])
 class LogEntry(messageWithContext: => MessageWithContext) {
   def message: String = messageWithContext.message
 
-  def context: Option[Instance] = messageWithContext.context
+  def context: java.util.HashMap[String, String] = messageWithContext.context
 }
 
 /**
@@ -94,12 +100,12 @@ trait Logging {
     def log(args: MDC*): MessageWithContext = {
       val processedParts = sc.parts.iterator
       val sb = new StringBuilder(processedParts.next())
-      lazy val map = new java.util.HashMap[String, String]()
+      val context = new java.util.HashMap[String, String]()
 
       args.foreach { mdc =>
-        sb.append(mdc.value)
+        sb.append(mdc.value.toString)
         if (Logging.isStructuredLoggingEnabled) {
-          map.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value)
+          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value.toString)
         }
 
         if (processedParts.hasNext) {
@@ -107,19 +113,38 @@ trait Logging {
         }
       }
 
-      // Create a CloseableThreadContext and apply the context map
-      val closeableContext = if (Logging.isStructuredLoggingEnabled) {
-        Some(CloseableThreadContext.putAll(map))
-      } else {
-        None
-      }
-      MessageWithContext(sb.toString(), closeableContext)
+      MessageWithContext(sb.toString(), context)
+    }
+  }
+
+  private def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
+    val threadContext = CloseableThreadContext.putAll(context)
+    try {
+      body
+    } finally {
+      threadContext.close()
     }
   }
 
   // Log methods that take only a String
   protected def logInfo(msg: => String): Unit = {
     if (log.isInfoEnabled) log.info(msg)
+  }
+
+  protected def logInfo(entry: LogEntry): Unit = {
+    if (log.isInfoEnabled) {
+      withLogContext(entry.context) {
+        log.info(entry.message)
+      }
+    }
+  }
+
+  protected def logInfo(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isInfoEnabled) {
+      withLogContext(entry.context) {
+        log.info(entry.message, throwable)
+      }
+    }
   }
 
   protected def logDebug(msg: => String): Unit = {
@@ -134,21 +159,39 @@ trait Logging {
     if (log.isWarnEnabled) log.warn(msg)
   }
 
+  protected def logWarning(entry: LogEntry): Unit = {
+    if (log.isWarnEnabled) {
+      withLogContext(entry.context) {
+        log.warn(entry.message)
+      }
+    }
+  }
+
+  protected def logWarning(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isWarnEnabled) {
+      withLogContext(entry.context) {
+        log.warn(entry.message, throwable)
+      }
+    }
+  }
+
   protected def logError(msg: => String): Unit = {
     if (log.isErrorEnabled) log.error(msg)
   }
 
   protected def logError(entry: LogEntry): Unit = {
     if (log.isErrorEnabled) {
-      log.error(entry.message)
-      entry.context.map(_.close())
+      withLogContext(entry.context) {
+        log.error(entry.message)
+      }
     }
   }
 
   protected def logError(entry: LogEntry, throwable: Throwable): Unit = {
     if (log.isErrorEnabled) {
-      log.error(entry.message, throwable)
-      entry.context.map(_.close())
+      withLogContext(entry.context) {
+        log.error(entry.message, throwable)
+      }
     }
   }
 

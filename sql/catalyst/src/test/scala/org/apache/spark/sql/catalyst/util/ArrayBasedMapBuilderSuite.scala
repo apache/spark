@@ -72,6 +72,16 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
     )
   }
 
+  test ("disable map key normalization") {
+    withSQLConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION.key -> "true") {
+      val builder = new ArrayBasedMapBuilder(DoubleType, IntegerType)
+      builder.put(0.0, 1)
+      builder.put(-0.0, 1)
+      val map = builder.build()
+      assert(map.numElements() == 2)
+    }
+  }
+
   test("successful map normalization on build") {
     val builder = new ArrayBasedMapBuilder(DoubleType, IntegerType)
     builder.put(-0.0, 1)

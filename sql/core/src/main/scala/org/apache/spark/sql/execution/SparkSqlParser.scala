@@ -265,8 +265,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetCatalogCommand]] logical command.
    */
   override def visitSetCatalog(ctx: SetCatalogContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.identifier() != null) {
-      SetCatalogCommand(ctx.identifier().getText)
+    if (ctx.errorCapturingIdentifier() != null) {
+      SetCatalogCommand(ctx.errorCapturingIdentifier().getText)
     } else if (ctx.stringLit() != null) {
       SetCatalogCommand(string(visitStringLit(ctx.stringLit())))
     } else {
