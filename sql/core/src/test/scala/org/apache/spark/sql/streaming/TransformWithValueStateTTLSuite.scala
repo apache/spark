@@ -106,7 +106,7 @@ class ValueStateTTLProcessor
       expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
-    for (row <- inputRows) {
+    inputRows.foreach { row =>
       val resultIter = TTLInputProcessFunction.processRow(_ttlMode, row, _valueState)
       resultIter.foreach { r =>
         results = r :: results
@@ -152,7 +152,7 @@ case class MultipleValueStatesTTLProcessor(
       _valueStateWithoutTTL
     }
 
-    for (row <- inputRows) {
+    inputRows.foreach { row =>
       val resultIterator = TTLInputProcessFunction.processRow(_ttlMode, row, state)
       resultIterator.foreach { r =>
         results = r :: results
@@ -162,53 +162,77 @@ case class MultipleValueStatesTTLProcessor(
   }
 }
 
-class TransformWithStateTTLSuite
+/**
+ * Tests that ttl works as expected for Value State for
+ * processing time and event time based ttl.
+ */
+class TransformWithValueStateTTLSuite
   extends StreamTest {
   import testImplicits._
 
   test("validate state is evicted at ttl expiry - processing time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
-      val inputStream = MemoryStream[InputEvent]
-      val result = inputStream.toDS()
-        .groupByKey(x => x.key)
-        .transformWithState(
-          new ValueStateTTLProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL())
+      withTempDir { dir =>
+        val inputStream = MemoryStream[InputEvent]
+        val result = inputStream.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            new ValueStateTTLProcessor(),
+            TimeoutMode.NoTimeouts(),
+            TTLMode.ProcessingTimeTTL())
 
-      val clock = new StreamManualClock
-      testStream(result)(
-        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
-        AddData(inputStream, InputEvent("k1", "put", 1, Duration.ofMinutes(1))),
-        // advance clock to trigger processing
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        // get this state, and make sure we get unexpired value
-        AddData(inputStream, InputEvent("k1", "get", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
-        // ensure ttl values were added correctly
-        AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
-        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
-        // advance clock so that state expires
-        AdvanceManualClock(60 * 1000),
-        AddData(inputStream, InputEvent("k1", "get", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        // validate expired value is not returned
-        CheckNewAnswer(),
-        // ensure this state does not exist any longer in State
-        AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(),
-        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer()
-      )
+        val clock = new StreamManualClock
+        testStream(result)(
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = dir.getAbsolutePath),
+          AddData(inputStream, InputEvent("k1", "put", 1, Duration.ofMinutes(1))),
+          // advance clock to trigger processing
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          StopStream,
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = dir.getAbsolutePath),
+          // get this state, and make sure we get unexpired value
+          AddData(inputStream, InputEvent("k1", "get", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
+          StopStream,
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = dir.getAbsolutePath),
+          // ensure ttl values were added correctly
+          AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
+          AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
+          StopStream,
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = dir.getAbsolutePath),
+          // advance clock so that state expires
+          AdvanceManualClock(60 * 1000),
+          AddData(inputStream, InputEvent("k1", "get", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          // validate expired value is not returned
+          CheckNewAnswer(),
+          // ensure this state does not exist any longer in State
+          AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer()
+        )
+      }
     }
   }
 
@@ -389,48 +413,57 @@ class TransformWithStateTTLSuite
   test("validate state is evicted at ttl expiry - event time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
-      val inputStream = MemoryStream[InputEvent]
-      val result = inputStream.toDS()
-        .withWatermark("eventTime", "1 second")
-        .groupByKey(x => x.key)
-        .transformWithState(
-          new ValueStateTTLProcessor(),
-          TimeoutMode.NoTimeouts(),
-          TTLMode.EventTimeTTL())
+      withTempDir { dir =>
+        val inputStream = MemoryStream[InputEvent]
+        val result = inputStream.toDS()
+          .withWatermark("eventTime", "1 second")
+          .groupByKey(x => x.key)
+          .transformWithState(
+            new ValueStateTTLProcessor(),
+            TimeoutMode.NoTimeouts(),
+            TTLMode.EventTimeTTL())
 
-      val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
-      val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
-      val ttlExpiration = Timestamp.valueOf("2024-01-01 00:03:00")
-      val ttlExpirationMs = ttlExpiration.getTime
-      val eventTime3 = Timestamp.valueOf("2024-01-01 00:05:00")
+        val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
+        val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
+        val ttlExpiration = Timestamp.valueOf("2024-01-01 00:03:00")
+        val ttlExpirationMs = ttlExpiration.getTime
+        val eventTime3 = Timestamp.valueOf("2024-01-01 00:05:00")
 
-      testStream(result)(
-        AddData(inputStream,
-          InputEvent("k1", "put", 1, null, eventTime1, ttlExpiration)),
-        CheckNewAnswer(),
-        // get this state, and make sure we get unexpired value
-        AddData(inputStream, InputEvent("k1", "get", -1, null, eventTime2)),
-        ProcessAllAvailable(),
-        CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
-        // ensure ttl values were added correctly
-        AddData(inputStream,
-          InputEvent("k1", "get_ttl_value_from_state", -1, null, eventTime2)),
-        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, ttlExpirationMs)),
-        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null, eventTime2)),
-        ProcessAllAvailable(),
-        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, ttlExpirationMs)),
-        // increment event time so that key k1 expires
-        AddData(inputStream, InputEvent("k2", "put", 1, null, eventTime3)),
-        CheckNewAnswer(),
-        // validate that k1 has expired
-        AddData(inputStream, InputEvent("k1", "get", -1, null, eventTime3)),
-        CheckNewAnswer(),
-        // ensure this state does not exist any longer in State
-        AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null, eventTime3)),
-        CheckNewAnswer(),
-        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null, eventTime3)),
-        CheckNewAnswer()
-      )
+        testStream(result)(
+          StartStream(checkpointLocation = dir.getAbsolutePath),
+          AddData(inputStream,
+            InputEvent("k1", "put", 1, null, eventTime1, ttlExpiration)),
+          CheckNewAnswer(),
+          StopStream,
+          StartStream(checkpointLocation = dir.getAbsolutePath),
+          // get this state, and make sure we get unexpired value
+          AddData(inputStream, InputEvent("k1", "get", -1, null, eventTime2)),
+          ProcessAllAvailable(),
+          CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
+          // ensure ttl values were added correctly
+          AddData(inputStream,
+            InputEvent("k1", "get_ttl_value_from_state", -1, null, eventTime2)),
+          CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, ttlExpirationMs)),
+          AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null, eventTime2)),
+          ProcessAllAvailable(),
+          CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, ttlExpirationMs)),
+          StopStream,
+          StartStream(checkpointLocation = dir.getAbsolutePath),
+          // increment event time so that key k1 expires
+          AddData(inputStream, InputEvent("k2", "put", 1, null, eventTime3)),
+          CheckNewAnswer(),
+          StopStream,
+          StartStream(checkpointLocation = dir.getAbsolutePath),
+          // validate that k1 has expired
+          AddData(inputStream, InputEvent("k1", "get", -1, null, eventTime3)),
+          CheckNewAnswer(),
+          // ensure this state does not exist any longer in State
+          AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null, eventTime3)),
+          CheckNewAnswer(),
+          AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null, eventTime3)),
+          CheckNewAnswer()
+        )
+      }
     }
   }
 

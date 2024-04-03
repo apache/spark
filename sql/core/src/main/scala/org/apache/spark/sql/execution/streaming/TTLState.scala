@@ -80,7 +80,7 @@ trait TTLState {
 abstract class SingleKeyTTLStateImpl(
     stateName: String,
     store: StateStore,
-    batchTtlExpirationMs: Long)
+    ttlExpirationMs: Long)
   extends TTLState {
 
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
@@ -102,12 +102,15 @@ abstract class SingleKeyTTLStateImpl(
     store.put(encodedTtlKey, EMPTY_ROW, ttlColumnFamilyName)
   }
 
+  /**
+   * Clears any state which has ttl older than [[ttlExpirationMs]].
+   */
   override def clearExpiredState(): Unit = {
     val iterator = store.iterator(ttlColumnFamilyName)
 
     iterator.takeWhile { kv =>
       val expirationMs = kv.key.getLong(0)
-      StateTTL.isExpired(expirationMs, batchTtlExpirationMs)
+      StateTTL.isExpired(expirationMs, ttlExpirationMs)
     }.foreach { kv =>
       val groupingKey = kv.key.getBinary(1)
       clearIfExpired(groupingKey)
