@@ -27,6 +27,9 @@ import org.scalatest.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.network.client.TransportClient
 import org.apache.spark.rpc._
+import org.apache.spark.util.RpcUtils
+
+import org.apache.commons.beanutils.BeanComparator
 
 class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
 
@@ -133,6 +136,110 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar with TimeLimits {
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
+    }
+  }
+
+
+  test("CVE-2018-17190 denyList") {
+    var conf = new SparkConf()
+    val localEnv = createRpcEnv(conf, "cve-local", 0).asInstanceOf[NettyRpcEnv]
+    val remoteEnv = createRpcEnv(conf, "cve-remote", 0, clientMode = true)
+      .asInstanceOf[NettyRpcEnv]
+
+    try {
+      localEnv.setupEndpoint(
+        "deserialization-cve",
+        new RpcEndpoint {
+          override val rpcEnv = localEnv
+
+          override def receiveAndReply(
+              context: RpcCallContext
+          ): PartialFunction[Any, Unit] = { case msg: String =>
+            context.reply(msg)
+          }
+        }
+      )
+      val uri =
+        RpcEndpointAddress(localEnv.address, "deserialization-cve").toString
+      val addr = RpcEndpointAddress(uri)
+      val verifier = new NettyRpcEndpointRef(
+        conf,
+        RpcEndpointAddress(addr.rpcAddress, RpcEndpointVerifier.NAME),
+        remoteEnv
+      )
+      val defaultLookupTimeout = RpcUtils.lookupRpcTimeout(conf)
+      var denied = false
+      try {
+        defaultLookupTimeout.awaitResult(
+          verifier.ask[Boolean](new BeanComparator("lowestSetBit"))
+        )
+      } catch {
+        case e: SparkException =>
+          e.getCause match {
+            case e1: RuntimeException => denied = true
+            case _: Throwable         => assert(false)
+          }
+        case _: Throwable => assert(false)
+      }
+      assert(denied)
+
+    } finally {
+      localEnv.shutdown()
+      localEnv.awaitTermination()
+      remoteEnv.shutdown()
+      remoteEnv.awaitTermination()
+    }
+  }
+
+  test("CVE-2018-17190 no denyList on authenticated RPC") {
+    var conf = new SparkConf()
+    conf.set("spark.authenticate", "true")
+    val localEnv = createRpcEnv(conf, "cve-local", 0).asInstanceOf[NettyRpcEnv]
+    val remoteEnv = createRpcEnv(conf, "cve-remote", 0, clientMode = true)
+      .asInstanceOf[NettyRpcEnv]
+
+    try {
+      localEnv.setupEndpoint(
+        "deserialization-cve2",
+        new RpcEndpoint {
+          override val rpcEnv = localEnv
+
+          override def receiveAndReply(
+              context: RpcCallContext
+          ): PartialFunction[Any, Unit] = { case msg: String =>
+            context.reply(msg)
+          }
+        }
+      )
+      val uri =
+        RpcEndpointAddress(localEnv.address, "deserialization-cve2").toString
+      val addr = RpcEndpointAddress(uri)
+      val verifier = new NettyRpcEndpointRef(
+        conf,
+        RpcEndpointAddress(addr.rpcAddress, RpcEndpointVerifier.NAME),
+        remoteEnv
+      )
+      val defaultLookupTimeout = RpcUtils.lookupRpcTimeout(conf)
+      var denied = false
+      try {
+        defaultLookupTimeout.awaitResult(
+          verifier.ask[Boolean](new BeanComparator("lowestSetBit"))
+        )
+      } catch {
+        case e: SparkException =>
+          e.getCause match {
+            case e1: RuntimeException => denied = true
+            case _: Throwable         => Unit
+          }
+        case _: Throwable => assert(false)
+      }
+      assert(!denied)
+
+    } finally {
+      localEnv.shutdown()
+      localEnv.awaitTermination()
+      remoteEnv.shutdown()
+      remoteEnv.awaitTermination()
     }
   }
 }
