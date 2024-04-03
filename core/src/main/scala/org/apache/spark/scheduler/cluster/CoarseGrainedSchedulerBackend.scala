@@ -26,13 +26,14 @@ import scala.concurrent.Future
 
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
-import org.apache.spark.internal.LogKey.ERROR
 import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.ERROR
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.resource.ResourceProfile

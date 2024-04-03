@@ -27,7 +27,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.REASON
 import org.apache.spark.internal.config.EXECUTOR_REMOVE_DELAY
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -161,7 +162,7 @@ private[spark] class StandaloneSchedulerBackend(
     notifyContext()
     if (!stopping.get) {
       launcherBackend.setState(SparkAppHandle.State.KILLED)
-      logError("Application has been killed. Reason: " + reason)
+      logError(log"Application has been killed. Reason: ${MDC(REASON, reason)}")
       try {
         scheduler.error(reason)
       } finally {

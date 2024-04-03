@@ -68,6 +68,10 @@ object LogKey extends Enumeration {
   val MAX_EXECUTOR_FAILURES = Value
   val REMOTE_ADDRESS = Value
   val POD_ID = Value
+  val BLOCK_ID = Value
+  val BLOCK_MANAGER_ID = Value
+  val OLD_BLOCK_MANAGER_ID = Value
+  val COMMAND_OUTPUT = Value
 
   type LogKey = Value
 }
