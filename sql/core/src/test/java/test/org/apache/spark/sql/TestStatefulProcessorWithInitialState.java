@@ -25,7 +25,7 @@ import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.streaming.*;
 
 /**
- * A test stateful processor  concatenates all input rows for a key and emits the result.
+ * A test stateful processor concatenates all input rows for a key and emits the result.
  * Primarily used for testing the Java API for arbitrary stateful operator in structured streaming
  * using provided initial state.
  */
