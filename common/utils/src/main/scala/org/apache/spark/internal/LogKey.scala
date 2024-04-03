@@ -24,14 +24,26 @@ object LogKey extends Enumeration {
   val APPLICATION_ID = Value
   val APPLICATION_STATE = Value
   val BUCKET = Value
+  val BYTECODE_SIZE = Value
+  val CLASS_NAME = Value
   val CONTAINER_ID = Value
   val EXECUTOR_ID = Value
   val EXIT_CODE = Value
+  val FORMATTED_CODE = Value
+  val JOIN_CONDITION = Value
   val MAX_EXECUTOR_FAILURES = Value
   val MAX_SIZE = Value
+  val METHOD_NAME = Value
   val MIN_SIZE = Value
   val REMOTE_ADDRESS = Value
   val POD_ID = Value
+  val QUERY_PLAN = Value
+  val RULE_BATCH_NAME = Value
+  val RULE_NAME = Value
+  val RULE_NUMBER_OF_RUNS = Value
+  val TIME_UNITS = Value
+  val WATERMARK_CONSTRAINT = Value
+  val XSD_PATH = Value
 
   type LogKey = Value
 }

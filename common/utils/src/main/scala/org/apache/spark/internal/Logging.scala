@@ -126,23 +126,32 @@ trait Logging {
     }
   }
 
+  private def maybeStripMargin(msg: String, stripMargin: Boolean): String = {
+    if (stripMargin) {
+      msg.stripMargin
+    } else {
+      msg
+    }
+  }
+
   // Log methods that take only a String
   protected def logInfo(msg: => String): Unit = {
     if (log.isInfoEnabled) log.info(msg)
   }
 
-  protected def logInfo(entry: LogEntry): Unit = {
+  protected def logInfo(entry: LogEntry, stripMargin: Boolean = false): Unit = {
     if (log.isInfoEnabled) {
       withLogContext(entry.context) {
-        log.info(entry.message)
+        log.info(maybeStripMargin(entry.message, stripMargin))
       }
     }
   }
 
-  protected def logInfo(entry: LogEntry, throwable: Throwable): Unit = {
+  protected def logInfo(
+      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
     if (log.isInfoEnabled) {
       withLogContext(entry.context) {
-        log.info(entry.message, throwable)
+        log.info(maybeStripMargin(entry.message, stripMargin), throwable)
       }
     }
   }
@@ -151,26 +160,45 @@ trait Logging {
     if (log.isDebugEnabled) log.debug(msg)
   }
 
+  protected def logDebug(entry: LogEntry, stripMargin: Boolean = false): Unit = {
+    if (log.isDebugEnabled) log.debug(maybeStripMargin(entry.message, stripMargin))
+  }
+
+  protected def logDebug(
+      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
+    if (log.isDebugEnabled) log.debug(maybeStripMargin(entry.message, stripMargin), throwable)
+  }
+
   protected def logTrace(msg: => String): Unit = {
     if (log.isTraceEnabled) log.trace(msg)
+  }
+
+  protected def logTrace(entry: LogEntry, stripMargin: Boolean = false): Unit = {
+    if (log.isTraceEnabled) log.trace(maybeStripMargin(entry.message, stripMargin))
+  }
+
+  protected def logTrace(
+      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
+    if (log.isTraceEnabled) log.trace(maybeStripMargin(entry.message, stripMargin), throwable)
   }
 
   protected def logWarning(msg: => String): Unit = {
     if (log.isWarnEnabled) log.warn(msg)
   }
 
-  protected def logWarning(entry: LogEntry): Unit = {
+  protected def logWarning(entry: LogEntry, stripMargin: Boolean = false): Unit = {
     if (log.isWarnEnabled) {
       withLogContext(entry.context) {
-        log.warn(entry.message)
+        log.warn(maybeStripMargin(entry.message, stripMargin))
       }
     }
   }
 
-  protected def logWarning(entry: LogEntry, throwable: Throwable): Unit = {
+  protected def logWarning(
+      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
     if (log.isWarnEnabled) {
       withLogContext(entry.context) {
-        log.warn(entry.message, throwable)
+        log.warn(maybeStripMargin(entry.message, stripMargin), throwable)
       }
     }
   }
@@ -179,18 +207,19 @@ trait Logging {
     if (log.isErrorEnabled) log.error(msg)
   }
 
-  protected def logError(entry: LogEntry): Unit = {
+  protected def logError(entry: LogEntry, stripMargin: Boolean = false): Unit = {
     if (log.isErrorEnabled) {
       withLogContext(entry.context) {
-        log.error(entry.message)
+        log.error(maybeStripMargin(entry.message, stripMargin))
       }
     }
   }
 
-  protected def logError(entry: LogEntry, throwable: Throwable): Unit = {
+  protected def logError(
+      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
     if (log.isErrorEnabled) {
       withLogContext(entry.context) {
-        log.error(entry.message, throwable)
+        log.error(maybeStripMargin(entry.message, stripMargin), throwable)
       }
     }
   }
