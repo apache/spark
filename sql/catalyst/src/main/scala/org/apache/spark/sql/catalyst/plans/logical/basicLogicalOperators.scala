@@ -325,7 +325,7 @@ case class Generate(
       copy(child = newChild)
     } else {
       val newOut = AttributeMap[Int](newChild.output.zipWithIndex.map(x => x._1 -> x._2))
-      val unRequired = unrequiredChildOutput.map(x => newOut.getOrElse(x, -1)).filter(x => x > 0)
+      val unRequired = unrequiredChildOutput.flatMap(x => newOut.get(x))
       copy(child = newChild, unrequiredChildIndex = unRequired)
     }
   }
