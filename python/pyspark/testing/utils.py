@@ -287,7 +287,7 @@ class PySparkErrorTestUtils:
     ):
         query_context = exception.getQueryContext()
         assert bool(query_context) == (query_context_type is not None), (
-            f"`query_context_type` is required when QueryContext exists. "
+            "`query_context_type` is required when QueryContext exists. "
             f"QueryContext: {query_context}."
         )
         # Test if given error is an instance of PySparkException.
