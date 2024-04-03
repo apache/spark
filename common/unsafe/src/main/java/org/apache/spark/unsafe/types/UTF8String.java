@@ -998,6 +998,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
   }
 
+  /**
+   * This is a collation aware implementation of subStringIndex.
+   * @param delim The delimiter to search for.
+   * @param count The number of occurrences of the delimiter to search for.
+   * @param collationId The collation to use for comparison.
+   * @return The substring from string str before count occurrences of the delimiter delim.
+   * If count is positive, everything the left of the final delimiter (counting from left) is
+   * returned. If count is negative, every to the right of the final delimiter (counting from the
+   * right) is returned. subStringIndex performs a case-sensitive match when searching for delim.
+   */
   public UTF8String collationAwareSubStringIndex(UTF8String delim, int count, int collationId) {
     if (delim.numBytes == 0 || count == 0) {
       return EMPTY_UTF8;
