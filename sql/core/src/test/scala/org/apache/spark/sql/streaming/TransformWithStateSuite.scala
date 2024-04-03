@@ -810,7 +810,7 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     val result = inputData.toDS()
       .groupByKey(x => x.key)
       .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-        TTLMode.NoTTL(), TimeoutMode.NoTimeouts(), OutputMode.Append(), initDf
+        TimeoutMode.NoTimeouts(), TTLMode.NoTTL(), OutputMode.Append(), initDf
       )
     testStream(result, OutputMode.Update())(
       AddData(inputData, InitInputRow("a", "add", -1.0)),

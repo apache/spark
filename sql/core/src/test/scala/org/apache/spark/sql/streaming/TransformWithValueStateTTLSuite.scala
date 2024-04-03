@@ -180,7 +180,8 @@ class TransformWithValueStateTTLSuite
           .transformWithState(
             new ValueStateTTLProcessor(),
             TimeoutMode.NoTimeouts(),
-            TTLMode.ProcessingTimeTTL())
+            TTLMode.ProcessingTimeTTL(),
+            OutputMode.Append())
 
         val clock = new StreamManualClock
         testStream(result)(
@@ -245,7 +246,8 @@ class TransformWithValueStateTTLSuite
         .transformWithState(
           new ValueStateTTLProcessor(),
           TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL())
+          TTLMode.ProcessingTimeTTL(),
+          OutputMode.Append())
 
       val clock = new StreamManualClock
       testStream(result)(
@@ -306,7 +308,8 @@ class TransformWithValueStateTTLSuite
         .transformWithState(
           new ValueStateTTLProcessor(),
           TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL())
+          TTLMode.ProcessingTimeTTL(),
+          OutputMode.Append())
 
       val clock = new StreamManualClock
       testStream(result)(
@@ -365,7 +368,8 @@ class TransformWithValueStateTTLSuite
         .transformWithState(
           new ValueStateTTLProcessor(),
           TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL())
+          TTLMode.ProcessingTimeTTL(),
+          OutputMode.Append())
 
       val clock = new StreamManualClock
       testStream(result)(
@@ -424,7 +428,8 @@ class TransformWithValueStateTTLSuite
         .transformWithState(
           MultipleValueStatesTTLProcessor(ttlKey, noTtlKey),
           TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL())
+          TTLMode.ProcessingTimeTTL(),
+          OutputMode.Append())
 
       val clock = new StreamManualClock
       testStream(result)(
@@ -478,7 +483,8 @@ class TransformWithValueStateTTLSuite
           .transformWithState(
             new ValueStateTTLProcessor(),
             TimeoutMode.NoTimeouts(),
-            TTLMode.EventTimeTTL())
+            TTLMode.EventTimeTTL(),
+            OutputMode.Append())
 
         val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
         val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
@@ -534,7 +540,8 @@ class TransformWithValueStateTTLSuite
         .transformWithState(
           new ValueStateTTLProcessor(),
           TimeoutMode.NoTimeouts(),
-          TTLMode.EventTimeTTL())
+          TTLMode.EventTimeTTL(),
+          OutputMode.Append())
 
       val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
       val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
@@ -584,7 +591,8 @@ class TransformWithValueStateTTLSuite
         .transformWithState(
           new ValueStateTTLProcessor(),
           TimeoutMode.NoTimeouts(),
-          TTLMode.EventTimeTTL())
+          TTLMode.EventTimeTTL(),
+          OutputMode.Append())
 
       val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
       val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
@@ -630,7 +638,8 @@ class TransformWithValueStateTTLSuite
         .transformWithState(
           new ValueStateTTLProcessor(),
           TimeoutMode.NoTimeouts(),
-          TTLMode.EventTimeTTL())
+          TTLMode.EventTimeTTL(),
+          OutputMode.Append())
 
       val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
       val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
@@ -681,7 +690,8 @@ class TransformWithValueStateTTLSuite
         .transformWithState(
           new ValueStateTTLProcessor(),
           TimeoutMode.NoTimeouts(),
-          TTLMode.ProcessingTimeTTL())
+          TTLMode.ProcessingTimeTTL(),
+          OutputMode.Append())
 
       val clock = new StreamManualClock
       testStream(result)(

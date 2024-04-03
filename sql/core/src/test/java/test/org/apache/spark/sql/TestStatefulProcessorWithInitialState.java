@@ -17,6 +17,7 @@
 
 package test.org.apache.spark.sql;
 
+import java.time.Duration;
 import java.util.*;
 
 import scala.jdk.javaapi.CollectionConverters;
@@ -35,14 +36,17 @@ public class TestStatefulProcessorWithInitialState
   private transient ValueState<String> testState;
 
   @Override
-  public void init(OutputMode outputMode, TimeoutMode timeoutMode) {
+  public void init(
+      OutputMode outputMode,
+      TimeoutMode timeoutMode,
+      TTLMode ttlMode) {
     testState = this.getHandle().getValueState("testState",
       Encoders.STRING());
   }
 
   @Override
   public void handleInitialState(Integer key, String initialState, TimerValues timerValues) {
-    testState.update(initialState);
+    testState.update(initialState, Duration.ZERO);
   }
 
   @Override
