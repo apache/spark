@@ -328,66 +328,69 @@ class RangeKeyScanStateEncoder(
             writer.write(idx, bbuf.array())
 
           case ShortType =>
-            val signCol = if (value.asInstanceOf[Short] < 0) {
+            val shortVal = value.asInstanceOf[Short]
+            val signCol = if (shortVal < 0) {
               negativeValMarker
             } else {
               positiveValMarker
             }
             bbuf.put(signCol)
-            bbuf.putShort(value.asInstanceOf[Short])
+            bbuf.putShort(shortVal)
             writer.write(idx, bbuf.array())
 
           case IntegerType =>
-            val signCol = if (value.asInstanceOf[Int] < 0) {
+            val intVal = value.asInstanceOf[Int]
+            val signCol = if (intVal < 0) {
               negativeValMarker
             } else {
               positiveValMarker
             }
             bbuf.put(signCol)
-            bbuf.putInt(value.asInstanceOf[Int])
+            bbuf.putInt(intVal)
             writer.write(idx, bbuf.array())
 
           case LongType =>
-            val signCol = if (value.asInstanceOf[Long] < 0) {
+            val longVal = value.asInstanceOf[Long]
+            val signCol = if (longVal < 0) {
               negativeValMarker
             } else {
               positiveValMarker
             }
             bbuf.put(signCol)
-            bbuf.putLong(value.asInstanceOf[Long])
+            bbuf.putLong(longVal)
             writer.write(idx, bbuf.array())
 
           case FloatType =>
-            // for negative values, we need to flip all the bits to ensure correct ordering
-            val rawBits = floatToRawIntBits(value.asInstanceOf[Float])
+            val floatVal = value.asInstanceOf[Float]
+            val rawBits = floatToRawIntBits(floatVal)
             // perform sign comparison using bit manipulation to ensure NaN values are handled
             // correctly
             if ((rawBits & floatSignBitMask) != 0) {
-              // flip all the bits
+              // for negative values, we need to flip all the bits to ensure correct ordering
               val updatedVal = rawBits ^ floatFlipBitMask
               bbuf.put(negativeValMarker)
               // convert the bits back to float
               bbuf.putFloat(intBitsToFloat(updatedVal))
             } else {
               bbuf.put(positiveValMarker)
-              bbuf.putFloat(value.asInstanceOf[Float])
+              bbuf.putFloat(floatVal)
             }
             writer.write(idx, bbuf.array())
 
           case DoubleType =>
-            // for negative values, we need to flip all the bits to ensure correct ordering
-            val rawBits = doubleToRawLongBits(value.asInstanceOf[Double])
+            val doubleVal = value.asInstanceOf[Double]
+            val rawBits = doubleToRawLongBits(doubleVal)
             // perform sign comparison using bit manipulation to ensure NaN values are handled
             // correctly
             if ((rawBits & doubleSignBitMask) != 0) {
-              // flip all the bits
+              // for negative values, we need to flip all the bits to ensure correct ordering
               val updatedVal = rawBits ^ doubleFlipBitMask
               bbuf.put(negativeValMarker)
               // convert the bits back to double
               bbuf.putDouble(longBitsToDouble(updatedVal))
             } else {
               bbuf.put(positiveValMarker)
-              bbuf.putDouble(value.asInstanceOf[Double])
+              bbuf.putDouble(doubleVal)
             }
             writer.write(idx, bbuf.array())
         }

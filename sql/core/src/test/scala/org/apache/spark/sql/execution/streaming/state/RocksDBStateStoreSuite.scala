@@ -333,17 +333,19 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      var nanCnt = 0
-      val result = store.iterator(cfName).map { kv =>
+      // We expect to find NaNs at the beginning and end of the sorted list
+      var nanIndexSet = Set(0, 1, timerTimestamps.size - 2, timerTimestamps.size - 1)
+      val result = store.iterator(cfName).zipWithIndex.map { case (kv, idx) =>
         val keyRow = kv.key
         val key = (keyRow.getDouble(0), keyRow.getString(1))
         if (key._1.isNaN) {
-          nanCnt = nanCnt + 1
+          assert(nanIndexSet.contains(idx))
+          nanIndexSet -= idx
         }
         key._1
       }.toSeq
 
-      assert(nanCnt === 4)
+      assert(nanIndexSet.isEmpty)
       assert(result.filter(!_.isNaN) === timerTimestamps.sorted.filter(!_.isNaN))
       store.commit()
     }
