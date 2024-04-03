@@ -942,7 +942,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       // df1("i") is ambiguous as df1 appears in both join sides (df1_filter contains df1).
       df1.join(df1_filter, df1("i") === 1).collect()
     }
-    assert(e4.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+    assert(e4.getMessage.contains("AMBIGUOUS_COLUMN_OR_FIELD"))
 
     checkSameResult(
       Seq(Row("a")),
@@ -953,7 +953,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       // df1("i") is ambiguous as df1 appears in both sides of the first join.
       df1.join(df1_filter, df1_filter("i") === 1).join(df2, df1("i") === 1).collect()
     }
-    assert(e5.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
+    assert(e5.getMessage.contains("AMBIGUOUS_COLUMN_OR_FIELD"))
 
     checkSameResult(
       Seq(Row("a")),
