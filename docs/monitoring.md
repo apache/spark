@@ -1291,6 +1291,17 @@ These metrics are exposed by Spark executors.
   - shuffleRemoteBytesReadToDisk.count
   - shuffleTotalBytesRead.count
   - shuffleWriteTime.count
+  - Metrics related to push-based shuffle:
+    - shuffleCorruptMergedBlockChunks
+    - shuffleMergedFetchFallbackCount
+    - shuffleMergedRemoteBlocksFetched
+    - shuffleMergedLocalBlocksFetched
+    - shuffleMergedRemoteChunksFetched
+    - shuffleMergedLocalChunksFetched
+    - shuffleMergedRemoteBytesRead
+    - shuffleMergedLocalBytesRead
+    - shuffleRemoteReqsDuration
+    - shuffleMergedRemoteReqsDuration
   - succeededTasks.count
   - threadpool.activeTasks
   - threadpool.completeTasks
