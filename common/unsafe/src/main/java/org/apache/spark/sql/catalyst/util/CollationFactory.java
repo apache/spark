@@ -191,8 +191,8 @@ public final class CollationFactory {
   }
 
   public static StringSearch getStringSearch(
-          final UTF8String targetUTF8String,
-          final UTF8String patternUTF8String) {
+      final UTF8String targetUTF8String,
+      final UTF8String patternUTF8String) {
     String pattern = patternUTF8String.toString();
     String target = targetUTF8String.toString();
 
