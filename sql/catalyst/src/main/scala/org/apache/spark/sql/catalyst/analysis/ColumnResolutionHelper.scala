@@ -33,6 +33,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
 
+// scalastyle:off println
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   def conf: SQLConf
@@ -446,6 +447,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       plan: LogicalPlan,
       throws: Boolean = false,
       includeLastResort: Boolean = false): Expression = {
+    println()
+    println()
+    println(s"resolveExpressionByPlanOutput $expr")
+    println(plan)
+    println()
+    println()
     resolveExpression(
       tryResolveDataFrameColumns(expr, Seq(plan)),
       resolveColumnByName = nameParts => {
@@ -468,6 +475,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       e: Expression,
       q: LogicalPlan,
       includeLastResort: Boolean = false): Expression = {
+    println()
+    println()
+    println(s"resolveExpressionByPlanChildren $e")
+    println(q)
+    println()
+    println()
     resolveExpression(
       tryResolveDataFrameColumns(e, q.children),
       resolveColumnByName = nameParts => {
@@ -526,6 +539,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val planId = planIdOpt.get
     logDebug(s"Extract plan_id $planId from $u")
 
+    println()
+    println()
+    println(s"resolveDataFrameColumn $u $planId")
+    q.foreach(println)
+    println()
+    println()
+
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
     val (resolved, matched) = resolveDataFrameColumnByPlanId(u, planId, isMetadataAccess, q)
     if (!matched) {
@@ -543,7 +563,11 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       q: Seq[LogicalPlan]): (Option[NamedExpression], Boolean) = {
-    q.iterator.map(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _))
+    var c = q.filter(p => p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id))
+    if (c.isEmpty) {
+      c = q
+    }
+    c.iterator.map(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _))
       .foldLeft((Option.empty[NamedExpression], false)) {
         case ((r1, m1), (r2, m2)) =>
           if (r1.nonEmpty && r2.nonEmpty) {

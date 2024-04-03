@@ -103,7 +103,10 @@ abstract class LogicalPlan
    */
   lazy val resolved: Boolean = expressions.forall(_.resolved) && childrenResolved
 
-  override protected def statePrefix = if (!resolved) "'" else super.statePrefix
+  override protected def statePrefix = {
+    val p = if (!resolved) "'" else super.statePrefix
+    this.getTagValue(LogicalPlan.PLAN_ID_TAG).map(id => s"{#$id} $p").getOrElse(p)
+  }
 
   /**
    * Returns true if all its children of this query plan have been resolved.

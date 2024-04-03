@@ -27,6 +27,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
+// scalastyle:off println
 object RuleExecutor {
   protected val queryExecutionMeter = QueryExecutionMetering()
 
@@ -64,6 +65,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
         }
 
         logBasedOnLevel(message())
+        println(message())
       }
     }
   }
