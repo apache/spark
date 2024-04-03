@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
@@ -177,6 +178,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE test_bit_array (c1 bit(1)[], c2 bit(5)[])").executeUpdate()
     conn.prepareStatement("INSERT INTO test_bit_array VALUES (ARRAY[B'1', B'0'], " +
       "ARRAY[B'00001', B'00010'])").executeUpdate()
+
+    conn.prepareStatement(
+      """
+        |CREATE TYPE complex AS (
+        |    b       bool,
+        |    d       double precision
+        |)""".stripMargin).executeUpdate()
+    conn.prepareStatement("CREATE TABLE complex_table (c1 complex)").executeUpdate()
+    conn.prepareStatement("INSERT INTO complex_table VALUES (ROW(true, 1.0))").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -185,7 +195,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows.length == 2)
     // Test the types, and values using the first row.
     val types = rows(0).toSeq.map(x => x.getClass)
-    assert(types.length == 45)
+    assert(types.length == 42)
     assert(classOf[String].isAssignableFrom(types(0)))
     assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
     assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
@@ -492,5 +502,44 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val expected = Row(Array(true, false), Array(
       Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
     checkAnswer(df, expected)
+  }
+
+  test("SPARK-47691: multiple dimensional array") {
+    sql("select array(1, 2) as col0").write
+      .jdbc(jdbcUrl, "single_dim_array", new Properties)
+    checkAnswer(spark.read.jdbc(jdbcUrl, "single_dim_array", new Properties), Row(Seq(1, 2)))
+
+    sql("select array(array(1, 2), array(3, 4)) as col0").write
+      .jdbc(jdbcUrl, "double_dim_array", new Properties)
+    sql("select array(array(array(1, 2), array(3, 4)), array(array(5, 6), array(7, 8))) as col0")
+      .write.jdbc(jdbcUrl, "triple_dim_array", new Properties)
+    // Reading multi-dimensional array is not supported yet.
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read.jdbc(jdbcUrl, "double_dim_array", new Properties).collect()
+      },
+      errorClass = null)
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read.jdbc(jdbcUrl, "triple_dim_array", new Properties).collect()
+      },
+      errorClass = null)
+  }
+
+  test("SPARK-47701: Reading complex type") {
+    val df = spark.read.jdbc(jdbcUrl, "complex_table", new Properties)
+    checkAnswer(df, Row("(t,1)"))
+    val df2 = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT (c1).b, (c1).d FROM complex_table").load()
+    checkAnswer(df2, Row(true, 1.0d))
+  }
+
+  test("SPARK-47701: Range Types") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT '[3,7)'::int4range")
+      .load()
+    checkAnswer(df, Row("[3,7)"))
   }
 }
