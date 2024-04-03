@@ -848,7 +848,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     StringSearch stringSearch = CollationFactory.getStringSearch(this, substring, collationId);
-    stringSearch.setOverlapping(true);
     stringSearch.setIndex(start);
 
     return stringSearch.next();

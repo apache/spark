@@ -109,6 +109,7 @@ class CollationStringExpressionsSuite extends QueryTest
     testStringLocate("界X", "test大千世界X大千世界", 1, collationId, 8)
     testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
     // scalastyle:on
+
     collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
     testStringLocate("aa", "Aaads", 0, collationId, 0)
     testStringLocate("AA", "aaads", 1, collationId, 1)
@@ -125,6 +126,7 @@ class CollationStringExpressionsSuite extends QueryTest
     testStringLocate("大千", "test大千世界大千世界", 9, collationId, 9)
     testStringLocate("大千", "大千世界大千世界", 1, collationId, 1)
     // scalastyle:on
+
     collationId = CollationFactory.collationNameToId("UNICODE")
     testStringLocate("aa", "Aaads", 0, collationId, 0)
     testStringLocate("aa", "Aaads", 1, collationId, 2)
@@ -141,6 +143,7 @@ class CollationStringExpressionsSuite extends QueryTest
     testStringLocate("界X", "test大千世界X大千世界", 1, collationId, 8)
     testStringLocate("界", "test大千世界X大千世界", 13, collationId, 13)
     // scalastyle:on
+
     collationId = CollationFactory.collationNameToId("UNICODE_CI")
     testStringLocate("aa", "Aaads", 0, collationId, 0)
     testStringLocate("AA", "aaads", 1, collationId, 1)
