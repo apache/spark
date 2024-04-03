@@ -2002,16 +2002,10 @@ case class ArrayJoin(
   def this(array: Expression, delimiter: Expression, nullReplacement: Expression) =
     this(array, delimiter, Some(nullReplacement))
 
-  override def inputTypes: Seq[AbstractDataType] = {
-    val arrayType = array.dataType.asInstanceOf[ArrayType].elementType match {
-      case _: StringType => array.dataType
-      case _ => ArrayType(StringType)
-    }
-    if (nullReplacement.isDefined) {
-      Seq(arrayType, StringTypeAnyCollation, StringTypeAnyCollation)
-    } else {
-      Seq(arrayType, StringTypeAnyCollation)
-    }
+  override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
+    Seq(ArrayType, StringTypeAnyCollation, StringTypeAnyCollation)
+  } else {
+    Seq(ArrayType, StringTypeAnyCollation)
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
