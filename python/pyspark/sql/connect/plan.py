@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -2085,11 +2086,13 @@ class MapPartitions(LogicalPlan):
         function: "UserDefinedFunction",
         cols: List[str],
         is_barrier: bool,
+        profile: Optional[ResourceProfile],
     ) -> None:
         super().__init__(child)
 
         self._function = function._build_common_inline_user_defined_function(*cols)
         self._is_barrier = is_barrier
+        self._profile = profile
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
@@ -2097,6 +2100,8 @@ class MapPartitions(LogicalPlan):
         plan.map_partitions.input.CopyFrom(self._child.plan(session))
         plan.map_partitions.func.CopyFrom(self._function.to_plan_udf(session))
         plan.map_partitions.is_barrier = self._is_barrier
+        if self._profile is not None:
+            plan.map_partitions.profile_id = self._profile.id
         return plan
 
 

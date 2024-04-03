@@ -846,6 +846,12 @@ GROUP BY `<index>` refers to an expression `<aggExpr>` that contains an aggregat
 
 GROUP BY position `<index>` is not in select list (valid range is [1, `<size>`]).
 
+### GROUP_EXPRESSION_TYPE_IS_NOT_ORDERABLE
+
+[SQLSTATE: 42822](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The expression `<sqlExpr>` cannot be used as a grouping expression because its data type `<dataType>` is not an orderable data type.
+
 ### HLL_INVALID_INPUT_SKETCH_BUFFER
 
 [SQLSTATE: 22546](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1500,6 +1506,19 @@ Invalid usage of `<elem>` in `<prettyName>`.
 [SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Variable type must be string type but got `<varType>`.
+
+### INVALID_VARIANT_CAST
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The variant value ``<value>`` cannot be cast into ``<dataType>``. Please use `try_variant_get` instead.
+
+### INVALID_VARIANT_GET_PATH
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The path ``<path>`` is not a valid variant extraction path in ``<functionName>``.
+A valid path should start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
 
 ### INVALID_VIEW_TEXT
 

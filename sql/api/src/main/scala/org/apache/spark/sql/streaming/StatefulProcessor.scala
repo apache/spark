@@ -108,6 +108,8 @@ private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
    *
    * @param key - grouping key
    * @param initialState - A row in the initial state to be processed
+   * @param timerValues  - instance of TimerValues that provides access to current processing/event
+   *                     time if available
    */
-  def handleInitialState(key: K, initialState: S): Unit
+  def handleInitialState(key: K, initialState: S, timerValues: TimerValues): Unit
 }

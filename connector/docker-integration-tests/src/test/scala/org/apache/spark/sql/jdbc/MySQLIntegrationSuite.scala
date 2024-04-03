@@ -27,6 +27,7 @@ import scala.util.Using
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.ShortType
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -60,6 +61,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO numbers VALUES (b'0', b'1000100101', "
       + "17, 77777, 123456789, 123456789012345, 123456789012345.123456789012345, "
       + "42.75, 1.0000000000000002, -128)").executeUpdate()
+    conn.prepareStatement("INSERT INTO numbers VALUES (null, null, null, null, null," +
+      "null, null, null, null, null)").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE unsigned_numbers (" +
       "tiny TINYINT UNSIGNED, small SMALLINT UNSIGNED, med MEDIUMINT UNSIGNED," +
@@ -117,32 +120,35 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 10)
-    assert(types(0).equals("class java.lang.Boolean"))
-    assert(types(1).equals("class java.lang.Long"))
-    assert(types(2).equals("class java.lang.Short"))
-    assert(types(3).equals("class java.lang.Integer"))
-    assert(types(4).equals("class java.lang.Integer"))
-    assert(types(5).equals("class java.lang.Long"))
-    assert(types(6).equals("class java.math.BigDecimal"))
-    assert(types(7).equals("class java.lang.Float"))
-    assert(types(8).equals("class java.lang.Double"))
-    assert(types(9).equals("class java.lang.Byte"))
-    assert(rows(0).getBoolean(0) == false)
-    assert(rows(0).getLong(1) == 0x225)
-    assert(rows(0).getShort(2) == 17)
-    assert(rows(0).getInt(3) == 77777)
-    assert(rows(0).getInt(4) == 123456789)
-    assert(rows(0).getLong(5) == 123456789012345L)
+    val row = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties).head()
+    assert(row.length === 10)
+    assert(row(0).isInstanceOf[Boolean])
+    assert(row(1).isInstanceOf[Array[Byte]])
+    assert(row(2).isInstanceOf[Short])
+    assert(row(3).isInstanceOf[Int])
+    assert(row(4).isInstanceOf[Int])
+    assert(row(5).isInstanceOf[Long])
+    assert(row(6).isInstanceOf[BigDecimal])
+    assert(row(7).isInstanceOf[Float])
+    assert(row(8).isInstanceOf[Double])
+    assert(row(9).isInstanceOf[Byte])
+    assert(!row.getBoolean(0))
+    assert(java.util.Arrays.equals(row.getAs[Array[Byte]](1),
+      Array[Byte](49, 48, 49, 48, 48, 49, 48, 49)))
+    assert(row.getShort(2) == 17)
+    assert(row.getInt(3) == 77777)
+    assert(row.getInt(4) == 123456789)
+    assert(row.getLong(5) == 123456789012345L)
     val bd = new BigDecimal("123456789012345.12345678901234500000")
-    assert(rows(0).getAs[BigDecimal](6).equals(bd))
-    assert(rows(0).getFloat(7) == 42.75)
-    assert(rows(0).getDouble(8) == 1.0000000000000002)
-    assert(rows(0).getByte(9) == 0x80.toByte)
+    assert(row.getAs[BigDecimal](6).equals(bd))
+    assert(row.getFloat(7) == 42.75)
+    assert(row.getDouble(8) == 1.0000000000000002)
+    assert(row.getByte(9) == 0x80.toByte)
+    withSQLConf(SQLConf.LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED.key -> "true") {
+      val row = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties).head()
+      assert(row(1).isInstanceOf[Long])
+      assert(row.getLong(1) == 0x225)
+    }
   }
 
   test("SPARK-47462: Unsigned numeric types") {
@@ -333,6 +339,24 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df = spark.read.jdbc(jdbcUrl, "TBL_GEOMETRY", new Properties)
     checkAnswer(df,
       Row(Array[Byte](0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+  }
+
+  test("SPARK-47666: Check nulls for result set getters") {
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED.key -> flag) {
+        val nulls = spark.read.jdbc(jdbcUrl, "numbers", new Properties).tail(1).head
+        assert(nulls === Row(null, null, null, null, null, null, null, null, null, null))
+      }
+    }
+  }
+
+  test("SPARK-47665: Read/write round-trip for ShortType") {
+    spark.range(3)
+      .selectExpr("CAST(id AS SMALLINT) AS id")
+      .write
+      .jdbc(jdbcUrl, "smallint_round_trip", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "smallint_round_trip", new Properties)
+    assert(df.schema.fields.head.dataType === ShortType)
   }
 }
 

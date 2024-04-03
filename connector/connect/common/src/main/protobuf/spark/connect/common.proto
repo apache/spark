@@ -46,3 +46,38 @@ message ResourceInformation {
   // (Required) An array of strings describing the addresses of the resource.
   repeated string addresses = 2;
 }
+
+// An executor resource request.
+message ExecutorResourceRequest {
+  // (Required) resource name.
+  string resource_name = 1;
+
+  // (Required) resource amount requesting.
+  int64 amount = 2;
+
+  // Optional script used to discover the resources.
+  optional string discovery_script = 3;
+
+  // Optional vendor, required for some cluster managers.
+  optional string vendor = 4;
+}
+
+// A task resource request.
+message TaskResourceRequest {
+  // (Required) resource name.
+  string resource_name = 1;
+
+  // (Required) resource amount requesting as a double to support fractional
+  // resource requests.
+  double amount = 2;
+}
+
+message ResourceProfile {
+  // (Optional) Resource requests for executors. Mapped from the resource name
+  // (e.g., cores, memory, CPU) to its specific request.
+  map<string, ExecutorResourceRequest> executor_resources = 1;
+
+  // (Optional) Resource requests for tasks. Mapped from the resource name
+  // (e.g., cores, memory, CPU) to its specific request.
+  map<string, TaskResourceRequest> task_resources = 2;
+}

@@ -1282,6 +1282,68 @@ class Column:
             )
         return Column(jc)
 
+    def try_cast(self, dataType: Union[DataType, str]) -> "Column":
+        """
+        This is a special version of `cast` that performs the same operation, but returns a NULL
+        value instead of raising an error if the invoke method throws exception.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        dataType : :class:`DataType` or str
+            a DataType or Python string literal with a DDL-formatted string
+            to use when parsing the column to the same type.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing whether each element of Column is cast into new type.
+
+        Examples
+        --------
+        Example 1: Cast with a Datatype
+
+        >>> from pyspark.sql.types import LongType
+        >>> df = spark.createDataFrame(
+        ...      [(2, "123"), (5, "Bob"), (3, None)], ["age", "name"])
+        >>> df.select(df.name.try_cast(LongType())).show()
+        +----+
+        |name|
+        +----+
+        | 123|
+        |NULL|
+        |NULL|
+        +----+
+
+        Example 2: Cast with a DDL string
+
+        >>> df = spark.createDataFrame(
+        ...      [(2, "123"), (5, "Bob"), (3, None)], ["age", "name"])
+        >>> df.select(df.name.try_cast("double")).show()
+        +-----+
+        | name|
+        +-----+
+        |123.0|
+        | NULL|
+        | NULL|
+        +-----+
+        """
+        if isinstance(dataType, str):
+            jc = self._jc.try_cast(dataType)
+        elif isinstance(dataType, DataType):
+            from pyspark.sql import SparkSession
+
+            spark = SparkSession._getActiveSessionOrCreate()
+            jdt = spark._jsparkSession.parseDataType(dataType.json())
+            jc = self._jc.try_cast(jdt)
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+            )
+        return Column(jc)
+
     def astype(self, dataType: Union[DataType, str]) -> "Column":
         """
         :func:`astype` is an alias for :func:`cast`.

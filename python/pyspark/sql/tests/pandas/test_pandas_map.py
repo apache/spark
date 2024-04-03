@@ -31,7 +31,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest, eventually
+from pyspark.testing.utils import eventually
 
 if have_pandas:
     import pandas as pd
@@ -138,7 +138,7 @@ class MapInPandasTestsMixin:
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
     def test_other_than_dataframe_iter(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_other_than_dataframe_iter()
 
     def check_other_than_dataframe_iter(self):
@@ -163,7 +163,7 @@ class MapInPandasTestsMixin:
             (self.spark.range(10, numPartitions=3).mapInPandas(bad_iter_elem, "a int").count())
 
     def test_dataframes_with_other_column_names(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_dataframes_with_other_column_names()
 
     def check_dataframes_with_other_column_names(self):
@@ -185,7 +185,7 @@ class MapInPandasTestsMixin:
             )
 
     def test_dataframes_with_duplicate_column_names(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_dataframes_with_duplicate_column_names()
 
     def check_dataframes_with_duplicate_column_names(self):
@@ -208,7 +208,7 @@ class MapInPandasTestsMixin:
             )
 
     def test_dataframes_with_less_columns(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_dataframes_with_less_columns()
 
     def check_dataframes_with_less_columns(self):
@@ -247,7 +247,7 @@ class MapInPandasTestsMixin:
         self.assertEqual(actual, expected)
 
     def test_dataframes_with_incompatible_types(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_dataframes_with_incompatible_types()
 
     def check_dataframes_with_incompatible_types(self):
@@ -314,7 +314,7 @@ class MapInPandasTestsMixin:
         self.assertEqual(mapped.count(), 10)
 
     def test_empty_dataframes_with_less_columns(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_empty_dataframes_with_less_columns()
 
     def check_empty_dataframes_with_less_columns(self):
@@ -339,7 +339,7 @@ class MapInPandasTestsMixin:
         self.assertEqual(mapped.count(), 10)
 
     def test_empty_dataframes_with_other_columns(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_empty_dataframes_with_other_columns()
 
     def check_empty_dataframes_with_other_columns(self):

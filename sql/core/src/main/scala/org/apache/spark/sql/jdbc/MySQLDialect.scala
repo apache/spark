@@ -92,17 +92,21 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    def getCatalystTypeForBitArray: Option[DataType] = {
+      md.putLong("binarylong", 1)
+      if (conf.legacyMySqlBitArrayMappingEnabled) {
+        Some(LongType)
+      } else {
+        Some(BinaryType)
+      }
+    }
     sqlType match {
       case Types.VARBINARY if "BIT".equalsIgnoreCase(typeName) && size != 1 =>
         // MariaDB connector behaviour
-        // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
-        // byte arrays instead of longs.
-        md.putLong("binarylong", 1)
-        Some(LongType)
+        getCatalystTypeForBitArray
       case Types.BIT if size > 1 =>
         // MySQL connector behaviour
-        md.putLong("binarylong", 1)
-        Some(LongType)
+        getCatalystTypeForBitArray
       case Types.VARCHAR if "TINYTEXT".equalsIgnoreCase(typeName) =>
         // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
         Some(StringType)
@@ -215,6 +219,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
+    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     // scalastyle:off line.size.limit
     // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
     // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251

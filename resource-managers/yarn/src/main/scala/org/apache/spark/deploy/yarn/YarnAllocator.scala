@@ -40,7 +40,8 @@ import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONTAINER_ID, EXECUTOR_ID}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
@@ -789,7 +790,8 @@ private[yarn] class YarnAllocator(
                 getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
                 launchingExecutorContainerIds.remove(containerId)
                 if (NonFatal(e)) {
-                  logError(s"Failed to launch executor $executorId on container $containerId", e)
+                  logError(log"Failed to launch executor ${MDC(EXECUTOR_ID, executorId)} " +
+                    log"on container ${MDC(CONTAINER_ID, containerId)}", e)
                   // Assigned container should be released immediately
                   // to avoid unnecessary resource occupation.
                   amClient.releaseAssignedContainer(containerId)
