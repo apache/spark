@@ -32,7 +32,8 @@ import org.codehaus.janino.util.ClassFile
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
@@ -1561,9 +1562,9 @@ object CodeGenerator extends Logging {
   private def logGeneratedCode(code: CodeAndComment): Unit = {
     val maxLines = SQLConf.get.loggingMaxLinesForCodegen
     if (Utils.isTesting) {
-      logError(s"\n${CodeFormatter.format(code, maxLines)}")
+      logError(log"\n${MDC(FORMATTED_CODE, CodeFormatter.format(code, maxLines))}")
     } else {
-      logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
+      logInfo(log"\n${MDC(FORMATTED_CODE, CodeFormatter.format(code, maxLines))}")
     }
   }
 

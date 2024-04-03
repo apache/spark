@@ -32,6 +32,7 @@ object LogKey extends Enumeration {
   val MIN_SIZE = Value
   val REMOTE_ADDRESS = Value
   val POD_ID = Value
+  val FORMATTED_CODE = Value
 
   type LogKey = Value
 }
