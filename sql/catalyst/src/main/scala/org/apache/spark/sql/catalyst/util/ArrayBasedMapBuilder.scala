@@ -53,11 +53,13 @@ class ArrayBasedMapBuilder(keyType: DataType, valueType: DataType) extends Seria
 
   private val mapKeyDedupPolicy = SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY)
 
-  private lazy val keyNormalizer: Any => Any = keyType match {
-    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
-    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
-    case _ => identity
-  }
+  private lazy val keyNormalizer: Any => Any =
+    (SQLConf.get.getConf(SQLConf.DISABLE_MAP_KEY_NORMALIZATION), keyType) match {
+      case (false, FloatType) => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+      case (false, DoubleType) => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
+      case _ => identity
+    }
+
 
   def put(key: Any, value: Any): Unit = {
     if (key == null) {

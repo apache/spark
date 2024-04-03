@@ -22,6 +22,8 @@ import com.fasterxml.jackson.core.JsonGenerator;
 
 import java.io.CharArrayWriter;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.Arrays;
 
 import static org.apache.spark.types.variant.VariantUtil.*;
 
@@ -32,10 +34,19 @@ import static org.apache.spark.types.variant.VariantUtil.*;
 public final class Variant {
   private final byte[] value;
   private final byte[] metadata;
+  // The variant value doesn't use the whole `value` binary, but starts from its `pos` index and
+  // spans a size of `valueSize(value, pos)`. This design avoids frequent copies of the value binary
+  // when reading a sub-variant in the array/object element.
+  private final int pos;
 
   public Variant(byte[] value, byte[] metadata) {
+    this(value, metadata, 0);
+  }
+
+  Variant(byte[] value, byte[] metadata, int pos) {
     this.value = value;
     this.metadata = metadata;
+    this.pos = pos;
     // There is currently only one allowed version.
     if (metadata.length < 1 || (metadata[0] & VERSION_MASK) != VERSION) {
       throw malformedVariant();
@@ -48,18 +59,138 @@ public final class Variant {
   }
 
   public byte[] getValue() {
-    return value;
+    if (pos == 0) return value;
+    int size = valueSize(value, pos);
+    checkIndex(pos + size - 1, value.length);
+    return Arrays.copyOfRange(value, pos, pos + size);
   }
 
   public byte[] getMetadata() {
     return metadata;
   }
 
+  // Get a boolean value from the variant.
+  public boolean getBoolean() {
+    return VariantUtil.getBoolean(value, pos);
+  }
+
+  // Get a long value from the variant.
+  public long getLong() {
+    return VariantUtil.getLong(value, pos);
+  }
+
+  // Get a double value from the variant.
+  public double getDouble() {
+    return VariantUtil.getDouble(value, pos);
+  }
+
+  // Get a decimal value from the variant.
+  public BigDecimal getDecimal() {
+    return VariantUtil.getDecimal(value, pos);
+  }
+
+  // Get a string value from the variant.
+  public String getString() {
+    return VariantUtil.getString(value, pos);
+  }
+
+  // Get the value type of the variant.
+  public Type getType() {
+    return VariantUtil.getType(value, pos);
+  }
+
+  // Get the number of object fields in the variant.
+  // It is only legal to call it when `getType()` is `Type.OBJECT`.
+  public int objectSize() {
+    return handleObject(value, pos,
+        (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> size);
+  }
+
+  // Find the field value whose key is equal to `key`. Return null if the key is not found.
+  // It is only legal to call it when `getType()` is `Type.OBJECT`.
+  public Variant getFieldByKey(String key) {
+    return handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+      // Use linear search for a short list. Switch to binary search when the length reaches
+      // `BINARY_SEARCH_THRESHOLD`.
+      final int BINARY_SEARCH_THRESHOLD = 32;
+      if (size < BINARY_SEARCH_THRESHOLD) {
+        for (int i = 0; i < size; ++i) {
+          int id = readUnsigned(value, idStart + idSize * i, idSize);
+          if (key.equals(getMetadataKey(metadata, id))) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            return new Variant(value, metadata, dataStart + offset);
+          }
+        }
+      } else {
+        int low = 0;
+        int high = size - 1;
+        while (low <= high) {
+          // Use unsigned right shift to compute the middle of `low` and `high`. This is not only a
+          // performance optimization, because it can properly handle the case where `low + high`
+          // overflows int.
+          int mid = (low + high) >>> 1;
+          int id = readUnsigned(value, idStart + idSize * mid, idSize);
+          int cmp = getMetadataKey(metadata, id).compareTo(key);
+          if (cmp < 0) {
+            low = mid + 1;
+          } else if (cmp > 0) {
+            high = mid - 1;
+          } else {
+            int offset = readUnsigned(value, offsetStart + offsetSize * mid, offsetSize);
+            return new Variant(value, metadata, dataStart + offset);
+          }
+        }
+      }
+      return null;
+    });
+  }
+
+  public static final class ObjectField {
+    public final String key;
+    public final Variant value;
+
+    public ObjectField(String key, Variant value) {
+      this.key = key;
+      this.value = value;
+    }
+  }
+
+  // Get the object field at the `index` slot. Return null if `index` is out of the bound of
+  // `[0, objectSize())`.
+  // It is only legal to call it when `getType()` is `Type.OBJECT`.
+  public ObjectField getFieldAtIndex(int index) {
+    return handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+      if (index < 0 || index >= size) return null;
+      int id = readUnsigned(value, idStart + idSize * index, idSize);
+      int offset = readUnsigned(value, offsetStart + offsetSize * index, offsetSize);
+      String key = getMetadataKey(metadata, id);
+      Variant v = new Variant(value, metadata, dataStart + offset);
+      return new ObjectField(key, v);
+    });
+  }
+
+  // Get the number of array elements in the variant.
+  // It is only legal to call it when `getType()` is `Type.ARRAY`.
+  public int arraySize() {
+    return handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> size);
+  }
+
+  // Get the array element at the `index` slot. Return null if `index` is out of the bound of
+  // `[0, arraySize())`.
+  // It is only legal to call it when `getType()` is `Type.ARRAY`.
+  public Variant getElementAtIndex(int index) {
+    return handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+      if (index < 0 || index >= size) return null;
+      int offset = readUnsigned(value, offsetStart + offsetSize * index, offsetSize);
+      return new Variant(value, metadata, dataStart + offset);
+    });
+  }
+
   // Stringify the variant in JSON format.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public String toJson() {
     StringBuilder sb = new StringBuilder();
-    toJsonImpl(value, metadata, 0, sb);
+    toJsonImpl(value, metadata, pos, sb);
     return sb.toString();
   }
 

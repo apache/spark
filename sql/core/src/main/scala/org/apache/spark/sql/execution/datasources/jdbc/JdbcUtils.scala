@@ -24,6 +24,7 @@ import java.time.{Instant, LocalDate}
 import java.util
 import java.util.concurrent.TimeUnit
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -438,14 +439,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case LongType if metadata.contains("binarylong") =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
-        val bytes = rs.getBytes(pos + 1)
-        var ans = 0L
-        var j = 0
-        while (j < bytes.length) {
-          ans = 256 * ans + (255 & bytes(j))
-          j = j + 1
-        }
-        row.setLong(pos, ans)
+        val l = nullSafeConvert[Array[Byte]](rs.getBytes(pos + 1), bytes => {
+          var ans = 0L
+          var j = 0
+          while (j < bytes.length) {
+            ans = 256 * ans + (255 & bytes(j))
+            j = j + 1
+          }
+          ans
+        })
+        row.update(pos, l)
 
     case LongType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -666,20 +669,32 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case ArrayType(et, _) =>
       // remove type length parameters from end of type name
-      val typeName = getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0)
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         et match {
           case TimestampNTZType =>
             val array = row.getSeq[java.time.LocalDateTime](pos)
             val arrayType = conn.createArrayOf(
-              typeName,
+              getJdbcType(et, dialect).databaseTypeDefinition.split("\\(")(0),
               array.map(dialect.convertTimestampNTZToJavaTimestamp).toArray)
             stmt.setArray(pos + 1, arrayType)
           case _ =>
-            val array = row.getSeq[AnyRef](pos)
+            @tailrec
+            def getElementTypeName(dt: DataType): String = dt match {
+              case ArrayType(et0, _) => getElementTypeName(et0)
+              case a: AtomicType => getJdbcType(a, dialect).databaseTypeDefinition.split("\\(")(0)
+              case _ => throw QueryExecutionErrors.nestedArraysUnsupportedError()
+            }
+
+            def toArray(seq: scala.collection.Seq[Any], dt: DataType): Array[Any] = dt match {
+              case ArrayType(et0, _) =>
+                seq.map(i => toArray(i.asInstanceOf[scala.collection.Seq[Any]], et0)).toArray
+              case _ => seq.toArray
+            }
+
+            val seq = row.getSeq[AnyRef](pos)
             val arrayType = conn.createArrayOf(
-              typeName,
-              array.toArray)
+              getElementTypeName(et),
+              toArray(seq, et).asInstanceOf[Array[AnyRef]])
             stmt.setArray(pos + 1, arrayType)
         }
 

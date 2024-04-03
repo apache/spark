@@ -331,6 +331,23 @@ class Column:
 
     astype = cast
 
+    def try_cast(self, dataType: Union[DataType, str]) -> "Column":
+        if isinstance(dataType, (DataType, str)):
+            return Column(
+                CastExpression(
+                    expr=self._expr,
+                    data_type=dataType,
+                    eval_mode="try",
+                )
+            )
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+            )
+
+    try_cast.__doc__ = PySparkColumn.try_cast.__doc__
+
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
 
