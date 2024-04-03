@@ -703,6 +703,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   }
 
   test("Test logic for determining whether a query is semantically sorted") {
+    spark.sql("CREATE SCHEMA semantic_sort_test")
+    spark.sql("USE SCHEMA semantic_sort_test")
     withTable("t1", "t2") {
       spark.sql("CREATE TABLE t1(a int, b int) USING parquet")
       spark.sql("CREATE TABLE t2(a int, b int) USING parquet")
@@ -734,5 +736,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       assert(isSemanticallySorted(spark.sql(sortedWindowQuery).logicalPlan))
       assert(isSemanticallySorted(spark.sql(sortedDistinctQuery).logicalPlan))
     }
+    spark.sql("DROP SCHEMA semantic_sort_test")
   }
 }
