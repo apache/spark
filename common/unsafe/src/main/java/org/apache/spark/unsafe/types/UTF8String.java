@@ -1171,11 +1171,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int increase = Math.max(0, Math.abs(replace.numBytes - search.numBytes)) * 16;
     final UTF8StringBuilder buf = new UTF8StringBuilder(numBytes + increase);
     while (end != StringSearch.DONE) {
-      if(stringSearch.getMatchLength() == stringSearch.getPattern().length()) {
-        buf.appendBytes(this.base, this.offset + byteStart, byteEnd - byteStart);
-        buf.append(replace);
-        byteStart = byteEnd + search.numBytes;
-      }
+      buf.appendBytes(this.base, this.offset + byteStart, byteEnd - byteStart);
+      buf.append(replace);
+      byteStart = byteEnd + search.numBytes;
+      // Go to next match
       end = stringSearch.next();
       // Update byte positions
       while (byteEnd < numBytes && c < end) {
