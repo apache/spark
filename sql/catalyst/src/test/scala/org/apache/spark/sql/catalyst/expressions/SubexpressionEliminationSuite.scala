@@ -494,6 +494,21 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     checkShortcut(Or(equal, Literal(true)), 1)
     checkShortcut(Not(And(equal, Literal(false))), 1)
   }
+
+  test("SPARK-46632: Child expressions equivalent but not equal") {
+    import org.apache.spark.sql.catalyst.dsl.expressions.DslExpression
+    val equivalence = new EquivalentExpressions
+
+    val one = Literal(1.0)
+    val y: AttributeReference = AttributeReference("y", IntegerType)()
+    val e1 = If(
+      Literal(true),
+      y * one * one + one * one * y,
+      y * one * one + one * one * y
+    )
+    equivalence.addExprTree(e1)
+    assert(equivalence.getAllExprStates(1).size == 1)
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)
