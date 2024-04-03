@@ -81,7 +81,8 @@ class ExampleExpressionPlugin extends ExpressionPlugin {
       return Optional.empty()
     }
     val exp = rel.unpack(classOf[proto.ExamplePluginExpression])
-    Optional.of(Alias(planner.transformExpression(exp.getChild.toByteArray), exp.getCustomField)())
+    Optional.of(
+      Alias(planner.transformExpression(exp.getChild.toByteArray), exp.getCustomField)())
   }
 }
 
