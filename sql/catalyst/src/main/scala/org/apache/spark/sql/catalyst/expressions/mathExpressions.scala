@@ -451,7 +451,7 @@ case class Conv(
   override def second: Expression = fromBaseExpr
   override def third: Expression = toBaseExpr
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, IntegerType)
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
 
   override def nullSafeEval(num: Any, fromBase: Any, toBase: Any): Any = {
@@ -1002,7 +1002,7 @@ case class Bin(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def inputTypes: Seq[DataType] = Seq(LongType)
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
@@ -1110,7 +1110,7 @@ case class Hex(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, BinaryType, StringType))
 
-  override def dataType: DataType = StringType
+    override def dataType: DataType = SQLConf.get.defaultStringType
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])

@@ -155,7 +155,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 
   override def nullable: Boolean = true
   override def inputTypes: Seq[DataType] = Seq.fill(children.size)(StringType)
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "parse_url"
 
   // If the url is a constant, cache the URL object so that we don't need to convert url

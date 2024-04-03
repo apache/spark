@@ -177,7 +177,7 @@ case class SchemaOfCsv(
     child = child,
     options = ExprUtils.convertToMapData(options))
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 
@@ -300,7 +300,7 @@ case class StructsToCsv(
     (row: Any) => UTF8String.fromString(gen.writeToString(row.asInstanceOf[InternalRow]))
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

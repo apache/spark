@@ -104,7 +104,7 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   since = "3.1.0")
 case class CurrentTimeZone() extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "current_timezone"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
@@ -904,7 +904,7 @@ case class WeekOfYear(child: Expression) extends GetDateField {
 case class MonthName(child: Expression) extends GetDateField {
   override val func = DateTimeUtils.getMonthName
   override val funcName = "getMonthName"
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override protected def withNewChildInternal(newChild: Expression): MonthName =
     copy(child = newChild)
 }
@@ -923,7 +923,7 @@ case class DayName(child: Expression) extends GetDateField {
   override val funcName = "getDayName"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override protected def withNewChildInternal(newChild: Expression): DayName =
     copy(child = newChild)
 }
@@ -951,7 +951,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   def this(left: Expression, right: Expression) = this(left, right, None)
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
 
@@ -1429,7 +1429,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     this(unix, Literal(TimestampFormatter.defaultPattern()))
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)

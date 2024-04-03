@@ -21,8 +21,9 @@ import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInt}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
@@ -162,7 +163,7 @@ object AgnosticEncoders {
   // Enums are special leafs because we need to capture the class.
   protected abstract class EnumEncoder[E] extends AgnosticEncoder[E] {
     override def isPrimitive: Boolean = false
-    override def dataType: DataType = StringType
+    override def dataType: DataType = SqlApiConf.get.defaultStringType
   }
   case class ScalaEnumEncoder[T, E](
      parent: Class[T],

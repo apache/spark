@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -32,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String
 case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ToStringBase {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 

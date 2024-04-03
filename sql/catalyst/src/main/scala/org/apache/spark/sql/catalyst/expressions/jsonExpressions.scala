@@ -132,7 +132,7 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
@@ -820,7 +820,7 @@ case class StructsToJson(
     }
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
     case dt @ (_: StructType | _: MapType | _: ArrayType | _: VariantType) =>
@@ -869,7 +869,7 @@ case class SchemaOfJson(
       child = child,
       options = ExprUtils.convertToMapData(options))
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 

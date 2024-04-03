@@ -61,7 +61,7 @@ case class TestFunction(
     inputTypes: Seq[AbstractDataType])
   extends Expression with ImplicitCastInputTypes with Unevaluable {
   override def nullable: Boolean = true
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }
@@ -83,7 +83,7 @@ case class TestFunctionWithTypeCheckFailure(
   }
 
   override def nullable: Boolean = true
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
     copy(children = newChildren)
 }

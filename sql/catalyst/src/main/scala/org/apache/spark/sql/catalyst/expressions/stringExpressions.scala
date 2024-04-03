@@ -82,7 +82,7 @@ case class ConcatWs(children: Seq[Expression])
     StringType +: Seq.fill(children.size - 1)(arrayOrStr)
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = children.head.nullable
   override def foldable: Boolean = children.forall(_.foldable)
@@ -742,7 +742,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
     })
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
   override def first: Expression = srcExpr
   override def second: Expression = searchExpr
@@ -960,7 +960,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     })
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
   override def first: Expression = srcExpr
   override def second: Expression = matchingExpr
@@ -1020,7 +1020,7 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   protected def direction: String
 
   override def children: Seq[Expression] = srcStr +: trimStr.toSeq
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
 
   override def nullable: Boolean = children.exists(_.nullable)
@@ -1412,7 +1412,7 @@ case class StringInstr(str: Expression, substr: Expression)
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
   override def first: Expression = strExpr
   override def second: Expression = delimExpr
@@ -1715,7 +1715,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def foldable: Boolean = children.forall(_.foldable)
   override def nullable: Boolean = children(0).nullable
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def inputTypes: Seq[AbstractDataType] =
     StringType :: List.fill(children.size - 1)(AnyDataType)
@@ -1831,7 +1831,7 @@ case class InitCap(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullSafeEval(string: Any): Any = {
     // scalastyle:off caselocale
@@ -1895,7 +1895,7 @@ case class StringRepeat(str: Expression, times: Expression)
 case class StringSpace(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
   override def nullSafeEval(s: Any): Any = {
@@ -2337,7 +2337,7 @@ case class Levenshtein(
 case class SoundEx(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
 
@@ -2415,7 +2415,7 @@ case class Ascii(child: Expression)
 case class Chr(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
   protected override def nullSafeEval(lon: Any): Any = {
@@ -2464,7 +2464,7 @@ case class Chr(child: Expression)
 case class Base64(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(bytes: Any): Any = {
@@ -2689,7 +2689,7 @@ case class StringDecode(bin: Expression, charset: Expression, legacyCharsets: Bo
 
   override def left: Expression = bin
   override def right: Expression = charset
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(BinaryType, StringType)
 
   private val supportedCharsets = Set(
@@ -2946,7 +2946,7 @@ case class FormatNumber(x: Expression, d: Expression)
 
   override def left: Expression = x
   override def right: Expression = d
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(NumericType, TypeCollection(IntegerType, StringType))

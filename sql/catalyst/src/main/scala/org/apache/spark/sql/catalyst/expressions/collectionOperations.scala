@@ -2149,7 +2149,7 @@ case class ArrayJoin(
     }
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def prettyName: String = "array_join"
 }
