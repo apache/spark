@@ -152,7 +152,7 @@ case class DataSourceV2ScanRelation(
   override def name: String = relation.name
 
   override def simpleString(maxFields: Int): String = {
-    s"RelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
+    s"ScanRelationV2${truncatedString(output, "[", ", ", "]", maxFields)} $name"
   }
 
   override def computeStats(): Statistics = {
