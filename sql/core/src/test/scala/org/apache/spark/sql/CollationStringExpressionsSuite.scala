@@ -105,6 +105,9 @@ class CollationStringExpressionsSuite extends QueryTest
 
     var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
     testFindInSet("AB", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("abc", "abc,b,ab,c,def", collationId, 1)
+    testFindInSet("def", "abc,b,ab,c,def", collationId, 5)
+    testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
 
     collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
     testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
@@ -112,11 +115,13 @@ class CollationStringExpressionsSuite extends QueryTest
     testFindInSet("AB", "abc,b,ab,c,def", collationId, 3)
     testFindInSet("AbC", "abc,b,ab,c,def", collationId, 1)
     testFindInSet("abcd", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
 
     collationId = CollationFactory.collationNameToId("UNICODE")
     testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
     testFindInSet("ab", "abc,b,ab,c,def", collationId, 3)
     testFindInSet("Ab", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
 
     collationId = CollationFactory.collationNameToId("UNICODE_CI")
     testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
