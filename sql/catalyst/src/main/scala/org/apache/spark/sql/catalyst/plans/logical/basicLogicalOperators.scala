@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedAttribute, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -321,17 +321,12 @@ case class Generate(
    * @return
    */
   override protected def withNewChildInternal(newChild: LogicalPlan): Generate = {
-    if (unrequiredChildIndex.isEmpty) {
+    if (!child.resolved || unrequiredChildIndex.isEmpty) {
       copy(child = newChild)
     } else {
-      val unrequired = if (child.output.exists(x => x.isInstanceOf[UnresolvedAttribute])) {
-        // or the unit test will fail
-        Seq()
-      } else {
-        val newOut = AttributeMap[Int](newChild.output.zipWithIndex.map(x => x._1 -> x._2))
-        unrequiredChildOutput.map(x => newOut.getOrElse(x, -1)).filter(x => x > 0)
-      }
-      copy(child = newChild, unrequiredChildIndex = unrequired)
+      val newOut = AttributeMap[Int](newChild.output.zipWithIndex.map(x => x._1 -> x._2))
+      val unRequired = unrequiredChildOutput.map(x => newOut.getOrElse(x, -1)).filter(x => x > 0)
+      copy(child = newChild, unrequiredChildIndex = unRequired)
     }
   }
 }
