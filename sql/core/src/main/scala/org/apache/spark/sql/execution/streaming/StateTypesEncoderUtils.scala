@@ -60,10 +60,10 @@ class StateTypesEncoder[GK, V](
   /** Variables reused for conversions between byte array and UnsafeRow */
   private val keyProjection = UnsafeProjection.create(KEY_ROW_SCHEMA)
   private val valueProjection = if (hasTtl) {
-      UnsafeProjection.create(VALUE_ROW_SCHEMA_WITH_TTL)
-    } else {
-      UnsafeProjection.create(VALUE_ROW_SCHEMA)
-    }
+    UnsafeProjection.create(VALUE_ROW_SCHEMA_WITH_TTL)
+  } else {
+    UnsafeProjection.create(VALUE_ROW_SCHEMA)
+  }
 
   /** Variables reused for value conversions between spark sql and object */
   private val valExpressionEnc = encoderFor(valEncoder)

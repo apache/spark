@@ -355,6 +355,63 @@ class TransformWithValueStateTTLSuite
     }
   }
 
+  test("validate state is evicted at ttl expiry for no data batch" +
+    " - processing time ttl") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+    classOf[RocksDBStateStoreProvider].getName) {
+      val inputStream = MemoryStream[InputEvent]
+      val result = inputStream.toDS()
+        .groupByKey(x => x.key)
+        .transformWithState(
+          new ValueStateTTLProcessor(),
+          TimeoutMode.NoTimeouts(),
+          TTLMode.ProcessingTimeTTL())
+
+      val clock = new StreamManualClock
+      testStream(result)(
+        StartStream(
+          Trigger.ProcessingTime("1 second"),
+          triggerClock = clock),
+        AddData(inputStream, InputEvent("k1", "put", 1, Duration.ofMinutes(1))),
+        // advance clock to trigger processing
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        // get this state, and make sure we get unexpired value
+        AddData(inputStream, InputEvent("k1", "get", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
+        // ensure ttl values were added correctly
+        AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
+        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, 61000)),
+        Execute("beforeNoDataBatch") { q =>
+          logWarning(s"before running a no data batch ${q.lastProgress.batchId}")
+        },
+        // advance clock so that state expires
+        AdvanceManualClock(60 * 1000),
+        // run a no data batch
+        CheckNewAnswer(),
+        Execute("noDataBatch") { q =>
+          logWarning(s"running a no data batch ${q.lastProgress.batchId}")
+        },
+        AddData(inputStream, InputEvent("k1", "get", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        // validate expired value is not returned
+        CheckNewAnswer(),
+        // ensure this state does not exist any longer in State
+        AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer()
+      )
+    }
+  }
+
   test("validate multiple value states - processing time ttl") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
@@ -512,6 +569,53 @@ class TransformWithValueStateTTLSuite
         CheckNewAnswer(),
         AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null, eventTime2)),
         ProcessAllAvailable()
+      )
+    }
+  }
+
+  test("validate state is evicted at ttl expiry for no data batch" +
+    " - event time ttl") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      val inputStream = MemoryStream[InputEvent]
+      val result = inputStream.toDS()
+        .withWatermark("eventTime", "1 minutes")
+        .groupByKey(x => x.key)
+        .transformWithState(
+          new ValueStateTTLProcessor(),
+          TimeoutMode.NoTimeouts(),
+          TTLMode.EventTimeTTL())
+
+      val eventTime1 = Timestamp.valueOf("2024-01-01 00:00:00")
+      val eventTime2 = Timestamp.valueOf("2024-01-01 00:02:00")
+      val ttlExpiration = Timestamp.valueOf("2024-01-01 00:03:00")
+      val ttlExpirationMs = ttlExpiration.getTime
+      val eventTime3 = Timestamp.valueOf("2024-01-01 00:05:00")
+
+      testStream(result)(
+        AddData(inputStream,
+          InputEvent("k1", "put", 1, null, eventTime1, ttlExpiration)),
+        CheckNewAnswer(),
+        // get this state, and make sure we get unexpired value
+        AddData(inputStream, InputEvent("k1", "get", -1, null, eventTime2)),
+        CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
+        // ensure ttl values were added correctly, and move watermark for next
+        // batch to eventTime3
+        AddData(inputStream,
+          InputEvent("k1", "get_ttl_value_from_state", -1, null, eventTime3),
+          InputEvent("k1", "get_values_in_ttl_state", -1, null, eventTime3)),
+        CheckNewAnswer(OutputEvent("k1", -1, isTTLValue = true, ttlExpirationMs),
+          OutputEvent("k1", -1, isTTLValue = true, ttlExpirationMs)),
+        // run a no data batch
+        CheckNewAnswer(),
+        // validate that k1 has expired
+        AddData(inputStream, InputEvent("k1", "get", -1, null, eventTime3)),
+        CheckNewAnswer(),
+        // ensure this state does not exist any longer in State
+        AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null, eventTime3)),
+        CheckNewAnswer(),
+        AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null, eventTime3)),
+        CheckNewAnswer()
       )
     }
   }
