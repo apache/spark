@@ -25,7 +25,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.OPTIMIZER_CLASS_NAME
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
@@ -271,9 +272,9 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
         optimizer, initialSolution)
 
     if (rawCoefficients == null) {
-      val msg = s"${optimizer.getClass.getName} failed."
+      val msg = log"${MDC(OPTIMIZER_CLASS_NAME, optimizer.getClass.getName)} failed."
       instr.logError(msg)
-      throw new SparkException(msg)
+      throw new SparkException(msg.message)
     }
 
     val coefficientArray = Array.tabulate(numFeatures) { i =>

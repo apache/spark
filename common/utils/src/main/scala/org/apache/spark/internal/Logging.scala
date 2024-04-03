@@ -49,6 +49,8 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
     resultMap.putAll(mdc.context)
     MessageWithContext(message + mdc.message, resultMap)
   }
+
+  override def toString: String = message
 }
 
 /**
@@ -117,7 +119,7 @@ trait Logging {
     }
   }
 
-  private def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
+  protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
     val threadContext = CloseableThreadContext.putAll(context)
     try {
       body

@@ -18,7 +18,8 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CATEGORICAL_FEATURES, MAX_CATEGORIES}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
@@ -175,8 +176,10 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
         maxCategories: Int,
         categoricalFeatures: Set[Int]): Unit = {
       val collectedData = data.collect().map(_.getAs[Vector](0))
-      val errMsg = s"checkCategoryMaps failed for input with maxCategories=$maxCategories," +
-        s" categoricalFeatures=${categoricalFeatures.mkString(", ")}"
+
+      val errMsg = log"checkCategoryMaps failed for input with " +
+        log"maxCategories=${MDC(MAX_CATEGORIES, maxCategories)} " +
+        log"categoricalFeatures=${MDC(CATEGORICAL_FEATURES, categoricalFeatures.mkString(", "))}"
       try {
         val vectorIndexer = getIndexer.setMaxCategories(maxCategories)
         val model = vectorIndexer.fit(data)
