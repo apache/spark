@@ -19,6 +19,7 @@ package org.apache.spark.unsafe.types;
 import org.apache.spark.SparkException;
 import org.apache.spark.sql.catalyst.util.CollationFactory;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 
