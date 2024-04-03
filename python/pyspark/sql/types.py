@@ -250,18 +250,22 @@ class StringType(AtomicType):
 
     Parameters
     ----------
-    collationId : int
-        the collation id number.
+    collation : str
+        name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UCS_BASIC", "UCS_BASIC_LCASE", "UNICODE", "UNICODE_CI"]
+    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
 
-    def __init__(self, collationId: int = 0):
-        self.collationId = collationId
+    def __init__(self, collation: Optional[str] = None):
+        self.collationId = 0 if collation is None else self.collationNameToId(collation)
+
+    @classmethod
+    def fromCollationId(self, collationId: int) -> "StringType":
+        return StringType(StringType.collationNames[collationId])
 
     def collationIdToName(self) -> str:
         return (
-            " COLLATE '%s'" % StringType.collationNames[self.collationId]
+            " collate %s" % StringType.collationNames[self.collationId]
             if self.collationId != 0
             else ""
         )
@@ -277,7 +281,11 @@ class StringType(AtomicType):
         return "string" + self.collationIdToName()
 
     def __repr__(self) -> str:
-        return "StringType(%d)" % (self.collationId) if self.collationId != 0 else "StringType()"
+        return (
+            "StringType('%s')" % StringType.collationNames[self.collationId]
+            if self.collationId != 0
+            else "StringType()"
+        )
 
 
 class CharType(AtomicType):
@@ -443,21 +451,21 @@ class FloatType(FractionalType, metaclass=DataTypeSingleton):
 
 
 class ByteType(IntegralType):
-    """Byte data type, i.e. a signed integer in a single byte."""
+    """Byte data type, representing signed 8-bit integers."""
 
     def simpleString(self) -> str:
         return "tinyint"
 
 
 class IntegerType(IntegralType):
-    """Int data type, i.e. a signed 32-bit integer."""
+    """Int data type, representing signed 32-bit integers."""
 
     def simpleString(self) -> str:
         return "int"
 
 
 class LongType(IntegralType):
-    """Long data type, i.e. a signed 64-bit integer.
+    """Long data type, representing signed 64-bit integers.
 
     If the values are beyond the range of [-9223372036854775808, 9223372036854775807],
     please use :class:`DecimalType`.
@@ -468,7 +476,7 @@ class LongType(IntegralType):
 
 
 class ShortType(IntegralType):
-    """Short data type, i.e. a signed 16-bit integer."""
+    """Short data type, representing signed 16-bit integers."""
 
     def simpleString(self) -> str:
         return "smallint"
@@ -1486,7 +1494,7 @@ _all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dic
     (v.typeName(), v) for v in _complex_types
 )
 
-_COLLATED_STRING = re.compile(r"string\s+COLLATE\s+'([\w_]+)'")
+_COLLATED_STRING = re.compile(r"string\s+collate\s+([\w_]+|`[\w_]`)")
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
@@ -1654,7 +1662,7 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             return CalendarIntervalType()
         elif _COLLATED_STRING.match(json_value):
             m = _COLLATED_STRING.match(json_value)
-            return StringType(StringType.collationNameToId(m.group(1)))  # type: ignore[union-attr]
+            return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]

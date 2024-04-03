@@ -76,7 +76,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE identifierReference                                          #use
     | USE namespace identifierReference                                #useNamespace
-    | SET CATALOG (identifier | stringLit)                             #setCatalog
+    | SET CATALOG (errorCapturingIdentifier | stringLit)                  #setCatalog
     | CREATE namespace (IF NOT EXISTS)? identifierReference
         (commentSpec |
          locationSpec |
@@ -388,10 +388,11 @@ describeFuncName
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
+    | BANG
     ;
 
 describeColName
-    : nameParts+=identifier (DOT nameParts+=identifier)*
+    : nameParts+=errorCapturingIdentifier (DOT nameParts+=errorCapturingIdentifier)*
     ;
 
 ctes
@@ -428,7 +429,7 @@ property
     ;
 
 propertyKey
-    : identifier (DOT identifier)*
+    : errorCapturingIdentifier (DOT errorCapturingIdentifier)*
     | stringLit
     ;
 
@@ -682,18 +683,18 @@ pivotClause
     ;
 
 pivotColumn
-    : identifiers+=identifier
-    | LEFT_PAREN identifiers+=identifier (COMMA identifiers+=identifier)* RIGHT_PAREN
+    : identifiers+=errorCapturingIdentifier
+    | LEFT_PAREN identifiers+=errorCapturingIdentifier (COMMA identifiers+=errorCapturingIdentifier)* RIGHT_PAREN
     ;
 
 pivotValue
-    : expression (AS? identifier)?
+    : expression (AS? errorCapturingIdentifier)?
     ;
 
 unpivotClause
     : UNPIVOT nullOperator=unpivotNullClause? LEFT_PAREN
         operator=unpivotOperator
-      RIGHT_PAREN (AS? identifier)?
+      RIGHT_PAREN (AS? errorCapturingIdentifier)?
     ;
 
 unpivotNullClause
@@ -735,7 +736,7 @@ unpivotColumn
     ;
 
 unpivotAlias
-    : AS? identifier
+    : AS? errorCapturingIdentifier
     ;
 
 lateralView
@@ -946,7 +947,7 @@ expressionSeq
     ;
 
 booleanExpression
-    : NOT booleanExpression                                        #logicalNot
+    : (NOT | BANG) booleanExpression                               #logicalNot
     | EXISTS LEFT_PAREN query RIGHT_PAREN                          #exists
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
@@ -1096,7 +1097,7 @@ colPosition
     ;
 
 collateClause
-    : COLLATE collationName=stringLit
+    : COLLATE collationName=identifier
     ;
 
 type
@@ -1187,7 +1188,7 @@ complexColTypeList
     ;
 
 complexColType
-    : identifier COLON? dataType (NOT NULL)? commentSpec?
+    : errorCapturingIdentifier COLON? dataType (NOT NULL)? commentSpec?
     ;
 
 whenClause

@@ -180,6 +180,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       UpdateAttributeNullability) ::
     Batch("Pullup Correlated Expressions", Once,
       OptimizeOneRowRelationSubquery,
+      PullOutNestedDataOuterRefExpressions,
       PullupCorrelatedPredicates) ::
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
@@ -243,6 +244,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
+    Batch("InsertMapSortInGroupingExpressions", Once,
+      InsertMapSortInGroupingExpressions) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
@@ -328,6 +331,44 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // Do not optimize DPP subquery, as it was created from optimized plan and we should not
       // optimize it again, to save optimization time and avoid breaking broadcast/subquery reuse.
       case d: DynamicPruningSubquery => d
+      case s @ ScalarSubquery(a @ Aggregate(group, _, child), _, _, _, _, mayHaveCountBug)
+        if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
+          mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
+        // This is a subquery with an aggregate that may suffer from a COUNT bug.
+        // Detailed COUNT bug detection is done at a later stage (e.g. in
+        // RewriteCorrelatedScalarSubquery).
+        // Make sure that the output plan always has the same aggregate node
+        // (i.e., it is not being constant folded).
+        // Note that this does not limit optimization opportunities for the subquery: after
+        // decorrelation is done, the subquery's body becomes part of the main plan and all
+        // optimization rules are applied again.
+        val projectOverAggregateChild = Project(a.references.toSeq, child)
+        val optimizedPlan = Optimizer.this.execute(Subquery.fromExpression(
+          s.withNewPlan(projectOverAggregateChild)))
+        assert(optimizedPlan.isInstanceOf[Subquery])
+        val optimizedInput = optimizedPlan.asInstanceOf[Subquery].child
+
+        assert(optimizedInput.output.size == projectOverAggregateChild.output.size)
+        // We preserve the top aggregation, but its input has been optimized via
+        // Optimizer.execute().
+        // Make sure that the attributes still have IDs expected by the Aggregate node
+        // by inserting a project if necessary.
+        val needProject = projectOverAggregateChild.output.zip(optimizedInput.output).exists {
+          case (oldAttr, newAttr) => oldAttr.exprId != newAttr.exprId
+        }
+        if (needProject) {
+          val updatedProjectList = projectOverAggregateChild.output.zip(optimizedInput.output).map {
+            case (oldAttr, newAttr) => Alias(newAttr, newAttr.name)(exprId = oldAttr.exprId)
+          }
+          s.withNewPlan(a.withNewChildren(Seq(Project(updatedProjectList, optimizedInput))))
+        } else {
+          // Remove the top-level project if it is trivial. We do it to minimize plan changes.
+          optimizedInput match {
+            case Project(projectList, input) if projectList.forall(_.isInstanceOf[Attribute]) =>
+              s.withNewPlan(a.withNewChildren(Seq(input)))
+            case _ => s.withNewPlan(a.withNewChildren(Seq(optimizedInput)))
+          }
+        }
       case s: SubqueryExpression =>
         val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
         // At this point we have an optimized subquery plan that we are going to attach
@@ -1667,9 +1708,9 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
     case Filter(Literal(null, _), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     case Filter(Literal(false, BooleanType), child) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>

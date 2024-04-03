@@ -193,6 +193,12 @@ abstract class AbstractCommandBuilder {
     boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
     String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
     if (jarsDir != null) {
+      // Place slf4j-api-* jar first to be robust
+      for (File f: new File(jarsDir).listFiles()) {
+        if (f.getName().startsWith("slf4j-api-")) {
+          addToClassPath(cp, f.toString());
+        }
+      }
       addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }
 

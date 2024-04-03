@@ -58,7 +58,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest, assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual
 
 if have_pandas:
     import pandas as pd
@@ -544,7 +544,7 @@ class ScalarPandasUDFTestsMixin:
                 )
 
     def test_vectorized_udf_nested_struct(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_nested_struct()
 
     def check_vectorized_udf_nested_struct(self):
@@ -631,7 +631,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected.collect(), res.collect())
 
     def test_vectorized_udf_exception(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_exception()
 
     def check_vectorized_udf_exception(self):
@@ -648,7 +648,7 @@ class ScalarPandasUDFTestsMixin:
                 df.select(raise_exception(col("id"))).collect()
 
     def test_vectorized_udf_invalid_length(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_invalid_length()
 
     def check_vectorized_udf_invalid_length(self):
@@ -723,7 +723,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected, actual)
 
     def test_vectorized_udf_wrong_return_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_wrong_return_type()
 
     def check_vectorized_udf_wrong_return_type(self):
@@ -735,7 +735,7 @@ class ScalarPandasUDFTestsMixin:
                 pandas_udf(lambda x: x, ArrayType(YearMonthIntervalType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_return_scalar()
 
     def check_vectorized_udf_return_scalar(self):
@@ -1039,7 +1039,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertTrue(result1["plus_ten(rand)"].equals(result1["rand"] + 10))
 
     def test_nondeterministic_vectorized_udf_in_aggregate(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_nondeterministic_analysis_exception()
 
     def check_nondeterministic_analysis_exception(self):
@@ -1100,7 +1100,7 @@ class ScalarPandasUDFTestsMixin:
             )
 
     def test_scalar_iter_udf_close(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_scalar_iter_udf_close()
 
     def check_scalar_iter_udf_close(self):
@@ -1135,7 +1135,7 @@ class ScalarPandasUDFTestsMixin:
                     assert generator_exit_caught, "Generator exit exception was not caught."
                     open(tmp_file, "a").close()
 
-            with QuietTest(self.sc):
+            with self.quiet():
                 with self.sql_conf(
                     {
                         "spark.sql.execution.arrow.maxRecordsPerBatch": 1,

@@ -266,11 +266,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("expression" -> toSQLExpr(trimmedNestedGenerator)))
   }
 
-  def moreThanOneGeneratorError(generators: Seq[Expression], clause: String): Throwable = {
+  def moreThanOneGeneratorError(generators: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
       messageParameters = Map(
-        "clause" -> clause,
         "num" -> generators.size.toString,
         "generators" -> generators.map(toSQLExpr).mkString(", ")))
   }
@@ -621,28 +620,42 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("prettyName" -> toSQLId(prettyName), "syntax" -> toSQLStmt(syntax)))
   }
 
-  def nonDeterministicFilterInAggregateError(): Throwable = {
+  def subqueryExpressionInLambdaOrHigherOrderFunctionNotAllowedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1024",
+      errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.HIGHER_ORDER_FUNCTION",
       messageParameters = Map.empty)
   }
 
-  def nonBooleanFilterInAggregateError(): Throwable = {
+  def nonDeterministicFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1025",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
+      messageParameters = Map("filterExpr" -> toSQLExpr(filterExpr)))
   }
 
-  def aggregateInAggregateFilterError(): Throwable = {
+  def nonBooleanFilterInAggregateError(filterExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1026",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
+      messageParameters = Map("filterExpr" -> toSQLExpr(filterExpr)))
   }
 
-  def windowFunctionInAggregateFilterError(): Throwable = {
+  def aggregateInAggregateFilterError(
+      filterExpr: Expression,
+      aggExpr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1027",
-      messageParameters = Map.empty)
+      errorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
+      messageParameters = Map(
+        "filterExpr" -> toSQLExpr(filterExpr),
+        "aggExpr" -> toSQLExpr(aggExpr)))
+  }
+
+  def windowFunctionInAggregateFilterError(
+      filterExpr: Expression,
+      windowExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
+      messageParameters = Map(
+        "filterExpr" -> toSQLExpr(filterExpr),
+        "windowExpr" -> toSQLExpr(windowExpr)))
   }
 
   def distinctInverseDistributionFunctionUnsupportedError(funcName: String): Throwable = {
@@ -1710,10 +1723,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "partColumns" -> targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")))
   }
 
-  def cannotWriteDataToRelationsWithMultiplePathsError(): Throwable = {
+  def cannotWriteDataToRelationsWithMultiplePathsError(paths: Seq[Path]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1148",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_INSERT.MULTI_PATH",
+      messageParameters = Map(
+        "paths" -> paths.mkString("[", ",", "]")))
   }
 
   def failedToRebuildExpressionError(filter: Filter): Throwable = {
@@ -1867,6 +1881,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "sortCol" -> sortCol,
         "normalizedPartCols" -> normalizedPartCols.mkString(", ")))
+  }
+
+  def invalidBucketColumnDataTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_BUCKET_COLUMN_DATA_TYPE",
+      messageParameters = Map("type" -> toSQLType(dataType)))
   }
 
   def requestedPartitionsMismatchTablePartitionsError(
@@ -3960,6 +3980,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("varType" -> toSQLType(dataType)))
   }
 
+  def nullSQLStringExecuteImmediate(varName: String): Throwable = {
+    throw new AnalysisException(
+      errorClass = "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+      messageParameters = Map("varName" -> toSQLId(varName)))
+  }
+
   def invalidStatementForExecuteInto(queryString: String): Throwable = {
     throw new AnalysisException(
       errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
@@ -3995,5 +4021,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("name" -> toSQLExpr(e)),
       origin = e.origin
     )
+  }
+
+  private def callDeprecatedMethodError(oldMethod: String, newMethod: String): Throwable = {
+    SparkException.internalError(s"The method `$oldMethod` is deprecated, " +
+      s"please use `$newMethod` instead.")
+  }
+
+  def createTableDeprecatedError(): Throwable = {
+    callDeprecatedMethodError("createTable(..., StructType, ...)",
+      "createTable(..., Array[Column], ...)")
   }
 }

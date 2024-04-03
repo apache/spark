@@ -103,6 +103,11 @@ object DataSourceManager extends Logging {
         val maybeResult = try {
           Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())
         } catch {
+          case e: Throwable if e.toString.contains(
+              "ModuleNotFoundError: No module named 'pyspark'") =>
+            // If PySpark is not in the Python path at all, suppress the warning
+            // To make it less noisy, see also SPARK-47311.
+            None
           case e: Throwable =>
             // Even if it fails for whatever reason, we shouldn't make the whole
             // application fail.

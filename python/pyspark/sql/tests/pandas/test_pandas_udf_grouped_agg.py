@@ -40,7 +40,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest, assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 if have_pandas:
@@ -176,7 +176,7 @@ class GroupedAggPandasUDFTestsMixin:
         assert_frame_equal(expected4.toPandas(), result4.toPandas())
 
     def test_unsupported_types(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_unsupported_types()
 
     def check_unsupported_types(self):
@@ -501,7 +501,7 @@ class GroupedAggPandasUDFTestsMixin:
         self.assertEqual(result1.first()["v2"], [1.0, 2.0])
 
     def test_invalid_args(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_invalid_args()
 
     def check_invalid_args(self):

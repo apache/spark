@@ -455,19 +455,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         fragment = fragment3,
         start = 16,
         stop = 40))
-
-    val sql4 = "select interval '.1111111111' second"
-    val value4 = "Error parsing ' .1111111111 second' to interval, " +
-      "interval can only support nanosecond precision, '.1111111111' is out of range"
-    val fragment4 = "'.1111111111' second"
-    checkError(
-      exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0062",
-      parameters = Map("msg" -> value4),
-      context = ExpectedContext(
-        fragment = fragment4,
-        start = 16,
-        stop = 35))
   }
 
   test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {

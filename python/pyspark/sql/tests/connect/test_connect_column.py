@@ -813,12 +813,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             ).toPandas(),
         )
 
-        # TODO(SPARK-41762): make __neg__ return the correct column name
-        # [left]:  Index(['negative(a)'], dtype='object')
-        # [right]: Index(['(- a)'], dtype='object')
         self.assert_eq(
-            cdf.select((-cdf.a).alias("x")).toPandas(),
-            sdf.select((-sdf.a).alias("x")).toPandas(),
+            cdf.select((-cdf.a)).toPandas(),
+            sdf.select((-sdf.a)).toPandas(),
         )
 
         self.assert_eq(

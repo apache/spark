@@ -383,6 +383,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         db.load(version, readOnly = true)
         assert(db.iterator().map(toStr).toSet === Set((version.toString, version.toString)))
       }
+
+      // recommit 60 to ensure that acquireLock is released for maintenance
+      for (version <- 60 to 60) {
+        db.load(version - 1)
+        db.put(version.toString, version.toString)
+        db.remove((version - 1).toString)
+        db.commit()
+      }
       // Check that snapshots and changelogs get purged correctly.
       db.doMaintenance()
       assert(snapshotVersionsPresent(remoteDir) === Seq(30, 60))
@@ -536,6 +544,147 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithColumnFamilies(s"RocksDB: column family creation with invalid names",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      Seq("default", "", " ", "    ", " default", " default ").foreach { colFamilyName =>
+        val ex = intercept[SparkUnsupportedOperationException] {
+          db.createColFamilyIfAbsent(colFamilyName)
+        }
+
+        if (!colFamiliesEnabled) {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+            parameters = Map(
+              "operationType" -> "create_col_family",
+              "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+            ),
+            matchPVals = true
+          )
+        } else {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_CANNOT_USE_COLUMN_FAMILY_WITH_INVALID_NAME",
+            parameters = Map(
+              "operationName" -> "create_col_family",
+              "colFamilyName" -> colFamilyName
+            ),
+            matchPVals = true
+          )
+        }
+      }
+    }
+  }
+
+  testWithColumnFamilies(s"RocksDB: column family creation with reserved chars",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      Seq("_internal", "_test", "_test123", "__12345").foreach { colFamilyName =>
+        val ex = intercept[SparkUnsupportedOperationException] {
+          db.createColFamilyIfAbsent(colFamilyName)
+        }
+
+        if (!colFamiliesEnabled) {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+            parameters = Map(
+              "operationType" -> "create_col_family",
+              "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+            ),
+            matchPVals = true
+          )
+        } else {
+          checkError(
+            ex,
+            errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+            parameters = Map(
+              "colFamilyName" -> colFamilyName
+            ),
+            matchPVals = true
+          )
+        }
+      }
+    }
+  }
+
+
+  private def verifyStoreOperationUnsupported(
+      operationName: String,
+      colFamiliesEnabled: Boolean,
+      colFamilyName: String)
+      (testFn: => Unit): Unit = {
+    val ex = intercept[SparkUnsupportedOperationException] {
+      testFn
+    }
+
+    if (!colFamiliesEnabled) {
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION",
+        parameters = Map(
+          "operationType" -> operationName,
+          "entity" -> "multiple column families disabled in RocksDBStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+    } else {
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        parameters = Map(
+          "operationType" -> operationName,
+          "colFamilyName" -> colFamilyName
+        ),
+        matchPVals = true
+      )
+    }
+  }
+
+  testWithColumnFamilies(s"RocksDB: operations on absent column family",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete() // to make sure that the directory gets created
+
+    val conf = RocksDBConf().copy()
+    withDB(remoteDir, conf = conf, useColumnFamilies = colFamiliesEnabled) { db =>
+      db.load(0)
+      val colFamilyName = "test"
+      verifyStoreOperationUnsupported("put", colFamiliesEnabled, colFamilyName) {
+        db.put("a", "1", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("remove", colFamiliesEnabled, colFamilyName) {
+        db.remove("a", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("get", colFamiliesEnabled, colFamilyName) {
+        db.get("a", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("iterator", colFamiliesEnabled, colFamilyName) {
+        db.iterator(colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("merge", colFamiliesEnabled, colFamilyName) {
+        db.merge("a", "1", colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("prefixScan", colFamiliesEnabled, colFamilyName) {
+        db.prefixScan("a", colFamilyName)
+      }
+    }
+  }
+
   testWithColumnFamilies(s"RocksDB: get, put, iterator, commit, load " +
     s"with multiple column families",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
@@ -545,13 +694,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val colFamily2: String = "xyz"
 
     val conf = RocksDBConf().copy()
-    withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
-      val ex = intercept[Exception] {
-        db.createColFamilyIfAbsent("default")
-      }
-      ex.getCause.isInstanceOf[UnsupportedOperationException]
-    }
-
     withDB(remoteDir, conf = conf, useColumnFamilies = true) { db =>
       db.createColFamilyIfAbsent(colFamily1)
       db.createColFamilyIfAbsent(colFamily2)
@@ -572,7 +714,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     withDB(remoteDir, conf = conf, version = 0, useColumnFamilies = true) { db =>
-      val ex = intercept[Exception] {
+      val ex = intercept[SparkUnsupportedOperationException] {
         // version 0 can be loaded again
         assert(toStr(db.get("a", colFamily1)) === null)
         assert(iterator(db, colFamily1).isEmpty)
@@ -581,8 +723,15 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         assert(toStr(db.get("a", colFamily2)) === null)
         assert(iterator(db, colFamily2).isEmpty)
       }
-      assert(ex.isInstanceOf[RuntimeException])
-      assert(ex.getMessage.contains("does not exist"))
+      checkError(
+        ex,
+        errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_ON_MISSING_COLUMN_FAMILY",
+        parameters = Map(
+          "operationType" -> "get",
+          "colFamilyName" -> colFamily1
+        ),
+        matchPVals = true
+      )
     }
 
     withDB(remoteDir, conf = conf, version = 1, useColumnFamilies = true) { db =>
@@ -1196,6 +1345,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
           parameters = Map(
             "loggingId" -> "\\[Thread-\\d+\\]",
+            "operationType" -> "load_store",
             "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
             "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
             "timeWaitedMs" -> "\\d+",
@@ -1223,6 +1373,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           errorClass = "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR",
           parameters = Map(
             "loggingId" -> "\\[Thread-\\d+\\]",
+            "operationType" -> "load_store",
             "newAcquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
             "acquiredThreadInfo" -> "\\[ThreadId: Some\\(\\d+\\)\\]",
             "timeWaitedMs" -> "\\d+",
@@ -1773,6 +1924,35 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     withDB(remoteDir, version = 4, conf = conf) { db =>
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("time travel 4 -" +
+    " validate successful RocksDB load") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = dbConf.copy(minDeltasForSnapshot = 2, compactOnCommit = false)
+    new File(remoteDir).delete() // to make sure that the directory gets created
+    withDB(remoteDir, conf = conf) { db =>
+      for (version <- 0 to 1) {
+        db.load(version)
+        db.put(version.toString, version.toString)
+        db.commit()
+      }
+
+      // load previous version, and recreate the snapshot
+      db.load(1)
+      db.put("3", "3")
+
+      // do maintenance - upload any latest snapshots so far
+      // would fail to acquire lock and no snapshots would be uploaded
+      db.doMaintenance()
+      db.commit()
+      // upload newly created snapshot 2.zip
+      db.doMaintenance()
+    }
+
+    // reload version 2 - should succeed
+    withDB(remoteDir, version = 2, conf = conf) { db =>
     }
   }
 

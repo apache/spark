@@ -55,7 +55,8 @@ object OrcUtils extends Logging {
     OrcCompressionCodec.ZLIB.name() -> ".zlib",
     OrcCompressionCodec.ZSTD.name() -> ".zstd",
     OrcCompressionCodec.LZ4.name() -> ".lz4",
-    OrcCompressionCodec.LZO.name() -> ".lzo")
+    OrcCompressionCodec.LZO.name() -> ".lzo",
+    OrcCompressionCodec.BROTLI.name() -> ".brotli")
 
   val CATALYST_TYPE_ATTRIBUTE_NAME = "spark.sql.catalyst.type"
 
@@ -303,6 +304,10 @@ object OrcUtils extends Logging {
         case t: TimestampType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, t.typeName)
+          Some(typeDesc)
+        case _: StringType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.STRING)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, StringType.typeName)
           Some(typeDesc)
         case _ => None
       }

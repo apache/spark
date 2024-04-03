@@ -160,6 +160,8 @@ String Functions
     char
     char_length
     character_length
+    collate
+    collation
     concat_ws
     contains
     decode
@@ -530,6 +532,7 @@ JSON Functions
     json_array_length
     json_object_keys
     json_tuple
+    parse_json
     schema_of_json
     to_json
 

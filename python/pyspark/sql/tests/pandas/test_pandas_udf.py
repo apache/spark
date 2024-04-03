@@ -30,7 +30,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 
 @unittest.skipIf(
@@ -126,7 +125,7 @@ class PandasUDFTestsMixin:
         self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
     def test_udf_wrong_arg(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_udf_wrong_arg()
 
             with self.assertRaises(ParseException):

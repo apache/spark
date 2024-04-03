@@ -93,11 +93,13 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   override def testUpdateColumnType(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID INTEGER)")
     var t = spark.table(tbl)
-    var expectedSchema = new StructType().add("ID", IntegerType, true, defaultMetadata)
+    var expectedSchema = new StructType()
+      .add("ID", IntegerType, true, defaultMetadata(IntegerType))
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    expectedSchema = new StructType()
+      .add("ID", StringType, true, defaultMetadata())
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val sql1 = s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER"
@@ -124,5 +126,21 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
         sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
       },
       errorClass = "_LEGACY_ERROR_TEMP_2271")
+  }
+
+  test("SPARK-47440: SQLServer does not support boolean expression in binary comparison") {
+    val df1 = sql("SELECT name FROM " +
+      s"$catalogName.employee WHERE ((name LIKE 'am%') = (name LIKE '%y'))")
+    assert(df1.collect().length == 4)
+
+    val df2 = sql("SELECT name FROM " +
+      s"$catalogName.employee " +
+      "WHERE ((name NOT LIKE 'am%') = (name NOT LIKE '%y'))")
+    assert(df2.collect().length == 4)
+
+    val df3 = sql("SELECT name FROM " +
+      s"$catalogName.employee " +
+      "WHERE (dept > 1 AND ((name LIKE 'am%') = (name LIKE '%y')))")
+    assert(df3.collect().length == 3)
   }
 }

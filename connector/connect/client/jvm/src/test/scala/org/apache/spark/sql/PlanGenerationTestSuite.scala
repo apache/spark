@@ -871,6 +871,10 @@ class PlanGenerationTestSuite
     fn.col("a").cast("long")
   }
 
+  columnTest("try_cast") {
+    fn.col("a").try_cast("long")
+  }
+
   orderColumnTest("desc") {
     fn.col("b").desc
   }
@@ -1816,6 +1820,14 @@ class PlanGenerationTestSuite
 
   functionTest("hours") {
     fn.hours(Column("a"))
+  }
+
+  functionTest("collate") {
+    fn.collate(fn.col("g"), "UNICODE")
+  }
+
+  functionTest("collation") {
+    fn.collation(fn.col("g"))
   }
 
   temporalFunctionTest("convert_timezone with source time zone") {

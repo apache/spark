@@ -37,8 +37,8 @@ import org.apache.spark.sql.types._
     Examples:
       > SET spark.sql.collation.enabled=true;
       spark.sql.collation.enabled	true
-      > SELECT COLLATION('Spark SQL' _FUNC_ 'UCS_BASIC_LCASE');
-      UCS_BASIC_LCASE
+      > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_BINARY_LCASE);
+      UTF8_BINARY_LCASE
       > SET spark.sql.collation.enabled=false;
       spark.sql.collation.enabled	false
   """,
@@ -82,7 +82,7 @@ case class Collate(child: Expression, collationName: String)
   extends UnaryExpression with ExpectsInputTypes {
   private val collationId = CollationFactory.collationNameToId(collationName)
   override def dataType: DataType = StringType(collationId)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
 
   override protected def withNewChildInternal(
     newChild: Expression): Expression = copy(newChild)
@@ -105,7 +105,7 @@ case class Collate(child: Expression, collationName: String)
       > SET spark.sql.collation.enabled=true;
       spark.sql.collation.enabled	true
       > SELECT _FUNC_('Spark SQL');
-      UCS_BASIC
+      UTF8_BINARY
       > SET spark.sql.collation.enabled=false;
       spark.sql.collation.enabled	false
   """,

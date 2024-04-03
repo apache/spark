@@ -362,6 +362,13 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           case other => failAnalysis(s"Cannot use ${other.catalogString} for sorting column")
         }
 
+        schema.filter(f => normalizedBucketSpec.bucketColumnNames.contains(f.name))
+          .foreach { field =>
+            if (!BucketingUtils.canBucketOn(field.dataType)) {
+              throw QueryCompilationErrors.invalidBucketColumnDataTypeError(field.dataType)
+            }
+          }
+
         Some(normalizedBucketSpec)
 
       case None => None

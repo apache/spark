@@ -141,20 +141,39 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
+      envVars: Map[String, String],
+      useDaemon: Boolean): (PythonWorker, Option[Long]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
-      pythonWorkers.getOrElseUpdate(key,
-        new PythonWorkerFactory(pythonExec, workerModule, daemonModule, envVars)).create()
+      val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
+          pythonExec, workerModule, daemonModule, envVars, useDaemon))
+      if (workerFactory.useDaemonEnabled != useDaemon) {
+        throw SparkException.internalError("PythonWorkerFactory is already created with " +
+          s"useDaemon = ${workerFactory.useDaemonEnabled}, but now is requested with " +
+          s"useDaemon = $useDaemon. This is not allowed to change after the PythonWorkerFactory " +
+          s"is created given the same key: $key.")
+      }
+      workerFactory.create()
     }
   }
 
   private[spark] def createPythonWorker(
       pythonExec: String,
       workerModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
+      envVars: Map[String, String],
+      useDaemon: Boolean): (PythonWorker, Option[Long]) = {
     createPythonWorker(
-      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars)
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
+  }
+
+  private[spark] def createPythonWorker(
+      pythonExec: String,
+      workerModule: String,
+      daemonModule: String,
+      envVars: Map[String, String]): (PythonWorker, Option[Long]) = {
+    val useDaemon = conf.get(Python.PYTHON_USE_DAEMON)
+    createPythonWorker(
+      pythonExec, workerModule, daemonModule, envVars, useDaemon)
   }
 
   private[spark] def destroyPythonWorker(
