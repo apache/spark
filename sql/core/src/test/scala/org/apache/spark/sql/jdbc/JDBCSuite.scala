@@ -953,6 +953,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(DoubleType))
     assert(mySqlDialect.getCatalystType(java.sql.Types.FLOAT, "FLOAT", 1, metadata) ===
       Some(DoubleType))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.CHAR, "JSON", Int.MaxValue, metadata) ===
+      Some(StringType))
   }
 
   test("SPARK-35446: MySQLDialect type mapping of float") {
