@@ -569,8 +569,8 @@ case class EnsureRequirements(
   }
 
   private def reduceCommonPartValues(commonPartValues: Seq[(InternalRow, Int)],
-    expressions: Seq[Expression],
-    reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
+      expressions: Seq[Expression],
+      reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
     reducers match {
       case Some(reducers) => commonPartValues.groupBy { case (row, _) =>
         KeyGroupedShuffleSpec.reducePartitionValue(row, expressions, reducers)

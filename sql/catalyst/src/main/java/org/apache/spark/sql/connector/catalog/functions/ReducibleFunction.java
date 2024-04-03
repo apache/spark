@@ -61,12 +61,12 @@ import org.apache.spark.annotation.Evolving;
 public interface ReducibleFunction<I, O> {
 
   /**
-   * This method is for parameterized functions.
+   * This method is for the bucket function.
    *
-   * If this parameterized function is 'reducible' on another bucket function,
+   * If this bucket function is 'reducible' on another bucket function,
    * return the {@link Reducer} function.
    * <p>
-   * Example to return reducer for reducing f_source = bucket(4, x) on f_target = bucket(2, x)
+   * For example, to return reducer for reducing f_source = bucket(4, x) on f_target = bucket(2, x)
    * <ul>
    *     <li>thisBucketFunction = bucket</li>
    *     <li>thisNumBuckets = 4</li>
@@ -79,10 +79,10 @@ public interface ReducibleFunction<I, O> {
    * @param otherNumBuckets parameter for the other function
    * @return a reduction function if it is reducible, null if not
    */
-  default Reducer<I, O> bucketReducer(
-    int thisNumBuckets,
-    ReducibleFunction<?, ?> otherBucketFunction,
-    int otherNumBuckets) {
+  default Reducer<I, O> reducer(
+      int thisNumBuckets,
+      ReducibleFunction<?, ?> otherBucketFunction,
+      int otherNumBuckets) {
     throw new UnsupportedOperationException();
   }
 
@@ -100,7 +100,7 @@ public interface ReducibleFunction<I, O> {
    * @param otherFunction the other function
    * @return a reduction function if it is reducible, null if not.
    */
-  default Reducer<I, O> bucketReducer(ReducibleFunction<?, ?> otherFunction) {
+  default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
     throw new UnsupportedOperationException();
   }
 }

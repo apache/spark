@@ -96,14 +96,15 @@ case class TransformExpression(
   }
 
   // Return a Reducer for a reducible function on another reducible function
-  private def reducer(thisFunction: ReducibleFunction[_, _],
-    thisNumBucketsOpt: Option[Int],
-    otherFunction: ReducibleFunction[_, _],
-    otherNumBucketsOpt: Option[Int]): Option[Reducer[_, _]] = {
+  private def reducer(
+      thisFunction: ReducibleFunction[_, _],
+      thisNumBucketsOpt: Option[Int],
+      otherFunction: ReducibleFunction[_, _],
+      otherNumBucketsOpt: Option[Int]): Option[Reducer[_, _]] = {
     val res = (thisNumBucketsOpt, otherNumBucketsOpt) match {
       case (Some(numBuckets), Some(otherNumBuckets)) =>
-        thisFunction.bucketReducer(numBuckets, otherFunction, otherNumBuckets)
-      case _ => thisFunction.bucketReducer(otherFunction)
+        thisFunction.reducer(numBuckets, otherFunction, otherNumBuckets)
+      case _ => thisFunction.reducer(otherFunction)
     }
     Option(res)
   }

@@ -881,9 +881,9 @@ case class KeyGroupedShuffleSpec(
 
 object KeyGroupedShuffleSpec {
   def reducePartitionValue(
-    row: InternalRow,
-    expressions: Seq[Expression],
-    reducers: Seq[Option[Reducer[_, _]]]):
+      row: InternalRow,
+      expressions: Seq[Expression],
+      reducers: Seq[Option[Reducer[_, _]]]):
     InternalRowComparableWrapper = {
     val partitionVals = row.toSeq(expressions.map(_.dataType))
     val reducedRow = partitionVals.zip(reducers).map{
