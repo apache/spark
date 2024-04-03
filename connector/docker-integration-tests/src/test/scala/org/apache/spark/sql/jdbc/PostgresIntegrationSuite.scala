@@ -534,4 +534,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("query", "SELECT (c1).b, (c1).d FROM complex_table").load()
     checkAnswer(df2, Row(true, 1.0d))
   }
+
+  test("SPARK-47701: Range Types") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT '[3,7)'::int4range")
+      .load()
+    checkAnswer(df, Row("[3,7)"))
+  }
 }
