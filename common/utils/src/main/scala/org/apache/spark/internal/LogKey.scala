@@ -31,7 +31,8 @@ object LogKey extends Enumeration {
   val MAX_SIZE = Value
   val MIN_SIZE = Value
   val REMOTE_ADDRESS = Value
-  val POD_ID = Value
+  val KUBERNETES_NAMESPACE = Value
+  val KUBERNETES_POD_NAME = Value
 
   type LogKey = Value
 }

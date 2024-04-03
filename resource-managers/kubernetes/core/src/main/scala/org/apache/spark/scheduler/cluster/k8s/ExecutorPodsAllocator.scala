@@ -533,8 +533,10 @@ class ExecutorPodsAllocator(
       currentTime - creationTime > executorIdleTimeout
     } catch {
       case e: Exception =>
-        logError(log"Cannot get the creationTimestamp of the pod: " +
-          log"${MDC(LogKey.POD_ID, state.pod)}", e)
+        logError(log"Cannot get the creationTimestamp of the pod " +
+          log"${MDC(LogKey.KUBERNETES_POD_NAME, state.pod.getMetadata.getName)} in namespace " +
+          log"${MDC(LogKey.KUBERNETES_NAMESPACE, state.pod.getMetadata.getNamespace)}. " +
+          log"Resource details: ${state.pod}", e)
         true
     }
   }

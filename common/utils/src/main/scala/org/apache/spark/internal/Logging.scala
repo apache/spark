@@ -97,20 +97,23 @@ trait Logging {
   }
 
   implicit class LogStringContext(val sc: StringContext) {
-    def log(args: MDC*): MessageWithContext = {
+    def log(args: Any*): MessageWithContext = {
       val processedParts = sc.parts.iterator
       val sb = new StringBuilder(processedParts.next())
       val context = new java.util.HashMap[String, String]()
 
-      args.foreach { mdc =>
-        sb.append(mdc.value.toString)
-        if (Logging.isStructuredLoggingEnabled) {
-          context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value.toString)
-        }
+      args.foreach {
+        case mdc: MDC =>
+          sb.append(mdc.value.toString)
+          if (Logging.isStructuredLoggingEnabled) {
+            context.put(mdc.key.toString.toLowerCase(Locale.ROOT), mdc.value.toString)
+          }
 
-        if (processedParts.hasNext) {
-          sb.append(processedParts.next())
-        }
+          if (processedParts.hasNext) {
+            sb.append(processedParts.next())
+          }
+        case any: Any =>
+          sb.append(any)
       }
 
       MessageWithContext(sb.toString(), context)
