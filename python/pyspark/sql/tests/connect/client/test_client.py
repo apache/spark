@@ -111,7 +111,6 @@ if should_test_connect:
                 print("increment")
                 self.release_until_calls += 1
 
-
     class MockService:
         # Simplest mock of the SparkConnectService.
         # If this needs more complex logic, it needs to be replaced with Python mocking.
