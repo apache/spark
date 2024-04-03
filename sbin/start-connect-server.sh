@@ -38,10 +38,4 @@ fi
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
-if [ "$1" == "--wait" ]; then
-  shift
-  exec "${SPARK_HOME}"/bin/spark-submit --class $CLASS 1 --name "Spark Connect Server" "$@"
-else
-  exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Spark Connect server" "$@"
-fi
-
+exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Spark Connect server" "$@"
