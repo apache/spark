@@ -145,20 +145,21 @@ def _capture_call_site(fragment: str) -> None:
     """
     from pyspark.sql.session import SparkSession
 
-    spark = SparkSession._getActiveSessionOrCreate()
-    assert spark._jvm is not None
+    spark = SparkSession.getActiveSession()
+    if spark is not None:
+        assert spark._jvm is not None
 
-    stack = inspect.stack()
-    frame_info = stack[-1]
-    filename = frame_info.filename
-    lineno = frame_info.lineno
-    call_site = f"{filename}:{lineno}"
+        stack = inspect.stack()
+        frame_info = stack[-1]
+        filename = frame_info.filename
+        lineno = frame_info.lineno
+        call_site = f"{filename}:{lineno}"
 
-    pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
-    pyspark_origin.set(fragment, call_site)
+        pyspark_origin = spark._jvm.org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+        pyspark_origin.set(fragment, call_site)
 
 
-def with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
+def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     A decorator to capture and provide the call site information to the server side
     when PySpark API functions are invoked.
@@ -176,9 +177,9 @@ def with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
 
 def with_origin_to_class(cls: Type[T]) -> Type[T]:
     """
-    Decorate all methods of a class with `with_origin` to capture call site information.
+    Decorate all methods of a class with `_with_origin` to capture call site information.
     """
     for name, method in cls.__dict__.items():
         if callable(method) and name != "__init__":
-            setattr(cls, name, with_origin(method))
+            setattr(cls, name, _with_origin(method))
     return cls
