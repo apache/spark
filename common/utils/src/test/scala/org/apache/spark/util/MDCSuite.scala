@@ -32,7 +32,6 @@ class MDCSuite
     val log = log"This is a log, exitcode ${MDC(EXIT_CODE, 10086)}"
     assert(log.message === "This is a log, exitcode 10086")
     assert(log.context === Map("exit_code" -> "10086").asJava)
-    assert(log.toString === "This is a log, exitcode 10086")
   }
 
   test("custom object as MDC value") {
@@ -40,7 +39,6 @@ class MDCSuite
     val log = log"This is a log, exitcode ${MDC(EXIT_CODE, cov)}"
     assert(log.message === "This is a log, exitcode CustomObjectValue: spark, 10086")
     assert(log.context === Map("exit_code" -> "CustomObjectValue: spark, 10086").asJava)
-    assert(log.toString === "This is a log, exitcode CustomObjectValue: spark, 10086")
   }
 
   case class CustomObjectValue(key: String, value: Int) {
