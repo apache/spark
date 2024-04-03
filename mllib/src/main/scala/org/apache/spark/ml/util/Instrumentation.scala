@@ -27,7 +27,7 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.internal.{LogEntry, Logging, MessageWithContext}
+import org.apache.spark.internal.{LogEntry, Logging}
 import org.apache.spark.ml.{MLEvents, PipelineStage}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.rdd.RDD
