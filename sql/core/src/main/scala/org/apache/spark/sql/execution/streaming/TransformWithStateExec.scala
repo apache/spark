@@ -82,7 +82,6 @@ case class TransformWithStateExec(
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (ttlMode == TTLMode.ProcessingTimeTTL() || timeoutMode == TimeoutMode.ProcessingTime()) {
       // TODO: check if we can return true only if actual timers are registered
-      logWarning(s"returning true from shouldRunAnotherBatch - $newInputWatermark")
       true
     } else if (ttlMode == TTLMode.EventTimeTTL() || timeoutMode == TimeoutMode.EventTime()) {
       eventTimeWatermarkForEviction.isDefined &&
