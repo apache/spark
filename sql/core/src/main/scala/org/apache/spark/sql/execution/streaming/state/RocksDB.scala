@@ -886,6 +886,8 @@ class RocksDB(
       colFamilyNameToHandleMap.values.map(handle => handle.close)
       colFamilyNameToHandleMap.clear()
 
+      // Cancel and wait until all background work finishes
+      db.cancelAllBackgroundWork(true)
       // Close the DB instance
       db.close()
       db = null
