@@ -111,9 +111,12 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
         // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
         Some(StringType)
       case Types.VARCHAR | Types.CHAR if "JSON".equalsIgnoreCase(typeName) =>
-        // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1
-        // or Types.CHAR with a precision of Int.Max.
+        // scalastyle:off line.size.limit
+        // Some MySQL JDBC drivers convert JSON type into Types.VARCHAR(-1) or Types.CHAR(Int.Max).
+        // MySQL Connector/J 5.x as an example:
+        // https://github.com/mysql/mysql-connector-j/blob/release/5.1/src/com/mysql/jdbc/MysqlDefs.java#L295
         // Explicitly converts it into StringType here.
+        // scalastyle:on line.size.limit
         Some(StringType)
       case Types.TINYINT =>
         if (md.build().getBoolean("isSigned")) {
