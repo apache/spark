@@ -546,12 +546,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     checkAnswer(df, Row("[3,7)"))
   }
 
-  test("SPARK-47701: Reading Domain Types") {
+  test("SPARK-47710: Reading Domain Types") {
     val df = spark.read.jdbc(jdbcUrl, "domain_table", new Properties)
     checkAnswer(df, Row(1))
   }
 
-  test("SPARK-47701: Reading Object Identifier Types") {
+  test("SPARK-47710: Reading Object Identifier Types") {
     val df = spark.read.format("jdbc")
       .option("url", jdbcUrl)
       .option("query", "SELECT 1::oid, 'bar'::regclass, 'integer'::regtype").load()
