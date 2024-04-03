@@ -527,13 +527,15 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     logDebug(s"Extract plan_id $planId from $u")
 
     val isMetadataAccess = u.getTagValue(LogicalPlan.IS_METADATA_COL).nonEmpty
-    val (resolved, matched) = resolveDataFrameColumnByPlanId(u, planId, isMetadataAccess, q)
-    if (!matched) {
-      // Can not find the target plan node with plan id, e.g.
-      //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
-      //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
-      //  df1.select(df2.a)   <-   illegal reference df2.a
-      throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
+    val resolved = resolveDataFrameColumnByPlanId(u, planId, isMetadataAccess, q, 0).map(_._1)
+    if (resolved.isEmpty) {
+      if (!q.exists(_.exists(_.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(planId)))) {
+        // Can not find the target plan node with plan id, e.g.
+        //  df1 = spark.createDataFrame([Row(a = 1, b = 2, c = 3)]])
+        //  df2 = spark.createDataFrame([Row(a = 1, b = 2)]])
+        //  df1.select(df2.a)   <-   illegal reference df2.a
+        throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
+      }
     }
     resolved
   }
@@ -542,14 +544,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
-      q: Seq[LogicalPlan]): (Option[NamedExpression], Boolean) = {
-    q.iterator.map(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _))
-      .foldLeft((Option.empty[NamedExpression], false)) {
-        case ((r1, m1), (r2, m2)) =>
-          if (r1.nonEmpty && r2.nonEmpty) {
+      q: Seq[LogicalPlan],
+      d: Int): Option[(NamedExpression, Int)] = {
+    q.iterator.flatMap(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _, d))
+      .foldLeft(Option.empty[(NamedExpression, Int)]) {
+        case (Some((r1, d1)), (r2, d2)) =>
+          if (d1 == 0 && d2 != 0) {
+            Some((r1, 0))
+          } else if (d2 == 0 && d1 != 0) {
+            Some((r2, 0))
+          } else {
             throw QueryCompilationErrors.ambiguousColumnReferences(u)
           }
-          (if (r1.nonEmpty) r1 else r2, m1 | m2)
+        case (_, (r2, d2)) => Some((r2, d2))
       }
   }
 
@@ -557,8 +564,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
-      p: LogicalPlan): (Option[NamedExpression], Boolean) = {
-    val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+      p: LogicalPlan,
+      d: Int): Option[(NamedExpression, Int)] = {
+    val resolved = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
       val resolved = try {
         if (!isMetadataAccess) {
           p.resolve(u.nameParts, conf.resolver)
@@ -572,9 +580,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           logDebug(s"Fail to resolve $u with $p due to $e")
           None
       }
-      (resolved, true)
+      resolved.map(r => (r, d))
     } else {
-      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children)
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children, d + 1)
     }
 
     // In self join case like:
@@ -602,14 +610,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // maybe filtered out here. In this case, resolveDataFrameColumnByPlanId
     // returns None, the dataframe column will remain unresolved, and the analyzer
     // will try to resolve it without plan id later.
-    val filtered = resolved.filter { r =>
+    resolved.filter { r =>
       if (isMetadataAccess) {
-        r.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
+        r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
       } else {
-        r.references.subsetOf(p.outputSet)
+        r._1.references.subsetOf(p.outputSet)
       }
     }
-    (filtered, matched)
   }
 
   private def resolveDataFrameStar(
