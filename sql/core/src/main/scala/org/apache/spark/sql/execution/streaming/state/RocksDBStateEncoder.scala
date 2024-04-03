@@ -225,7 +225,8 @@ class PrefixKeyScanStateEncoder(
  * still be honored. For rows with null column values, ordering for subsequent columns
  * will also be maintained within those set of rows. We use the same byte to also encode whether
  * the value is negative or not. For negative float/double values, we flip all the bits to ensure
- * the right lexicographical ordering.
+ * the right lexicographical ordering. For the rationale around this, please check the link
+ * here: https://en.wikipedia.org/wiki/IEEE_754#Design_rationale
  *
  * @param keySchema - schema of the key to be encoded
  * @param numOrderingCols - number of columns to be used for range scan
@@ -310,49 +311,49 @@ class RangeKeyScanStateEncoder(
     writer.resetRowWriter()
     rangeScanKeyFieldsWithIdx.foreach { case (field, idx) =>
       val value = row.get(idx, field.dataType)
-      // initialize the value to indicate positive value to begin with
-      var isNullOrSignCol: Byte = positiveValMarker
-      // Update the isNullOrSignCol byte (if required) to indicate null value
-      if (value == null) {
-        isNullOrSignCol = nullValMarker
-      }
       // Note that we cannot allocate a smaller buffer here even if the value is null
       // because the effective byte array is considered variable size and needs to have
       // the same size across all rows for the ordering to work as expected.
       val bbuf = ByteBuffer.allocate(field.dataType.defaultSize + 1)
       bbuf.order(ByteOrder.BIG_ENDIAN)
-      if (isNullOrSignCol == nullValMarker) {
-        bbuf.put(isNullOrSignCol)
+      if (value == null) {
+        bbuf.put(nullValMarker)
         writer.write(idx, bbuf.array())
       } else {
         field.dataType match {
           case BooleanType =>
           case ByteType =>
-            bbuf.put(isNullOrSignCol)
+            bbuf.put(positiveValMarker)
             bbuf.put(value.asInstanceOf[Byte])
             writer.write(idx, bbuf.array())
 
           case ShortType =>
-            if (value.asInstanceOf[Short] < 0) {
-              isNullOrSignCol = negativeValMarker
+            val signCol = if (value.asInstanceOf[Short] < 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
             }
-            bbuf.put(isNullOrSignCol)
+            bbuf.put(signCol)
             bbuf.putShort(value.asInstanceOf[Short])
             writer.write(idx, bbuf.array())
 
           case IntegerType =>
-            if (value.asInstanceOf[Int] < 0) {
-              isNullOrSignCol = negativeValMarker
+            val signCol = if (value.asInstanceOf[Int] < 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
             }
-            bbuf.put(isNullOrSignCol)
+            bbuf.put(signCol)
             bbuf.putInt(value.asInstanceOf[Int])
             writer.write(idx, bbuf.array())
 
           case LongType =>
-            if (value.asInstanceOf[Long] < 0) {
-              isNullOrSignCol = negativeValMarker
+            val signCol = if (value.asInstanceOf[Long] < 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
             }
-            bbuf.put(isNullOrSignCol)
+            bbuf.put(signCol)
             bbuf.putLong(value.asInstanceOf[Long])
             writer.write(idx, bbuf.array())
 
@@ -364,12 +365,11 @@ class RangeKeyScanStateEncoder(
             if ((rawBits & floatSignBitMask) != 0) {
               // flip all the bits
               val updatedVal = rawBits ^ floatFlipBitMask
-              isNullOrSignCol = negativeValMarker
-              bbuf.put(isNullOrSignCol)
+              bbuf.put(negativeValMarker)
               // convert the bits back to float
               bbuf.putFloat(intBitsToFloat(updatedVal))
             } else {
-              bbuf.put(isNullOrSignCol)
+              bbuf.put(positiveValMarker)
               bbuf.putFloat(value.asInstanceOf[Float])
             }
             writer.write(idx, bbuf.array())
@@ -382,12 +382,11 @@ class RangeKeyScanStateEncoder(
             if ((rawBits & doubleSignBitMask) != 0) {
               // flip all the bits
               val updatedVal = rawBits ^ doubleFlipBitMask
-              isNullOrSignCol = negativeValMarker
-              bbuf.put(isNullOrSignCol)
+              bbuf.put(negativeValMarker)
               // convert the bits back to double
               bbuf.putDouble(longBitsToDouble(updatedVal))
             } else {
-              bbuf.put(isNullOrSignCol)
+              bbuf.put(positiveValMarker)
               bbuf.putDouble(value.asInstanceOf[Double])
             }
             writer.write(idx, bbuf.array())

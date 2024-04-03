@@ -316,11 +316,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       }
 
       // Verify that the sort ordering here is as follows:
-      // -NaN, -Infinity, -ve values, 0, +ve values, +Infinity, +NaN
+      // -NaN, -Infinity, -ve values, -0, 0, +0, +ve values, +Infinity, +NaN
       val timerTimestamps: Seq[Double] = Seq(6894.32, 345.2795, -23.24, 24.466,
         7860.0, 4535.55, 423.42, -5350.355, 0.0, 0.001, 0.233, -53.255, -66.356, -244.452,
         96456466.3536677, 14421434453.43524562, Double.NaN, Double.PositiveInfinity,
-        Double.NegativeInfinity, -Double.NaN)
+        Double.NegativeInfinity, -Double.NaN, +0.0, -0.0,
+        // A different representation of NaN than the Java constants
+        java.lang.Double.longBitsToDouble(0x7ff80abcdef54321L),
+        java.lang.Double.longBitsToDouble(0xfff80abcdef54321L))
       timerTimestamps.foreach { ts =>
         // non-timestamp col is of variable size
         val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts,
@@ -330,15 +333,18 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
+      var nanCnt = 0
       val result = store.iterator(cfName).zipWithIndex.map { case (kv, idx) =>
         val keyRow = kv.key
         val key = (keyRow.getDouble(0), keyRow.getString(1))
         // verify that NaN is only at the beginning or end of the sorted list
         if (key._1.isNaN) {
-          assert(idx == 0 || idx == timerTimestamps.length -1)
+          nanCnt = nanCnt + 1
         }
         key._1
       }.toSeq
+
+      assert(nanCnt === 4)
       assert(result.filter(!_.isNaN) === timerTimestamps.sorted.filter(!_.isNaN))
       store.commit()
     }
