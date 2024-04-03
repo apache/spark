@@ -82,17 +82,45 @@ class CollationStringExpressionsSuite extends QueryTest
       checkEvaluation(StringInstr(string, substring), expected)
     }
 
-    var collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
+    var collationId = CollationFactory.collationNameToId("UTF8_BINARY")
+    testInStr("aaads", "Aa", collationId, 0)
+    testInStr("aaaDs", "de", collationId, 0)
+    testInStr("aaads", "ds", collationId, 4)
+    testInStr("xxxx", "", collationId, 1)
+    testInStr("", "xxxx", collationId, 0)
+    // scalastyle:off
+    testInStr("test大千世界X大千世界", "大千", collationId, 5)
+    testInStr("test大千世界X大千世界", "界X", collationId, 8)
+    // scalastyle:on
+
+    collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
     testInStr("aaads", "Aa", collationId, 1)
     testInStr("aaaDs", "de", collationId, 0)
+    testInStr("aaaDs", "ds", collationId, 4)
+    testInStr("xxxx", "", collationId, 1)
+    testInStr("", "xxxx", collationId, 0)
+    // scalastyle:off
+    testInStr("test大千世界X大千世界", "大千", collationId, 5)
+    testInStr("test大千世界X大千世界", "界x", collationId, 8)
+    // scalastyle:on
 
     collationId = CollationFactory.collationNameToId("UNICODE")
     testInStr("aaads", "Aa", collationId, 0)
+    testInStr("aaads", "aa", collationId, 1)
     testInStr("aaads", "de", collationId, 0)
+    testInStr("xxxx", "", collationId, 1)
+    testInStr("", "xxxx", collationId, 0)
+    // scalastyle:off
+    testInStr("test大千世界X大千世界", "界x", collationId, 0)
+    testInStr("test大千世界X大千世界", "界X", collationId, 8)
+    // scalastyle:on
 
     collationId = CollationFactory.collationNameToId("UNICODE_CI")
     testInStr("aaads", "AD", collationId, 3)
     testInStr("aaads", "dS", collationId, 4)
+    // scalastyle:off
+    testInStr("test大千世界X大千世界", "界x", collationId, 8)
+    // scalastyle:on
   }
 
   test("FIND_IN_SET check result on explicitly collated strings") {
@@ -108,6 +136,7 @@ class CollationStringExpressionsSuite extends QueryTest
     testFindInSet("abc", "abc,b,ab,c,def", collationId, 1)
     testFindInSet("def", "abc,b,ab,c,def", collationId, 5)
     testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("", "abc,b,ab,c,def", collationId, 0)
 
     collationId = CollationFactory.collationNameToId("UTF8_BINARY_LCASE")
     testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
@@ -116,18 +145,34 @@ class CollationStringExpressionsSuite extends QueryTest
     testFindInSet("AbC", "abc,b,ab,c,def", collationId, 1)
     testFindInSet("abcd", "abc,b,ab,c,def", collationId, 0)
     testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("XX", "xx", collationId, 1)
+    testFindInSet("", "abc,b,ab,c,def", collationId, 0)
+    // scalastyle:off
+    testFindInSet("界x", "test,大千,世,界X,大,千,世界", collationId, 4)
+    // scalastyle:on
 
     collationId = CollationFactory.collationNameToId("UNICODE")
     testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
     testFindInSet("ab", "abc,b,ab,c,def", collationId, 3)
     testFindInSet("Ab", "abc,b,ab,c,def", collationId, 0)
     testFindInSet("d,ef", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("xx", "xx", collationId, 1)
+    // scalastyle:off
+    testFindInSet("界x", "test,大千,世,界X,大,千,世界", collationId, 0)
+    testFindInSet("大", "test,大千,世,界X,大,千,世界", collationId, 5)
+    // scalastyle:on
 
     collationId = CollationFactory.collationNameToId("UNICODE_CI")
     testFindInSet("a", "abc,b,ab,c,def", collationId, 0)
     testFindInSet("C", "abc,b,ab,c,def", collationId, 4)
     testFindInSet("DeF", "abc,b,ab,c,dEf", collationId, 5)
     testFindInSet("DEFG", "abc,b,ab,c,def", collationId, 0)
+    testFindInSet("XX", "xx", collationId, 1)
+    // scalastyle:off
+    testFindInSet("界x", "test,大千,世,界X,大,千,世界", collationId, 4)
+    testFindInSet("界x", "test,大千,界Xx,世,界X,大,千,世界", collationId, 5)
+    testFindInSet("大", "test,大千,世,界X,大,千,世界", collationId, 5)
+    // scalastyle:on
   }
 
   test("REPEAT check output type on explicitly collated string") {

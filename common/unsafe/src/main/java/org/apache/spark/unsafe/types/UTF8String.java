@@ -559,6 +559,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return collationAwareFindInSet(match, collationId);
   }
 
+  /*
+   * Works on Strings with collationId other than UTF8_BINARY_COLLATION_ID. Returns the index
+   * of the string `match` in this String. This string has to be a comma separated
+   * list. If `match` contains a comma 0 will be returned. If the `match` isn't part of this String,
+   * 0 will be returned, else the index of match (1-based index)
+   */
   private int collationAwareFindInSet(UTF8String match, int collationId) {
     if (match.contains(COMMA_UTF8)) {
       return 0;
