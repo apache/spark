@@ -42,16 +42,9 @@ object CollationTypeCasts extends TypeCoercionRule {
       // This case is necessary for changing Substring input to implicit collation
       substrExpr.withNewChildren(
         collateToSingleType(Seq(substrExpr.str)) :+ substrExpr.pos :+ substrExpr.len)
-    case otherExpr @ (_: In
-                      | _: InSubquery
-                      | _: CreateArray
-                      | _: ArrayJoin
-                      | _: Concat
-                      | _: Greatest
-                      | _: Least
-                      | _: Coalesce
-                      | _: BinaryExpression
-                      | _: ConcatWs) =>
+    case otherExpr @ (
+      _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
+      _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }

@@ -544,7 +544,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
       // concat of columns of different collations is allowed
       // as long as we don't use the result in an unsupported function
-      // TODO: (SPARK-47210) Add indeterminate support
+      // TODO(SPARK-47210): Add indeterminate support
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SELECT c1 || c2 FROM $tableName")
@@ -672,7 +672,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  // TODO: (SPARK-47210) Add indeterminate support
+  // TODO(SPARK-47210): Add indeterminate support
   test("indeterminate collation checks") {
     val tableName = "t1"
     val newTableName = "t2"
