@@ -4533,7 +4533,8 @@
     "subClass" : {
       "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {
         "message" : [
-          "Accessing outer query column is not allowed in this location<treeNode>."
+          "Accessing outer query column is not allowed in this location:",
+          "<treeNode>"
         ]
       },
       "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES" : {
@@ -4543,7 +4544,8 @@
       },
       "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE" : {
         "message" : [
-          "Correlated column is not allowed in predicate: <treeNode>."
+          "Correlated column is not allowed in predicate:",
+          "<treeNode>"
         ]
       },
       "CORRELATED_COLUMN_NOT_FOUND" : {
@@ -4578,7 +4580,8 @@
       },
       "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
         "message" : [
-          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row<treeNode>."
+          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
@@ -4588,17 +4591,20 @@
       },
       "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {
         "message" : [
-          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands<treeNode>."
+          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_IN_EXISTS_SUBQUERY" : {
         "message" : [
-          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>."
+          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_TABLE_ARGUMENT" : {
         "message" : [
-          "Table arguments are used in a function where they are not supported<treeNode>."
+          "Table arguments are used in a function where they are not supported:",
+          "<treeNode>"
         ]
       }
     },
