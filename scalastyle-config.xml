@@ -150,6 +150,11 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
+  <check customId="invalidMDC" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">s".*\$\{MDC\(</parameter></parameters>
+    <customMessage><![CDATA[MDC should be used in string interpolation log"..." instead of s"..."]]></customMessage>
+  </check>
+
   <check customId="hadoopconfiguration" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">spark(.sqlContext)?.sparkContext.hadoopConfiguration</parameter></parameters>
     <customMessage><![CDATA[

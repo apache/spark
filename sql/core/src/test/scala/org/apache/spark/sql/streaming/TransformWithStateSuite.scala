@@ -115,6 +115,27 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
     Iterator((key, "-1"))
   }
 
+  protected def processUnexpiredRows(
+      key: String,
+      currCount: Long,
+      count: Long,
+      timerValues: TimerValues): Unit = {
+    _countState.update(count)
+    if (key == "a") {
+      var nextTimerTs: Long = 0L
+      if (currCount == 0) {
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 5000
+        getHandle.registerTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      } else if (currCount == 1) {
+        getHandle.deleteTimer(_timerState.get())
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 7500
+        getHandle.registerTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      }
+    }
+  }
+
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
@@ -125,20 +146,7 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
     } else {
       val currCount = _countState.getOption().getOrElse(0L)
       val count = currCount + inputRows.size
-      _countState.update(count)
-      if (key == "a") {
-        var nextTimerTs: Long = 0L
-        if (currCount == 0) {
-          nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 5000
-          getHandle.registerTimer(nextTimerTs)
-          _timerState.update(nextTimerTs)
-        } else if (currCount == 1) {
-          getHandle.deleteTimer(_timerState.get())
-          nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 7500
-          getHandle.registerTimer(nextTimerTs)
-          _timerState.update(nextTimerTs)
-        }
-      }
+      processUnexpiredRows(key, currCount, count, timerValues)
       Iterator((key, count.toString))
     }
   }
@@ -192,12 +200,24 @@ class MaxEventTimeStatefulProcessor
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
   }
 
+  protected def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
+    val timeoutDelaySec = 5
+    val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
+    _maxEventTimeState.update(maxEventTimeSec)
+
+    val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+    if (registeredTimerMs < timeoutTimestampMs) {
+      getHandle.deleteTimer(registeredTimerMs)
+      getHandle.registerTimer(timeoutTimestampMs)
+      _timerState.update(timeoutTimestampMs)
+    }
+  }
+
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, Long)],
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
-    val timeoutDelaySec = 5
     if (expiredTimerInfo.isValid()) {
       _maxEventTimeState.clear()
       Iterator((key, -1))
@@ -205,15 +225,7 @@ class MaxEventTimeStatefulProcessor
       val valuesSeq = inputRows.toSeq
       val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
         _maxEventTimeState.getOption().getOrElse(0L))
-      val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
-      _maxEventTimeState.update(maxEventTimeSec)
-
-      val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
-      if (registeredTimerMs < timeoutTimestampMs) {
-        getHandle.deleteTimer(registeredTimerMs)
-        getHandle.registerTimer(timeoutTimestampMs)
-        _timerState.update(timeoutTimestampMs)
-      }
+      processUnexpiredRows(maxEventTimeSec)
       Iterator((key, maxEventTimeSec.toInt))
     }
   }
