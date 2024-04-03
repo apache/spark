@@ -89,12 +89,13 @@
       <artifactId>hudi-spark3.3-bundle_${scala.binary.version}</artifactId>
       <version>${hudi.version}</version>
     </dependency>
+    <!--  Commenting out to avoid Build error "Found Banned Dependency: org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:jar:1.5.0"
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-spark-runtime-3.3_${scala.binary.version}</artifactId>
       <version>${iceberg.version}</version>
     </dependency>
-
+    -->
     <!--
       Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
       that the libraries Spark depend on have it available. We'll package the version that Spark
