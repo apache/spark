@@ -191,8 +191,8 @@ public final class CollationFactory {
   }
 
   private static StringSearch getStringSearch(
-          final UTF8String left,
-          final UTF8String right) {
+      final UTF8String left,
+      final UTF8String right) {
     String pattern = right.toLowerCase().toString();
     String target = left.toLowerCase().toString();
 
