@@ -472,9 +472,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private int compareLowercaseSuffixSlow(UTF8String other, int pref) {
     UTF8String suffixLeft = UTF8String.fromAddress(base, offset + pref,
-            numBytes - pref);
+      numBytes - pref);
     UTF8String suffixRight = UTF8String.fromAddress(other.base, other.offset + pref,
-            other.numBytes - pref);
+      other.numBytes - pref);
     return suffixLeft.toLowerCaseSlow().binaryCompare(suffixRight.toLowerCaseSlow());
   }
 

@@ -109,6 +109,7 @@ public class UTF8StringSuite {
 
   @Test
   public void lowercaseComparison() {
+    // SPARK-47693: Test optimized lowercase comparison of UTF8String instances
     // ASCII
     assertEquals(fromString("aaa").compareLowercase(fromString("AAA")), 0);
     assertTrue(fromString("aaa").compareLowercase(fromString("AAAA")) < 0);
