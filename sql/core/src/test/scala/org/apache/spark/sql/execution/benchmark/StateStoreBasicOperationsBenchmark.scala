@@ -51,10 +51,10 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
   private val valueProjection = UnsafeProjection.create(valueSchema)
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-  //  runPutBenchmark()
+    runPutBenchmark()
     runMergeBenchmark()
- //   runDeleteBenchmark()
- //   runEvictBenchmark()
+    runDeleteBenchmark()
+    runEvictBenchmark()
   }
 
   final def skip(benchmarkName: String)(func: => Any): Unit = {
@@ -161,12 +161,12 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
         val testData = constructRandomizedTestDataWithMultipleValues(numOfRow,
           (1 to numOfRow).map(_ * 1000L).toList, numValuesPerKey, 0)
 
-        val rocksDBProvider = newRocksDBStateProvider(useColumnFamilies = true,
-          multipleValuesPerKey = true,
-          trackTotalNumberOfRows = true)
-        val rocksDBWithNoTrackProvider = newRocksDBStateProvider(useColumnFamilies = true,
-          multipleValuesPerKey = true,
-          trackTotalNumberOfRows = false)
+        val rocksDBProvider = newRocksDBStateProvider(trackTotalNumberOfRows = true,
+          useColumnFamilies = true,
+          useMultipleValuesPerKey = true)
+        val rocksDBWithNoTrackProvider = newRocksDBStateProvider(trackTotalNumberOfRows = false,
+          useColumnFamilies = true,
+          useMultipleValuesPerKey = true)
 
         val committedRocksDBVersion = loadInitialDataWithMultipleValues(rocksDBProvider, testData)
         val committedRocksDBWithNoTrackVersion = loadInitialDataWithMultipleValues(
@@ -474,7 +474,9 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
   }
 
   private def newRocksDBStateProvider(
-      trackTotalNumberOfRows: Boolean = true): StateStoreProvider = {
+      trackTotalNumberOfRows: Boolean = true,
+      useColumnFamilies: Boolean = false,
+      useMultipleValuesPerKey: Boolean = false): StateStoreProvider = {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new RocksDBStateStoreProvider()
     val sqlConf = new SQLConf()
@@ -484,24 +486,8 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
 
     provider.init(
       storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = false, storeConf, new Configuration)
-    provider
-  }
-
-  private def newRocksDBStateProvider(
-      useColumnFamilies: Boolean,
-      multipleValuesPerKey: Boolean,
-      trackTotalNumberOfRows: Boolean): StateStoreProvider = {
-    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
-    val provider = new RocksDBStateStoreProvider()
-    val sqlConf = new SQLConf()
-    sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows",
-      trackTotalNumberOfRows.toString)
-    val storeConf = new StateStoreConf(sqlConf)
-
-    provider.init(
-      storeId, keySchema, valueSchema, 0, useColumnFamilies,
-      storeConf, new Configuration, useMultipleValuesPerKey = multipleValuesPerKey)
+      useColumnFamilies = useColumnFamilies, storeConf, new Configuration,
+      useMultipleValuesPerKey = useMultipleValuesPerKey)
     provider
   }
 
