@@ -940,14 +940,11 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     }
     assert(e3.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
 
-    //    val e4 = intercept[AnalysisException] {
-    //      // df1("i") is ambiguous as df1 appears in both join sides (df1_filter contains df1).
-    //      df1.join(df1_filter, df1("i") === 1).collect()
-    //    }
-    //    assert(e4.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
-    //
-    //    "[AMBIGUOUS_COLUMN_OR_FIELD] Column or field `i` is ambiguous and has 2 matches.
-    //    SQLSTATE: 42702" did not contain "AMBIGUOUS_COLUMN_REFERENCE"
+    // df1.join(df1_filter, df1("i") === 1) fails in classic spark due to:
+    // org.apache.spark.sql.AnalysisException: Column i#24 are ambiguous
+    assert(
+      df1.join(df1_filter, df1("i") === 1).columns ===
+        Array("i", "j", "i", "j"))
 
     checkSameResult(
       Seq(Row("a")),

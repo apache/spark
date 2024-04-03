@@ -546,17 +546,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       isMetadataAccess: Boolean,
       q: Seq[LogicalPlan],
       d: Int): Option[(NamedExpression, Int)] = {
-    q.iterator.flatMap(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _, d))
+    q.flatMap(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _, d))
+      .sortBy(_._2) // make sure 0-depth result is on the left side (avoid case like: 1, 2, 0)
       .foldLeft(Option.empty[(NamedExpression, Int)]) {
         case (Some((r1, d1)), (r2, d2)) =>
           if (d1 == 0 && d2 != 0) {
-            Some((r1, 0))
+            Some((r1, d1))
           } else if (d2 == 0 && d1 != 0) {
-            Some((r2, 0))
+            Some((r2, d2))
           } else {
             throw QueryCompilationErrors.ambiguousColumnReferences(u)
           }
-        case (_, (r2, d2)) => Some((r2, d2))
+        case (None, (r2, d2)) => Some((r2, d2))
       }
   }
 
