@@ -180,7 +180,7 @@ public final class CollationFactory {
       final UTF8String right,
       final int collationId) {
 
-    if(collationId == UTF8_BINARY_LCASE_COLLATION_ID) {
+    if (collationId == UTF8_BINARY_LCASE_COLLATION_ID) {
       return getStringSearch(left, right);
     }
 
