@@ -871,6 +871,10 @@ class PlanGenerationTestSuite
     fn.col("a").cast("long")
   }
 
+  columnTest("try_cast") {
+    fn.col("a").try_cast("long")
+  }
+
   orderColumnTest("desc") {
     fn.col("b").desc
   }
