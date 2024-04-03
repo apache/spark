@@ -836,7 +836,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private int charPosToByte(int charPos) {
-    if(charPos < 0) {
+    if (charPos < 0) {
       return -1;
     }
 
@@ -927,7 +927,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private int collationAwareRFind(UTF8String str, int start, int collationId) {
     assert (str.numBytes > 0);
 
-    if(numBytes == 0) {
+    if (numBytes == 0) {
       return -1;
     }
 
@@ -935,8 +935,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int prevStart = -1;
     int matchStart = stringSearch.next();
-    while(charPosToByte(matchStart) <= start) {
-      if(matchStart != StringSearch.DONE) {
+    while (charPosToByte(matchStart) <= start) {
+      if (matchStart != StringSearch.DONE) {
         // Found a match, update the start position
         prevStart = matchStart;
         matchStart = stringSearch.next();
