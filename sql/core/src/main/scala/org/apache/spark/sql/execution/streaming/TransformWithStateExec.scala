@@ -240,8 +240,6 @@ case class TransformWithStateExec(
             expiredTimerMetrics += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
-        val activeTimers = processorHandle.listTimers().length - expiredTimerMetrics.value
-        longMetric("numOfActiveTimer").set(activeTimers)
         iter
 
       case EventTime =>
@@ -253,8 +251,6 @@ case class TransformWithStateExec(
             expiredTimerMetrics += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
-        val activeTimers = processorHandle.listTimers().length - expiredTimerMetrics.value
-        longMetric("numOfActiveTimer").set(activeTimers)
         iter
 
       case _ => Iterator.empty
@@ -312,6 +308,12 @@ case class TransformWithStateExec(
           timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
           processorHandle.setHandleState(StatefulProcessorHandleState.TIMER_PROCESSED)
         })
+    }
+
+    if (timeoutMode != NoTimeouts) {
+      val activeTimers = processorHandle.getAllTimers() -
+        longMetric("numOfExpiredTimer").value
+      longMetric("numOfActiveTimer").set(activeTimers)
     }
 
     val outputIterator = newDataProcessorIter ++ timeoutProcessorIter

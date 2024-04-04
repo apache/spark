@@ -98,4 +98,6 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * @param stateName - name of the state variable
    */
   def deleteIfExists(stateName: String): Unit
+
+  def getAllTimers(): Long
 }

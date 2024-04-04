@@ -136,12 +136,13 @@ class TimerStateImpl(
   def registerTimer(expiryTimestampMs: Long): Unit = {
     val groupingKey = getGroupingKey(keyToTsCFName)
     if (exists(groupingKey, expiryTimestampMs)) {
-      logWarning(s"Failed to register timer for key=$groupingKey and " +
+      println(s"Failed to register timer for key=$groupingKey and " +
         s"timestamp=$expiryTimestampMs since it already exists")
     } else {
       store.put(encodeKey(groupingKey, expiryTimestampMs), EMPTY_ROW, keyToTsCFName)
       store.put(encodeSecIndexKey(groupingKey, expiryTimestampMs), EMPTY_ROW, tsToKeyCFName)
-      logDebug(s"Registered timer for key=$groupingKey and timestamp=$expiryTimestampMs")
+      println(s"Registered timer for key=$groupingKey and timestamp=$expiryTimestampMs")
+      println(s"inside registerTimer, iterator: " + store.iterator(tsToKeyCFName).toSeq)
     }
   }
 
@@ -217,5 +218,13 @@ class TimerStateImpl(
 
       override protected def close(): Unit = { }
     }
+  }
+
+  def getAllTimers(): Long = {
+    // TODO before rocksDB.commit, this will not return
+    //  the newly registered/deleted timers in current batch;
+    //  When counting the number of active timers, should we count the newly
+    //  registered/deleted timers?
+    store.iterator(tsToKeyCFName).toSeq.length
   }
 }

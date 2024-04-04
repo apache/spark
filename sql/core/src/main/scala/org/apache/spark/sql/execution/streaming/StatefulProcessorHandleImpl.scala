@@ -105,6 +105,9 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
+  private val colFamilyToStateVarTypeMap =
+    new java.util.concurrent.ConcurrentHashMap[String, String]
+
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) {
       throw new IllegalStateException(msg)
@@ -134,6 +137,7 @@ class StatefulProcessorHandleImpl(
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
     incrementMetricVal("numOfValueStateVar")
+    colFamilyToStateVarTypeMap.putIfAbsent(stateName, "Value")
     val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
@@ -167,6 +171,7 @@ class StatefulProcessorHandleImpl(
    */
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     verifyTimerOperations("register_timer")
+    println("I got here")
     incrementMetricVal("numOfNewlyRegisteredTimer")
     timerState.registerTimer(expiryTimestampMs)
   }
@@ -204,6 +209,10 @@ class StatefulProcessorHandleImpl(
     timerState.listTimers()
   }
 
+  override def getAllTimers(): Long = {
+    timerState.getAllTimers()
+  }
+
   /**
    * Function to delete and purge state variable if defined previously
    *
@@ -212,12 +221,23 @@ class StatefulProcessorHandleImpl(
   override def deleteIfExists(stateName: String): Unit = {
     verifyStateVarOperations("delete_if_exists")
     incrementMetricVal("numOfRemovedStateVar")
+    val stateVarType = colFamilyToStateVarTypeMap.get(stateName)
+    if (stateVarType == null) {
+      logWarning(s"Trying to delete state var $stateName, " +
+        s"did not find this state variable in the column family to state variable " +
+        s"type map. The variable with given stateName may not exist")
+    } else {
+      // decrease the count of state variable type by 1
+      val numOfVar = metrics.get(s"numOf${stateVarType}StateVar").get.value
+      setMetricVal(s"numOf${stateVarType}StateVar", numOfVar - 1)
+    }
     store.removeColFamilyIfExists(stateName)
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state")
     incrementMetricVal("numOfListStateVar")
+    colFamilyToStateVarTypeMap.putIfAbsent(stateName, "List")
     val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder)
     resultState
   }
@@ -228,6 +248,7 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state")
     incrementMetricVal("numOfMapStateVar")
+    colFamilyToStateVarTypeMap.putIfAbsent(stateName, "Map")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
   }
