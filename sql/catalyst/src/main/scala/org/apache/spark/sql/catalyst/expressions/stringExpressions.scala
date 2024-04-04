@@ -1024,12 +1024,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      return defaultCheck
-    }
-
-    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
+    super.checkInputDataTypes()
   }
 
   override def dataType: DataType = IntegerType
@@ -1410,12 +1405,7 @@ case class StringInstr(str: Expression, substr: Expression)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      return defaultCheck
-    }
-
-    CollationTypeConstraints.checkCollationCompatibility(collationId, children.map(_.dataType))
+    super.checkInputDataTypes()
   }
 
   override def prettyName: String = "instr"
