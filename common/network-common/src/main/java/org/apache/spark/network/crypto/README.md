@@ -106,10 +106,10 @@ observer. Only active adversaries spoofing a session would be able to recover pl
 Security Changes & Compatibility
 -------------
 
-The original version of this protocol, retroactively called v1.0, did not apply an HKDF to `sharedSecret` and was
-directly using the encoded X coordinate as key material. This is atypical and standard practice is to pass that shared
-coordinate through an HKDF. The current version, v2.0, adds this additional HKDF to
-derive `derivedKey`.
+The original version of this protocol, retroactively called v1.0, did not apply an HKDF to `sharedSecret` to derive
+a key (i.e. `derivedKey`) and was directly using the encoded X coordinate as key material. This is atypical and
+standard practice is to pass that shared coordinate through an HKDF. The current version, v2.0, adds this additional
+HKDF to derive `derivedKey`.
 
 Consequently, older Spark versions using v1.0 of this protocol will not negotiate the same key as
 Spark versions using v2.0 and will be **unable to send encrypted RPCs** across incompatible versions.

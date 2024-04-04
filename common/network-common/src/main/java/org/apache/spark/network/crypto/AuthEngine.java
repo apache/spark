@@ -236,7 +236,7 @@ class AuthEngine implements Closeable {
 
   private byte[] getTranscript(AuthMessage... encryptedPublicKeys) {
     ByteBuf transcript = Unpooled.buffer(
-        Arrays.stream(encryptedPublicKeys).mapToInt(AuthMessage::encodedLength).sum());
+        Arrays.stream(encryptedPublicKeys).mapToInt(k -> k.encodedLength()).sum());
     Arrays.stream(encryptedPublicKeys).forEachOrdered(k -> k.encode(transcript));
     return transcript.array();
   }

@@ -28,6 +28,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.FileRegion;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
+import org.apache.spark.network.util.ConfigProvider;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 import static org.junit.jupiter.api.Assertions.*;
@@ -59,7 +60,9 @@ public class AuthEngineSuite {
 
   @BeforeAll
   public static void setUp() {
-    conf = new TransportConf("rpc", MapConfigProvider.EMPTY);
+    ConfigProvider v2Provider = new MapConfigProvider(Collections.singletonMap(
+            "spark.network.crypto.authEngineVersion", "2"));
+    conf = new TransportConf("rpc", v2Provider);
   }
 
   @Test
@@ -185,10 +188,9 @@ public class AuthEngineSuite {
 
   @Test
   public void testFixedChallengeResponseUnsafeVersion() throws Exception {
-    MapConfigProvider configProvider = new MapConfigProvider(Collections.singletonMap(
-      "spark.network.crypto.authEngineVersion", "1"));
-    TransportConf v1Conf = new TransportConf("rpc", configProvider);
-
+    ConfigProvider v1Provider = new MapConfigProvider(Collections.singletonMap(
+            "spark.network.crypto.authEngineVersion", "1"));
+    TransportConf v1Conf = new TransportConf("rpc", v1Provider);
     try (AuthEngine client = new AuthEngine("appId", "secret", v1Conf)) {
       byte[] clientPrivateKey = Hex.decode(clientPrivate);
       client.setClientPrivateKey(clientPrivateKey);

@@ -181,6 +181,12 @@ authentication must also be enabled and properly configured. AES encryption uses
 [Apache Commons Crypto](https://commons.apache.org/proper/commons-crypto/) library, and Spark's
 configuration system allows access to that library's configuration for advanced users.
 
+This legacy protocol has two mutually incompatible versions. Version 1 omits applying key derivation function
+(KDF) to the key exchange protocol's output, while version 2 applies a KDF to ensure that the derived session
+key is uniformly distributed. Version 1 is default for backward compatibility. It is **recommended to use version 2**
+for better security properties. The version can be configured by setting `spark.network.crypto.authEngineVersion` to
+1 or 2 respectively.
+
 There is also support for SASL-based encryption, although it should be considered deprecated. It
 is still required when talking to shuffle services from Spark versions older than 2.2.0.
 
@@ -195,6 +201,11 @@ The following table describes the different options available for configuring th
     Enable AES-based RPC encryption, including the new authentication protocol added in 2.2.0.
   </td>
   <td>2.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.authEngineVersion</code></td>
+  <td>1</td>
+  <td>Version of AES-based RPC encryption to use. Valid versions are 1 or 2. Version 2 is recommended. Added in 4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.network.crypto.config.*</code></td>
