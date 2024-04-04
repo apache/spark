@@ -27,6 +27,7 @@ class LogKeySuite
 
   test("LogKey enumeration fields must be sorted alphabetically") {
     val keys = LogKey.values.toSeq
-    assert(keys === keys.sorted, "LogKey enumeration fields must be sorted alphabetically")
+    assert(keys === keys.sortBy(_.toString),
+      "LogKey enumeration fields must be sorted alphabetically")
   }
 }
