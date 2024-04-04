@@ -70,6 +70,7 @@ object LogKey extends Enumeration {
   val TASK_STATE = Value
   val TID = Value
   val TIMEOUT = Value
+  val VERSION = Value
   val WORKER_URL = Value
 
   type LogKey = Value

@@ -31,6 +31,8 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
+import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.launcher.JavaModuleOptions
@@ -200,7 +202,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
           logInfo("Skip tests because old Spark versions don't support Java 21.")
         }
       } else {
-        logError(s"Python version <  ${TestUtils.minimumPythonSupportedVersion}, " +
+        logError(
+          log"Python version <  ${MDC(VERSION, TestUtils.minimumPythonSupportedVersion)}, " +
           "the running environment is unavailable.")
       }
     }
