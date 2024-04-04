@@ -126,14 +126,6 @@ trait Logging {
     }
   }
 
-  private def maybeStripMargin(msg: String, stripMargin: Boolean): String = {
-    if (stripMargin) {
-      msg.stripMargin
-    } else {
-      msg
-    }
-  }
-
   // Log methods that take only a String
   protected def logDebug(msg: => String): Unit = if (log.isDebugEnabled) log.debug(msg)
   protected def logError(msg: => String): Unit = if (log.isErrorEnabled) log.error(msg)
@@ -189,6 +181,14 @@ trait Logging {
       withLogContext(entry.context) {
         fn(maybeStripMargin(entry.message, stripMargin))
       }
+    }
+  }
+
+  private def maybeStripMargin(msg: String, stripMargin: Boolean): String = {
+    if (stripMargin) {
+      msg.stripMargin
+    } else {
+      msg
     }
   }
 
