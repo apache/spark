@@ -30,7 +30,8 @@ import org.apache.spark.InternalAccumulator
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
@@ -769,11 +770,12 @@ private[spark] class TaskSetManager(
     totalResultSize += size
     calculatedTasks += 1
     if (!isShuffleMapTasks && maxResultSize > 0 && totalResultSize > maxResultSize) {
-      val msg = s"Total size of serialized results of ${calculatedTasks} tasks " +
-        s"(${Utils.bytesToString(totalResultSize)}) is bigger than ${config.MAX_RESULT_SIZE.key} " +
-        s"(${Utils.bytesToString(maxResultSize)})"
+      val msg = log"Total size of serialized results of ${MDC(COUNT, calculatedTasks)} tasks " +
+        log"(${MDC(SIZE, Utils.bytesToString(totalResultSize))}) is bigger than " +
+        log"${MDC(CONFIG, config.MAX_RESULT_SIZE.key)} " +
+        log"(${MDC(MAX_SIZE, Utils.bytesToString(maxResultSize))})"
       logError(msg)
-      abort(msg)
+      abort(msg.message)
       false
     } else {
       true
@@ -959,7 +961,8 @@ private[spark] class TaskSetManager(
         val task = taskName(tid)
         if (ef.className == classOf[NotSerializableException].getName) {
           // If the task result wasn't serializable, there's no point in trying to re-execute it.
-          logError(s"$task had a not serializable result: ${ef.description}; not retrying")
+          logError(log"${MDC(TASK_NAME, task)} had a not serializable result: " +
+            log"${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
             accumUpdates, metricPeaks)
           abort(s"$task had a not serializable result: ${ef.description}")
@@ -968,8 +971,9 @@ private[spark] class TaskSetManager(
         if (ef.className == classOf[TaskOutputFileAlreadyExistException].getName) {
           // If we can not write to output file in the task, there's no point in trying to
           // re-execute it.
-          logError("Task %s in stage %s (TID %d) can not write to output file: %s; not retrying"
-            .format(info.id, taskSet.id, tid, ef.description))
+          logError(log"Task ${MDC(TASK_ID, info.id)} in stage ${MDC(STAGE_ID, taskSet.id)} " +
+            log"(TID ${MDC(TID, tid)}) can not write to output file: " +
+            log"${MDC(ERROR, ef.description)}; not retrying")
           emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
             accumUpdates, metricPeaks)
           abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
@@ -1033,8 +1037,8 @@ private[spark] class TaskSetManager(
         info.host, info.executorId, index, failureReason))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
-        logError("Task %d in stage %s failed %d times; aborting job".format(
-          index, taskSet.id, maxTaskFailures))
+        logError(log"Task ${MDC(TASK_ID, index)} in stage ${MDC(STAGE_ID, taskSet.id)} failed " +
+          log"${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
           .format(index, taskSet.id, maxTaskFailures, failureReason), failureException)
         return
