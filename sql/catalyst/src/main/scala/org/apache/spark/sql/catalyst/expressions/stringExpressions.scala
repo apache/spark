@@ -751,14 +751,7 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      return defaultCheck
-    }
-
-    // Only srcExpr and searchExpr are checked for collation compatibility.
-    val collationId = first.dataType.asInstanceOf[StringType].collationId
-    CollationTypeConstraints.checkCollationCompatibility(collationId, Seq(second.dataType))
+    super.checkInputDataTypes()
   }
 
   override def dataType: DataType = srcExpr.dataType
