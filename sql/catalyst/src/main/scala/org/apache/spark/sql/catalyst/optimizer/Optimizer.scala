@@ -1782,10 +1782,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       }
 
       if (stayUp.isEmpty) {
-        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+        val childCondition = replaceAlias(condition, aliasMap)
+        project.copy(child = Filter(childCondition, grandChild))
       } else if (!pushDown.isEmpty) {
-        Filter(stayUp.reduce(And),
-          project.copy(child = Filter(pushDown.reduce(And), grandChild)))
+        val childCondition = replaceAlias(pushDown.reduce(And), aliasMap)
+        Filter(stayUp.reduce(And), project.copy(child = Filter(childCondition, grandChild)))
       } else {
         f
       }
