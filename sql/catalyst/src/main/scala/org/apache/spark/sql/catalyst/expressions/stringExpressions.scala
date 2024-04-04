@@ -1015,10 +1015,6 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
     }
   }
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes()
-  }
-
   override def dataType: DataType = IntegerType
 
   override def prettyName: String = "find_in_set"
@@ -1394,10 +1390,6 @@ case class StringInstr(str: Expression, substr: Expression)
     } else {
       string.asInstanceOf[UTF8String].indexOf(sub.asInstanceOf[UTF8String], 0, collationId) + 1
     }
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes()
   }
 
   override def prettyName: String = "instr"
