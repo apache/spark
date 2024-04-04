@@ -48,7 +48,6 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 import urllib
 
-from pyspark import SparkContext, SparkConf, __version__
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
@@ -889,6 +888,8 @@ class SparkSession:
         3. Starts a regular Spark session that automatically starts a Spark Connect server
           with JVM via ``spark.plugins`` feature.
         """
+        from pyspark import SparkContext, SparkConf, __version__
+
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
             # Configurations to be overwritten

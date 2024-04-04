@@ -48,7 +48,7 @@ from pyspark.accumulators import AccumulatorParam
 from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
-    from pyspark.context import SparkContext
+    from pyspark.core.context import SparkContext
 
 MemoryTuple = Tuple[float, float, int]
 LineProfile = Tuple[int, Optional[MemoryTuple]]
