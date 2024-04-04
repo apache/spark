@@ -145,7 +145,7 @@ class SparkContext:
 
     Examples
     --------
-    >>> from pyspark.core.context import SparkContext
+    >>> from pyspark.context import SparkContext
     >>> sc = SparkContext('local', 'test')
     >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
