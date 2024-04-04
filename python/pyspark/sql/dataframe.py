@@ -599,10 +599,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     # Create a table with Rate source.
         ...     query = df.writeStream.toTable(
         ...         "my_table", checkpointLocation=d)
-        ...     print(type(query))
         ...     time.sleep(3)
         ...     query.stop()
-        <...streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
 
