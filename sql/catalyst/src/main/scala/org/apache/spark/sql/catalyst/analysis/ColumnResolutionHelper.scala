@@ -545,8 +545,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       q: Seq[LogicalPlan],
-      d: Int): Option[(NamedExpression, Int)] = {
-    q.flatMap(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _, d))
+      currentDepth: Int): Option[(NamedExpression, Int)] = {
+    q.flatMap(resolveDataFrameColumnRecursively(u, id, isMetadataAccess, _, currentDepth))
       .sortBy(_._2) // make sure 0-depth result is on the left side (avoid depths like: 1, 2, 0)
       .foldLeft(Option.empty[(NamedExpression, Int)]) {
         case (None, (r2, d2)) => Some((r2, d2))
@@ -560,7 +560,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       p: LogicalPlan,
-      d: Int): Option[(NamedExpression, Int)] = {
+      currentDepth: Int): Option[(NamedExpression, Int)] = {
     val resolved = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
       val resolved = try {
         if (!isMetadataAccess) {
@@ -575,9 +575,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           logDebug(s"Fail to resolve $u with $p due to $e")
           None
       }
-      resolved.map(r => (r, d))
+      resolved.map(r => (r, currentDepth))
     } else {
-      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children, d + 1)
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children, currentDepth + 1)
     }
 
     // In self join case like:
