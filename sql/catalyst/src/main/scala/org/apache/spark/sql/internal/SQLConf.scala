@@ -3390,13 +3390,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val REPLACE_NULLIF_USING_WITH_EXPR =
-    buildConf("spark.databricks.sql.replaceNullIfUsingWithExpr")
+  val ALWAYS_INLINE_COMMON_EXPR_IN_WITH =
+    buildConf("spark.sql.alwaysInlineCommonExprInWith")
       .internal()
-      .doc("When true, NullIf expressions are rewritten using With expressions to avoid " +
-        "expression duplication.")
+      .doc("When true, always inline common expressions inside WITH expression which may lead " +
+        "to duplicated expressions.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
