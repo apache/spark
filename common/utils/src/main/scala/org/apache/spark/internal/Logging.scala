@@ -176,7 +176,7 @@ trait Logging {
   protected def logWarning(entry: LogEntry, stripMargin: Boolean): Unit =
     logEntryHelper(entry, stripMargin, log.warn)
 
-  private def logEntryHelper(entry: LogEntry, stripMargin: Boolean, fn: String => ()): Unit = {
+  private def logEntryHelper(entry: LogEntry, stripMargin: Boolean, fn: String => Unit): Unit = {
     if (log.isDebugEnabled) {
       withLogContext(entry.context) {
         fn(maybeStripMargin(entry.message, stripMargin))
@@ -209,7 +209,7 @@ trait Logging {
       entry: LogEntry,
       throwable: Throwable,
       stripMargin: Boolean,
-      fn: (String, Throwable) => ()): Unit = {
+      fn: (String, Throwable) => Unit): Unit = {
     if (log.isDebugEnabled) {
       withLogContext(entry.context) {
         fn(maybeStripMargin(entry.message, stripMargin), throwable)
