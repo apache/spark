@@ -27,6 +27,7 @@ import org.apache.commons.io.FileUtils
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.internal.{Logging, LogKey}
+import org.apache.spark.internal.LogKey.LogKey
 
 class LogKeySuite
     extends AnyFunSuite // scalastyle:ignore funsuite
@@ -36,7 +37,7 @@ class LogKeySuite
   /* Used to regenerate the LogKey class file. Run:
    {{{
       SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
-        "common-utils/testOnly *LogKeySuite -- -t \"LogKey enumeration fields are correctly sorted\""
+        "common-utils/testOnly *LogKeySuite -- \"LogKey enumeration fields are correctly sorted\""
    }}}
    */
   // scalastyle:on line.size.limit
@@ -57,31 +58,37 @@ class LogKeySuite
   private val logKeyFilePath = getWorkspaceFilePath("common", "utils", "src", "main", "scala",
     "org", "apache", "spark", "internal", "LogKey.scala")
 
+  // regenerate the file `LogKey.scala` with its enumeration fields sorted alphabetically
+  private def regenerateLogKeyFile(
+      originalKeys: Seq[LogKey], sortedKeys: Seq[LogKey]): Unit = {
+    if (originalKeys != sortedKeys) {
+      val logKeyFile = logKeyFilePath.toFile
+      logInfo(s"Regenerating LogKey file $logKeyFile")
+      val originalContents = FileUtils.readLines(logKeyFile, StandardCharsets.UTF_8)
+      val sortedContents = new JList[String]()
+      var firstMatch = false
+      originalContents.asScala.foreach { line =>
+        if (line.trim.startsWith("val ") && line.trim.endsWith(" = Value")) {
+          if (!firstMatch) {
+            sortedKeys.foreach { logKey =>
+              sortedContents.add(s"  val ${logKey.toString} = Value")
+            }
+            firstMatch = true
+          }
+        } else {
+          sortedContents.add(line)
+        }
+      }
+      Files.delete(logKeyFile.toPath)
+      FileUtils.writeLines(logKeyFile, StandardCharsets.UTF_8.name(), sortedContents)
+    }
+  }
+
   test("LogKey enumeration fields are correctly sorted") {
     val originalKeys = LogKey.values.toSeq
     val sortedKeys = originalKeys.sortBy(_.toString)
     if (regenerateGoldenFiles) {
-      if (originalKeys != sortedKeys) {
-        val logKeyFile = logKeyFilePath.toFile
-        logInfo(s"Regenerating LogKey file $logKeyFile")
-        val originalContents = FileUtils.readLines(logKeyFile, StandardCharsets.UTF_8)
-        val sortedContents = new JList[String]()
-        var firstMatch = false
-        originalContents.asScala.foreach { line =>
-          if (line.trim.startsWith("val ") && line.trim.endsWith(" = Value")) {
-            if (!firstMatch) {
-              sortedKeys.foreach { logKey =>
-                sortedContents.add(s"  val ${logKey.toString} = Value")
-              }
-              firstMatch = true
-            }
-          } else {
-            sortedContents.add(line)
-          }
-        }
-        Files.delete(logKeyFile.toPath)
-        FileUtils.writeLines(logKeyFile, StandardCharsets.UTF_8.name(), sortedContents)
-      }
+      regenerateLogKeyFile(originalKeys, sortedKeys)
     } else {
       assert(originalKeys === sortedKeys,
         "LogKey enumeration fields must be sorted alphabetically")
