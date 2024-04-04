@@ -1817,14 +1817,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      // We should also only push down filters which are equal (either ref or semantic) to an
-      // output of the union. We check referential equality since semantic equality of a named field
-      // may be false as the data type may have changed to include nullable during the union.
       val output = union.output
       def eligibleForPushdown(e: Expression): Boolean = {
-        e.deterministic && e.references.forall { ref =>
-          output.exists(e2 => ref.exprId == e2.exprId)
-        }
+        e.deterministic
       }
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(eligibleForPushdown)
 
