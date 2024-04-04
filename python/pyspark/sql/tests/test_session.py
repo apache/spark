@@ -193,9 +193,6 @@ class SparkSessionTests3(unittest.TestCase, PySparkErrorTestUtils):
             session.range(5).collect()
 
     def test_active_session_with_None_and_not_None_context(self):
-        from pyspark.core.context import SparkContext
-        from pyspark.core.conf import SparkConf
-
         sc = None
         session = None
         try:
