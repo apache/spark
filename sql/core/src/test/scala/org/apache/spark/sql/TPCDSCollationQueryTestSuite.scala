@@ -59,22 +59,25 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
     }
   }
 
-  abstract class CollationCheck(val dbName: String,
-                                val collation: String,
-                                val columnTransform: String) {
+  abstract class CollationCheck(
+      val dbName: String,
+      val collation: String,
+      val columnTransform: String) {
     def queryTransform: String => String
   }
 
-  case class CaseInsensitiveCollationCheck(override val dbName: String,
-                                           override val collation: String,
-                                           override val columnTransform: String)
+  case class CaseInsensitiveCollationCheck(
+      override val dbName: String,
+      override val collation: String,
+      override val columnTransform: String)
     extends CollationCheck(dbName, collation, columnTransform) {
-    def queryTransform: String => String = identity
+    override def queryTransform: String => String = identity
   }
 
-  case class CaseSensitiveCollationCheck(override val dbName: String,
-                                         override val collation: String,
-                                         override val columnTransform: String)
+  case class CaseSensitiveCollationCheck(
+      override val dbName: String,
+      override val collation: String,
+      override val columnTransform: String)
     extends CollationCheck(dbName, collation, columnTransform) {
     override def queryTransform: String => String = _.toLowerCase(Locale.ROOT)
   }
