@@ -108,8 +108,9 @@ Security Changes & Compatibility
 
 The original version of this protocol, retroactively called v1.0, did not apply an HKDF to `sharedSecret` to derive
 a key (i.e. `derivedKey`) and was directly using the encoded X coordinate as key material. This is atypical and
-standard practice is to pass that shared coordinate through an HKDF. The current version, v2.0, adds this additional
+standard practice is to pass that shared coordinate through an HKDF. The latest version adds this additional
 HKDF to derive `derivedKey`.
 
-Consequently, older Spark versions using v1.0 of this protocol will not negotiate the same key as
-Spark versions using v2.0 and will be **unable to send encrypted RPCs** across incompatible versions.
+Consequently, Apache Spark instances using v1.0 of this protocol will not negotiate the same key as
+instances using v2.0 and will be **unable to send encrypted RPCs** across incompatible versions. For this reason, v1.0
+remains the default to preserve backward-compatibility.
