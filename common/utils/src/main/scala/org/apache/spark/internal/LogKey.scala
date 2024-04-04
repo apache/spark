@@ -42,6 +42,7 @@ object LogKey extends Enumeration {
   val EXECUTOR_ID = Value
   val EXECUTOR_STATE_CHANGED = Value
   val EXIT_CODE = Value
+  val FIELD_NAME = Value
   val HOST = Value
   val JOB_ID = Value
   val LINE = Value
