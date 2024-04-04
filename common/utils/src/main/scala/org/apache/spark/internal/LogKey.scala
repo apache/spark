@@ -43,6 +43,7 @@ object LogKey extends Enumeration {
   val EXECUTOR_STATE_CHANGED = Value
   val EXIT_CODE = Value
   val HOST = Value
+  val INDEX = Value
   val JOB_ID = Value
   val LINE = Value
   val LINE_NUM = Value
@@ -51,14 +52,20 @@ object LogKey extends Enumeration {
   val MAX_EXECUTOR_FAILURES = Value
   val MAX_SIZE = Value
   val MIN_SIZE = Value
+  val NEW_VALUE = Value
   val OLD_BLOCK_MANAGER_ID = Value
+  val OLD_VALUE = Value
+  val OP_ID = Value
   val PARTITION_ID = Value
   val PATH = Value
   val POD_ID = Value
+  val POLICY = Value
+  val QUERY_ID = Value
   val REASON = Value
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
   val RPC_ADDRESS = Value
+  val SESSION_ID = Value
   val SHUFFLE_ID = Value
   val SIZE = Value
   val STAGE_ID = Value
@@ -70,6 +77,10 @@ object LogKey extends Enumeration {
   val TASK_STATE = Value
   val TID = Value
   val TIMEOUT = Value
+  val TOTAL_TIME = Value
+  val WAIT_RESULT_TIME = Value
+  val WAIT_SEND_TIME = Value
+  val WAIT_TIME = Value
   val WORKER_URL = Value
 
   type LogKey = Value
