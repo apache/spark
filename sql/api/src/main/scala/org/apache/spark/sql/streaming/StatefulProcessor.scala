@@ -28,7 +28,7 @@ import org.apache.spark.sql.errors.ExecutionErrors
  */
 @Experimental
 @Evolving
-private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
+private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
 
   /**
    * Handle to the stateful processor that provides access to the state store and other
@@ -100,13 +100,16 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
  */
 @Experimental
 @Evolving
-trait StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K, I, O] {
+private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
+  extends StatefulProcessor[K, I, O] {
 
   /**
    * Function that will be invoked only in the first batch for users to process initial states.
    *
    * @param key - grouping key
    * @param initialState - A row in the initial state to be processed
+   * @param timerValues  - instance of TimerValues that provides access to current processing/event
+   *                     time if available
    */
-  def handleInitialState(key: K, initialState: S): Unit
+  def handleInitialState(key: K, initialState: S, timerValues: TimerValues): Unit
 }
