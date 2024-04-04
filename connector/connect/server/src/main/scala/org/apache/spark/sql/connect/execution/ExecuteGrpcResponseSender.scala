@@ -268,11 +268,12 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
       // Process the outcome of the inner loop.
       if (interrupted) {
         // This sender got interrupted. Kill this RPC.
-        logWarning(log"Got detached from opId=${MDC(OP_ID, executeHolder.operationId)} " +
-          log"at index ${MDC(INDEX, nextIndex - 1)}." +
-          log"totalTime=${MDC(TOTAL_TIME, System.nanoTime - startTime)}ns " +
-          log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep)}ns " +
-          log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep)}ns")
+        logWarning(
+          log"Got detached from opId=${MDC(OP_ID, executeHolder.operationId)} " +
+            log"at index ${MDC(INDEX, nextIndex - 1)}." +
+            log"totalTime=${MDC(TOTAL_TIME, System.nanoTime - startTime)}ns " +
+            log"waitingForResults=${MDC(WAIT_RESULT_TIME, consumeSleep)}ns " +
+            log"waitingForSend=${MDC(WAIT_SEND_TIME, sendSleep)}ns")
         throw new SparkSQLException(errorClass = "INVALID_CURSOR.DISCONNECTED", Map.empty)
       } else if (gotResponse) {
         enqueueProgressMessage()

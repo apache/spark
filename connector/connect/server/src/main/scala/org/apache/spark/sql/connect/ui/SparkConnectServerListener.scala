@@ -195,8 +195,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.COMPILED
         updateLiveStore(executionData)
       case None =>
-        logWarning(log"onOperationAnalyzed called with " +
-          log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
+        logWarning(
+          log"onOperationAnalyzed called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
 
@@ -207,8 +208,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.READY
         updateLiveStore(executionData)
       case None =>
-        logWarning(log"onOperationReadyForExecution called with " +
-          log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
+        logWarning(
+          log"onOperationReadyForExecution called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
 
@@ -219,8 +221,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.CANCELED
         updateLiveStore(executionData)
       case None =>
-        logWarning(log"onOperationCanceled called with " +
-          log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
+        logWarning(
+          log"onOperationCanceled called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
   private def onOperationFailed(e: SparkListenerConnectOperationFailed) = synchronized {
@@ -231,8 +234,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.FAILED
         updateLiveStore(executionData)
       case None =>
-        logWarning(log"onOperationFailed called with " +
-          log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
+        logWarning(
+          log"onOperationFailed called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
   private def onOperationFinished(e: SparkListenerConnectOperationFinished) = synchronized {
@@ -242,8 +246,9 @@ private[connect] class SparkConnectServerListener(
         executionData.state = ExecutionState.FINISHED
         updateLiveStore(executionData)
       case None =>
-        logWarning(log"onOperationFinished called with " +
-          log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
+        logWarning(
+          log"onOperationFinished called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
   private def onOperationClosed(e: SparkListenerConnectOperationClosed) = synchronized {
@@ -254,8 +259,9 @@ private[connect] class SparkConnectServerListener(
         updateStoreWithTriggerEnabled(executionData)
         executionList.remove(e.jobTag)
       case None =>
-        logWarning(log"onOperationClosed called with " +
-          log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
+        logWarning(
+          log"onOperationClosed called with " +
+            log"unknown operation id: ${MDC(OP_ID, e.jobTag)}")
     }
   }
 
@@ -272,8 +278,10 @@ private[connect] class SparkConnectServerListener(
         updateStoreWithTriggerEnabled(sessionData)
         sessionList.remove(e.sessionId)
 
-      case None => logWarning(log"onSessionClosed called with " +
-        log"unknown session id: ${MDC(SESSION_ID, e.sessionId)}")
+      case None =>
+        logWarning(
+          log"onSessionClosed called with " +
+            log"unknown session id: ${MDC(SESSION_ID, e.sessionId)}")
     }
   }
 

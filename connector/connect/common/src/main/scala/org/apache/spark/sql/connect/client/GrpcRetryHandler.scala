@@ -190,7 +190,8 @@ private[sql] object GrpcRetryHandler extends Logging {
         // retry exception is considered immediately retriable without any policies.
         logWarning(
           log"Retrying (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)}), " +
-            log"Non-Fatal error during RPC execution:", lastException)
+            log"Non-Fatal error during RPC execution:",
+          lastException)
         return
       }
 
@@ -211,7 +212,8 @@ private[sql] object GrpcRetryHandler extends Logging {
 
       logWarning(
         log"Exceeded retries (currentRetryNum=${MDC(RETRY_COUNT, currentRetryNum)}), " +
-          log"Non-Fatal error during RPC execution: ", lastException)
+          log"Non-Fatal error during RPC execution: ",
+        lastException)
 
       val error = new RetriesExceeded()
       exceptionList.foreach(error.addSuppressed)

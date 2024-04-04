@@ -116,8 +116,10 @@ private[connect] class SparkConnectStreamingQueryCache(
             v.query.stop()
           } catch {
             case NonFatal(ex) =>
-              logWarning(log"Failed to stop the query ${MDC(QUERY_ID, k.queryId)}. " +
-                log"Error is ignored.", ex)
+              logWarning(
+                log"Failed to stop the query ${MDC(QUERY_ID, k.queryId)}. " +
+                  log"Error is ignored.",
+                ex)
           }
         }
       }
