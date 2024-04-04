@@ -38,7 +38,8 @@ import org.apache.spark.util.Utils
  *   2. build/sbt "sql/Test/runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
- *      Results will be written to "benchmarks/StateStoreBasicOperationsBenchmark-results.txt".
+ *      Results will be written to:
+ *      "sql/core/benchmarks/StateStoreBasicOperationsBenchmark-results.txt".
  * }}}
  */
 object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
@@ -153,7 +154,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     }
 
     runBenchmark("merge rows") {
-      val numOfRows = Seq(1000)
+      val numOfRows = Seq(10000)
       val numValuesPerKey = 10
       val overwriteRates = Seq(100, 50, 10, 0)
 
