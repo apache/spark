@@ -74,8 +74,6 @@ class LogKeySuite
                 sortedContents.add(s"  val ${logKey.toString} = Value")
               }
               firstMatch = true
-            } else {
-              // ignore it
             }
           } else {
             sortedContents.add(line)

@@ -467,6 +467,24 @@
     ],
     "sqlState" : "42704"
   },
+  "COLLATION_MISMATCH" : {
+    "message" : [
+      "Could not determine which collation to use for string functions and operators."
+    ],
+    "subClass" : {
+      "EXPLICIT" : {
+        "message" : [
+          "Error occurred due to the mismatch between explicit collations: <explicitTypes>. Decide on a single explicit collation and remove others."
+        ]
+      },
+      "IMPLICIT" : {
+        "message" : [
+          "Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly."
+        ]
+      }
+    },
+    "sqlState" : "42P21"
+  },
   "COLLECTION_SIZE_LIMIT_EXCEEDED" : {
     "message" : [
       "Can't create array with <numberOfElements> elements which exceeding the array size limit <maxRoundedArrayLength>,"
@@ -686,11 +704,6 @@
         "message" : [
           "cannot cast <srcType> to <targetType>.",
           "To convert values from <srcType> to <targetType>, you can use the functions <functionNames> instead."
-        ]
-      },
-      "COLLATION_MISMATCH" : {
-        "message" : [
-          "Collations <collationNameLeft> and <collationNameRight> are not compatible. Please use the same collation for both strings."
         ]
       },
       "CREATE_MAP_KEY_DIFF_TYPES" : {
@@ -1603,6 +1616,12 @@
       "Max offset with <rowsPerSecond> rowsPerSecond is <maxSeconds>, but 'rampUpTimeSeconds' is <rampUpTimeSeconds>."
     ],
     "sqlState" : "22003"
+  },
+  "INDETERMINATE_COLLATION" : {
+    "message" : [
+      "Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly."
+    ],
+    "sqlState" : "42P22"
   },
   "INDEX_ALREADY_EXISTS" : {
     "message" : [
@@ -4533,7 +4552,8 @@
     "subClass" : {
       "ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED" : {
         "message" : [
-          "Accessing outer query column is not allowed in this location<treeNode>."
+          "Accessing outer query column is not allowed in this location:",
+          "<treeNode>"
         ]
       },
       "AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES" : {
@@ -4543,7 +4563,8 @@
       },
       "CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE" : {
         "message" : [
-          "Correlated column is not allowed in predicate: <treeNode>."
+          "Correlated column is not allowed in predicate:",
+          "<treeNode>"
         ]
       },
       "CORRELATED_COLUMN_NOT_FOUND" : {
@@ -4578,7 +4599,8 @@
       },
       "NON_DETERMINISTIC_LATERAL_SUBQUERIES" : {
         "message" : [
-          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row<treeNode>."
+          "Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE" : {
@@ -4588,17 +4610,20 @@
       },
       "UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY" : {
         "message" : [
-          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands<treeNode>."
+          "Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_IN_EXISTS_SUBQUERY" : {
         "message" : [
-          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands<treeNode>."
+          "IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands:",
+          "<treeNode>"
         ]
       },
       "UNSUPPORTED_TABLE_ARGUMENT" : {
         "message" : [
-          "Table arguments are used in a function where they are not supported<treeNode>."
+          "Table arguments are used in a function where they are not supported:",
+          "<treeNode>"
         ]
       }
     },

@@ -48,10 +48,10 @@ from py4j.protocol import Py4JError
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
-from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
-from pyspark.conf import SparkConf
-from pyspark.files import SparkFiles
-from pyspark.java_gateway import launch_gateway, local_connect_and_auth
+from pyspark.core.broadcast import Broadcast, BroadcastPickleRegistry
+from pyspark.core.conf import SparkConf
+from pyspark.core.files import SparkFiles
+from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import (
     CPickleSerializer,
     BatchedSerializer,
@@ -64,10 +64,11 @@ from pyspark.serializers import (
 )
 from pyspark.storagelevel import StorageLevel
 from pyspark.resource.information import ResourceInformation
-from pyspark.rdd import RDD, _load_from_socket
+from pyspark.core.rdd import RDD
+from pyspark.util import _load_from_socket, local_connect_and_auth
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
-from pyspark.status import StatusTracker
+from pyspark.core.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler, MemoryProfiler
 from pyspark.errors import PySparkRuntimeError
 from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
@@ -144,7 +145,7 @@ class SparkContext:
 
     Examples
     --------
-    >>> from pyspark.context import SparkContext
+    >>> from pyspark.core.context import SparkContext
     >>> sc = SparkContext('local', 'test')
     >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):

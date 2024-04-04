@@ -222,7 +222,8 @@
     <icu4j.version>72.1</icu4j.version>
     <!--
     If you are changing Arrow version specification, please check
-    ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
+    ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
+    and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>15.0.2</arrow.version>
     <ammonite.version>3.0.0-M1</ammonite.version>
