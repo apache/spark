@@ -29,7 +29,6 @@ object LogKey extends Enumeration {
   val CONTAINER_ID = Value
   val EXECUTOR_ID = Value
   val EXIT_CODE = Value
-  val FORMATTED_CODE = Value
   val JOIN_CONDITION = Value
   val MAX_EXECUTOR_FAILURES = Value
   val MAX_SIZE = Value
