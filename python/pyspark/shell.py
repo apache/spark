@@ -29,7 +29,7 @@ import warnings
 import sys
 
 import pyspark
-from pyspark.context import SparkContext
+from pyspark.core.context import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.context import SQLContext
 from pyspark.sql.utils import is_remote

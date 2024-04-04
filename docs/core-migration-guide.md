@@ -44,6 +44,8 @@ license: |
 
 - Since Spark 4.0, the default log4j output has shifted from plain text to JSON lines to enhance analyzability. To revert to plain text output, you can either set `spark.log.structuredLogging.enabled` to `false`, or use a custom log4j configuration.
 
+- Since Spark 4.0, Spark performs speculative executions less agressively with `spark.speculation.multiplier=3` and `spark.speculation.quantile=0.9`. To restore the legacy behavior, you can set `spark.speculation.multiplier=1.5` and `spark.speculation.quantile=0.75`.
+
 ## Upgrading from Core 3.4 to 3.5
 
 - Since Spark 3.5, `spark.yarn.executor.failuresValidityInterval` is deprecated. Use `spark.executor.failuresValidityInterval` instead.
