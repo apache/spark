@@ -32,6 +32,9 @@ from pyspark.serializers import read_int, UTF8Deserializer
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.errors import PySparkRuntimeError
 
+# for backward compatibility references.
+from pyspark.util import local_connect_and_auth  # noqa: F401
+
 
 def launch_gateway(conf=None, popen_kwargs=None):
     """

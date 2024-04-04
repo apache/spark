@@ -91,6 +91,9 @@ from pyspark.util import (
 )
 from pyspark.errors import PySparkRuntimeError
 
+# for backward compatibility references.
+from pyspark.util import PythonEvalType  # noqa: F401
+
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject

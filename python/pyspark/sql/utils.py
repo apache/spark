@@ -32,6 +32,7 @@ from pyspark.errors import (  # noqa: F401
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
+from pyspark.util import is_remote_only
 from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
 
@@ -178,7 +179,7 @@ def is_remote() -> bool:
     >>> is_remote()
     False
     """
-    return "SPARK_CONNECT_MODE_ENABLED" in os.environ
+    return ("SPARK_CONNECT_MODE_ENABLED" in os.environ) or is_remote_only()
 
 
 def try_remote_functions(f: FuncT) -> FuncT:

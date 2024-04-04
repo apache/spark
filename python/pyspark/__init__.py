@@ -46,6 +46,7 @@ Public classes:
       A inheritable thread to use in Spark when the pinned thread mode is on.
 """
 
+import sys
 from functools import wraps
 from typing import cast, Any, Callable, TypeVar, Union
 
@@ -57,6 +58,15 @@ if not is_remote_only():
     from pyspark.core.files import SparkFiles
     from pyspark.core.status import StatusTracker, SparkJobInfo, SparkStageInfo
     from pyspark.core.broadcast import Broadcast
+    from pyspark.core import conf, rdd, files, status, broadcast
+
+    # for backward compatibility references.
+    sys.modules["pyspark.conf"] = conf
+    sys.modules["pyspark.rdd"] = rdd
+    sys.modules["pyspark.files"] = files
+    sys.modules["pyspark.status"] = status
+    sys.modules["pyspark.broadcast"] = broadcast
+
 from pyspark.util import InheritableThread, inheritable_thread_target
 from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
@@ -111,6 +121,10 @@ def keyword_only(func: _F) -> _F:
 # To avoid circular dependencies
 if not is_remote_only():
     from pyspark.core.context import SparkContext
+    from pyspark.core import context
+
+    # for backward compatibility references.
+    sys.modules["pyspark.context"] = context
 
 # for back compatibility
 from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401
