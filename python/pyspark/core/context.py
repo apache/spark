@@ -47,7 +47,6 @@ from py4j.java_collections import JavaMap
 from py4j.protocol import Py4JError
 
 from pyspark import accumulators
-from pyspark.conf import SparkConf
 from pyspark.accumulators import Accumulator
 from pyspark.core.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.core.files import SparkFiles
@@ -74,6 +73,7 @@ from pyspark.errors import PySparkRuntimeError
 from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
+    from pyspark.conf import SparkConf
     from pyspark.accumulators import AccumulatorParam
 
 __all__ = ["SparkContext"]
@@ -235,6 +235,8 @@ class SparkContext:
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
         memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ) -> None:
+        from pyspark.conf import SparkConf
+
         self.environment = environment or {}
         # java gateway must have been launched at this point.
         if conf is not None and conf._jconf is not None:
@@ -511,6 +513,8 @@ class SparkContext:
         >>> SparkContext.getOrCreate()
         <SparkContext ...>
         """
+        from pyspark.conf import SparkConf
+
         with SparkContext._lock:
             if SparkContext._active_spark_context is None:
                 SparkContext(conf=conf or SparkConf())
@@ -2561,6 +2565,8 @@ class SparkContext:
 
         .. versionadded:: 2.1.0
         """
+        from pyspark.conf import SparkConf
+
         conf = SparkConf()
         conf.setAll(self._conf.getAll())
         return conf
@@ -2598,7 +2604,7 @@ class SparkContext:
 
 def _test() -> None:
     import doctest
-    from pyspark import SparkConf
+    from pyspark.conf import SparkConf
 
     globs = globals().copy()
     conf = SparkConf().set("spark.ui.enabled", "True")
