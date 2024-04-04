@@ -39,11 +39,10 @@ case class Between private(input: Expression, lower: Expression, upper: Expressi
   extends RuntimeReplaceable with InheritAnalysisRules  {
   def this(input: Expression, lower: Expression, upper: Expression) = {
     this(input, lower, upper,
-      if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR_IN_WITH)) {
-        val commonExpr = CommonExpressionDef(input)
-        val ref = new CommonExpressionRef(commonExpr)
-        val replacement = And(GreaterThanOrEqual(ref, lower), LessThanOrEqual(ref, upper))
-        With(replacement, Seq(commonExpr))
+      if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
+        With(input) { case Seq(ref) =>
+          And(GreaterThanOrEqual(ref, lower), LessThanOrEqual(ref, upper))
+        }
       } else {
         And(GreaterThanOrEqual(input, lower), LessThanOrEqual(input, upper))
       }

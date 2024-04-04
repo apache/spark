@@ -3390,11 +3390,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ALWAYS_INLINE_COMMON_EXPR_IN_WITH =
-    buildConf("spark.sql.alwaysInlineCommonExprInWith")
+  val ALWAYS_INLINE_COMMON_EXPR =
+    buildConf("spark.sql.alwaysInlineCommonExpr")
       .internal()
-      .doc("When true, always inline common expressions inside WITH expression which may lead " +
-        "to duplicated expressions.")
+      .doc("When true, always inline common expressions instead of using the WITH expression. " +
+        "This may lead to duplicated expressions and the config should only be enabled if you " +
+        "hit bugs caused by the WITH expression.")
       .booleanConf
       .createWithDefault(false)
 

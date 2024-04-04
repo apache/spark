@@ -160,7 +160,7 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
 
   def this(left: Expression, right: Expression) = {
     this(left, right,
-      if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR_IN_WITH)) {
+      if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
         With(left) { case Seq(ref) =>
           If(EqualTo(ref, right), Literal.create(null, left.dataType), ref)
         }
