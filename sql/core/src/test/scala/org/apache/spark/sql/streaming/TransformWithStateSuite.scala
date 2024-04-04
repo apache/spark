@@ -802,3 +802,79 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
     )
   }
 }
+
+class MetricsStatefulProcessor
+  extends RunningCountStatefulProcessorWithProcTimeTimerUpdates
+    with StatefulProcessor[String, String, (String, String)] {
+  @transient protected var _valueStateToDelete: ValueState[Long] = _
+  @transient protected var _listState: ListState[Long] = _
+  @transient protected var _mapState: MapState[String, Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeoutMode: TimeoutMode): Unit = {
+    super.init(outputMode, timeoutMode)
+    _valueStateToDelete = getHandle.getValueState(
+      "valueStateToDelete", Encoders.scalaLong)
+    _listState = getHandle.getListState(
+      "listStateMetricsTest", Encoders.scalaLong)
+    _mapState = getHandle.getMapState(
+      "mapStateMetricsTest", Encoders.STRING, Encoders.scalaLong)
+    getHandle.deleteIfExists("valueStateToDelete")
+  }
+}
+
+class TransformWithStateMetricsSuite extends StateStoreMetricsTest {
+
+  import testImplicits._
+
+  test("metrics test") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      val clock = new StreamManualClock
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new MetricsStatefulProcessor(),
+          TimeoutMode.ProcessingTime(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckLastBatch(("a", "1")),
+        Execute { q =>
+          println("print some metrics: " + q.lastProgress)
+        },
+        AddData(inputData, "a", "b"),
+        AdvanceManualClock(1 * 1000),
+        CheckLastBatch(("a", "2"), ("b", "1")),
+        Execute { q =>
+          println("print some metrics: " + q.lastProgress)
+        },
+        AddData(inputData, "c"),
+        AdvanceManualClock(1 * 1000),
+        CheckLastBatch(("c", "1")),
+        Execute { q =>
+          println("print some metrics: " + q.lastProgress)
+        },
+        AddData(inputData, "d"),
+        AdvanceManualClock(5 * 1000),
+        CheckLastBatch(("b", "-1"), ("d", "1")),
+        Execute { q =>
+          println("print some metrics: " + q.lastProgress)
+        },
+        AddData(inputData, "d"),
+        AdvanceManualClock(1 * 1000),
+        CheckLastBatch(("d", "2")),
+        Execute { q =>
+          println("print some metrics: " + q.lastProgress)
+        },
+        StopStream
+      )
+    }
+  }
+}

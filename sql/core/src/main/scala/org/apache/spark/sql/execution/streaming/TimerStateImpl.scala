@@ -218,4 +218,12 @@ class TimerStateImpl(
       override protected def close(): Unit = { }
     }
   }
+
+  def getAllTimers(): Long = {
+    // TODO before rocksDB.commit, this will not return
+    //  the newly registered/deleted timers in current batch;
+    //  When counting the number of active timers, should we count the newly
+    //  registered/deleted timers?
+    store.iterator(tsToKeyCFName).toSeq.length
+  }
 }

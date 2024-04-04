@@ -762,6 +762,10 @@ class RocksDB(
     val nativeOpsMetrics = nativeOpsMetricTickers.transform { (_, typ) =>
       nativeStats.getTickerCount(typ)
     }
+    // TODO "default" counts a col family? sum of all partition, or only count once?
+    val numInternalColFamily = colFamilyNameToHandleMap.keys
+      .filter(checkInternalColumnFamilies).size.toLong
+    val numExternalColFamily = colFamilyNameToHandleMap.keys.size - numInternalColFamily
 
     RocksDBMetrics(
       numKeysOnLoadedVersion,
@@ -775,6 +779,8 @@ class RocksDB(
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
+      numExternalColFamily = numExternalColFamily,
+      numInternalColFamily = numInternalColFamily,
       nativeOpsMetrics = nativeOpsMetrics)
   }
 
@@ -1181,6 +1187,8 @@ case class RocksDBMetrics(
     bytesCopied: Long,
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
+    numExternalColFamily: Long,
+    numInternalColFamily: Long,
     nativeOpsMetrics: Map[String, Long]) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
