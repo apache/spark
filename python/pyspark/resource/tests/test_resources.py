@@ -23,7 +23,7 @@ from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
-    pyarrow_requirement_message
+    pyarrow_requirement_message,
 )
 
 
