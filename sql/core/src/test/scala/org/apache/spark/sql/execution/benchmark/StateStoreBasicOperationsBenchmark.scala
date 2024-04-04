@@ -162,6 +162,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
         val testData = constructRandomizedTestDataWithMultipleValues(numOfRow,
           (1 to numOfRow).map(_ * 1000L).toList, numValuesPerKey, 0)
 
+        // note that merge is only supported for RocksDB state store provider
         val rocksDBProvider = newRocksDBStateProvider(trackTotalNumberOfRows = true,
           useColumnFamilies = true,
           useMultipleValuesPerKey = true)
@@ -191,6 +192,7 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
           val rowsToPut = Random.shuffle(newRows ++ existingRows)
 
           val benchmark = new Benchmark(s"merging $numOfRow rows " +
+            s"with $numValuesPerKey values per key " +
             s"($numOfRowsToOverwrite rows to overwrite - rate $overwriteRate)",
             numOfRow, minNumIters = 1000, output = output)
 
@@ -383,12 +385,8 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
       store: StateStore,
       rows: Seq[(UnsafeRow, Seq[UnsafeRow])]): Unit = {
     rows.foreach { case (key, values) =>
-      values.zipWithIndex.foreach { case (value, index) =>
-        if (index == 0) {
-          store.put(key, value)
-        } else {
-          store.merge(key, value)
-        }
+      values.foreach { value =>
+        store.merge(key, value)
       }
     }
   }
