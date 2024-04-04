@@ -1157,9 +1157,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * A function translate any character which is key in input map by a corresponding character which is value.
-   * The translate will happen when any character in the string matching with the character in the input map keys.
-   * @param dict map representing relations between characters that should be replaced with their replacements
+   * A function translate any character which is key in input map by a corresponding character
+   * which is value. The translation will happen when any character in the string matching with
+   * the character in the input map keys.
+   * @param dict map representing relations between characters and their replacements
    * @param collationId the collation id to use for comparison
    * @return a new UTF8String with characters replaced
    */
