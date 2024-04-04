@@ -29,18 +29,17 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.apache.spark.internal.{Logging, LogKey}
 import org.apache.spark.internal.LogKey.LogKey
 
+// scalastyle:off line.size.limit
+/**
+ * To re-generate the LogKey class file, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "common-utils/testOnly org.apache.spark.util.LogKeySuite"
+ * }}}
+ */
+// scalastyle:on line.size.limit
 class LogKeySuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with Logging {
-
-  // scalastyle:off line.size.limit
-  /* Used to regenerate the LogKey class file. Run:
-   {{{
-      SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
-        "common-utils/testOnly *LogKeySuite"
-   }}}
-   */
-  // scalastyle:on line.size.limit
 
   /**
    * Get a Path relative to the root project. It is assumed that a spark home is set.
