@@ -36,7 +36,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKey.{BLOCK_ID, ERROR, MAX_ATTEMPTS}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
@@ -964,13 +964,14 @@ final class ShuffleBlockFetcherIterator(
           }
 
         case FailureFetchResult(blockId, mapIndex, address, e) =>
-          var errorMsg: MessageWithContext = null
+          var errorMsg: String = null
           if (e.isInstanceOf[OutOfDirectMemoryError]) {
-            errorMsg = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
+            val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
               log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
-            logError(errorMsg)
+            logError(logMessage)
+            errorMsg = logMessage.message
           }
-          throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg.message))
+          throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
 
         case DeferFetchRequestResult(request) =>
           val address = request.address
