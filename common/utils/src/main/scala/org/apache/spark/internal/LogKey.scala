@@ -21,9 +21,9 @@ package org.apache.spark.internal
  * All structured logging keys should be defined here for standardization.
  */
 object LogKey extends Enumeration {
-  val APP_STATE = Value
   val APP_DESC = Value
   val APP_ID = Value
+  val APP_STATE = Value
   val BLOCK_ID = Value
   val BLOCK_MANAGER_ID = Value
   val BROADCAST_ID = Value

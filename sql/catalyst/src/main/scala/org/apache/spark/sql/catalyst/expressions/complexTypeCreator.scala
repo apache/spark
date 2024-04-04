@@ -78,7 +78,7 @@ case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolea
 
   private val defaultElementType: DataType = {
     if (useStringTypeWhenEmpty) {
-      StringType
+      SQLConf.get.defaultStringType
     } else {
       NullType
     }

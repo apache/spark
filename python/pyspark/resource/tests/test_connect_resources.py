@@ -18,8 +18,10 @@ import unittest
 
 from pyspark.resource import ResourceProfileBuilder, TaskResourceRequests, ExecutorResourceRequests
 from pyspark.sql import SparkSession
+from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
 
+@unittest.skipIf(not have_pandas, pandas_requirement_message)
 class ResourceProfileTests(unittest.TestCase):
     def test_profile_before_sc_for_connect(self):
         rpb = ResourceProfileBuilder()
