@@ -882,7 +882,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("union part 2 electric razor idk") {
+  test("union filter pushdown w/reference to grand-child field") {
     val nonNullableArray = StructField("a", ArrayType(IntegerType, false))
     val bField = StructField("b", IntegerType)
     val testRelationNonNull = LocalRelation(nonNullableArray, bField)
