@@ -235,23 +235,21 @@ case class TransformWithStateExec(
         val expiredTimerMetrics = longMetric("numOfExpiredTimer")
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
-        val iter = processorHandle.getExpiredTimers(batchTimestamp)
+        processorHandle.getExpiredTimers(batchTimestamp)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             expiredTimerMetrics += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
-        iter
 
       case EventTime =>
         val expiredTimerMetrics = longMetric("numOfExpiredTimer")
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        val iter = processorHandle.getExpiredTimers(watermark)
+        processorHandle.getExpiredTimers(watermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             expiredTimerMetrics += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
           }
-        iter
 
       case _ => Iterator.empty
     }
