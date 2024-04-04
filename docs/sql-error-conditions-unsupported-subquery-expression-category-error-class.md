@@ -32,7 +32,8 @@ This error class has the following derived error classes:
 
 ## ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED
 
-Accessing outer query column is not allowed in this location`<treeNode>`.
+Accessing outer query column is not allowed in this location:
+`<treeNode>`
 
 ## AGGREGATE_FUNCTION_MIXED_OUTER_LOCAL_REFERENCES
 
@@ -40,7 +41,8 @@ Found an aggregate function in a correlated predicate that has both outer and lo
 
 ## CORRELATED_COLUMN_IS_NOT_ALLOWED_IN_PREDICATE
 
-Correlated column is not allowed in predicate: `<treeNode>`.
+Correlated column is not allowed in predicate:
+`<treeNode>`
 
 ## CORRELATED_COLUMN_NOT_FOUND
 
@@ -68,7 +70,8 @@ A GROUP BY clause in a scalar correlated subquery cannot contain non-correlated 
 
 ## NON_DETERMINISTIC_LATERAL_SUBQUERIES
 
-Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row`<treeNode>`.
+Non-deterministic lateral subqueries are not supported when joining with outer relations that produce more than one row:
+`<treeNode>`
 
 ## UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE
 
@@ -76,14 +79,17 @@ Correlated column reference '`<expr>`' cannot be `<dataType>` type.
 
 ## UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY
 
-Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands`<treeNode>`.
+Correlated scalar subqueries can only be used in filters, aggregations, projections, and UPDATE/MERGE/DELETE commands:
+`<treeNode>`
 
 ## UNSUPPORTED_IN_EXISTS_SUBQUERY
 
-IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands`<treeNode>`.
+IN/EXISTS predicate subqueries can only be used in filters, joins, aggregations, window functions, projections, and UPDATE/MERGE/DELETE commands:
+`<treeNode>`
 
 ## UNSUPPORTED_TABLE_ARGUMENT
 
-Table arguments are used in a function where they are not supported`<treeNode>`.
+Table arguments are used in a function where they are not supported:
+`<treeNode>`
 
 
