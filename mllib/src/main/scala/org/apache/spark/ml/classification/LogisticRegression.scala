@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{NUM_CLASSIFICATION_LABELS, OPTIMIZER_CLASS_NAME, RANGE_CLASSIFICATION_LABELS}
+import org.apache.spark.internal.LogKey.{COUNT, OPTIMIZER_CLASS_NAME, RANGE}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
@@ -532,8 +532,8 @@ class LogisticRegression @Since("1.2.0") (
 
     if (numInvalid != 0) {
       val msg = log"Classification labels should be in " +
-        log"${MDC(RANGE_CLASSIFICATION_LABELS, s"[0 to ${numClasses - 1}]")}. " +
-        log"Found ${MDC(NUM_CLASSIFICATION_LABELS, numInvalid)} invalid labels."
+        log"${MDC(RANGE, s"[0 to ${numClasses - 1}]")}. " +
+        log"Found ${MDC(COUNT, numInvalid)} invalid labels."
       instr.logError(msg)
       throw new SparkException(msg.message)
     }
@@ -636,9 +636,7 @@ class LogisticRegression @Since("1.2.0") (
         initialSolution.toArray, regularization, optimizer)
 
     if (allCoefficients == null) {
-      val msg = log"${MDC(OPTIMIZER_CLASS_NAME, optimizer.getClass.getName)} failed."
-      instr.logError(msg)
-      throw new SparkException(msg.message)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val allCoefMatrix = new DenseMatrix(numCoefficientSets, numFeaturesPlusIntercept,

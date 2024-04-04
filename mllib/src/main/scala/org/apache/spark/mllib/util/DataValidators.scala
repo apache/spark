@@ -19,7 +19,7 @@ package org.apache.spark.mllib.util
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{NUM_CLASSIFICATION_LABELS, RANGE_CLASSIFICATION_LABELS}
+import org.apache.spark.internal.LogKey.{COUNT, RANGE}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
@@ -39,7 +39,7 @@ object DataValidators extends Logging {
     val numInvalid = data.filter(x => x.label != 1.0 && x.label != 0.0).count()
     if (numInvalid != 0) {
       logError(log"Classification labels should be 0 or 1. " +
-        log"Found ${MDC(NUM_CLASSIFICATION_LABELS, numInvalid)} invalid labels")
+        log"Found ${MDC(COUNT, numInvalid)} invalid labels")
     }
     numInvalid == 0
   }
@@ -56,8 +56,8 @@ object DataValidators extends Logging {
       x.label - x.label.toInt != 0.0 || x.label < 0 || x.label > k - 1).count()
     if (numInvalid != 0) {
       logError(log"Classification labels should be in " +
-        log"${MDC(RANGE_CLASSIFICATION_LABELS, s"[0 to ${k - 1}]")}. " +
-        log"Found ${MDC(NUM_CLASSIFICATION_LABELS, numInvalid)} invalid labels")
+        log"${MDC(RANGE, s"[0 to ${k - 1}]")}. " +
+        log"Found ${MDC(COUNT, numInvalid)} invalid labels")
     }
     numInvalid == 0
   }

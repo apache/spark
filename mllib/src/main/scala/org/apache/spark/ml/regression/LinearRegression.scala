@@ -25,10 +25,8 @@ import breeze.stats.distributions.Rand.FixedSeed.randBasis
 import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.OPTIMIZER_CLASS_NAME
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
@@ -429,9 +427,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         featuresMean, featuresStd, initialSolution, regularization, optimizer)
 
     if (parameters == null) {
-      val msg = log"${MDC(OPTIMIZER_CLASS_NAME, optimizer.getClass.getName)} failed."
-      instr.logError(msg)
-      throw new SparkException(msg.message)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val model = createModel(parameters, yMean, yStd, featuresMean, featuresStd)

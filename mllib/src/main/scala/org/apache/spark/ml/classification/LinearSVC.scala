@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{NUM_CLASSIFICATION_LABELS, OPTIMIZER_CLASS_NAME, RANGE_CLASSIFICATION_LABELS}
+import org.apache.spark.internal.LogKey.{COUNT, RANGE}
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.optim.aggregator._
@@ -37,6 +37,7 @@ import org.apache.spark.ml.stat._
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
@@ -222,8 +223,8 @@ class LinearSVC @Since("2.2.0") (
 
     if (numInvalid != 0) {
       val msg = log"Classification labels should be in " +
-        log"${MDC(RANGE_CLASSIFICATION_LABELS, s"[0 to ${numClasses - 1}]")}. " +
-        log"Found ${MDC(NUM_CLASSIFICATION_LABELS, numInvalid)} invalid labels."
+        log"${MDC(RANGE, s"[0 to ${numClasses - 1}]")}. " +
+        log"Found ${MDC(COUNT, numInvalid)} invalid labels."
       instr.logError(msg)
       throw new SparkException(msg.message)
     }
@@ -251,9 +252,7 @@ class LinearSVC @Since("2.2.0") (
         regularization, optimizer)
 
     if (rawCoefficients == null) {
-      val msg = log"${MDC(OPTIMIZER_CLASS_NAME, optimizer.getClass.getName)} failed."
-      instr.logError(msg)
-      throw new SparkException(msg.message)
+      MLUtils.optimizerFailed(instr, optimizer.getClass)
     }
 
     val coefficientArray = Array.tabulate(numFeatures) { i =>

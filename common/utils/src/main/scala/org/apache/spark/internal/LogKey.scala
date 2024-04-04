@@ -24,24 +24,22 @@ object LogKey extends Enumeration {
   val APPLICATION_ID = Value
   val APPLICATION_STATE = Value
   val BUCKET = Value
+  val CATEGORICAL_FEATURES = Value
   val CONTAINER_ID = Value
+  val COUNT = Value
   val EXECUTOR_ID = Value
   val EXIT_CODE = Value
+  val LEARNING_RATE = Value
+  val MAX_CATEGORIES = Value
   val MAX_EXECUTOR_FAILURES = Value
   val MAX_SIZE = Value
   val MIN_SIZE = Value
-  val REMOTE_ADDRESS = Value
-  val POD_ID = Value
   val NUM_ITERATIONS = Value
-  val LEARNING_RATE = Value
-  val SUBSAMPLING_RATE = Value
-
-  val MAX_CATEGORIES = Value
-  val CATEGORICAL_FEATURES = Value
-
-  val RANGE_CLASSIFICATION_LABELS = Value
-  val NUM_CLASSIFICATION_LABELS = Value
   val OPTIMIZER_CLASS_NAME = Value
+  val POD_ID = Value
+  val RANGE = Value
+  val REMOTE_ADDRESS = Value
+  val SUBSAMPLING_RATE = Value
 
   type LogKey = Value
 }
