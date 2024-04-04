@@ -239,12 +239,10 @@ object StateStoreMetrics {
       customMetric -> sumOfMetrics
     }.toMap
 
-    val res = StateStoreMetrics(
+    StateStoreMetrics(
       allMetrics.map(_.numKeys).sum,
       allMetrics.map(_.memoryUsedBytes).sum,
       combinedCustomMetrics)
-    println("inside StateStoreMetrics, combine: " + res)
-    res
   }
 }
 

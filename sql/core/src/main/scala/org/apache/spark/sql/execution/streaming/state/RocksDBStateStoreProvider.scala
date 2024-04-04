@@ -180,7 +180,6 @@ private[sql] class RocksDBStateStoreProvider
     }
 
     override def metrics: StateStoreMetrics = {
-      println("Inside RocksDBStateStoreProvider - metrics()")
       val rocksDBMetricsOpt = rocksDB.metricsOpt
 
       if (rocksDBMetricsOpt.isDefined) {
@@ -234,8 +233,6 @@ private[sql] class RocksDBStateStoreProvider
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
-        println("Inside RocksDBStateStoreProvider - after get metrics, " +
-          "rocksDBMetrics.zipFileBytesUncompressed: " + rocksDBMetrics.zipFileBytesUncompressed)
         StateStoreMetrics(
           rocksDBMetrics.numUncommittedKeys,
           rocksDBMetrics.totalMemUsageBytes,

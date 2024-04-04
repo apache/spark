@@ -611,7 +611,6 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
-      println("Just before RocksDB - recordedMetrics")
       recordedMetrics = Some(metrics)
       logInfo(s"Committed $newVersion, stats = ${recordedMetrics.get.json}")
       loadedVersion
@@ -727,7 +726,6 @@ class RocksDB(
   /** Get current instantaneous statistics */
   private def metrics: RocksDBMetrics = {
     import HistogramType._
-    println("Inside RocksDB - metrics()")
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
     val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
@@ -768,7 +766,6 @@ class RocksDB(
     val numInternalColFamily = colFamilyNameToHandleMap.keys
       .filter(checkInternalColumnFamilies).size.toLong
     val numExternalColFamily = colFamilyNameToHandleMap.keys.size - numInternalColFamily
-    println("Inside RocksDB - RocksDBMetrics()")
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
