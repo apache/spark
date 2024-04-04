@@ -277,6 +277,7 @@ try:
             "pyspark.sql.connect.proto",
             "pyspark.sql.connect.streaming",
             "pyspark.sql.connect.streaming.worker",
+            "pyspark.sql.connect.shell",
             "pyspark.sql.functions",
             "pyspark.sql.pandas",
             "pyspark.sql.protobuf",
