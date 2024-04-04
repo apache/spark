@@ -62,7 +62,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
           log"""
              |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
-           """
+           """.stripMargin
         }
 
         logBasedOnLevel(message())
@@ -77,7 +77,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
           log"""
              |=== Result of Batch ${MDC(RULE_BATCH_NAME, batchName)} ===
              |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
-          """
+          """.stripMargin
         } else {
           log"Batch ${MDC(RULE_BATCH_NAME, batchName)} has no effect."
         }
@@ -97,19 +97,19 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
          |Total time: ${MDC(TIME_UNITS, totalTime)} seconds
          |Total number of effective runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numEffectiveRuns)}
          |Total time of effective runs: ${MDC(TIME_UNITS, totalTimeEffective)} seconds
-      """
+      """.stripMargin
 
     logBasedOnLevel(message)
   }
 
   private def logBasedOnLevel(f: => MessageWithContext): Unit = {
     logLevel match {
-      case "TRACE" => logTrace(f, stripMargin = true)
-      case "DEBUG" => logDebug(f, stripMargin = true)
-      case "INFO" => logInfo(f, stripMargin = true)
-      case "WARN" => logWarning(f, stripMargin = true)
-      case "ERROR" => logError(f, stripMargin = true)
-      case _ => logTrace(f, stripMargin = true)
+      case "TRACE" => logTrace(f)
+      case "DEBUG" => logDebug(f)
+      case "INFO" => logInfo(f)
+      case "WARN" => logWarning(f)
+      case "ERROR" => logError(f)
+      case _ => logTrace(f)
     }
   }
 }

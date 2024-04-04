@@ -43,19 +43,33 @@ case class MDC(key: LogKey, value: Any)
  * Wrapper class for log messages that include a logging context.
  * This is used as the return type of the string interpolator `LogStringContext`.
  */
-case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
+case class MessageWithContext(
+    message: String,
+    context: java.util.HashMap[String, String],
+    stripMarginFromMessage: Boolean = false) {
   def +(mdc: MessageWithContext): MessageWithContext = {
     val resultMap = new java.util.HashMap(context)
     resultMap.putAll(mdc.context)
-    MessageWithContext(message + mdc.message, resultMap)
+    MessageWithContext(
+      message + mdc.message,
+      resultMap,
+      mdc.stripMarginFromMessage || stripMarginFromMessage)
   }
+
+  def stripMargin: MessageWithContext = copy(stripMarginFromMessage = true)
 }
 
 /**
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = messageWithContext.message
+  def message: String = {
+    if (messageWithContext.stripMarginFromMessage) {
+      messageWithContext.message.stripMargin
+    } else {
+      messageWithContext.message
+    }
+  }
 
   def context: java.util.HashMap[String, String] = messageWithContext.context
 }
@@ -146,73 +160,37 @@ trait Logging {
     if (log.isWarnEnabled) log.warn(msg, throwable)
 
   // Log methods that take only a LogEntry
-  protected def logDebug(entry: LogEntry): Unit = logDebug(entry, stripMargin = false)
-  protected def logError(entry: LogEntry): Unit = logError(entry, stripMargin = false)
-  protected def logInfo(entry: LogEntry): Unit = logInfo(entry, stripMargin = false)
-  protected def logTrace(entry: LogEntry): Unit = logTrace(entry, stripMargin = false)
-  protected def logWarning(entry: LogEntry): Unit = logWarning(entry, stripMargin = false)
+  protected def logDebug(entry: LogEntry): Unit = if (log.isDebugEnabled) logFn(entry, log.debug)
+  protected def logError(entry: LogEntry): Unit = if (log.isErrorEnabled) logFn(entry, log.error)
+  protected def logInfo(entry: LogEntry): Unit = if (log.isInfoEnabled) logFn(entry, log.info)
+  protected def logTrace(entry: LogEntry): Unit = if (log.isTraceEnabled) logFn(entry, log.trace)
+  protected def logWarning(entry: LogEntry): Unit = if (log.isWarnEnabled) logFn(entry, log.warn)
 
   // Log methods that take only a LogEntry and a Throwable (Exception/Error) too
   protected def logDebug(entry: LogEntry, throwable: Throwable): Unit =
-    logDebug(entry, throwable, stripMargin = false)
+    if (log.isDebugEnabled) logFn(entry, throwable, log.debug)
   protected def logError(entry: LogEntry, throwable: Throwable): Unit =
-    logError(entry, throwable, stripMargin = false)
+    if (log.isErrorEnabled) logFn(entry, throwable, log.error)
   protected def logInfo(entry: LogEntry, throwable: Throwable): Unit =
-    logInfo(entry, throwable, stripMargin = false)
+    if (log.isInfoEnabled) logFn(entry, throwable, log.info)
   protected def logTrace(entry: LogEntry, throwable: Throwable): Unit =
-    logTrace(entry, throwable, stripMargin = false)
+    if (log.isTraceEnabled) logFn(entry, throwable, log.trace)
   protected def logWarning(entry: LogEntry, throwable: Throwable): Unit =
-    logWarning(entry, throwable, stripMargin = false)
+    if (log.isWarnEnabled) logFn(entry, throwable, log.warn)
 
-  // Log methods that take only a LogEntry with the option to strip margin from the string message
-  protected def logDebug(entry: LogEntry, stripMargin: Boolean): Unit =
-    logEntryHelper(entry, stripMargin, log.debug)
-  protected def logError(entry: LogEntry, stripMargin: Boolean): Unit =
-    logEntryHelper(entry, stripMargin, log.error)
-  protected def logInfo(entry: LogEntry, stripMargin: Boolean): Unit =
-    logEntryHelper(entry, stripMargin, log.info)
-  protected def logTrace(entry: LogEntry, stripMargin: Boolean): Unit =
-    logEntryHelper(entry, stripMargin, log.trace)
-  protected def logWarning(entry: LogEntry, stripMargin: Boolean): Unit =
-    logEntryHelper(entry, stripMargin, log.warn)
-
-  private def logEntryHelper(entry: LogEntry, stripMargin: Boolean, fn: String => Unit): Unit = {
+  private def logFn(entry: LogEntry, fn: String => Unit): Unit = {
     if (log.isDebugEnabled) {
       withLogContext(entry.context) {
-        fn(maybeStripMargin(entry.message, stripMargin))
+        fn(entry.message)
       }
     }
   }
 
-  private def maybeStripMargin(msg: String, stripMargin: Boolean): String = {
-    if (stripMargin) {
-      msg.stripMargin
-    } else {
-      msg
-    }
-  }
-
-  // Log methods that take only a LogEntry and a Throwable (Exception/Error) too with the option to
-  // strip margin from the string message
-  protected def logDebug(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
-    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.debug)
-  protected def logError(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
-    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.error)
-  protected def logInfo(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
-    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.info)
-  protected def logTrace(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
-    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.trace)
-  protected def logWarning(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
-    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.warn)
-
-  private def logEntryWithThrowableHelper(
-      entry: LogEntry,
-      throwable: Throwable,
-      stripMargin: Boolean,
-      fn: (String, Throwable) => Unit): Unit = {
+  private def logFn(
+      entry: LogEntry, throwable: Throwable, fn: (String, Throwable) => Unit): Unit = {
     if (log.isDebugEnabled) {
       withLogContext(entry.context) {
-        fn(maybeStripMargin(entry.message, stripMargin), throwable)
+        fn(entry.message, throwable)
       }
     }
   }
