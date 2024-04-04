@@ -32,7 +32,7 @@ $ ./bin/spark-submit --driver-class-path /path/to/example/jar \\
 import sys
 from typing import Any, Tuple
 
-from pyspark.rdd import RDD
+from pyspark import RDD
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":

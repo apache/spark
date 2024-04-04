@@ -38,19 +38,16 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject, JVMView
-
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.context import SparkContext
 from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
     PySparkIndexError,
     PySparkAttributeError,
 )
-from pyspark.rdd import (
-    RDD,
+from pyspark.util import (
+    is_remote_only,
     _load_from_socket,
     _local_iterator_from_socket,
 )
@@ -70,6 +67,9 @@ from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
+    from pyspark.core.rdd import RDD
+    from pyspark.core.context import SparkContext
     from pyspark._typing import PrimitiveType
     from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql._typing import (
@@ -141,7 +141,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def __init__(
         self,
-        jdf: JavaObject,
+        jdf: "JavaObject",
         sql_ctx: Union["SQLContext", "SparkSession"],
     ):
         from pyspark.sql.context import SQLContext
@@ -161,12 +161,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             session = sql_ctx
         self._session: "SparkSession" = session
 
-        self._sc: SparkContext = sql_ctx._sc
-        self._jdf: JavaObject = jdf
+        self._sc: "SparkContext" = sql_ctx._sc
+        self._jdf: "JavaObject" = jdf
         self.is_cached = False
         # initialized lazily
         self._schema: Optional[StructType] = None
-        self._lazy_rdd: Optional[RDD[Row]] = None
+        self._lazy_rdd: Optional["RDD[Row]"] = None
         # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
@@ -204,28 +204,32 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self._session
 
-    @property
-    def rdd(self) -> "RDD[Row]":
-        """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
+    if not is_remote_only():
 
-        .. versionadded:: 1.3.0
+        @property
+        def rdd(self) -> "RDD[Row]":
+            """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
 
-        Returns
-        -------
-        :class:`RDD`
+            .. versionadded:: 1.3.0
 
-        Examples
-        --------
-        >>> df = spark.range(1)
-        >>> type(df.rdd)
-        <class 'pyspark.rdd.RDD'>
-        """
-        if self._lazy_rdd is None:
-            jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(
-                jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer())
-            )
-        return self._lazy_rdd
+            Returns
+            -------
+            :class:`RDD`
+
+            Examples
+            --------
+            >>> df = spark.range(1)
+            >>> type(df.rdd)
+            <class 'pyspark.core.rdd.RDD'>
+            """
+            from pyspark.core.rdd import RDD
+
+            if self._lazy_rdd is None:
+                jrdd = self._jdf.javaToPython()
+                self._lazy_rdd = RDD(
+                    jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer())
+                )
+            return self._lazy_rdd
 
     @property
     def na(self) -> "DataFrameNaFunctions":
@@ -281,30 +285,34 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return DataFrameStatFunctions(self)
 
-    def toJSON(self, use_unicode: bool = True) -> RDD[str]:
-        """Converts a :class:`DataFrame` into a :class:`RDD` of string.
+    if not is_remote_only():
 
-        Each row is turned into a JSON document as one element in the returned RDD.
+        def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
+            """Converts a :class:`DataFrame` into a :class:`RDD` of string.
 
-        .. versionadded:: 1.3.0
+            Each row is turned into a JSON document as one element in the returned RDD.
 
-        Parameters
-        ----------
-        use_unicode : bool, optional, default True
-            Whether to convert to unicode or not.
+            .. versionadded:: 1.3.0
 
-        Returns
-        -------
-        :class:`RDD`
+            Parameters
+            ----------
+            use_unicode : bool, optional, default True
+                Whether to convert to unicode or not.
 
-        Examples
-        --------
-        >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
-        >>> df.toJSON().first()
-        '{"age":2,"name":"Alice"}'
-        """
-        rdd = self._jdf.toJSON()
-        return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
+            Returns
+            -------
+            :class:`RDD`
+
+            Examples
+            --------
+            >>> df = spark.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
+            >>> df.toJSON().first()
+            '{"age":2,"name":"Alice"}'
+            """
+            from pyspark.core.rdd import RDD
+
+            rdd = self._jdf.toJSON()
+            return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def registerTempTable(self, name: str) -> None:
         """Registers this :class:`DataFrame` as a temporary table using the given name.
@@ -3275,16 +3283,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def _jseq(
         self,
         cols: Sequence,
-        converter: Optional[Callable[..., Union["PrimitiveType", JavaObject]]] = None,
-    ) -> JavaObject:
+        converter: Optional[Callable[..., Union["PrimitiveType", "JavaObject"]]] = None,
+    ) -> "JavaObject":
         """Return a JVM Seq of Columns from a list of Column or names"""
         return _to_seq(self.sparkSession._sc, cols, converter)
 
-    def _jmap(self, jm: Dict) -> JavaObject:
+    def _jmap(self, jm: Dict) -> "JavaObject":
         """Return a JVM Scala Map from a dict"""
         return _to_scala_map(self.sparkSession._sc, jm)
 
-    def _jcols(self, *cols: "ColumnOrName") -> JavaObject:
+    def _jcols(self, *cols: "ColumnOrName") -> "JavaObject":
         """Return a JVM Seq of Columns from a list of Column or column names
 
         If `cols` has only one list in it, cols[0] will be used as the list.
@@ -3293,7 +3301,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
 
-    def _jcols_ordinal(self, *cols: "ColumnOrNameOrOrdinal") -> JavaObject:
+    def _jcols_ordinal(self, *cols: "ColumnOrNameOrOrdinal") -> "JavaObject":
         """Return a JVM Seq of Columns from a list of Column or column names or column ordinals.
 
         If `cols` has only one list in it, cols[0] will be used as the list.
@@ -3318,7 +3326,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         self,
         cols: Sequence[Union[int, str, Column, List[Union[int, str, Column]]]],
         kwargs: Dict[str, Any],
-    ) -> JavaObject:
+    ) -> "JavaObject":
         """Return a JVM Seq of Columns that describes the sort order"""
         if not cols:
             raise PySparkValueError(
@@ -4473,7 +4481,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         def to_jcols(
             cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName", ...]]
-        ) -> JavaObject:
+        ) -> "JavaObject":
             if isinstance(cols, list):
                 return self._jcols(*cols)
             if isinstance(cols, tuple):
@@ -6392,6 +6400,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df_meta.schema['age'].metadata
         {'foo': 'bar'}
         """
+        from py4j.java_gateway import JVMView
+
         if not isinstance(metadata, dict):
             raise PySparkTypeError(
                 error_class="NOT_DICT",
@@ -6542,7 +6552,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+-----+
         """
         column_names: List[str] = []
-        java_columns: List[JavaObject] = []
+        java_columns: List["JavaObject"] = []
 
         for c in cols:
             if isinstance(c, str):
@@ -6915,7 +6925,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return PandasOnSparkDataFrame(internal)
 
 
-def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:
+def _to_scala_map(sc: "SparkContext", jm: Dict) -> "JavaObject":
     """
     Convert a dict into a JVM Map.
     """

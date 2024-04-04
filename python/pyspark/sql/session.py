@@ -38,10 +38,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject
-
-from pyspark import SparkConf, SparkContext
-from pyspark.rdd import RDD
+from pyspark.util import is_remote_only
 from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
@@ -69,6 +66,10 @@ from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_ses
 from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
+    from pyspark.core.conf import SparkConf
+    from pyspark.core.context import SparkContext
+    from pyspark.core.rdd import RDD
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
@@ -80,6 +81,7 @@ if TYPE_CHECKING:
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
+    from pyspark.sql.connect.shell.progress import ProgressHandler
 
 try:
     import memory_profiler  # noqa: F401
@@ -129,7 +131,10 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         """
         return sparkSession.createDataFrame(self, schema, sampleRatio)
 
-    RDD.toDF = toDF  # type: ignore[method-assign]
+    if not is_remote_only():
+        from pyspark import RDD
+
+        RDD.toDF = toDF  # type: ignore[method-assign]
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
@@ -216,7 +221,7 @@ class SparkSession(SparkConversionMixin):
             self._options: Dict[str, Any] = {}
 
         @overload
-        def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
+        def config(self, *, conf: "SparkConf") -> "SparkSession.Builder":
             ...
 
         @overload
@@ -231,7 +236,7 @@ class SparkSession(SparkConversionMixin):
             self,
             key: Optional[str] = None,
             value: Optional[Any] = None,
-            conf: Optional[SparkConf] = None,
+            conf: Optional["SparkConf"] = None,
             *,
             map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
         ) -> "SparkSession.Builder":
@@ -268,7 +273,7 @@ class SparkSession(SparkConversionMixin):
             --------
             For an existing :class:`SparkConf`, use `conf` parameter.
 
-            >>> from pyspark.conf import SparkConf
+            >>> from pyspark.core.conf import SparkConf
             >>> conf = SparkConf().setAppName("example").setMaster("local")
             >>> SparkSession.builder.config(conf=conf)
             <pyspark.sql.session.SparkSession.Builder...
@@ -466,10 +471,25 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
-            from pyspark.context import SparkContext
-            from pyspark.conf import SparkConf
-
             opts = dict(self._options)
+
+            if is_remote_only():
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                if url is None:
+                    raise PySparkRuntimeError(
+                        error_class="CONNECT_URL_NOT_SET",
+                        message_parameters={},
+                    )
+
+                os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+                opts["spark.remote"] = url
+                return RemoteSparkSession.builder.config(map=opts).getOrCreate()  # type: ignore
+
+            from pyspark.core.context import SparkContext
+            from pyspark.core.conf import SparkConf
 
             with self._lock:
                 if (
@@ -596,8 +616,8 @@ class SparkSession(SparkConversionMixin):
 
     def __init__(
         self,
-        sparkContext: SparkContext,
-        jsparkSession: Optional[JavaObject] = None,
+        sparkContext: "SparkContext",
+        jsparkSession: Optional["JavaObject"] = None,
         options: Dict[str, Any] = {},
     ):
         self._sc = sparkContext
@@ -655,25 +675,27 @@ class SparkSession(SparkConversionMixin):
         """Accessor for the JVM SQL-specific configurations"""
         return self._jsparkSession.sessionState().conf()
 
-    def newSession(self) -> "SparkSession":
-        """
-        Returns a new :class:`SparkSession` as new session, that has separate SQLConf,
-        registered temporary views and UDFs, but shared :class:`SparkContext` and
-        table cache.
+    if not is_remote_only():
 
-        .. versionadded:: 2.0.0
+        def newSession(self) -> "SparkSession":
+            """
+            Returns a new :class:`SparkSession` as new session, that has separate SQLConf,
+            registered temporary views and UDFs, but shared :class:`SparkContext` and
+            table cache.
 
-        Returns
-        -------
-        :class:`SparkSession`
-            Spark session if an active session exists for the current thread
+            .. versionadded:: 2.0.0
 
-        Examples
-        --------
-        >>> spark.newSession()
-        <...SparkSession object ...>
-        """
-        return self.__class__(self._sc, self._jsparkSession.newSession())
+            Returns
+            -------
+            :class:`SparkSession`
+                Spark session if an active session exists for the current thread
+
+            Examples
+            --------
+            >>> spark.newSession()
+            <...SparkSession object ...>
+            """
+            return self.__class__(self._sc, self._jsparkSession.newSession())
 
     @classmethod
     @try_remote_session_classmethod
@@ -739,29 +761,31 @@ class SparkSession(SparkConversionMixin):
                 )
         return session
 
-    @property
-    def sparkContext(self) -> SparkContext:
-        """
-        Returns the underlying :class:`SparkContext`.
+    if not is_remote_only():
 
-        .. versionadded:: 2.0.0
+        @property
+        def sparkContext(self) -> "SparkContext":
+            """
+            Returns the underlying :class:`SparkContext`.
 
-        Returns
-        -------
-        :class:`SparkContext`
+            .. versionadded:: 2.0.0
 
-        Examples
-        --------
-        >>> spark.sparkContext
-        <SparkContext master=... appName=...>
+            Returns
+            -------
+            :class:`SparkContext`
 
-        Create an RDD from the Spark context
+            Examples
+            --------
+            >>> spark.sparkContext
+            <SparkContext master=... appName=...>
 
-        >>> rdd = spark.sparkContext.parallelize([1, 2, 3])
-        >>> rdd.collect()
-        [1, 2, 3]
-        """
-        return self._sc
+            Create an RDD from the Spark context
+
+            >>> rdd = spark.sparkContext.parallelize([1, 2, 3])
+            >>> rdd.collect()
+            [1, 2, 3]
+            """
+            return self._sc
 
     @property
     def version(self) -> str:
@@ -1040,7 +1064,7 @@ class SparkSession(SparkConversionMixin):
 
     def _inferSchema(
         self,
-        rdd: RDD[Any],
+        rdd: "RDD[Any]",
         samplingRatio: Optional[float] = None,
         names: Optional[List[str]] = None,
     ) -> StructType:
@@ -1111,10 +1135,10 @@ class SparkSession(SparkConversionMixin):
 
     def _createFromRDD(
         self,
-        rdd: RDD[Any],
+        rdd: "RDD[Any]",
         schema: Optional[Union[DataType, List[str]]],
         samplingRatio: Optional[float],
-    ) -> Tuple[RDD[Tuple], StructType]:
+    ) -> Tuple["RDD[Tuple]", StructType]:
         """
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
         """
@@ -1146,7 +1170,7 @@ class SparkSession(SparkConversionMixin):
 
     def _createFromLocal(
         self, data: Iterable[Any], schema: Optional[Union[DataType, List[str]]]
-    ) -> Tuple[RDD[Tuple], StructType]:
+    ) -> Tuple["RDD[Tuple]", StructType]:
         """
         Create an RDD for DataFrame from a list or pandas.DataFrame, returns
         the RDD and schema.
@@ -1189,8 +1213,8 @@ class SparkSession(SparkConversionMixin):
         that script, which would expose those to users.
         """
         import py4j
-        from pyspark.conf import SparkConf
-        from pyspark.context import SparkContext
+        from pyspark.core.conf import SparkConf
+        from pyspark.core.context import SparkContext
 
         try:
             # Try to access HiveConf, it will raise exception if Hive is not added
@@ -1300,7 +1324,7 @@ class SparkSession(SparkConversionMixin):
 
     def createDataFrame(  # type: ignore[misc]
         self,
-        data: Union[RDD[Any], Iterable[Any], "PandasDataFrameLike", "ArrayLike"],
+        data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike", "ArrayLike"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
         verifySchema: bool = True,
@@ -1515,7 +1539,7 @@ class SparkSession(SparkConversionMixin):
 
     def _create_dataframe(
         self,
-        data: Union[RDD[Any], Iterable[Any]],
+        data: Union["RDD[Any]", Iterable[Any]],
         schema: Optional[Union[DataType, List[str]]],
         samplingRatio: Optional[float],
         verifySchema: bool,
@@ -1548,10 +1572,14 @@ class SparkSession(SparkConversionMixin):
             def prepare(obj: Any) -> Any:
                 return obj
 
-        if isinstance(data, RDD):
+        if not is_remote_only():
+            from pyspark.core.rdd import RDD
+        if not is_remote_only() and isinstance(data, RDD):
             rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
         else:
-            rdd, struct = self._createFromLocal(map(prepare, data), schema)
+            rdd, struct = self._createFromLocal(
+                map(prepare, data), schema  # type: ignore[arg-type]
+            )
         assert self._jvm is not None
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), struct.json())
@@ -2002,6 +2030,61 @@ class SparkSession(SparkConversionMixin):
 
     addArtifact = addArtifacts
 
+    def registerProgressHandler(self, handler: "ProgressHandler") -> None:
+        """
+        Register a progress handler to be called when a progress update is received from the server.
+
+        .. versionadded:: 4.0
+
+        Parameters
+        ----------
+        handler : ProgressHandler
+          A callable that follows the ProgressHandler interface. This handler will be called
+          on every progress update.
+
+        Examples
+        --------
+
+        >>> def progress_handler(stages, inflight_tasks, done):
+        ...     print(f"{len(stages)} Stages known, Done: {done}")
+        >>> spark.registerProgressHandler(progress_handler)
+        >>> res = spark.range(10).repartition(1).collect()
+        3 Stages known, Done: False
+        3 Stages known, Done: True
+        >>> spark.clearProgressHandlers()
+        """
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.registerProgressHandler"},
+        )
+
+    def removeProgressHandler(self, handler: "ProgressHandler") -> None:
+        """
+        Remove a progress handler that was previously registered.
+
+        .. versionadded:: 4.0
+
+        Parameters
+        ----------
+        handler : ProgressHandler
+          The handler to remove if present in the list of progress handlers.
+        """
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.removeProgressHandler"},
+        )
+
+    def clearProgressHandlers(self) -> None:
+        """
+        Clear all registered progress handlers.
+
+        .. versionadded:: 4.0
+        """
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.clearProgressHandlers"},
+        )
+
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
         Copy file from local to cloud storage file system.
@@ -2166,6 +2249,11 @@ def _test() -> None:
     import pyspark.sql.session
 
     os.chdir(os.environ["SPARK_HOME"])
+
+    # Disable Doc Tests for Spark Connect only functions:
+    pyspark.sql.session.SparkSession.registerProgressHandler.__doc__ = None
+    pyspark.sql.session.SparkSession.removeProgressHandler.__doc__ = None
+    pyspark.sql.session.SparkSession.clearProgressHandlers.__doc__ = None
 
     globs = pyspark.sql.session.__dict__.copy()
     globs["spark"] = (

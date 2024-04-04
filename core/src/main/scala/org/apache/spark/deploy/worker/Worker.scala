@@ -37,7 +37,8 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.{DRIVER_ID, ERROR, EXECUTOR_STATE_CHANGED, MASTER_URL, MAX_ATTEMPTS}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
@@ -498,7 +499,7 @@ private[deploy] class Worker(
 
       case RegisterWorkerFailed(message) =>
         if (!registered) {
-          logError("Worker registration failed: " + message)
+          logError(log"Worker registration failed: ${MDC(ERROR, message)}")
           System.exit(1)
         }
 
@@ -690,7 +691,7 @@ private[deploy] class Worker(
         case Some(runner) =>
           runner.kill()
         case None =>
-          logError(s"Asked to kill unknown driver $driverId")
+          logError(log"Asked to kill unknown driver ${MDC(DRIVER_ID, driverId)}")
       }
 
     case driverStateChanged @ DriverStateChanged(driverId, state, exception) =>
@@ -807,8 +808,9 @@ private[deploy] class Worker(
               }
               self.send(newState)
             } else {
-              logError(s"Failed to send $newState to Master $masterRef for " +
-                s"$executorStateSyncMaxAttempts times. Giving up.")
+              logError(log"Failed to send ${MDC(EXECUTOR_STATE_CHANGED, newState)} " +
+                log"to Master ${MDC(MASTER_URL, masterRef)} for " +
+                log"${MDC(MAX_ATTEMPTS, executorStateSyncMaxAttempts)} times. Giving up.")
               System.exit(1)
             }
         }(executorStateSyncFailureHandler)

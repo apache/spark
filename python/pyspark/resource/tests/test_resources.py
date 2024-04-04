@@ -18,6 +18,7 @@ import unittest
 
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.sql import SparkSession
+from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
 
 class ResourceProfileTests(unittest.TestCase):
@@ -71,6 +72,7 @@ class ResourceProfileTests(unittest.TestCase):
         assert_request_contents(rp3.executorResources, rp3.taskResources)
         sc.stop()
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_profile_before_sc_for_sql(self):
         rpb = ResourceProfileBuilder()
         treqs = TaskResourceRequests().cpus(2)
