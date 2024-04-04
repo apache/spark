@@ -354,7 +354,7 @@ class QueryExecutionSuite extends SharedSparkSession {
       val qe = df.queryExecution
       qe.extendedExplainInfo(concat.append, qe.executedPlan)
       val info = concat.toString
-      val expected = "\n== Extended Information ==\n" +
+      val expected = "\n== Extended Information (Test) ==\n" +
         "Scan Info: LocalTableScan\n" +
         "Project Info: Project\n" +
         "SMJ Info: SortMergeJoin"
@@ -441,6 +441,9 @@ class QueryExecutionSuite extends SharedSparkSession {
 }
 
 class ExtendedInfo extends ExtendedExplainGenerator {
+
+  override def title: String = "Test"
+
   override def generateExtendedInfo(plan: SparkPlan): String = {
     val info = mutable.LinkedHashSet[String]() // don't allow duplicates
     extensionInfo(plan, info)

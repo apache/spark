@@ -27,5 +27,6 @@ import org.apache.spark.sql.execution.SparkPlan
 @DeveloperApi
 @Since("4.0.0")
 trait ExtendedExplainGenerator {
+  def title: String
   def generateExtendedInfo(plan: SparkPlan): String
 }

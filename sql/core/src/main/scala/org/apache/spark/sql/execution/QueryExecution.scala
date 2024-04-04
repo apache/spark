@@ -380,9 +380,9 @@ class QueryExecution(
       generators,
       sparkSession.sparkContext.conf)
     if (extensions.nonEmpty) {
-      append("\n== Extended Information ==\n")
       extensions.foreach(extension =>
         try {
+          append(s"\n== Extended Information (${extension.title}) ==\n")
           append(extension.generateExtendedInfo(plan))
         } catch {
           case NonFatal(e) => logWarning(s"Cannot use $extension to get extended information.", e)
