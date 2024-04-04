@@ -750,10 +750,6 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
     }
   }
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes()
-  }
-
   override def dataType: DataType = srcExpr.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeAnyCollation, StringTypeAnyCollation, StringTypeAnyCollation)
