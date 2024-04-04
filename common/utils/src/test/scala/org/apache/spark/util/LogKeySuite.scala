@@ -37,7 +37,7 @@ class LogKeySuite
   /* Used to regenerate the LogKey class file. Run:
    {{{
       SPARK_GENERATE_GOLDEN_FILES=1 build/sbt \
-        "common-utils/testOnly *LogKeySuite -- \"LogKey enumeration fields are correctly sorted\""
+        "common-utils/testOnly *LogKeySuite \"LogKey enumeration fields are correctly sorted\""
    }}}
    */
   // scalastyle:on line.size.limit
