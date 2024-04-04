@@ -1409,6 +1409,7 @@ class TypesTestsMixin:
 
     def test_variant_type(self):
         from decimal import Decimal
+
         self.assertEqual(VariantType().simpleString(), "variant")
 
         # Holds a tuple of (key, json string value, python value)
@@ -1427,7 +1428,7 @@ class TypesTestsMixin:
             ("int8", "4295033089", 4295033089),
             ("-int8", "-4294967297", -4294967297),
             ("float4", "1.23456789e-30", 1.23456789e-30),
-            ("-float4", "-4.56789e+29", -4.56789e+29),
+            ("-float4", "-4.56789e+29", -4.56789e29),
             ("dec4", "123.456", Decimal("123.456")),
             ("-dec4", "-321.654", Decimal("-321.654")),
             ("dec8", "429.4967297", Decimal("429.4967297")),
@@ -1440,18 +1441,19 @@ class TypesTestsMixin:
         json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
 
         df = self.spark.createDataFrame([({"json": json_str})])
-        row = df.select(F.parse_json(df.json).alias("v"),
+        row = df.select(
+            F.parse_json(df.json).alias("v"),
             F.array([F.parse_json(F.lit('{"a": 1}'))]).alias("a"),
             F.struct([F.parse_json(F.lit('{"b": "2"}'))]).alias("s"),
-            F.create_map(
-                [F.lit("k"), F.parse_json(F.lit('{"c": true}'))]).alias("m")).collect()[0]
+            F.create_map([F.lit("k"), F.parse_json(F.lit('{"c": true}'))]).alias("m"),
+        ).collect()[0]
         variants = [row["v"], row["a"][0], row["s"]["col1"], row["m"]["k"]]
         for v in variants:
             self.assertEqual(type(v), VariantVal)
 
         # check str
         as_string = str(variants[0])
-        for (key, expected, _) in expected_values:
+        for key, expected, _ in expected_values:
             self.assertTrue('"%s":%s' % (key, expected) in as_string)
         self.assertEqual(str(variants[1]), '{"a":1}')
         self.assertEqual(str(variants[2]), '{"b":"2"}')
@@ -1459,7 +1461,7 @@ class TypesTestsMixin:
 
         # check toPython
         as_python = variants[0].toPython()
-        for (key, _, obj) in expected_values:
+        for key, _, obj in expected_values:
             self.assertEqual(as_python[key], obj)
         self.assertEqual(variants[1].toPython(), {"a": 1})
         self.assertEqual(variants[2].toPython(), {"b": "2"})
@@ -1467,7 +1469,6 @@ class TypesTestsMixin:
 
         # check repr
         self.assertEqual(str(variants[0]), str(eval(repr(variants[0]))))
-
 
     def test_from_ddl(self):
         self.assertEqual(DataType.fromDDL("long"), LongType())

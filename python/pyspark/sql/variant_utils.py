@@ -21,6 +21,7 @@ import struct
 from array import array
 from typing import Any
 
+
 class VariantUtils:
     """
     A utility class for VariantVal.
@@ -98,7 +99,6 @@ class VariantUtils:
         """
         return cls._to_json(value, metadata, 0)
 
-
     @classmethod
     def to_python(cls, value: bytes, metadata: bytes) -> str:
         """
@@ -107,19 +107,16 @@ class VariantUtils:
         """
         return cls._to_python(value, metadata, 0)
 
-
     @classmethod
     def _read_long(cls, data: bytes, pos: int, num_bytes: int, signed: bool) -> int:
         cls._check_index(pos, len(data))
         cls._check_index(pos + num_bytes - 1, len(data))
-        return int.from_bytes(data[pos:pos + num_bytes], byteorder='little', signed=signed)
-
+        return int.from_bytes(data[pos : pos + num_bytes], byteorder="little", signed=signed)
 
     @classmethod
     def _check_index(cls, pos: int, length: int) -> None:
-        if (pos < 0 or pos >= length):
+        if pos < 0 or pos >= length:
             raise Exception("Malformed Variant")
-
 
     @classmethod
     def _get_type_info(cls, value: bytes, pos: int):
@@ -129,7 +126,6 @@ class VariantUtils:
         basic_type = value[pos] & VariantUtils.BASIC_TYPE_MASK
         type_info = (value[pos] >> VariantUtils.BASIC_TYPE_BITS) & VariantUtils.TYPE_INFO_MASK
         return (basic_type, type_info)
-
 
     @classmethod
     def _get_metadata_key(cls, metadata: bytes, id: int) -> str:
@@ -144,22 +140,22 @@ class VariantUtils:
         string_start = 1 + (dict_size + 2) * offset_size
         offset = cls._read_long(metadata, 1 + (id + 1) * offset_size, offset_size, signed=False)
         next_offset = cls._read_long(
-            metadata, 1 + (id + 2) * offset_size, offset_size, signed=False)
+            metadata, 1 + (id + 2) * offset_size, offset_size, signed=False
+        )
         if offset > next_offset:
             raise Exception("Malformed Variant")
         cls._check_index(string_start + next_offset - 1, len(metadata))
-        return metadata[string_start + offset:(string_start + next_offset)].decode("utf-8")
-
+        return metadata[string_start + offset : (string_start + next_offset)].decode("utf-8")
 
     @classmethod
     def _get_boolean(cls, value: bytes, pos: int) -> bool:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
-        if (basic_type != VariantUtils.PRIMITIVE or
-            (type_info != VariantUtils.TRUE and type_info != VariantUtils.FALSE)):
+        if basic_type != VariantUtils.PRIMITIVE or (
+            type_info != VariantUtils.TRUE and type_info != VariantUtils.FALSE
+        ):
             raise Exception("Unexpected Variant type: %s" % (str(bool)))
         return type_info == VariantUtils.TRUE
-
 
     @classmethod
     def _get_long(cls, value: bytes, pos: int) -> int:
@@ -177,13 +173,13 @@ class VariantUtils:
             return cls._read_long(value, pos + 1, 8, signed=True)
         raise Exception("Unexpected Variant type: %s" % (str(int)))
 
-
     @classmethod
     def _get_string(cls, value: bytes, pos: int) -> str:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
-        if (basic_type == VariantUtils.SHORT_STR or
-            (basic_type == VariantUtils.PRIMITIVE and type_info == VariantUtils.LONG_STR)):
+        if basic_type == VariantUtils.SHORT_STR or (
+            basic_type == VariantUtils.PRIMITIVE and type_info == VariantUtils.LONG_STR
+        ):
             start = 0
             length = 0
             if basic_type == VariantUtils.SHORT_STR:
@@ -193,18 +189,16 @@ class VariantUtils:
                 start = pos + 1 + VariantUtils.U32_SIZE
                 length = cls._read_long(value, pos + 1, VariantUtils.U32_SIZE, signed=False)
             cls._check_index(start + length - 1, len(value))
-            return value[start:start + length].decode("utf-8")
+            return value[start : start + length].decode("utf-8")
         raise Exception("Unexpected Variant type: %s" % (str(str)))
-
 
     @classmethod
     def _get_double(cls, value: bytes, pos: int) -> float:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
-        if (basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.DOUBLE):
+        if basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.DOUBLE:
             raise Exception("Unexpected Variant type: %s" % (str(float)))
-        return struct.unpack('d', value[pos + 1:pos + 9])[0]
-
+        return struct.unpack("d", value[pos + 1 : pos + 9])[0]
 
     @classmethod
     def _get_decimal(cls, value: bytes, pos: int) -> decimal.Decimal:
@@ -220,11 +214,10 @@ class VariantUtils:
             unscaled = cls._read_long(value, pos + 2, 8, signed=True)
         elif type_info == VariantUtils.DECIMAL16:
             cls._check_index(pos + 17, len(value))
-            unscaled = int.from_bytes(value[pos + 2:pos + 18], byteorder='little', signed=True)
+            unscaled = int.from_bytes(value[pos + 2 : pos + 18], byteorder="little", signed=True)
         else:
             raise Exception("Unexpected Variant type: %s" % (str(Decimal)))
         return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
-
 
     @classmethod
     def _get_type(cls, value: bytes, pos: int):
@@ -234,7 +227,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type == VariantUtils.SHORT_STR:
-           return str
+            return str
         elif basic_type == VariantUtils.OBJECT:
             return dict
         elif basic_type == VariantUtils.ARRAY:
@@ -243,34 +236,46 @@ class VariantUtils:
             return type(None)
         elif type_info == VariantUtils.TRUE or type_info == VariantUtils.FALSE:
             return bool
-        elif (type_info == VariantUtils.INT1 or type_info == VariantUtils.INT2 or
-              type_info == VariantUtils.INT4 or type_info == VariantUtils.INT8):
+        elif (
+            type_info == VariantUtils.INT1
+            or type_info == VariantUtils.INT2
+            or type_info == VariantUtils.INT4
+            or type_info == VariantUtils.INT8
+        ):
             return int
         elif type_info == VariantUtils.DOUBLE:
             return float
-        elif (type_info == VariantUtils.DECIMAL4 or type_info == VariantUtils.DECIMAL8 or
-            type_info == VariantUtils.DECIMAL16):
+        elif (
+            type_info == VariantUtils.DECIMAL4
+            or type_info == VariantUtils.DECIMAL8
+            or type_info == VariantUtils.DECIMAL16
+        ):
             return decimal.Decimal
         elif type_info == VariantUtils.LONG_STR:
             return str
         raise Exception("Malformed Variant")
 
-
     @classmethod
     def _to_json(cls, value: bytes, metadata: bytes, pos: int) -> Any:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
+
             def handle_object(key_value_pos_list):
                 key_value_list = [
-                    json.dumps(key) + ':' + cls._to_json(value, metadata, value_pos)
-                    for (key, value_pos) in key_value_pos_list]
-                return '{' + ','.join(key_value_list) + '}'
+                    json.dumps(key) + ":" + cls._to_json(value, metadata, value_pos)
+                    for (key, value_pos) in key_value_pos_list
+                ]
+                return "{" + ",".join(key_value_list) + "}"
+
             return cls._handle_object(value, metadata, pos, handle_object)
         elif variant_type == array:
+
             def handle_array(value_pos_list):
-                value_list = [cls._to_json(value, metadata, value_pos)
-                    for value_pos in value_pos_list]
-                return '[' + ','.join(value_list) + ']'
+                value_list = [
+                    cls._to_json(value, metadata, value_pos) for value_pos in value_pos_list
+                ]
+                return "[" + ",".join(value_list) + "]"
+
             return cls._handle_array(value, pos, handle_array)
         else:
             value = cls._get_scalar(variant_type, value, metadata, pos)
@@ -282,26 +287,30 @@ class VariantUtils:
                 return json.dumps(value)
             return str(value)
 
-
     @classmethod
     def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
+
             def handle_object(key_value_pos_list):
                 key_value_list = [
                     (key, cls._to_python(value, metadata, value_pos))
-                    for (key, value_pos) in key_value_pos_list]
+                    for (key, value_pos) in key_value_pos_list
+                ]
                 return dict(key_value_list)
+
             return cls._handle_object(value, metadata, pos, handle_object)
         elif variant_type == array:
+
             def handle_array(value_pos_list):
-                value_list = [cls._to_python(value, metadata, value_pos)
-                    for value_pos in value_pos_list]
+                value_list = [
+                    cls._to_python(value, metadata, value_pos) for value_pos in value_pos_list
+                ]
                 return value_list
+
             return cls._handle_array(value, pos, handle_array)
         else:
             return cls._get_scalar(variant_type, value, metadata, pos)
-
 
     @classmethod
     def _get_scalar(cls, variant_type, value: bytes, metadata: bytes, pos: int) -> Any:
@@ -319,7 +328,6 @@ class VariantUtils:
             return cls._get_decimal(value, pos)
         else:
             raise Exception("Malformed Variant")
-
 
     @classmethod
     def _handle_object(cls, value: bytes, metadata: bytes, pos: int, func):
@@ -344,11 +352,11 @@ class VariantUtils:
         for i in range(num_fields):
             id = cls._read_long(value, id_start + id_size * i, id_size, signed=False)
             offset = cls._read_long(
-                value, offset_start + offset_size * i, offset_size, signed=False)
+                value, offset_start + offset_size * i, offset_size, signed=False
+            )
             value_pos = data_start + offset
             key_value_pos_list.append((cls._get_metadata_key(metadata, id), value_pos))
         return func(key_value_pos_list)
-
 
     @classmethod
     def _handle_array(cls, value: bytes, pos: int, func):
@@ -370,7 +378,8 @@ class VariantUtils:
         value_pos_list = []
         for i in range(num_fields):
             offset = cls._read_long(
-                value, offset_start + offset_size * i, offset_size, signed=False)
+                value, offset_start + offset_size * i, offset_size, signed=False
+            )
             element_pos = data_start + offset
             value_pos_list.append(element_pos)
         return func(value_pos_list)

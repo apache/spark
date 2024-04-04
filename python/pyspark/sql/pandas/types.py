@@ -774,9 +774,11 @@ def _create_converter_to_pandas(
         elif isinstance(dt, VariantType):
 
             def convert_variant(value: Any) -> Any:
-                if (isinstance(value, dict) and
-                    all(key in value for key in ["value", "metadata"]) and
-                    all(isinstance(value[key], bytes) for key in ["value", "metadata"])):
+                if (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
                     raise PySparkValueError(error_class="MALFORMED_VARIANT")
