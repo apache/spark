@@ -135,114 +135,86 @@ trait Logging {
   }
 
   // Log methods that take only a String
-  protected def logInfo(msg: => String): Unit = {
-    if (log.isInfoEnabled) log.info(msg)
-  }
+  protected def logDebug(msg: => String): Unit = if (log.isDebugEnabled) log.debug(msg)
+  protected def logError(msg: => String): Unit = if (log.isErrorEnabled) log.error(msg)
+  protected def logInfo(msg: => String): Unit = if (log.isInfoEnabled) log.info(msg)
+  protected def logTrace(msg: => String): Unit = if (log.isTraceEnabled) log.trace(msg)
+  protected def logWarning(msg: => String): Unit = if (log.isWarnEnabled) log.warn(msg)
 
-  protected def logInfo(entry: LogEntry, stripMargin: Boolean = false): Unit = {
-    if (log.isInfoEnabled) {
-      withLogContext(entry.context) {
-        log.info(maybeStripMargin(entry.message, stripMargin))
-      }
-    }
-  }
-
-  protected def logInfo(
-      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
-    if (log.isInfoEnabled) {
-      withLogContext(entry.context) {
-        log.info(maybeStripMargin(entry.message, stripMargin), throwable)
-      }
-    }
-  }
-
-  protected def logDebug(msg: => String): Unit = {
-    if (log.isDebugEnabled) log.debug(msg)
-  }
-
-  protected def logDebug(entry: LogEntry, stripMargin: Boolean = false): Unit = {
-    if (log.isDebugEnabled) log.debug(maybeStripMargin(entry.message, stripMargin))
-  }
-
-  protected def logDebug(
-      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
-    if (log.isDebugEnabled) log.debug(maybeStripMargin(entry.message, stripMargin), throwable)
-  }
-
-  protected def logTrace(msg: => String): Unit = {
-    if (log.isTraceEnabled) log.trace(msg)
-  }
-
-  protected def logTrace(entry: LogEntry, stripMargin: Boolean = false): Unit = {
-    if (log.isTraceEnabled) log.trace(maybeStripMargin(entry.message, stripMargin))
-  }
-
-  protected def logTrace(
-      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
-    if (log.isTraceEnabled) log.trace(maybeStripMargin(entry.message, stripMargin), throwable)
-  }
-
-  protected def logWarning(msg: => String): Unit = {
-    if (log.isWarnEnabled) log.warn(msg)
-  }
-
-  protected def logWarning(entry: LogEntry, stripMargin: Boolean = false): Unit = {
-    if (log.isWarnEnabled) {
-      withLogContext(entry.context) {
-        log.warn(maybeStripMargin(entry.message, stripMargin))
-      }
-    }
-  }
-
-  protected def logWarning(
-      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
-    if (log.isWarnEnabled) {
-      withLogContext(entry.context) {
-        log.warn(maybeStripMargin(entry.message, stripMargin), throwable)
-      }
-    }
-  }
-
-  protected def logError(msg: => String): Unit = {
-    if (log.isErrorEnabled) log.error(msg)
-  }
-
-  protected def logError(entry: LogEntry, stripMargin: Boolean = false): Unit = {
-    if (log.isErrorEnabled) {
-      withLogContext(entry.context) {
-        log.error(maybeStripMargin(entry.message, stripMargin))
-      }
-    }
-  }
-
-  protected def logError(
-      entry: LogEntry, throwable: Throwable, stripMargin: Boolean = false): Unit = {
-    if (log.isErrorEnabled) {
-      withLogContext(entry.context) {
-        log.error(maybeStripMargin(entry.message, stripMargin), throwable)
-      }
-    }
-  }
-
-  // Log methods that take Throwables (Exceptions/Errors) too
-  protected def logInfo(msg: => String, throwable: Throwable): Unit = {
-    if (log.isInfoEnabled) log.info(msg, throwable)
-  }
-
-  protected def logDebug(msg: => String, throwable: Throwable): Unit = {
+  // Log methods that take a string message and a Throwable (Exception/Error) too
+  protected def logDebug(msg: => String, throwable: Throwable): Unit =
     if (log.isDebugEnabled) log.debug(msg, throwable)
-  }
-
-  protected def logTrace(msg: => String, throwable: Throwable): Unit = {
-    if (log.isTraceEnabled) log.trace(msg, throwable)
-  }
-
-  protected def logWarning(msg: => String, throwable: Throwable): Unit = {
-    if (log.isWarnEnabled) log.warn(msg, throwable)
-  }
-
-  protected def logError(msg: => String, throwable: Throwable): Unit = {
+  protected def logError(msg: => String, throwable: Throwable): Unit =
     if (log.isErrorEnabled) log.error(msg, throwable)
+  protected def logInfo(msg: => String, throwable: Throwable): Unit =
+    if (log.isInfoEnabled) log.info(msg, throwable)
+  protected def logTrace(msg: => String, throwable: Throwable): Unit =
+    if (log.isTraceEnabled) log.trace(msg, throwable)
+  protected def logWarning(msg: => String, throwable: Throwable): Unit =
+    if (log.isWarnEnabled) log.warn(msg, throwable)
+
+  // Log methods that take only a LogEntry
+  protected def logDebug(entry: LogEntry): Unit = logDebug(entry, stripMargin = false)
+  protected def logError(entry: LogEntry): Unit = logError(entry, stripMargin = false)
+  protected def logInfo(entry: LogEntry): Unit = logInfo(entry, stripMargin = false)
+  protected def logTrace(entry: LogEntry): Unit = logTrace(entry, stripMargin = false)
+  protected def logWarning(entry: LogEntry): Unit = logWarning(entry, stripMargin = false)
+
+  // Log methods that take only a LogEntry and a Throwable (Exception/Error) too
+  protected def logDebug(entry: LogEntry, throwable: Throwable): Unit =
+    logDebug(entry, throwable, stripMargin = false)
+  protected def logError(entry: LogEntry, throwable: Throwable): Unit =
+    logError(entry, throwable, stripMargin = false)
+  protected def logInfo(entry: LogEntry, throwable: Throwable): Unit =
+    logInfo(entry, throwable, stripMargin = false)
+  protected def logTrace(entry: LogEntry, throwable: Throwable): Unit =
+    logTrace(entry, throwable, stripMargin = false)
+  protected def logWarning(entry: LogEntry, throwable: Throwable): Unit =
+    logWarning(entry, throwable, stripMargin = false)
+
+  // Log methods that take only a LogEntry with the option to strip margin from the string message
+  protected def logDebug(entry: LogEntry, stripMargin: Boolean): Unit =
+    logEntryHelper(entry, stripMargin, log.debug)
+  protected def logError(entry: LogEntry, stripMargin: Boolean): Unit =
+    logEntryHelper(entry, stripMargin, log.error)
+  protected def logInfo(entry: LogEntry, stripMargin: Boolean): Unit =
+    logEntryHelper(entry, stripMargin, log.info)
+  protected def logTrace(entry: LogEntry, stripMargin: Boolean): Unit =
+    logEntryHelper(entry, stripMargin, log.trace)
+  protected def logWarning(entry: LogEntry, stripMargin: Boolean): Unit =
+    logEntryHelper(entry, stripMargin, log.warn)
+
+  private def logEntryHelper(entry: LogEntry, stripMargin: Boolean, fn: String => ()): Unit = {
+    if (log.isDebugEnabled) {
+      withLogContext(entry.context) {
+        fn(maybeStripMargin(entry.message, stripMargin))
+      }
+    }
+  }
+
+  // Log methods that take only a LogEntry and a Throwable (Exception/Error) too with the option to
+  // strip margin from the string message
+  protected def logDebug(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
+    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.debug)
+  protected def logError(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
+    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.error)
+  protected def logInfo(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
+    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.info)
+  protected def logTrace(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
+    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.trace)
+  protected def logWarning(entry: LogEntry, throwable: Throwable, stripMargin: Boolean): Unit =
+    logEntryWithThrowableHelper(entry, throwable, stripMargin, log.warn)
+
+  private def logEntryWithThrowableHelper(
+      entry: LogEntry,
+      throwable: Throwable,
+      stripMargin: Boolean,
+      fn: (String, Throwable) => ()): Unit = {
+    if (log.isDebugEnabled) {
+      withLogContext(entry.context) {
+        fn(maybeStripMargin(entry.message, stripMargin), throwable)
+      }
+    }
   }
 
   protected def isTraceEnabled(): Boolean = {
