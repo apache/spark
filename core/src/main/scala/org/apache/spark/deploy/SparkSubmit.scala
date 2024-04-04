@@ -744,8 +744,11 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    // In case of shells, spark.ui.showConsoleProgress can be true by default or by user.
-    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS)) {
+    // In case of shells, spark.ui.showConsoleProgress can be true by default or by user. Except,
+    // when Spark Connect is in local mode, because Spark Connect support its own progress
+    // reporting.
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS) &&
+        !sparkConf.contains("spark.local.connect")) {
       sparkConf.set(UI_SHOW_CONSOLE_PROGRESS, true)
     }
 
