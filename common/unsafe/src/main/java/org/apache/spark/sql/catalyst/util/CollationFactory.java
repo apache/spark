@@ -180,7 +180,9 @@ public final class CollationFactory {
       final UTF8String patternUTF8String,
       final int collationId) {
 
-    if (collationId == UTF8_BINARY_LCASE_COLLATION_ID) {
+    if (collationId == UTF8_BINARY_COLLATION_ID) {
+      return getStringSearch(targetUTF8String, patternUTF8String);
+    } else if (collationId == UTF8_BINARY_LCASE_COLLATION_ID) {
       return getStringSearch(targetUTF8String.toLowerCase(), patternUTF8String.toLowerCase());
     }
 
