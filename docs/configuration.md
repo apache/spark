@@ -2907,7 +2907,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.speculation.multiplier</code></td>
-  <td>1.5</td>
+  <td>3</td>
   <td>
     How many times slower a task is than the median to be considered for speculation.
   </td>
@@ -2915,7 +2915,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.speculation.quantile</code></td>
-  <td>0.75</td>
+  <td>0.9</td>
   <td>
     Fraction of tasks which must be complete before speculation is enabled for a particular stage.
   </td>

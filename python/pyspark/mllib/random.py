@@ -26,8 +26,8 @@ from typing import Any, Callable, Optional
 import numpy as np
 
 from pyspark.mllib.common import callMLlibFunc
-from pyspark.context import SparkContext
-from pyspark.rdd import RDD
+from pyspark.core.context import SparkContext
+from pyspark.core.rdd import RDD
 from pyspark.mllib.linalg import Vector
 
 

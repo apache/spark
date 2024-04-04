@@ -36,7 +36,8 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{BLOCK_ID, ERROR, MAX_ATTEMPTS}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
@@ -585,7 +586,8 @@ final class ShuffleBlockFetcherIterator(
             // don't log the exception stack trace to avoid confusing users.
             // See: SPARK-28340
             case ce: ClosedByInterruptException =>
-              logError("Error occurred while fetching local blocks, " + ce.getMessage)
+              logError(
+                log"Error occurred while fetching local blocks, ${MDC(ERROR, ce.getMessage)}")
             case ex: Exception => logError("Error occurred while fetching local blocks", ex)
           }
           results.put(FailureFetchResult(blockId, mapIndex, blockManager.blockManagerId, e))
@@ -874,8 +876,8 @@ final class ShuffleBlockFetcherIterator(
                 assert(buf.isInstanceOf[FileSegmentManagedBuffer])
                 e match {
                   case ce: ClosedByInterruptException =>
-                    logError("Failed to create input stream from local block, " +
-                      ce.getMessage)
+                    lazy val error = MDC(ERROR, ce.getMessage)
+                    logError(log"Failed to create input stream from local block, $error")
                   case e: IOException =>
                     logError("Failed to create input stream from local block", e)
                 }
@@ -964,9 +966,10 @@ final class ShuffleBlockFetcherIterator(
         case FailureFetchResult(blockId, mapIndex, address, e) =>
           var errorMsg: String = null
           if (e.isInstanceOf[OutOfDirectMemoryError]) {
-            errorMsg = s"Block $blockId fetch failed after $maxAttemptsOnNettyOOM " +
-              s"retries due to Netty OOM"
-            logError(errorMsg)
+            val logMessage = log"Block ${MDC(BLOCK_ID, blockId)} fetch failed after " +
+              log"${MDC(MAX_ATTEMPTS, maxAttemptsOnNettyOOM)} retries due to Netty OOM"
+            logError(logMessage)
+            errorMsg = logMessage.message
           }
           throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
 

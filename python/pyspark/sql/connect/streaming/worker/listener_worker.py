@@ -22,7 +22,7 @@ Usually this is ran on the driver side of the Spark Connect Server.
 import os
 import json
 
-from pyspark.java_gateway import local_connect_and_auth
+from pyspark.util import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
     write_int,
