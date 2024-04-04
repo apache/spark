@@ -33,7 +33,8 @@ import jakarta.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkApplication
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CLASS_NAME, ERROR, SUBMISSION_ID}
 import org.apache.spark.util.Utils
 
 /**
@@ -329,7 +330,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
           !connection.getContentType().contains("application/json")) {
           throw new SubmitRestProtocolException(s"Server responded with exception:\n${errString}")
         }
-        logError(s"Server responded with error:\n${errString}")
+        logError(log"Server responded with error:\n${MDC(ERROR, errString)}")
         val error = new ErrorResponse
         if (responseCode == RestSubmissionServer.SC_UNKNOWN_PROTOCOL_VERSION) {
           error.highestProtocolVersion = RestSubmissionServer.PROTOCOL_VERSION
@@ -350,7 +351,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
         response match {
           // If the response is an error, log the message
           case error: ErrorResponse =>
-            logError(s"Server responded with error:\n${error.message}")
+            logError(log"Server responded with error:\n${MDC(ERROR, error.message)}")
             error
           // Otherwise, simply return the response
           case response: SubmitRestProtocolResponse => response
@@ -447,7 +448,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       }
     } else {
       val failMessage = Option(submitResponse.message).map { ": " + _ }.getOrElse("")
-      logError(s"Application submission failed$failMessage")
+      logError(log"Application submission failed${MDC(ERROR, failMessage)}")
     }
   }
 
@@ -470,7 +471,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
         // Log driver state, if present
         driverState match {
           case Some(state) => logInfo(s"State of driver $submissionId is now $state.")
-          case _ => logError(s"State of driver $submissionId was not found!")
+          case _ =>
+            logError(log"State of driver ${MDC(SUBMISSION_ID, submissionId)} was not found!")
         }
         // Log worker node, if present
         (workerId, workerHostPort) match {
@@ -478,12 +480,12 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
           case _ =>
         }
         // Log exception stack trace, if present
-        exception.foreach { e => logError(e) }
+        exception.foreach { e => logError(log"${MDC(ERROR, e)}") }
         return
       }
       Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
     }
-    logError(s"Error: Master did not recognize driver $submissionId.")
+    logError(log"Error: Master did not recognize driver ${MDC(SUBMISSION_ID, submissionId)}.")
   }
 
   /** Log the response sent by the server in the REST application submission protocol. */
@@ -493,7 +495,9 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
 
   /** Log an appropriate error if the response sent by the server is not of the expected type. */
   private def handleUnexpectedRestResponse(unexpected: SubmitRestProtocolResponse): Unit = {
-    logError(s"Error: Server responded with message of unexpected type ${unexpected.messageType}.")
+    // scalastyle:off line.size.limit
+    logError(log"Error: Server responded with message of unexpected type ${MDC(CLASS_NAME, unexpected.messageType)}.")
+    // scalastyle:on
   }
 
   /**
