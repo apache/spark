@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
+
 import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
 import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least, StringTranslate}
 import org.apache.spark.sql.errors.QueryCompilationErrors
