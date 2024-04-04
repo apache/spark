@@ -301,9 +301,11 @@ class LocalDataToArrowConversion:
                     if not nullable:
                         raise PySparkValueError(f"input for {dataType} must not be None")
                     return None
-                elif (isinstance(value, dict) and
-                    all(key in value for key in ["value", "metadata"]) and
-                    all(isinstance(value[key], bytes) for key in ["value", "metadata"])):
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
                     raise PySparkValueError(error_class="MALFORMED_VARIANT")
@@ -515,9 +517,11 @@ class ArrowTableToRowsConversion:
             def convert_variant(value: Any) -> Any:
                 if value is None:
                     return None
-                elif (isinstance(value, dict) and
-                    all(key in value for key in ["value", "metadata"]) and
-                    all(isinstance(value[key], bytes) for key in ["value", "metadata"])):
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["value", "metadata"])
+                    and all(isinstance(value[key], bytes) for key in ["value", "metadata"])
+                ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
                     raise PySparkValueError(error_class="MALFORMED_VARIANT")
