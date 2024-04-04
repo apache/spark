@@ -1668,7 +1668,6 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        logger.exception("GRPC Error received")
         # We have to cast the value here because, a RpcError is a Call as well.
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
         status = rpc_status.from_call(cast(grpc.Call, rpc_error))
