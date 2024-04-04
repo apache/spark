@@ -424,21 +424,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    // skip allocation if we need to fallback
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
+      if (getByte(i) < 0) {
+        // non-ASCII
         return toUpperCaseSlow();
       }
-      int upper = Character.toUpperCase(b);
-      if (upper > 127) {
-        // fallback
-        return toUpperCaseSlow();
-      }
-      bytes[i] = (byte) upper;
+    }
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+      bytes[i] = (byte) Character.toUpperCase(getByte(i));
     }
     return fromBytes(bytes);
   }
@@ -453,16 +448,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public int compareLowercase(UTF8String other) {
     int curr;
     for (curr = 0; curr < numBytes && curr < other.numBytes; curr++) {
-      byte left = getByte(curr);
-      byte right = other.getByte(curr);
-      if (numBytesForFirstByte(left) != 1 || numBytesForFirstByte(right) != 1) {
+      byte left, right;
+      if ((left = getByte(curr)) < 0 || (right = other.getByte(curr)) < 0) {
         return compareLowercaseSuffixSlow(other, curr);
       }
       int lowerLeft = Character.toLowerCase(left);
       int lowerRight = Character.toLowerCase(right);
-      if (lowerLeft > 127 || lowerRight > 127) {
-        return compareLowercaseSuffixSlow(other, curr);
-      }
       if (lowerLeft != lowerRight) {
         return lowerLeft - lowerRight;
       }
@@ -485,21 +476,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
+    // skip allocation if we need to fallback
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
+      if (getByte(i) < 0) {
+        // non-ASCII
         return toLowerCaseSlow();
       }
-      int lower = Character.toLowerCase(b);
-      if (lower > 127) {
-        // fallback
-        return toLowerCaseSlow();
-      }
-      bytes[i] = (byte) lower;
+    }
+    byte[] bytes = new byte[numBytes];
+    for (int i = 0; i < numBytes; i++) {
+      bytes[i] = (byte) Character.toLowerCase(getByte(i));
     }
     return fromBytes(bytes);
   }
@@ -515,24 +501,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-
-    byte[] bytes = new byte[numBytes];
+    // skip allocation if we need to fallback
+    byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (i == 0 || getByte(i - 1) == ' ') {
-        if (numBytesForFirstByte(b) != 1) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        int upper = Character.toTitleCase(b);
-        if (upper > 127) {
-          // fallback
-          return toTitleCaseSlow();
-        }
-        bytes[i] = (byte) upper;
-      } else {
-        bytes[i] = b;
+      curr = getByte(i);
+      if (prev == ' ' && curr < 0) {
+        // non-ASCII
+        return toTitleCaseSlow();
       }
+      prev = curr;
+    }
+    byte[] bytes = new byte[numBytes];
+    prev = ' ';
+    for (int i = 0; i < numBytes; i++) {
+      curr = getByte(i);
+      if (prev == ' ') {
+        bytes[i] = (byte) Character.toTitleCase(curr);
+      } else {
+        bytes[i] = curr;
+      }
+      prev = curr;
     }
     return fromBytes(bytes);
   }
