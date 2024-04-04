@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import com.codahale.metrics.{Gauge, Timer}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.EVENT_QUEUE
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -164,9 +165,9 @@ private class AsyncEventQueue(
     droppedEventsCounter.incrementAndGet()
     if (logDroppedEvent.compareAndSet(false, true)) {
       // Only log the following message once to avoid duplicated annoying logs.
-      logError(s"Dropping event from queue $name. " +
-        "This likely means one of the listeners is too slow and cannot keep up with " +
-        "the rate at which tasks are being started by the scheduler.")
+      logError(log"Dropping event from queue ${MDC(EVENT_QUEUE, name)}. " +
+        log"This likely means one of the listeners is too slow and cannot keep up with " +
+        log"the rate at which tasks are being started by the scheduler.")
     }
     logTrace(s"Dropping event $event")
 

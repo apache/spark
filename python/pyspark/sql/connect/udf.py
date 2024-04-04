@@ -27,7 +27,7 @@ import warnings
 from inspect import getfullargspec
 from typing import cast, Callable, Any, List, TYPE_CHECKING, Optional, Union
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     CommonInlineUserDefinedFunction,

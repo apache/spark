@@ -28,7 +28,7 @@ import org.apache.spark.sql.errors.ExecutionErrors
  */
 @Experimental
 @Evolving
-private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
+private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
 
   /**
    * Handle to the stateful processor that provides access to the state store and other
@@ -100,7 +100,7 @@ private[sql] trait StatefulProcessor[K, I, O] extends Serializable {
  */
 @Experimental
 @Evolving
-private[sql] trait StatefulProcessorWithInitialState[K, I, O, S]
+private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
   extends StatefulProcessor[K, I, O] {
 
   /**

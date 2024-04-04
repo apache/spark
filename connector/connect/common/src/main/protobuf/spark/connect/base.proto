@@ -333,7 +333,7 @@ message ExecutePlanRequest {
 
 // The response of a query, can be one or more for each request. Responses belonging to the
 // same input query, carry the same `session_id`.
-// Next ID: 16
+// Next ID: 17
 message ExecutePlanResponse {
   string session_id = 1;
   // Server-side generated idempotency key that the client can use to assert that the server side
@@ -377,6 +377,9 @@ message ExecutePlanResponse {
 
     // Response for command that creates ResourceProfile.
     CreateResourceProfileCommandResult create_resource_profile_command_result = 17;
+
+    // (Optional) Intermediate query progress reports.
+    ExecutionProgress execution_progress = 18;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
@@ -437,6 +440,23 @@ message ExecutePlanResponse {
     // If present, in a reattachable execution this means that after server sends onComplete,
     // the execution is complete. If the server sends onComplete without sending a ResultComplete,
     // it means that there is more, and the client should use ReattachExecute RPC to continue.
+  }
+
+  // This message is used to communicate progress about the query progress during the execution.
+  message ExecutionProgress {
+    // Captures the progress of each individual stage.
+    repeated StageInfo stages = 1;
+
+    // Captures the currently in progress tasks.
+    int64 num_inflight_tasks = 2;
+
+    message StageInfo {
+      int64 stage_id = 1;
+      int64 num_tasks = 2;
+      int64 num_completed_tasks = 3;
+      int64 input_bytes_read = 4;
+      bool done = 5;
+    }
   }
 }
 

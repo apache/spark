@@ -41,8 +41,8 @@ import org.apache.commons.io.IOUtils
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.BLOCK_ID
 import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
@@ -649,7 +649,7 @@ private[spark] class BlockManager(
     for ((blockId, info) <- blockInfoManager.entries) {
       val status = getCurrentBlockStatus(blockId, info)
       if (info.tellMaster && !tryToReportBlockStatus(blockId, status)) {
-        logError(s"Failed to report $blockId to master; giving up.")
+        logError(log"Failed to report ${MDC(BLOCK_ID, blockId)} to master; giving up.")
         return
       }
     }

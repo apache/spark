@@ -33,7 +33,8 @@ import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorMetrics
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, LogKey, MDC}
+import org.apache.spark.internal.LogKey.{REASON, TASK_SET_NAME, TASK_STATE, TID}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEndpoint
@@ -426,7 +427,9 @@ private[spark] class TaskSchedulerImpl(
             }
           } catch {
             case e: TaskNotSerializableException =>
-              logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
+              // scalastyle:off line.size.limit
+              logError(log"Resource offer failed, task set ${MDC(TASK_SET_NAME, taskSet.name)} was not serializable")
+              // scalastyle:on
               // Do not offer resources for this task, but don't throw an error to allow other
               // task sets to be submitted.
               return (noDelayScheduleRejects, minLaunchedLocality)
@@ -805,10 +808,8 @@ private[spark] class TaskSchedulerImpl(
             }
           case None =>
             logError(
-              ("Ignoring update with state %s for TID %s because its task set is gone (this is " +
-                "likely the result of receiving duplicate task finished status updates) or its " +
-                "executor has been marked as failed.")
-                .format(state, tid))
+              log"Ignoring update with state ${MDC(TASK_STATE, state)} for TID ${MDC(TID, tid)} because its task set is gone (this is " +
+                log"likely the result of receiving duplicate task finished status updates) or its executor has been marked as failed.")
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
@@ -1023,7 +1024,7 @@ private[spark] class TaskSchedulerImpl(
             // one may be triggered by a dropped connection from the worker while another may be a
             // report of executor termination. We produce log messages for both so we
             // eventually report the termination reason.
-            logError(s"Lost an executor $executorId (already removed): $reason")
+            logError(log"Lost an executor ${MDC(LogKey.EXECUTOR_ID, executorId)} (already removed): ${MDC(REASON, reason)}")
         }
       }
     }
@@ -1051,7 +1052,7 @@ private[spark] class TaskSchedulerImpl(
       logInfo(s"Executor $executorId on $hostPort is decommissioned" +
         s"${getDecommissionDuration(executorId)}.")
     case _ =>
-      logError(s"Lost executor $executorId on $hostPort: $reason")
+      logError(log"Lost executor ${MDC(LogKey.EXECUTOR_ID, executorId)} on ${MDC(LogKey.HOST, hostPort)}: ${MDC(REASON, reason)}")
   }
 
   // return decommission duration in string or "" if decommission startTime not exists

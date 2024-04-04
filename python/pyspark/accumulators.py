@@ -333,7 +333,7 @@ def _start_update_server(auth_token: str) -> AccumulatorServer:
 if __name__ == "__main__":
     import doctest
 
-    from pyspark.context import SparkContext
+    from pyspark.core.context import SparkContext
 
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
