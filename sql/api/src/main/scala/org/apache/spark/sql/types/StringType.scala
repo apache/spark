@@ -34,10 +34,11 @@ object StringTypePriority extends Enumeration {
  * @param collationId The id of collation for this StringType.
  */
 @Stable
-class StringType private(val collationId: Int,
-                         var priority: StringTypePriority = ImplicitST)
+class StringType private(
+    val collationId: Int,
+    var priority: StringTypePriority = ImplicitST)
   extends AtomicType
-    with Serializable {
+  with Serializable {
   /**
    * Support for Binary Equality implies that strings are considered equal only if
    * they are byte for byte equal. E.g. all accent or case-insensitive collations are considered
@@ -87,8 +88,9 @@ class StringType private(val collationId: Int,
  */
 @Stable
 case object StringType extends StringType(0, ImplicitST) {
-  private[spark] def apply(collationId: Int,
-                           priority: StringTypePriority = ImplicitST): StringType =
+  private[spark] def apply(
+      collationId: Int,
+      priority: StringTypePriority = ImplicitST): StringType =
     new StringType(collationId, priority)
 
   def apply(collation: String): StringType = {
