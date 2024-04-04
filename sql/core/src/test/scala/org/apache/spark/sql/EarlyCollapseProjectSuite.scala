@@ -26,7 +26,6 @@ import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-
 class EarlyCollapseProjectSuite extends QueryTest
   with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -262,12 +261,31 @@ class EarlyCollapseProjectSuite extends QueryTest
       baseDfCreator: () => DataFrame,
       testExec: DataFrame => DataFrame,
       baseAndDerivedIMRsOnCache: (Int, Int),
-      baseAndDerivedIMRsOnCBaseInvalidation: (Int, Int)): Unit = {
+      baseAndDerivedIMRsOnBaseInvalidation: (Int, Int)): Unit = {
+    // now check if the results of optimized dataframe and completely unoptimized dataframe are
+    // same
+    val fullyUnoptBase = withSQLConf(
+      SQLConf.EXCLUDE_POST_ANALYSIS_RULES.key -> EarlyCollapseProject.ruleName) {
+      baseDfCreator()
+    }
+
+    val fullyUnoptTest = withSQLConf(
+      SQLConf.EXCLUDE_POST_ANALYSIS_RULES.key -> EarlyCollapseProject.ruleName) {
+      testExec(baseDfCreator())
+    }
+
+    val baseDfRows = fullyUnoptBase.collect()
+    val testDfRows = fullyUnoptTest.collect()
+
     val baseDf = baseDfCreator()
-    val baseDfRows = baseDf.collect()
-    val testDfRows = testExec(baseDf).collect()
     if (useCaching) {
       baseDf.cache()
+      assertCacheDependency(baseDfCreator(), 1)
+      assertCacheDependency(testExec(baseDfCreator()), 1)
+      baseDfCreator().unpersist(true)
+      assertCacheDependency(baseDfCreator(), 0)
+      assertCacheDependency(testExec(baseDfCreator()), 0)
+      baseDfCreator().cache()
     }
     val initNodes = collectNodes(baseDf)
     val (newDfOpt, newDfUnopt) = getComparableDataFrames(baseDf, testExec)
@@ -283,13 +301,9 @@ class EarlyCollapseProjectSuite extends QueryTest
       assert(newDfOpt.queryExecution.optimizedPlan.collectLeaves().head.
         isInstanceOf[InMemoryRelation])
     }
-    // now check if the results of optimized dataframe and completely unoptimized dataframe are same
-    val fullyUnopt = withSQLConf(
-      SQLConf.EXCLUDE_POST_ANALYSIS_RULES.key -> EarlyCollapseProject.ruleName) {
-       testExec(baseDfCreator())
-    }
-    assert(collectNodes(fullyUnopt).size >= nonOptDfNodes.size)
-    checkAnswer(newDfOpt, fullyUnopt)
+
+    assert(collectNodes(fullyUnoptTest).size >= nonOptDfNodes.size)
+    checkAnswer(newDfOpt, fullyUnoptTest)
 
     if (useCaching) {
       // first unpersist both dataframes
@@ -306,8 +320,8 @@ class EarlyCollapseProjectSuite extends QueryTest
       baseDfCreator().cache()
       testExec(baseDfCreator()).cache()
       baseDfCreator().unpersist(true)
-      assertCacheDependency(baseDfCreator(), baseAndDerivedIMRsOnCBaseInvalidation._1)
-      assertCacheDependency(testExec(baseDfCreator()), baseAndDerivedIMRsOnCBaseInvalidation._2)
+      assertCacheDependency(baseDfCreator(), baseAndDerivedIMRsOnBaseInvalidation._1)
+      assertCacheDependency(testExec(baseDfCreator()), baseAndDerivedIMRsOnBaseInvalidation._2)
       checkAnswer(baseDfCreator(), baseDfRows)
       checkAnswer(testExec(baseDfCreator()), testDfRows)
       // recache base df so that if existing tests want to continue should work fine
@@ -335,7 +349,6 @@ class EarlyCollapseProjectSuite extends QueryTest
   }
 
   def assertCacheDependency(df: DataFrame, numOfCachesExpected: Int): Unit = {
-
     val cachedPlans = df.queryExecution.withCachedData.collect {
       case i: InMemoryRelation => i.cacheBuilder.cachedPlan
     }
@@ -349,6 +362,5 @@ class EarlyCollapseProjectSuite extends QueryTest
     }
     imrs.size + imrs.map(ime => recurse(ime.relation.cacheBuilder.cachedPlan)).sum
   }
-
 }
 
