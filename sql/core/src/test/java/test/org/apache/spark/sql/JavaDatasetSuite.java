@@ -27,15 +27,13 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import org.apache.spark.api.java.Optional;
-import org.apache.spark.sql.streaming.GroupStateTimeout;
-import org.apache.spark.sql.streaming.OutputMode;
+import org.apache.spark.sql.streaming.*;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
 
 import com.google.common.base.Objects;
-import org.apache.spark.sql.streaming.TestGroupState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -186,6 +184,39 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testInitialStateForTransformWithState() {
+    List<String> data = Arrays.asList("a", "xy", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    Dataset<Tuple2<Integer, String>> initialStateDS = spark.createDataset(
+      Arrays.asList(new Tuple2<Integer, String>(2, "pq")),
+      Encoders.tuple(Encoders.INT(), Encoders.STRING())
+    );
+
+    KeyValueGroupedDataset<Integer, Tuple2<Integer, String>> kvInitStateDS =
+      initialStateDS.groupByKey(
+        (MapFunction<Tuple2<Integer, String>, Integer>) f -> f._1, Encoders.INT());
+
+    KeyValueGroupedDataset<Integer, String> kvInitStateMappedDS = kvInitStateDS.mapValues(
+      (MapFunction<Tuple2<Integer, String>, String>) f -> f._2,
+      Encoders.STRING()
+    );
+
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    Dataset<String> transformWithStateMapped = grouped.transformWithState(
+      new TestStatefulProcessorWithInitialState(),
+      TimeoutMode.NoTimeouts(),
+      OutputMode.Append(),
+      kvInitStateMappedDS,
+      Encoders.STRING(),
+      Encoders.STRING());
+
+    Assertions.assertEquals(asSet("1a", "2pqxy", "3foobar"),
+      toSet(transformWithStateMapped.collectAsList()));
+  }
+
+  @Test
   public void testInitialStateFlatMapGroupsWithState() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
@@ -318,6 +349,24 @@ public class JavaDatasetSuite implements Serializable {
     Assertions.assertFalse(prevState.isUpdated());
     Assertions.assertTrue(prevState.isRemoved());
     Assertions.assertFalse(prevState.exists());
+  }
+
+  @Test
+  public void testTransformWithState() {
+    List<String> data = Arrays.asList("a", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    StatefulProcessor<Integer, String, String> testStatefulProcessor = new TestStatefulProcessor();
+    Dataset<String> transformWithStateMapped = grouped.transformWithState(
+      testStatefulProcessor,
+      TimeoutMode.NoTimeouts(),
+      OutputMode.Append(),
+      Encoders.STRING());
+
+    Assertions.assertEquals(asSet("1a", "3foobar"),
+      toSet(transformWithStateMapped.collectAsList()));
   }
 
   @Test

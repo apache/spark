@@ -187,6 +187,9 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
         |)""".stripMargin).executeUpdate()
     conn.prepareStatement("CREATE TABLE complex_table (c1 complex)").executeUpdate()
     conn.prepareStatement("INSERT INTO complex_table VALUES (ROW(true, 1.0))").executeUpdate()
+    conn.prepareStatement("CREATE DOMAIN myint AS integer CHECK (VALUE > 0)").executeUpdate()
+    conn.prepareStatement("CREATE TABLE domain_table (c1 myint)").executeUpdate()
+    conn.prepareStatement("INSERT INTO domain_table VALUES (1)").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -541,5 +544,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .option("query", "SELECT '[3,7)'::int4range")
       .load()
     checkAnswer(df, Row("[3,7)"))
+  }
+
+  test("SPARK-47710: Reading Domain Types") {
+    val df = spark.read.jdbc(jdbcUrl, "domain_table", new Properties)
+    checkAnswer(df, Row(1))
+  }
+
+  test("SPARK-47710: Reading Object Identifier Types") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT 1::oid, 'bar'::regclass, 'integer'::regtype").load()
+    checkAnswer(df, Row(1, "bar", "integer"))
   }
 }
