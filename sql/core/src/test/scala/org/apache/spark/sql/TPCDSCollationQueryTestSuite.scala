@@ -63,6 +63,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       val dbName: String,
       val collation: String,
       val columnTransform: String) {
+
     def queryTransform: String => String
   }
 
@@ -71,6 +72,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       override val collation: String,
       override val columnTransform: String)
     extends CollationCheck(dbName, collation, columnTransform) {
+
     override def queryTransform: String => String = identity
   }
 
@@ -79,6 +81,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
       override val collation: String,
       override val columnTransform: String)
     extends CollationCheck(dbName, collation, columnTransform) {
+
     override def queryTransform: String => String = _.toLowerCase(Locale.ROOT)
   }
 
