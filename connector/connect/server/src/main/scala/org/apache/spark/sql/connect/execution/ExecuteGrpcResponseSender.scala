@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.connect.execution
 
+import scala.jdk.CollectionConverters._
+
 import com.google.protobuf.Message
 import io.grpc.stub.{ServerCallStreamObserver, StreamObserver}
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
+import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_DURATION, CONNECT_EXECUTE_REATTACHABLE_SENDER_MAX_STREAM_SIZE, CONNECT_PROGRESS_REPORT_INTERVAL}
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 
@@ -132,6 +135,38 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
   }
 
   /**
+   * This method is called repeatedly during the query execution to enqueue a new message to be
+   * send to the client about the current query progress. The message is not directly send to the
+   * client, but rather enqueued to in the response observer.
+   */
+  private def enqueueProgressMessage(): Unit = {
+    if (executeHolder.sessionHolder.session.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL) > 0) {
+      SparkConnectService.executionListener.foreach { listener =>
+        // It is possible, that the tracker is no longer available and in this
+        // case we simply ignore it and do not send any progress message. This avoids
+        // having to synchronize on the listener.
+        listener.tryGetTracker(executeHolder.jobTag).foreach { tracker =>
+          // Only send progress message if there is something new to report.
+          tracker.yieldWhenDirty { (stages, inflightTasks) =>
+            val response = ExecutePlanResponse
+              .newBuilder()
+              .setExecutionProgress(
+                ExecutePlanResponse.ExecutionProgress
+                  .newBuilder()
+                  .addAllStages(stages.map(_.toProto()).asJava)
+                  .setNumInflightTasks(inflightTasks))
+              .build()
+            // There is a special case when the response observer has alreaady determined
+            // that the final message is send (and the stream will be closed) but we might want
+            // to send the progress message. In this case we ignore the result of the `onNext` call.
+            executeHolder.responseObserver.tryOnNext(response)
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Attach to the executionObserver, consume responses from it, and send them to grpcObserver.
    *
    * In non reattachable execution, it will keep sending responses until the query finishes. In
@@ -173,6 +208,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
     var sentResponsesSize: Long = 0
 
     while (!finished) {
+      enqueueProgressMessage()
       var response: Option[CachedStreamResponse[T]] = None
 
       // Conditions for exiting the inner loop (and helpers to compute them):
@@ -201,9 +237,18 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           // The state of interrupted, response and lastIndex are changed under executionObserver
           // monitor, and will notify upon state change.
           if (response.isEmpty) {
-            val timeout = Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+            // Wake up more frequently to send the progress updates.
+            val progressTimeout =
+              executeHolder.sessionHolder.session.conf.get(CONNECT_PROGRESS_REPORT_INTERVAL)
+            // If the progress feature is disabled, wait for the deadline.
+            val timeout = if (progressTimeout > 0) {
+              progressTimeout
+            } else {
+              Math.max(1, deadlineTimeMillis - System.currentTimeMillis())
+            }
             logTrace(s"Wait for response to become available with timeout=$timeout ms.")
             executionObserver.responseLock.wait(timeout)
+            enqueueProgressMessage()
             logTrace(s"Reacquired executionObserver lock after waiting.")
             sleepEnd = System.nanoTime()
           }
@@ -228,6 +273,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
             s"waitingForResults=${consumeSleep}ns waitingForSend=${sendSleep}ns")
         throw new SparkSQLException(errorClass = "INVALID_CURSOR.DISCONNECTED", Map.empty)
       } else if (gotResponse) {
+        enqueueProgressMessage()
         // There is a response available to be sent.
         val sent = sendResponse(response.get, deadlineTimeMillis)
         if (sent) {
@@ -240,6 +286,7 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
           assert(deadlineLimitReached || interrupted)
         }
       } else if (streamFinished) {
+        enqueueProgressMessage()
         // Stream is finished and all responses have been sent
         logInfo(
           s"Stream finished for opId=${executeHolder.operationId}, " +

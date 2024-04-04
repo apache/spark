@@ -22,7 +22,7 @@ from typing import cast
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType, assert_true, lit
 from pyspark.sql.types import DoubleType, StructType, StructField, LongType, DayTimeIntervalType
 from pyspark.errors import ParseException, PythonException, PySparkTypeError
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
