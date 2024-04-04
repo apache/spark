@@ -160,10 +160,11 @@
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
-    <aws.java.sdk.v2.version>2.23.19</aws.java.sdk.v2.version>
+    <aws.java.sdk.v2.version>2.24.6</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.20</gcs-connector.version>
+    <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
+    <gcs-connector.version>hadoop3-2.2.21</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -221,7 +222,8 @@
     <icu4j.version>72.1</icu4j.version>
     <!--
     If you are changing Arrow version specification, please check
-    ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
+    ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
+    and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>15.0.2</arrow.version>
     <ammonite.version>3.0.0-M1</ammonite.version>
@@ -316,6 +318,12 @@
       -Djdk.reflect.useDirectMethodHandle=false
       -Dio.netty.tryReflectionSetAccessible=true
     </extraJavaTestArgs>
+    <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
+    <mysql.connector.version>8.3.0</mysql.connector.version>
+    <postgresql.version>42.7.2</postgresql.version>
+    <db2.jcc.version>11.5.9.0</db2.jcc.version>
+    <mssql.jdbc.version>9.4.1.jre8</mssql.jdbc.version>
+    <ojdbc11.version>23.3.0.23.09</ojdbc11.version>
   </properties>
   <repositories>
     <repository>
@@ -1266,37 +1274,37 @@
       <dependency>
         <groupId>com.mysql</groupId>
         <artifactId>mysql-connector-j</artifactId>
-        <version>8.3.0</version>
+        <version>${mysql.connector.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mariadb.jdbc</groupId>
         <artifactId>mariadb-java-client</artifactId>
-        <version>2.7.12</version>
+        <version>${mariadb.java.client.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.7.2</version>
+        <version>${postgresql.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.ibm.db2</groupId>
         <artifactId>jcc</artifactId>
-        <version>11.5.9.0</version>
+        <version>${db2.jcc.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.microsoft.sqlserver</groupId>
         <artifactId>mssql-jdbc</artifactId>
-        <version>9.4.1.jre8</version>
+        <version>${mssql.jdbc.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.oracle.database.jdbc</groupId>
         <artifactId>ojdbc11</artifactId>
-        <version>23.3.0.23.09</version>
+        <version>${ojdbc11.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2475,7 +2483,7 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-service-rpc</artifactId>
-        <version>3.1.3</version>
+        <version>4.0.0</version>
         <exclusions>
           <exclusion>
             <groupId>*</groupId>

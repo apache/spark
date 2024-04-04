@@ -26,7 +26,8 @@ import org.apache.hadoop.yarn.api.records.{FinalApplicationStatus, YarnApplicati
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnAppReport}
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.APP_STATE
 import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -116,8 +117,8 @@ private[spark] class YarnClientSchedulerBackend(
       try {
         val YarnAppReport(_, state, diags) =
           client.monitorApplication(logApplicationReport = false)
-        logError(s"YARN application has exited unexpectedly with state $state! " +
-          "Check the YARN application logs for more details.")
+        logError(log"YARN application has exited unexpectedly with state " +
+          log"${MDC(APP_STATE, state)}! Check the YARN application logs for more details.")
         diags.foreach { err =>
           logError(s"Diagnostics message: $err")
         }

@@ -303,9 +303,9 @@ case class PrefixKeyScanStateEncoderSpec(
 
 case class RangeKeyScanStateEncoderSpec(
     keySchema: StructType,
-    numColsPrefixKey: Int) extends KeyStateEncoderSpec {
-  if (numColsPrefixKey == 0 || numColsPrefixKey > keySchema.length) {
-    throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(numColsPrefixKey.toString)
+    numOrderingCols: Int) extends KeyStateEncoderSpec {
+  if (numOrderingCols == 0 || numOrderingCols > keySchema.length) {
+    throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(numOrderingCols.toString)
   }
 }
 

@@ -18,7 +18,7 @@
 import unittest
 from typing import cast
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql import Row
 from pyspark.sql.functions import (
     array,

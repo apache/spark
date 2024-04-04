@@ -34,6 +34,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.errors.SparkCoreErrors
+import org.apache.spark.internal.LogKey.{COMMAND, ERROR}
+import org.apache.spark.internal.MDC
 import org.apache.spark.util.Utils
 
 
@@ -221,8 +223,8 @@ private[spark] class PipedRDD[T: ClassTag](
         val t = childThreadException.get()
         if (t != null) {
           val commandRan = command.mkString(" ")
-          logError(s"Caught exception while running pipe() operator. Command ran: $commandRan. " +
-            s"Exception: ${t.getMessage}")
+          logError(log"Caught exception while running pipe() operator. Command ran: " +
+            log"${MDC(COMMAND, commandRan)}. Exception: ${MDC(ERROR, t.getMessage)}")
           proc.destroy()
           cleanup()
           throw t
