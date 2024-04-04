@@ -34,7 +34,8 @@ import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOut
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -725,11 +726,12 @@ private[spark] class MapOutputTrackerMaster(
   // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
   if (minSizeForBroadcast > maxRpcMessageSize) {
-    val msg = s"${SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST.key} ($minSizeForBroadcast bytes) " +
-      s"must be <= spark.rpc.message.maxSize ($maxRpcMessageSize bytes) to prevent sending an " +
-      "rpc message that is too large."
-    logError(msg)
-    throw new IllegalArgumentException(msg)
+    val logEntry = log"${MDC(CONFIG, SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST.key)} " +
+      log"(${MDC(MIN_SIZE, minSizeForBroadcast)} bytes) " +
+      log"must be <= spark.rpc.message.maxSize (${MDC(MAX_SIZE, maxRpcMessageSize)} " +
+      log"bytes) to prevent sending an rpc message that is too large."
+    logError(logEntry)
+    throw new IllegalArgumentException(logEntry.message)
   }
 
   def post(message: MapOutputTrackerMasterMessage): Unit = {
@@ -815,7 +817,7 @@ private[spark] class MapOutputTrackerMaster(
       case None if shuffleMigrationEnabled =>
         logWarning(s"Asked to update map output for unknown shuffle ${shuffleId}")
       case None =>
-        logError(s"Asked to update map output for unknown shuffle ${shuffleId}")
+        logError(log"Asked to update map output for unknown shuffle ${MDC(SHUFFLE_ID, shuffleId)}")
     }
   }
 
@@ -1736,9 +1738,11 @@ private[spark] object MapOutputTracker extends Logging {
 
   def validateStatus(status: ShuffleOutputStatus, shuffleId: Int, partition: Int) : Unit = {
     if (status == null) {
-      val errorMessage = s"Missing an output location for shuffle $shuffleId partition $partition"
+      // scalastyle:off line.size.limit
+      val errorMessage = log"Missing an output location for shuffle ${MDC(SHUFFLE_ID, shuffleId)} partition ${MDC(PARTITION_ID, partition)}"
+      // scalastyle:on
       logError(errorMessage)
-      throw new MetadataFetchFailedException(shuffleId, partition, errorMessage)
+      throw new MetadataFetchFailedException(shuffleId, partition, errorMessage.message)
     }
   }
 }

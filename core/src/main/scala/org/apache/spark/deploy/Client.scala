@@ -31,7 +31,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.{DRIVER_ID, RPC_ADDRESS}
 import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
@@ -173,8 +174,7 @@ private class ClientEndpoint(
       // Exception, if present
       exception match {
         case Some(e) =>
-          logError(s"Exception from cluster was: $e")
-          e.printStackTrace()
+          logError("Exception from cluster", e)
           System.exit(-1)
         case _ =>
           state.get match {
@@ -197,7 +197,7 @@ private class ClientEndpoint(
     } else if (exception.exists(e => Utils.responseFromBackup(e.getMessage))) {
       logDebug(s"The status response is reported from a backup spark instance. So, ignored.")
     } else {
-        logError(s"ERROR: Cluster master did not recognize $submittedDriverID")
+        logError(log"ERROR: Cluster master did not recognize ${MDC(DRIVER_ID, submittedDriverID)}")
         System.exit(-1)
     }
   }
@@ -226,7 +226,7 @@ private class ClientEndpoint(
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (!lostMasters.contains(remoteAddress)) {
-      logError(s"Error connecting to master $remoteAddress.")
+      logError(log"Error connecting to master ${MDC(RPC_ADDRESS, remoteAddress)}.")
       lostMasters += remoteAddress
       // Note that this heuristic does not account for the fact that a Master can recover within
       // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
@@ -240,8 +240,7 @@ private class ClientEndpoint(
 
   override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
     if (!lostMasters.contains(remoteAddress)) {
-      logError(s"Error connecting to master ($remoteAddress).")
-      logError(s"Cause was: $cause")
+      logError(log"Error connecting to master (${MDC(RPC_ADDRESS, remoteAddress)}).", cause)
       lostMasters += remoteAddress
       if (lostMasters.size >= masterEndpoints.size) {
         logError("No master is available, exiting.")
@@ -251,8 +250,7 @@ private class ClientEndpoint(
   }
 
   override def onError(cause: Throwable): Unit = {
-    logError(s"Error processing messages, exiting.")
-    cause.printStackTrace()
+    logError("Error processing messages, exiting.", cause)
     System.exit(-1)
   }
 

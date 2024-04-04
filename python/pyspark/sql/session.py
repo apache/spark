@@ -81,6 +81,7 @@ if TYPE_CHECKING:
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
+    from pyspark.sql.connect.shell.progress import ProgressHandler
 
 try:
     import memory_profiler  # noqa: F401
@@ -2029,6 +2030,61 @@ class SparkSession(SparkConversionMixin):
 
     addArtifact = addArtifacts
 
+    def registerProgressHandler(self, handler: "ProgressHandler") -> None:
+        """
+        Register a progress handler to be called when a progress update is received from the server.
+
+        .. versionadded:: 4.0
+
+        Parameters
+        ----------
+        handler : ProgressHandler
+          A callable that follows the ProgressHandler interface. This handler will be called
+          on every progress update.
+
+        Examples
+        --------
+
+        >>> def progress_handler(stages, inflight_tasks, done):
+        ...     print(f"{len(stages)} Stages known, Done: {done}")
+        >>> spark.registerProgressHandler(progress_handler)
+        >>> res = spark.range(10).repartition(1).collect()
+        3 Stages known, Done: False
+        3 Stages known, Done: True
+        >>> spark.clearProgressHandlers()
+        """
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.registerProgressHandler"},
+        )
+
+    def removeProgressHandler(self, handler: "ProgressHandler") -> None:
+        """
+        Remove a progress handler that was previously registered.
+
+        .. versionadded:: 4.0
+
+        Parameters
+        ----------
+        handler : ProgressHandler
+          The handler to remove if present in the list of progress handlers.
+        """
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.removeProgressHandler"},
+        )
+
+    def clearProgressHandlers(self) -> None:
+        """
+        Clear all registered progress handlers.
+
+        .. versionadded:: 4.0
+        """
+        raise PySparkRuntimeError(
+            error_class="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
+            message_parameters={"feature": "SparkSession.clearProgressHandlers"},
+        )
+
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
         Copy file from local to cloud storage file system.
@@ -2193,6 +2249,11 @@ def _test() -> None:
     import pyspark.sql.session
 
     os.chdir(os.environ["SPARK_HOME"])
+
+    # Disable Doc Tests for Spark Connect only functions:
+    pyspark.sql.session.SparkSession.registerProgressHandler.__doc__ = None
+    pyspark.sql.session.SparkSession.removeProgressHandler.__doc__ = None
+    pyspark.sql.session.SparkSession.clearProgressHandlers.__doc__ = None
 
     globs = pyspark.sql.session.__dict__.copy()
     globs["spark"] = (
