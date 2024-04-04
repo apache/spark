@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.analysis.EarlyCollapseProject
-import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.internal.SQLConf
 
 class EarlyCollapseProjectWithCachingSuite extends EarlyCollapseProjectSuite {
@@ -29,8 +29,9 @@ class EarlyCollapseProjectWithCachingSuite extends EarlyCollapseProjectSuite {
     val baseDfCreator = () => spark.range(1000).select($"id" as "a", $"id" as "b").
       select($"a" + 1 as "c", $"a", $"b").filter($"a" > 4).filter($"c" * $"b" < 60)
 
-    checkProjectCollapseAndCacheUse(baseDfCreator, df => df.filter($"b" < 100).
-      select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e"))
+    checkProjectCollapseCacheUseAndInvalidation(baseDfCreator, df => df.filter($"b" < 100).
+      select($"c" + $"a" as "c", $"a" + 3 as "a", $"b", $"c" + 7 as "d", $"a" - $"b" as "e"),
+      (1, 2), (0, 1))
 
     // there is already a cached base Df
     val df1 = baseDfCreator().filter($"b" < 100).
@@ -69,21 +70,9 @@ class EarlyCollapseProjectWithCachingSuite extends EarlyCollapseProjectSuite {
     baseDf.cache()
     // Add df1 to the CacheManager; the buffer is currently empty.
     df1.cache()
-    assertCacheDependency(df1, 1)
+    assertCacheDependency(df1, 2)
     // removal of InMemoryRelation of base Df should result in the removal of dependency of df1
     baseDf.unpersist(blocking = true)
-    assertCacheDependency(df1.limit(1000), 0)
-  }
-
-
-  private def assertCacheDependency(df: DataFrame, numOfCachesDependedUpon: Int = 1): Unit = {
-
-    val cachedPlan = df.queryExecution.withCachedData.collectFirst {
-      case i: InMemoryRelation => i.cacheBuilder.cachedPlan
-    }
-    assert(cachedPlan.isDefined)
-
-    assert(find(cachedPlan.get)(_.isInstanceOf[InMemoryTableScanExec]).size
-      == numOfCachesDependedUpon)
+    assertCacheDependency(df1.limit(1000), 1)
   }
 }
