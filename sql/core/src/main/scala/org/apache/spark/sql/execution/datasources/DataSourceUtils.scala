@@ -292,7 +292,7 @@ object DataSourceUtils extends PredicateHelper {
 
     isCollationPushDownSupported || !expression.exists {
       case childExpression @ (_: Attribute | _: GetStructField) =>
-        // don't push down filters for types with utf8 binary collation
+        // don't push down filters for types with non-binary sortable collation
         // as it could lead to incorrect results
         SchemaUtils.hasNonBinarySortableCollatedString(childExpression.dataType)
 
