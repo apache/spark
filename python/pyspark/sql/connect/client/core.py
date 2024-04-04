@@ -56,6 +56,7 @@ import grpc
 from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
+from pyspark.util import is_remote_only
 from pyspark.accumulators import SpecialAccumulatorIds
 from pyspark.loose_version import LooseVersion
 from pyspark.version import __version__
@@ -291,7 +292,7 @@ class DefaultChannelBuilder(ChannelBuilder):
 
     @staticmethod
     def default_port() -> int:
-        if "SPARK_TESTING" in os.environ:
+        if "SPARK_TESTING" in os.environ and not is_remote_only():
             from pyspark.sql.session import SparkSession as PySparkSession
 
             # In the case when Spark Connect uses the local mode, it starts the regular Spark
