@@ -17,6 +17,8 @@
 import unittest
 
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
+from pyspark.sql import SparkSession
+from pyspark.testing.sqlutils import have_pandas, pandas_requirement_message
 
 
 class ResourceProfileTests(unittest.TestCase):
@@ -69,6 +71,19 @@ class ResourceProfileTests(unittest.TestCase):
         rp3 = rpb.build
         assert_request_contents(rp3.executorResources, rp3.taskResources)
         sc.stop()
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_profile_before_sc_for_sql(self):
+        rpb = ResourceProfileBuilder()
+        treqs = TaskResourceRequests().cpus(2)
+        # no exception for building ResourceProfile
+        rp = rpb.require(treqs).build
+
+        spark = SparkSession.builder.master("local-cluster[1, 2, 1024]").getOrCreate()
+        df = spark.range(10)
+        df.mapInPandas(lambda x: x, df.schema, False, rp).collect()
+        df.mapInArrow(lambda x: x, df.schema, False, rp).collect()
+        spark.stop()
 
 
 if __name__ == "__main__":

@@ -41,10 +41,10 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{CollationFactory, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{AtomicType, StringType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.{Utils, VersionUtils}
@@ -756,6 +756,14 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
+
+  val DEFAULT_COLLATION =
+    buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
+      .doc("Sets default collation to use for string literals, parameter markers or the string" +
+        " produced by a builtin function such as to_char or CAST")
+      .version("4.0.0")
+      .stringConf
+      .createWithDefault("UTF8_BINARY")
 
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
@@ -3239,6 +3247,16 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val DISABLE_MAP_KEY_NORMALIZATION =
+    buildConf("spark.sql.legacy.disableMapKeyNormalization")
+      .internal()
+      .doc("Disables key normalization when creating a map with `ArrayBasedMapBuilder`. When " +
+        "set to `true` it will prevent key normalization when building a map, which will " +
+        "allow for values such as `-0.0` and `0.0` to be present as distinct keys.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val FASTFAIL_ON_FILEFORMAT_OUTPUT =
     buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
       .internal()
@@ -3369,6 +3387,14 @@ object SQLConf {
         "option. This can be useful to enforce that inserted NULL values are present in " +
         "storage to differentiate from missing data.")
       .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val REPLACE_NULLIF_USING_WITH_EXPR =
+    buildConf("spark.databricks.sql.replaceNullIfUsingWithExpr")
+      .internal()
+      .doc("When true, NullIf expressions are rewritten using With expressions to avoid " +
+        "expression duplication.")
       .booleanConf
       .createWithDefault(true)
 
@@ -3514,6 +3540,15 @@ object SQLConf {
       .internal()
       .doc("If enabled, prevents constant folding in subqueries that contain" +
         " a COUNT-bug-susceptible Aggregate.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PULL_OUT_NESTED_DATA_OUTER_REF_EXPRESSIONS_ENABLED =
+    buildConf("spark.sql.optimizer.pullOutNestedDataOuterRefExpressions.enabled")
+      .internal()
+      .doc("Handle correlation over nested data extract expressions by pulling out the " +
+        "expression into the outer plan. This enables correlation on map attributes for example.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
@@ -4042,8 +4077,16 @@ object SQLConf {
   val LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mssqlserver.numericMapping.enabled")
       .internal()
-      .doc("When true, use legacy MySqlServer SMALLINT and REAL type mapping.")
+      .doc("When true, use legacy MsSqlServer SMALLINT and REAL type mapping.")
       .version("2.4.5")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.mysql.bitArrayMapping.enabled")
+      .internal()
+      .doc("When true, use LongType to represent MySQL BIT(n>1); otherwise, use BinaryType.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -4401,6 +4444,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val INFER_PANDAS_DICT_AS_MAP = buildConf("spark.sql.execution.pandas.inferPandasDictAsMap")
+    .doc("When true, spark.createDataFrame will infer dict from Pandas DataFrame " +
+      "as a MapType. When false, spark.createDataFrame infers dict from Pandas DataFrame " +
+      "as a StructType which is default inferring from PyArrow.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT =
     buildConf("spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled")
       .doc("PySpark's SparkSession.createDataFrame infers the element type of an array from all " +
@@ -4636,6 +4687,16 @@ object SQLConf {
       .internal()
       .doc("When set to true, restores legacy behavior of potential incorrect count bug " +
         "handling for scalar subqueries.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ALLOW_SUBQUERY_EXPRESSIONS_IN_LAMBDAS_AND_HIGHER_ORDER_FUNCTIONS =
+    buildConf("spark.sql.analyzer.allowSubqueryExpressionsInLambdasOrHigherOrderFunctions")
+      .internal()
+      .doc("When set to false, the analyzer will throw an error if a subquery expression appears " +
+        "in a lambda function or higher-order function. When set to true, it restores the legacy " +
+        "behavior of allowing subquery eexpressions in lambda functions or higher-order functions.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -5000,6 +5061,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def collationEnabled: Boolean = getConf(COLLATION_ENABLED)
 
+  override def defaultStringType: StringType = {
+    if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
+      StringType
+    } else {
+      StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
+    }
+  }
+
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
@@ -5128,6 +5197,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyMsSqlServerNumericMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_NUMERIC_MAPPING_ENABLED)
 
+  def legacyMySqlBitArrayMappingEnabled: Boolean =
+    getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
+
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))
   }
@@ -5177,8 +5249,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
 
   def isParquetSchemaRespectSummaries: Boolean = getConf(PARQUET_SCHEMA_RESPECT_SUMMARIES)
-
-  def parquetOutputCommitterClass: String = getConf(PARQUET_OUTPUT_COMMITTER_CLASS)
 
   def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
 
@@ -5574,6 +5644,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def plannedWriteEnabled: Boolean = getConf(SQLConf.PLANNED_WRITE_ENABLED)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def inferPandasDictAsMap: Boolean = getConf(SQLConf.INFER_PANDAS_DICT_AS_MAP)
 
   def legacyInferArrayTypeFromFirstElement: Boolean = getConf(
     SQLConf.LEGACY_INFER_ARRAY_TYPE_FROM_FIRST_ELEMENT)

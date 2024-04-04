@@ -480,6 +480,12 @@ class DataFrameTestsMixin:
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
+    def test_create_df_with_collation(self):
+        schema = StructType([StructField("name", StringType("UNICODE_CI"), True)])
+        df = self.spark.createDataFrame([("Alice",), ("alice",)], schema)
+
+        self.assertEqual(df.select("name").distinct().count(), 1)
+
     def test_print_schema(self):
         df = self.spark.createDataFrame([(1, (2, 2))], ["a", "b"])
 

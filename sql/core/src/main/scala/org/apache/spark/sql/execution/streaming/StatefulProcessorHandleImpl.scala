@@ -163,12 +163,14 @@ class StatefulProcessorHandleImpl(
   }
 
   /**
-   * Function to retrieve all registered timers for all grouping keys
+   * Function to retrieve all expired registered timers for all grouping keys
+   * @param expiryTimestampMs Threshold for expired timestamp in milliseconds, this function
+   *                          will return all timers that have timestamp less than passed threshold
    * @return - iterator of registered timers for all grouping keys
    */
-  def getExpiredTimers(): Iterator[(Any, Long)] = {
+  def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
     verifyTimerOperations("get_expired_timers")
-    timerState.getExpiredTimers()
+    timerState.getExpiredTimers(expiryTimestampMs)
   }
 
   /**

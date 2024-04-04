@@ -17,30 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
-
-object CollationTypeConstraints {
-
-  def checkCollationCompatibility(collationId: Int, dataTypes: Seq[DataType]): TypeCheckResult = {
-    val collationName = CollationFactory.fetchCollation(collationId).collationName
-    // Additional check needed for collation compatibility
-    dataTypes.collectFirst {
-      case stringType: StringType if stringType.collationId != collationId =>
-        val collation = CollationFactory.fetchCollation(stringType.collationId)
-        DataTypeMismatch(
-          errorSubClass = "COLLATION_MISMATCH",
-          messageParameters = Map(
-            "collationNameLeft" -> collationName,
-            "collationNameRight" -> collation.collationName
-          )
-        )
-    } getOrElse TypeCheckResult.TypeCheckSuccess
-  }
-
-}
 
 /**
  * StringTypeCollated is an abstract class for StringType with collation support.
@@ -56,7 +33,7 @@ case object StringTypeBinary extends StringTypeCollated {
   // TODO (SPARK-47504): Rename this AbstractDataType's simpleString when it is first used
   override private[sql] def simpleString: String = "string_binary"
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].isBinaryCollation
+    other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality
 }
 
 /**
@@ -66,8 +43,8 @@ case object StringTypeBinaryLcase extends StringTypeCollated {
   // TODO (SPARK-47504): Rename this AbstractDataType's simpleString when it is first used
   override private[sql] def simpleString: String = "string_binary_lcase"
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].isBinaryCollation ||
-      other.asInstanceOf[StringType].isLowercaseCollation)
+    other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
+      other.asInstanceOf[StringType].isUTF8BinaryLcaseCollation)
 }
 
 /**

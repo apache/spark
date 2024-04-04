@@ -24,10 +24,7 @@ class PandasUDFGroupedAggParityTests(GroupedAggPandasUDFTestsMixin, ReusedConnec
     # TODO(SPARK-43727): Parity returnType check in Spark Connect
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_unsupported_types(self):
-        self.check_unsupported_types()
-
-    def test_invalid_args(self):
-        self.check_invalid_args()
+        super().test_unsupported_types()
 
     @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
     def test_grouped_with_empty_partition(self):

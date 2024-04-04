@@ -43,6 +43,7 @@ from typing import (
     NoReturn,
     cast,
     TYPE_CHECKING,
+    Type,
     Sequence,
 )
 
@@ -81,19 +82,23 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.plan import (
     CommonInlineUserDefinedTableFunction,
+    CommonInlineUserDefinedDataSource,
     PythonUDTF,
+    PythonDataSource,
 )
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
 from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
 from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
+from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_proto
 
 if TYPE_CHECKING:
     from google.rpc.error_details_pb2 import ErrorInfo
     from pyspark.sql.connect._typing import DataTypeOrString
+    from pyspark.sql.datasource import DataSource
 
 
 class ChannelBuilder:
@@ -690,6 +695,37 @@ class SparkConnectClient(object):
 
         self._profiler_collector = ConnectProfilerCollector()
 
+        self._progress_handlers: List[ProgressHandler] = []
+
+    def register_progress_handler(self, handler: ProgressHandler) -> None:
+        """
+        Register a progress handler to be called when a progress message is received.
+
+        Parameters
+        ----------
+        handler : ProgressHandler
+          The callable that will be called with the progress information.
+
+        """
+        if handler in self._progress_handlers:
+            return
+        self._progress_handlers.append(handler)
+
+    def clear_progress_handlers(self) -> None:
+        self._progress_handlers.clear()
+
+    def remove_progress_handler(self, handler: ProgressHandler) -> None:
+        """
+        Remove a progress handler from the list of registered handlers.
+
+        Parameters
+        ----------
+        handler : ProgressHandler
+          The callable to remove from the list of progress handlers.
+
+        """
+        self._progress_handlers.remove(handler)
+
     def _retrying(self) -> "Retrying":
         return Retrying(self._retry_policies)
 
@@ -787,6 +823,23 @@ class SparkConnectClient(object):
 
         self._execute(req)
         return name
+
+    def register_data_source(self, dataSource: Type["DataSource"]) -> None:
+        """
+        Register a data source in the session catalog.
+        """
+        data_source = PythonDataSource(
+            data_source=dataSource,
+            python_ver=get_python_ver(),
+        )
+        proto = CommonInlineUserDefinedDataSource(
+            name=dataSource.name(),
+            data_source=data_source,
+        ).to_data_source_proto(self)
+
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_data_source.CopyFrom(proto)
+        self._execute(req)
 
     def register_java(
         self,
@@ -1192,7 +1245,10 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _execute_and_fetch_as_iterator(
-        self, req: pb2.ExecutePlanRequest, observations: Dict[str, Observation]
+        self,
+        req: pb2.ExecutePlanRequest,
+        observations: Dict[str, Observation],
+        progress: Optional["Progress"] = None,
     ) -> Iterator[
         Union[
             "pa.RecordBatch",
@@ -1271,6 +1327,10 @@ class SparkConnectClient(object):
                 yield {"get_resources_command_result": resources}
             if b.HasField("extension"):
                 yield b.extension
+            if b.HasField("execution_progress"):
+                if progress:
+                    p = from_proto(b.execution_progress)
+                    progress.update_ticks(*p)
             if b.HasField("arrow_batch"):
                 logger.debug(
                     f"Received arrow batch rows={b.arrow_batch.row_count} "
@@ -1300,6 +1360,9 @@ class SparkConnectClient(object):
                         + f"{num_records_in_batch}."
                     )
                 num_records += num_records_in_batch
+            if b.HasField("create_resource_profile_command_result"):
+                profile_id = b.create_resource_profile_command_result.profile_id
+                yield {"create_resource_profile_command_result": profile_id}
 
         try:
             if self._use_reattachable_execute:
@@ -1314,6 +1377,16 @@ class SparkConnectClient(object):
                     with attempt:
                         for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
                             yield from handle_response(b)
+        except KeyboardInterrupt:
+            logger.debug(f"Interrupt request received for operation={req.operation_id}")
+            try:
+                self.interrupt_operation(req.operation_id)
+            except Exception as e:
+                # Swallow all errors if aborted.
+                logger.debug(f"Caught an error during interrupt handling, silenced: {e}")
+                pass
+            if progress is not None:
+                progress.finish()
         except Exception as error:
             self._handle_error(error)
 
@@ -1337,7 +1410,8 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        for response in self._execute_and_fetch_as_iterator(req, observations):
+        progress = Progress(handlers=self._progress_handlers)
+        for response in self._execute_and_fetch_as_iterator(req, observations, progress=progress):
             if isinstance(response, StructType):
                 schema = response
             elif isinstance(response, pa.RecordBatch):
@@ -1355,6 +1429,7 @@ class SparkConnectClient(object):
                         "response": response,
                     },
                 )
+        progress.finish()
 
         if len(batches) > 0:
             if self_destruct:
@@ -1644,7 +1719,6 @@ class SparkConnectClient(object):
         -------
         Throws the appropriate internal Python exception.
         """
-        logger.exception("GRPC Error received")
         # We have to cast the value here because, a RpcError is a Call as well.
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
         status = rpc_status.from_call(cast(grpc.Call, rpc_error))
@@ -1725,3 +1799,12 @@ class SparkConnectClient(object):
         else:
             # Update the server side session ID.
             self._server_session_id = response.server_side_session_id
+
+    def _create_profile(self, profile: pb2.ResourceProfile) -> int:
+        """Create the ResourceProfile on the server side and return the profile ID"""
+        logger.info("Creating the ResourceProfile")
+        cmd = pb2.Command()
+        cmd.create_resource_profile_command.profile.CopyFrom(profile)
+        (_, properties) = self.execute_command(cmd)
+        profile_id = properties["create_resource_profile_command_result"]
+        return profile_id

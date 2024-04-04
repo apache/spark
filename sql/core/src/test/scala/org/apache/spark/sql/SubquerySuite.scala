@@ -2530,24 +2530,37 @@ class SubquerySuite extends QueryTest
         Row(2))
 
       // Cannot use non-orderable data type in one row subquery that cannot be collapsed.
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(
-            """select (
-              |  select concat(a, a) from
-              |  (select upper(x['a'] + rand()) as a)
-              |) from v1
-              |""".stripMargin
-          ).collect()
-        },
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
-          "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
-        parameters = Map("expr" -> "v1.x", "dataType" -> "map"),
-        context = ExpectedContext(
-          fragment = "select upper(x['a'] + rand()) as a",
-          start = 39,
-          stop = 72)
-      )
+      // However, this case is handled by rule PullOutNestedDataOuterRefExpressions.
+      // We test a non-deterministic function to prevent the expression from being collapsed, so
+      // we can't checkAnswer.
+      assert(sql(
+        """select (
+          |  select concat(a, a) from
+          |  (select upper(x['a'] + rand()) as a)
+          |) from v1
+          |""".stripMargin).collect().length == 1)
+
+      // With PullOutNestedDataOuterRefExpressions disabled, this query should fail.
+      withSQLConf(SQLConf.PULL_OUT_NESTED_DATA_OUTER_REF_EXPRESSIONS_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """select (
+                |  select concat(a, a) from
+                |  (select upper(x['a'] + rand()) as a)
+                |) from v1
+                |""".stripMargin
+            ).collect()
+          },
+          errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "UNSUPPORTED_CORRELATED_REFERENCE_DATA_TYPE",
+          parameters = Map("expr" -> "v1.x", "dataType" -> "map"),
+          context = ExpectedContext(
+            fragment = "select upper(x['a'] + rand()) as a",
+            start = 39,
+            stop = 72)
+        )
+      }
     }
   }
 

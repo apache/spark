@@ -184,6 +184,11 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
         self.assertFalse(is_remote())
 
+    def quiet(self):
+        from pyspark.testing.utils import QuietTest
+
+        return QuietTest(self.sc)
+
 
 class ByteArrayOutput:
     def __init__(self):
