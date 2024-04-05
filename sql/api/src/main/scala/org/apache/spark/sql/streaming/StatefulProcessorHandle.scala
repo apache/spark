@@ -52,15 +52,14 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *
    * @param stateName  - name of the state variable
    * @param valEncoder - SQL encoder for state variable
-   * @param tTLConfig  - the ttl configuration (time to live duration etc.)
+   * @param ttlConfig  - the ttl configuration (time to live duration etc.)
    * @tparam T - type of state variable
    * @return - instance of ValueState of type T that can be used to store state persistently
    */
   def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T],
-      tTLConfig: TTLConfig): ValueState[T]
-
+      ttlConfig: TTLConfig): ValueState[T]
 
   /**
    * Creates new or returns existing list state associated with stateName.

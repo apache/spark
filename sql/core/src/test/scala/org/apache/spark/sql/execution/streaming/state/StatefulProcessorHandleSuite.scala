@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.time.Duration
 import java.util.UUID
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
-import org.apache.spark.sql.streaming.{TimeoutMode, TTLMode}
+import org.apache.spark.sql.streaming.{TimeoutMode, TTLConfig, TTLMode}
 
 
 /**
@@ -225,10 +226,14 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         UUID.randomUUID(), keyExprEncoder, TTLMode.ProcessingTimeTTL(), TimeoutMode.NoTimeouts(),
         batchTimestampMs = Some(10))
 
-      val valueState = handle.getValueState("testState", Encoders.STRING)
+      val valueStateWithTTL = handle.getValueState("testState",
+        Encoders.STRING, TTLConfig(Duration.ofHours(1)))
+
+      // create another state without TTL, this should not be captured in the handle
+      handle.getValueState("testState", Encoders.STRING)
 
       assert(handle.ttlStates.size() === 1)
-      assert(handle.ttlStates.get(0) === valueState)
+      assert(handle.ttlStates.get(0) === valueStateWithTTL)
     }
   }
 

@@ -130,9 +130,9 @@ object StateStoreErrors {
     new StatefulProcessorCannotAssignTTLInNoTTLMode(stateName)
   }
 
-  def ttlCannotBeNegative(operationType: String,
-      stateName: String): StatefulProcessorTTLCannotBeNegative = {
-    new StatefulProcessorTTLCannotBeNegative(operationType, stateName)
+  def ttlMustBePositive(operationType: String,
+      stateName: String): StatefulProcessorTTLMustBePositive = {
+    new StatefulProcessorTTLMustBePositive(operationType, stateName)
   }
 }
 
@@ -215,7 +215,7 @@ class StatefulProcessorCannotAssignTTLInNoTTLMode(stateName: String)
     errorClass = "STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE",
     messageParameters = Map("stateName" -> stateName))
 
-class StatefulProcessorTTLCannotBeNegative(
+class StatefulProcessorTTLMustBePositive(
     operationType: String,
     stateName: String)
   extends SparkUnsupportedOperationException(

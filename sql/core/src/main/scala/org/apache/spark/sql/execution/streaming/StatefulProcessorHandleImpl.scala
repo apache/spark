@@ -244,8 +244,8 @@ class StatefulProcessorHandleImpl(
     val ttlDuration = ttlConfig.ttlDuration
     if (ttlMode != TTLMode.ProcessingTimeTTL()) {
       throw StateStoreErrors.cannotProvideTTLConfigForNoTTLMode(stateName)
-    } else if (ttlDuration != null && ttlDuration.isNegative) {
-      throw StateStoreErrors.ttlCannotBeNegative("update", stateName)
+    } else if (ttlDuration == null || ttlDuration.isNegative || ttlDuration.isZero) {
+      throw StateStoreErrors.ttlMustBePositive("update", stateName)
     }
   }
 }

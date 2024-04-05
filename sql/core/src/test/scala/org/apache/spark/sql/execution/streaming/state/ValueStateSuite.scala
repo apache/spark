@@ -330,38 +330,23 @@ class ValueStateSuite extends StateVariableSuiteBase {
       assert(testState.get() === "v1")
       assert(testState.getWithoutEnforcingTTL().get === "v1")
 
-      var ttlValue = testState.getTTLValue()
-      assert(ttlValue.isEmpty)
-      var ttlStateValueIterator = testState.getValuesInTTLState()
-      assert(ttlStateValueIterator.isEmpty)
-
-      testState.clear()
-      assert(!testState.exists())
-      assert(testState.get() === null)
-
       val ttlExpirationMs = timestampMs + 60000
-
-      testState.update("v1")
-      assert(testState.get() === "v1")
-      assert(testState.getWithoutEnforcingTTL().get === "v1")
-
-      ttlValue = testState.getTTLValue()
+      var ttlValue = testState.getTTLValue()
       assert(ttlValue.isDefined)
       assert(ttlValue.get === ttlExpirationMs)
-      ttlStateValueIterator = testState.getValuesInTTLState()
+      var ttlStateValueIterator = testState.getValuesInTTLState()
       assert(ttlStateValueIterator.hasNext)
-      assert(ttlStateValueIterator.next() === ttlExpirationMs)
-      assert(ttlStateValueIterator.isEmpty)
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
       val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
         TTLMode.ProcessingTimeTTL(), TimeoutMode.NoTimeouts(),
-        batchTimestampMs = Some(timestampMs))
+        batchTimestampMs = Some(ttlExpirationMs))
 
-      val nextBatchTestState: ValueStateImplWithTTL[String] = nextBatchHandle
-        .getValueState[String]("testState", Encoders.STRING)
-        .asInstanceOf[ValueStateImplWithTTL[String]]
+      val nextBatchTestState: ValueStateImplWithTTL[String] =
+        nextBatchHandle.getValueState[String]("testState", Encoders.STRING, ttlConfig)
+          .asInstanceOf[ValueStateImplWithTTL[String]]
+
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
       // ensure get does not return the expired value
@@ -383,10 +368,6 @@ class ValueStateSuite extends StateVariableSuiteBase {
       nextBatchTestState.clear()
       assert(!nextBatchTestState.exists())
       assert(nextBatchTestState.get() === null)
-
-      nextBatchTestState.clear()
-      assert(!nextBatchTestState.exists())
-      assert(nextBatchTestState.get() === null)
     }
   }
 
@@ -399,7 +380,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         TTLMode.ProcessingTimeTTL(), TimeoutMode.NoTimeouts(),
         batchTimestampMs = Some(batchTimestampMs))
 
-      Seq(Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
+      Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)
         val ex = intercept[SparkUnsupportedOperationException] {
           handle.getValueState[String]("testState", Encoders.STRING, ttlConfig)
