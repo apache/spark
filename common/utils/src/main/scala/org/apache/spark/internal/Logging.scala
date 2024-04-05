@@ -141,58 +141,109 @@ trait Logging {
   }
 
   // Log methods that take only a String
-  protected def logDebug(msg: => String): Unit = if (log.isDebugEnabled) log.debug(msg)
-  protected def logError(msg: => String): Unit = if (log.isErrorEnabled) log.error(msg)
-  protected def logInfo(msg: => String): Unit = if (log.isInfoEnabled) log.info(msg)
-  protected def logTrace(msg: => String): Unit = if (log.isTraceEnabled) log.trace(msg)
-  protected def logWarning(msg: => String): Unit = if (log.isWarnEnabled) log.warn(msg)
+  protected def logInfo(msg: => String): Unit = {
+    if (log.isInfoEnabled) log.info(msg)
+  }
 
-  // Log methods that take a string message and a Throwable (Exception/Error) too
-  protected def logDebug(msg: => String, throwable: Throwable): Unit =
-    if (log.isDebugEnabled) log.debug(msg, throwable)
-  protected def logError(msg: => String, throwable: Throwable): Unit =
-    if (log.isErrorEnabled) log.error(msg, throwable)
-  protected def logInfo(msg: => String, throwable: Throwable): Unit =
-    if (log.isInfoEnabled) log.info(msg, throwable)
-  protected def logTrace(msg: => String, throwable: Throwable): Unit =
-    if (log.isTraceEnabled) log.trace(msg, throwable)
-  protected def logWarning(msg: => String, throwable: Throwable): Unit =
-    if (log.isWarnEnabled) log.warn(msg, throwable)
-
-  // Log methods that take only a LogEntry
-  protected def logDebug(entry: LogEntry): Unit = if (log.isDebugEnabled) logFn(entry, log.debug)
-  protected def logError(entry: LogEntry): Unit = if (log.isErrorEnabled) logFn(entry, log.error)
-  protected def logInfo(entry: LogEntry): Unit = if (log.isInfoEnabled) logFn(entry, log.info)
-  protected def logTrace(entry: LogEntry): Unit = if (log.isTraceEnabled) logFn(entry, log.trace)
-  protected def logWarning(entry: LogEntry): Unit = if (log.isWarnEnabled) logFn(entry, log.warn)
-
-  // Log methods that take only a LogEntry and a Throwable (Exception/Error) too
-  protected def logDebug(entry: LogEntry, throwable: Throwable): Unit =
-    if (log.isDebugEnabled) logFn(entry, throwable, log.debug)
-  protected def logError(entry: LogEntry, throwable: Throwable): Unit =
-    if (log.isErrorEnabled) logFn(entry, throwable, log.error)
-  protected def logInfo(entry: LogEntry, throwable: Throwable): Unit =
-    if (log.isInfoEnabled) logFn(entry, throwable, log.info)
-  protected def logTrace(entry: LogEntry, throwable: Throwable): Unit =
-    if (log.isTraceEnabled) logFn(entry, throwable, log.trace)
-  protected def logWarning(entry: LogEntry, throwable: Throwable): Unit =
-    if (log.isWarnEnabled) logFn(entry, throwable, log.warn)
-
-  private def logFn(entry: LogEntry, fn: String => Unit): Unit = {
-    if (log.isDebugEnabled) {
+  protected def logInfo(entry: LogEntry): Unit = {
+    if (log.isInfoEnabled) {
       withLogContext(entry.context) {
-        fn(entry.message)
+        log.info(entry.message)
       }
     }
   }
 
-  private def logFn(
-      entry: LogEntry, throwable: Throwable, fn: (String, Throwable) => Unit): Unit = {
-    if (log.isDebugEnabled) {
+  protected def logInfo(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isInfoEnabled) {
       withLogContext(entry.context) {
-        fn(entry.message, throwable)
+        log.info(entry.message, throwable)
       }
     }
+  }
+
+  protected def logDebug(msg: => String): Unit = {
+    if (log.isDebugEnabled) log.debug(msg)
+  }
+
+  protected def logDebug(entry: LogEntry): Unit = {
+    if (log.isDebugEnabled) {
+      withLogContext(entry.context) {
+        log.debug(entry.message)
+      }
+    }
+  }
+
+  protected def logTrace(msg: => String): Unit = {
+    if (log.isTraceEnabled) log.trace(msg)
+  }
+
+  protected def logTrace(entry: LogEntry): Unit = {
+    if (log.isTraceEnabled) {
+      withLogContext(entry.context) {
+        log.trace(entry.message)
+      }
+    }
+  }
+
+  protected def logWarning(msg: => String): Unit = {
+    if (log.isWarnEnabled) log.warn(msg)
+  }
+
+  protected def logWarning(entry: LogEntry): Unit = {
+    if (log.isWarnEnabled) {
+      withLogContext(entry.context) {
+        log.warn(entry.message)
+      }
+    }
+  }
+
+  protected def logWarning(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isWarnEnabled) {
+      withLogContext(entry.context) {
+        log.warn(entry.message, throwable)
+      }
+    }
+  }
+
+  protected def logError(msg: => String): Unit = {
+    if (log.isErrorEnabled) log.error(msg)
+  }
+
+  protected def logError(entry: LogEntry): Unit = {
+    if (log.isErrorEnabled) {
+      withLogContext(entry.context) {
+        log.error(entry.message)
+      }
+    }
+  }
+
+  protected def logError(entry: LogEntry, throwable: Throwable): Unit = {
+    if (log.isErrorEnabled) {
+      withLogContext(entry.context) {
+        log.error(entry.message, throwable)
+      }
+    }
+  }
+
+  // Log methods that take Throwables (Exceptions/Errors) too
+  protected def logInfo(msg: => String, throwable: Throwable): Unit = {
+    if (log.isInfoEnabled) log.info(msg, throwable)
+  }
+
+  protected def logDebug(msg: => String, throwable: Throwable): Unit = {
+    if (log.isDebugEnabled) log.debug(msg, throwable)
+  }
+
+  protected def logTrace(msg: => String, throwable: Throwable): Unit = {
+    if (log.isTraceEnabled) log.trace(msg, throwable)
+  }
+
+  protected def logWarning(msg: => String, throwable: Throwable): Unit = {
+    if (log.isWarnEnabled) log.warn(msg, throwable)
+  }
+
+  protected def logError(msg: => String, throwable: Throwable): Unit = {
+    if (log.isErrorEnabled) log.error(msg, throwable)
   }
 
   protected def isTraceEnabled(): Boolean = {
