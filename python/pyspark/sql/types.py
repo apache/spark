@@ -1478,6 +1478,27 @@ class UserDefinedType(DataType):
 class VariantVal:
     """
     A class to represent a Variant value in Python.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    value : bytes
+        The bytes representing the value component of the Variant.
+    metadata : bytes
+        The bytes representing the metadata component of the Variant.
+
+    Methods
+    -------
+    toPython()
+        Convert the VariantVal to a Python data structure.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> v = df.select(parse_json(df.json).alias("var")).collect()[0].var
+    >>> v.toPython()
+    {'a': 1}
     """
 
     def __init__(self, value: bytes, metadata: bytes):
@@ -1485,22 +1506,19 @@ class VariantVal:
         self.metadata = metadata
 
     def __str__(self) -> str:
-        return self.toString()
+        return VariantUtils.to_json(self.value, self.metadata)
 
     def __repr__(self) -> str:
         return "VariantVal(%s, %s)" % (self.value, self.metadata)
 
-    def toString(self) -> str:
-        """
-        Convert the VariantVal to a string.
-        :return: a string representation of the Variant
-        """
-        return VariantUtils.to_json(self.value, self.metadata)
-
-    def toPython(self) -> str:
+    def toPython(self) -> Any:
         """
         Convert the VariantVal to a Python data structure.
-        :return: a Python object
+
+        Returns
+        -------
+        Any
+            A Python object that represents the Variant.
         """
         return VariantUtils.to_python(self.value, self.metadata)
 
