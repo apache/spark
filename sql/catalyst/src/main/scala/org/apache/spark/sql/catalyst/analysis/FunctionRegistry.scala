@@ -24,7 +24,8 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.FUNCTION_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
@@ -223,7 +224,8 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
     val newFunction = (info, builder)
     functionBuilders.put(name, newFunction) match {
       case Some(previousFunction) if previousFunction != newFunction =>
-        logWarning(s"The function $name replaced a previously registered function.")
+        logWarning(log"The function ${MDC(FUNCTION_NAME, name)} replaced a " +
+          log"previously registered function.")
       case _ =>
     }
   }

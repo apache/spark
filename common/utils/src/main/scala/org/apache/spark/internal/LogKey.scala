@@ -22,6 +22,7 @@ package org.apache.spark.internal
  */
 object LogKey extends Enumeration {
   val ACCUMULATOR_ID = Value
+  val ANALYSIS_ERROR = Value
   val APP_DESC = Value
   val APP_ID = Value
   val APP_STATE = Value
@@ -33,6 +34,9 @@ object LogKey extends Enumeration {
   val CATEGORICAL_FEATURES = Value
   val CLASS_LOADER = Value
   val CLASS_NAME = Value
+  val COLUMN_DATA_TYPE = Value
+  val COLUMN_DEFAULT_VALUE = Value
+  val COLUMN_NAME = Value
   val COMMAND = Value
   val COMMAND_OUTPUT = Value
   val COMPONENT = Value
@@ -40,6 +44,7 @@ object LogKey extends Enumeration {
   val CONFIG2 = Value
   val CONTAINER_ID = Value
   val COUNT = Value
+  val CSV_HEADER_LENGTH = Value
   val DRIVER_ID = Value
   val END_POINT = Value
   val ERROR = Value
@@ -48,7 +53,10 @@ object LogKey extends Enumeration {
   val EXECUTOR_ID = Value
   val EXECUTOR_STATE = Value
   val EXIT_CODE = Value
+  val EXPRESSION_TERMS = Value
   val FAILURES = Value
+  val FUNCTION_NAME = Value
+  val FUNCTION_PARAMETER = Value
   val HOST = Value
   val JOB_ID = Value
   val JOIN_CONDITION = Value
@@ -65,20 +73,26 @@ object LogKey extends Enumeration {
   val MERGE_DIR_NAME = Value
   val METHOD_NAME = Value
   val MIN_SIZE = Value
+  val NUM_COLUMNS = Value
   val NUM_ITERATIONS = Value
   val OBJECT_ID = Value
   val OLD_BLOCK_MANAGER_ID = Value
   val OPTIMIZER_CLASS_NAME = Value
+  val PARSE_MODE = Value
   val PARTITION_ID = Value
+  val PARTITION_SPECIFICATION = Value
   val PATH = Value
   val PATHS = Value
   val POD_ID = Value
   val PORT = Value
+  val QUERY_HINT = Value
   val QUERY_PLAN = Value
+  val QUERY_PLAN_LENGTH = Value
   val RANGE = Value
   val RDD_ID = Value
   val REASON = Value
   val REDUCE_ID = Value
+  val RELATION_NAME = Value
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
   val RPC_ADDRESS = Value
@@ -90,6 +104,8 @@ object LogKey extends Enumeration {
   val SHUFFLE_MERGE_ID = Value
   val SIZE = Value
   val SLEEP_TIME_SECONDS = Value
+  val SQL_CONF_KEY = Value
+  val SQL_TEXT = Value
   val STAGE_ID = Value
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
@@ -103,6 +119,8 @@ object LogKey extends Enumeration {
   val TID = Value
   val TIMEOUT = Value
   val TIME_UNITS = Value
+  val UNSUPPORTED_EXPRESSION = Value
+  val UNSUPPORTED_HINT_REASON = Value
   val URI = Value
   val USER_NAME = Value
   val WATERMARK_CONSTRAINT = Value

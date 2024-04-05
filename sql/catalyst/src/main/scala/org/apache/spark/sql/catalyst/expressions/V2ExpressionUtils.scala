@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.reflect.{Method, Modifier}
+import org.apache.spark.internal.LogKey.{FUNCTION_NAME, FUNCTION_PARAMETER}
 
-import org.apache.spark.internal.Logging
+import java.lang.reflect.{Method, Modifier}
+import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
-import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, NamedReference, NamedTransform, SortValue, Transform, Expression => V2Expression, Literal => V2Literal, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -134,9 +135,10 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     } catch {
       case _: NoSuchFunctionException =>
         val parameterString = args.map(_.dataType.typeName).mkString("(", ", ", ")")
-        logWarning(s"V2 function $name with parameter types $parameterString is used in " +
-            "partition transforms, but its definition couldn't be found in the function catalog " +
-            "provided")
+        logWarning(log"V2 function ${MDC(FUNCTION_NAME, name)} " +
+          log"with parameter types ${MDC(FUNCTION_PARAMETER, parameterString)} is used in " +
+          log"partition transforms, but its definition couldn't be found in the function catalog " +
+          log"provided")
         None
       case _: UnsupportedOperationException =>
         None
