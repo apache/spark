@@ -155,7 +155,7 @@ class Column(val expr: Expression) extends Logging {
     name match {
       case "*" => UnresolvedStar(None)
       case _ if name.endsWith(".*") =>
-        val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
+        val parts = UnresolvedAttribute.parseAttributeName(name.dropRight(2))
         UnresolvedStar(Some(parts))
       case _ => UnresolvedAttribute.quotedString(name)
     }
@@ -1221,6 +1221,43 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to IntegerType.
+   *   import org.apache.spark.sql.types.IntegerType
+   *   df.select(df("colA").try_cast(IntegerType))
+   *
+   *   // equivalent to
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: DataType): Column = withExpr {
+    val cast = Cast(
+      child = expr,
+      dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(to),
+      evalMode = EvalMode.TRY)
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
+    cast
+  }
+
+  /**
+   * Casts the column to a different data type and the result is null on failure.
+   * {{{
+   *   // Casts colA to integer.
+   *   df.select(df("colA").try_cast("int"))
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def try_cast(to: String): Column = {
+    try_cast(CatalystSqlParser.parseDataType(to))
+  }
 
   /**
    * Returns a sort expression based on the descending order of the column.

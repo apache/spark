@@ -208,8 +208,6 @@ object Metadata {
   /** Computes the hash code for the types we support. */
   private def hash(obj: Any): Int = {
     obj match {
-      // `map.mapValues` return `Map` in Scala 2.12 and return `MapView` in Scala 2.13, call
-      // `toMap` for Scala version compatibility.
       case map: Map[_, _] =>
         map.transform((_, v) => hash(v)).##
       case arr: Array[_] =>

@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
@@ -462,12 +462,17 @@ object CommandUtils extends Logging {
     !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
   }
 
-  def uncacheTableOrView(sparkSession: SparkSession, name: String): Unit = {
-    try {
-      sparkSession.catalog.uncacheTable(name)
-    } catch {
-      case NonFatal(e) => logWarning(s"Exception when attempting to uncache $name", e)
-    }
+  def uncacheTableOrView(sparkSession: SparkSession, ident: ResolvedIdentifier): Unit = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+    uncacheTableOrView(sparkSession, ident.identifier.toQualifiedNameParts(ident.catalog))
+  }
+
+  def uncacheTableOrView(sparkSession: SparkSession, ident: TableIdentifier): Unit = {
+    uncacheTableOrView(sparkSession, ident.nameParts)
+  }
+
+  private def uncacheTableOrView(sparkSession: SparkSession, name: Seq[String]): Unit = {
+    sparkSession.sharedState.cacheManager.uncacheTableOrView(sparkSession, name, cascade = true)
   }
 
   def calculateRowCountsPerPartition(

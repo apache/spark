@@ -159,12 +159,9 @@ Package                    Supported version Note
 `pandas`                   >=1.4.4                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `pyarrow`                  >=4.0.0                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`                    >=1.21                    Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
-`grpcio`                   >=1.59.3                  Required for Spark Connect
-`grpcio-status`            >=1.59.3                  Required for Spark Connect
+`grpcio`                   >=1.62.0                  Required for Spark Connect
+`grpcio-status`            >=1.62.0                  Required for Spark Connect
 `googleapis-common-protos` >=1.56.4                  Required for Spark Connect
 ========================== ========================= ======================================================================================
 
-Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set.
-Need set ``-Dio.netty.tryReflectionSetAccessible=true`` for Arrow related features and refer
-to |downloading|_.
-
+Note that PySpark requires Java 17 or later with ``JAVA_HOME`` properly set and refer to |downloading|_.

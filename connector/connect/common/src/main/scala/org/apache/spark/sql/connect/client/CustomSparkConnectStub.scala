@@ -23,7 +23,7 @@ import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse
 
 private[client] class CustomSparkConnectStub(
     channel: ManagedChannel,
-    stubState: SparkConnectStubState) {
+    val stubState: SparkConnectStubState) {
 
   private val stub = SparkConnectServiceGrpc.newStub(channel)
 

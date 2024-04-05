@@ -23,7 +23,8 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CLASS_NAME, PATH}
 
 /**
  * Process that starts a Py4J server on an ephemeral port.
@@ -40,7 +41,7 @@ private[spark] object PythonGatewayServer extends Logging {
     gatewayServer.start()
     val boundPort: Int = gatewayServer.getListeningPort
     if (boundPort == -1) {
-      logError(s"${gatewayServer.server.getClass} failed to bind; exiting")
+      logError(log"${MDC(CLASS_NAME, gatewayServer.server.getClass)} failed to bind; exiting")
       System.exit(1)
     } else {
       val address = InetAddress.getLoopbackAddress()
@@ -62,7 +63,7 @@ private[spark] object PythonGatewayServer extends Logging {
     dos.close()
 
     if (!tmpPath.renameTo(connectionInfoPath)) {
-      logError(s"Unable to write connection information to $connectionInfoPath.")
+      logError(log"Unable to write connection information to ${MDC(PATH, connectionInfoPath)}.")
       System.exit(1)
     }
 

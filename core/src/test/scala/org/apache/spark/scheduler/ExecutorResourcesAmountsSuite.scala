@@ -24,7 +24,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.resource.{ResourceAmountUtils, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.GPU
 
-class ExecutorResourcesAmountsSuite extends SparkFunSuite {
+class ExecutorResourcesAmountsSuite extends SparkFunSuite with ExecutorResourceUtils {
 
   implicit def toFractionalResource(resources: Map[String, Long]): Map[String, Double] =
     resources.map { case (k, v) => k -> ResourceAmountUtils.toFractionalResource(v) }
@@ -37,14 +37,6 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     resources.map { case (resName, addressesAmountMap) =>
       resName -> addressesAmountMap.map { case (k, v) =>
         k -> ResourceAmountUtils.toInternalResource(v) }
-  }
-
-  def compareMaps(lhs: Map[String, Double], rhs: Map[String, Double],
-                  eps: Double = 0.00000001): Boolean = {
-    lhs.size == rhs.size &&
-      lhs.zip(rhs).forall { case ((lName, lAmount), (rName, rAmount)) =>
-        lName == rName && (lAmount - rAmount).abs < eps
-      }
   }
 
   test("assign to rp without task resources requirement") {
@@ -61,7 +53,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     // assign nothing to rp without resource profile
     val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
     assert(assigned.isDefined)
-    assigned.foreach { case resource => assert(resource.isEmpty) }
+    assigned.foreach(resource => assert(resource.isEmpty))
   }
 
   test("Convert ExecutorResourceInfos to ExecutorResourcesAmounts") {
@@ -195,8 +187,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
     val rp = new ResourceProfileBuilder().require(treqs).build()
 
     var assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
-    assert(!assigned.isEmpty)
-    assigned.foreach { case resource => assert(!resource.isEmpty)}
+    assert(assigned.isDefined)
+    assigned.foreach(resource => assert(resource.nonEmpty))
 
     val treqs1 = new TaskResourceRequests()
       .resource("gpu", gpuTaskAmount)
@@ -278,8 +270,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
     // taskMount = 0.1 < 1.0 which can be assigned.
     val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
-    assert(!assigned.isEmpty)
-    assigned.foreach { case resource =>
+    assert(assigned.isDefined)
+    assigned.foreach { resource =>
       assert(resource.size === 1)
       assert(resource.keys.toSeq === Seq("gpu"))
       assert(resource("gpu").size === 1)
@@ -345,8 +337,8 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
     // taskMount = 0.1 < 1.0 which can be assigned.
     val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
-    assert(!assigned.isEmpty)
-    assigned.foreach { case resourceAmounts =>
+    assert(assigned.isDefined)
+    assigned.foreach { resourceAmounts =>
       assert(resourceAmounts.size === 2)
       assert(resourceAmounts.keys.toSeq.sorted === Seq("gpu", "fpga").sorted)
 
@@ -410,17 +402,17 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
       val treqs = new TaskResourceRequests().resource("gpu", taskAmount)
       val rp = new ResourceProfileBuilder().require(treqs).build()
       val assigned = availableExecResAmounts.assignAddressesCustomResources(rp)
-      assert(!assigned.isEmpty)
-      assigned.foreach { case resources =>
+      assert(assigned.isDefined)
+      assigned.foreach { resources =>
         assert(
-          resources("gpu").values.toArray.sorted.map(ResourceAmountUtils.toFractionalResource(_))
+          resources("gpu").values.toArray.sorted.map(ResourceAmountUtils.toFractionalResource)
           === expectedAssignedAmount.sorted)
 
         availableExecResAmounts.acquire(resources)
 
         val leftRes = availableExecResAmounts.availableResources
         assert(leftRes.size == 1)
-        assert(leftRes.keys.toSeq(0) == "gpu")
+        assert(leftRes.keys.toSeq.head == "gpu")
         assert(compareMaps(leftRes("gpu"), expectedLeftRes))
       }
     }
@@ -432,7 +424,7 @@ class ExecutorResourcesAmountsSuite extends SparkFunSuite {
 
       val leftRes = availableExecResAmounts.availableResources
       assert(leftRes.size == 1)
-      assert(leftRes.keys.toSeq(0) == "gpu")
+      assert(leftRes.keys.toSeq.head == "gpu")
       assert(compareMaps(leftRes("gpu"), expectedLeftRes))
     }
 

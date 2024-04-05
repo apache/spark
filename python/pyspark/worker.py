@@ -27,11 +27,14 @@ import json
 from typing import Any, Callable, Iterable, Iterator, Optional
 import faulthandler
 
-from pyspark.accumulators import _accumulatorRegistry
-from pyspark.java_gateway import local_connect_and_auth
+from pyspark.accumulators import (
+    SpecialAccumulatorIds,
+    _accumulatorRegistry,
+    _deserialize_accumulator,
+)
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType, local_connect_and_auth
 from pyspark.serializers import (
     write_int,
     read_long,
@@ -78,6 +81,13 @@ from pyspark.worker_util import (
     setup_spark_files,
     utf8_deserializer,
 )
+
+try:
+    import memory_profiler  # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 
 def report_times(outfile, boot, init, finish):
@@ -688,7 +698,62 @@ def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
         return f, args_offsets
 
 
-def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
+def _supports_profiler(eval_type: int) -> bool:
+    return eval_type not in (
+        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+        PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+    )
+
+
+def wrap_perf_profiler(f, result_id):
+    import cProfile
+    import pstats
+
+    from pyspark.sql.profiler import ProfileResultsParam
+
+    accumulator = _deserialize_accumulator(
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+    )
+
+    def profiling_func(*args, **kwargs):
+        pr = cProfile.Profile()
+        ret = pr.runcall(f, *args, **kwargs)
+        st = pstats.Stats(pr)
+        st.stream = None  # make it picklable
+        st.strip_dirs()
+
+        accumulator.add({result_id: (st, None)})
+
+        return ret
+
+    return profiling_func
+
+
+def wrap_memory_profiler(f, result_id):
+    from pyspark.sql.profiler import ProfileResultsParam
+    from pyspark.profiler import UDFLineProfilerV2
+
+    accumulator = _deserialize_accumulator(
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+    )
+
+    def profiling_func(*args, **kwargs):
+        profiler = UDFLineProfilerV2()
+
+        wrapped = profiler(f)
+        ret = wrapped(*args, **kwargs)
+        codemap_dict = {
+            filename: list(line_iterator) for filename, line_iterator in profiler.code_map.items()
+        }
+        accumulator.add({result_id: (None, codemap_dict)})
+        return ret
+
+    return profiling_func
+
+
+def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler):
     num_arg = read_int(infile)
 
     if eval_type in (
@@ -721,15 +786,32 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         else:
             chained_func = chain(chained_func, f)
 
+    if profiler == "perf":
+        result_id = read_long(infile)
+
+        if _supports_profiler(eval_type):
+            profiling_func = wrap_perf_profiler(chained_func, result_id)
+        else:
+            profiling_func = chained_func
+
+    elif profiler == "memory":
+        result_id = read_long(infile)
+        if _supports_profiler(eval_type) and has_memory_profiler:
+            profiling_func = wrap_memory_profiler(chained_func, result_id)
+        else:
+            profiling_func = chained_func
+    else:
+        profiling_func = chained_func
+
     if eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
     ):
-        func = chained_func
+        func = profiling_func
     else:
         # make sure StopIteration's raised in the user code are not ignored
         # when they are processed in a for loop, raise them as RuntimeError's instead
-        func = fail_on_stopiteration(chained_func)
+        func = fail_on_stopiteration(profiling_func)
 
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
@@ -1122,7 +1204,7 @@ def read_udtf(pickleSer, infile, eval_type):
                     raise PySparkTypeError(
                         error_class="INVALID_ARROW_UDTF_RETURN_TYPE",
                         message_parameters={
-                            "type_name": type(result).__name__,
+                            "return_type": type(result).__name__,
                             "value": str(result),
                             "func": f.__name__,
                         },
@@ -1403,6 +1485,12 @@ def read_udfs(pickleSer, infile, eval_type):
     else:
         ser = BatchedSerializer(CPickleSerializer(), 100)
 
+    is_profiling = read_bool(infile)
+    if is_profiling:
+        profiler = utf8_deserializer.loads(infile)
+    else:
+        profiler = None
+
     num_udfs = read_int(infile)
 
     is_scalar_iter = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
@@ -1417,7 +1505,9 @@ def read_udfs(pickleSer, infile, eval_type):
         if is_map_arrow_iter:
             assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
-        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, udf = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
 
         def func(_, iterator):
             num_input_rows = 0
@@ -1507,7 +1597,9 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         # Create function like this:
@@ -1526,7 +1618,9 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def batch_from_offset(batch, offsets):
@@ -1550,7 +1644,9 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def mapper(a):
@@ -1584,7 +1680,9 @@ def read_udfs(pickleSer, infile, eval_type):
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -1601,7 +1699,9 @@ def read_udfs(pickleSer, infile, eval_type):
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
-        arg_offsets, f = read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=0)
+        arg_offsets, f = read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
+        )
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -1624,7 +1724,11 @@ def read_udfs(pickleSer, infile, eval_type):
     else:
         udfs = []
         for i in range(num_udfs):
-            udfs.append(read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i))
+            udfs.append(
+                read_single_udf(
+                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
+                )
+            )
 
         def mapper(a):
             result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)

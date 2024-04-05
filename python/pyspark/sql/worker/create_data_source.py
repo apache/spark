@@ -21,7 +21,6 @@ from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -31,7 +30,7 @@ from pyspark.serializers import (
 )
 from pyspark.sql.datasource import DataSource, CaseInsensitiveDict
 from pyspark.sql.types import _parse_datatype_json_string, StructType
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -132,8 +131,8 @@ def main(infile: IO, outfile: IO) -> None:
             data_source = data_source_cls(options=options)  # type: ignore
         except Exception as e:
             raise PySparkRuntimeError(
-                error_class="PYTHON_DATA_SOURCE_CREATE_ERROR",
-                message_parameters={"type": "instance", "error": str(e)},
+                error_class="DATA_SOURCE_CREATE_ERROR",
+                message_parameters={"error": str(e)},
             )
 
         # Get the schema of the data source.
@@ -150,8 +149,8 @@ def main(infile: IO, outfile: IO) -> None:
                     is_ddl_string = True
             except NotImplementedError:
                 raise PySparkRuntimeError(
-                    error_class="PYTHON_DATA_SOURCE_METHOD_NOT_IMPLEMENTED",
-                    message_parameters={"type": "instance", "method": "schema"},
+                    error_class="NOT_IMPLEMENTED",
+                    message_parameters={"feature": "DataSource.schema"},
                 )
         else:
             schema = user_specified_schema  # type: ignore

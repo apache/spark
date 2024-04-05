@@ -48,9 +48,8 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 import urllib
 
-from pyspark import SparkContext, SparkConf, __version__
 from pyspark.loose_version import LooseVersion
-from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
+from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import (
@@ -62,11 +61,19 @@ from pyspark.sql.connect.plan import (
     CachedRelation,
     CachedRemoteRelation,
 )
+from pyspark.sql.connect.functions import builtin as F
+from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
-from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _deduplicate_field_names
+from pyspark.sql.pandas.types import (
+    to_arrow_schema,
+    to_arrow_type,
+    _deduplicate_field_names,
+    from_arrow_type,
+)
+from pyspark.sql.profiler import Profile
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -78,6 +85,8 @@ from pyspark.sql.types import (
     StructType,
     AtomicType,
     TimestampType,
+    MapType,
+    StringType,
 )
 from pyspark.sql.utils import to_str
 from pyspark.errors import (
@@ -93,6 +102,16 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark.sql.connect.shell.progress import ProgressHandler
+    from pyspark.sql.connect.datasource import DataSourceRegistration
+
+
+try:
+    import memory_profiler  # noqa: F401
+
+    has_memory_profiler = True
+except Exception:
+    has_memory_profiler = False
 
 
 class SparkSession:
@@ -109,7 +128,7 @@ class SparkSession:
 
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
-            self._channel_builder: Optional[ChannelBuilder] = None
+            self._channel_builder: Optional[DefaultChannelBuilder] = None
 
         @overload
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
@@ -143,7 +162,7 @@ class SparkSession:
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
             return self.config("spark.remote", location)
 
-        def channelBuilder(self, channelBuilder: ChannelBuilder) -> "SparkSession.Builder":
+        def channelBuilder(self, channelBuilder: DefaultChannelBuilder) -> "SparkSession.Builder":
             """Uses custom :class:`ChannelBuilder` implementation, when there is a need
             to customize the behavior for creation of GRPC connections.
 
@@ -225,13 +244,12 @@ class SparkSession:
 
     _client: SparkConnectClient
 
-    @classproperty
-    def builder(cls) -> Builder:
-        return cls.Builder()
-
+    # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
+    # If changing, make sure this bug is not reintroduced.
+    builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
     builder.__doc__ = PySparkSession.builder.__doc__
 
-    def __init__(self, connection: Union[str, ChannelBuilder], userId: Optional[str] = None):
+    def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):
         """
         Creates a new SparkSession for the Spark Connect interface.
 
@@ -286,6 +304,12 @@ class SparkSession:
     active.__doc__ = PySparkSession.active.__doc__
 
     def table(self, tableName: str) -> DataFrame:
+        if not isinstance(tableName, str):
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+            )
+
         return self.read.table(tableName)
 
     table.__doc__ = PySparkSession.table.__doc__
@@ -301,6 +325,21 @@ class SparkSession:
         return DataStreamReader(self)
 
     readStream.__doc__ = PySparkSession.readStream.__doc__
+
+    def registerProgressHandler(self, handler: "ProgressHandler") -> None:
+        self._client.register_progress_handler(handler)
+
+    registerProgressHandler.__doc__ = PySparkSession.registerProgressHandler.__doc__
+
+    def removeProgressHandler(self, handler: "ProgressHandler") -> None:
+        self._client.remove_progress_handler(handler)
+
+    removeProgressHandler.__doc__ = PySparkSession.removeProgressHandler.__doc__
+
+    def clearProgressHandlers(self) -> None:
+        self._client.clear_progress_handlers()
+
+    clearProgressHandlers.__doc__ = PySparkSession.clearProgressHandlers.__doc__
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
@@ -346,7 +385,7 @@ class SparkSession:
         if isinstance(data, DataFrame):
             raise PySparkTypeError(
                 error_class="INVALID_TYPE",
-                message_parameters={"arg_name": "data", "data_type": "DataFrame"},
+                message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
         _schema: Optional[Union[AtomicType, StructType]] = None
@@ -402,6 +441,28 @@ class SparkSession:
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+                infer_pandas_dict_as_map = (
+                    str(self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower()
+                    == "true"
+                )
+                if infer_pandas_dict_as_map:
+                    struct = StructType()
+                    pa_schema = pa.Schema.from_pandas(data)
+                    spark_type: Union[MapType, DataType]
+                    for field in pa_schema:
+                        field_type = field.type
+                        if isinstance(field_type, pa.StructType):
+                            if len(field_type) == 0:
+                                raise PySparkValueError(
+                                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                                    message_parameters={},
+                                )
+                            arrow_type = field_type.field(0).type
+                            spark_type = MapType(StringType(), from_arrow_type(arrow_type))
+                        else:
+                            spark_type = from_arrow_type(field_type)
+                        struct.add(field.name, spark_type, nullable=field.nullable)
+                    schema = struct
             elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
                 assert isinstance(_cols, list)
                 _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])
@@ -559,7 +620,22 @@ class SparkSession:
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
     def sql(self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None) -> "DataFrame":
-        cmd = SQL(sqlQuery, args)
+        _args = []
+        _named_args = {}
+        if args is not None:
+            if isinstance(args, Dict):
+                for k, v in args.items():
+                    assert isinstance(k, str)
+                    _named_args[k] = F.lit(v)
+            elif isinstance(args, List):
+                _args = [F.lit(v) for v in args]
+            else:
+                raise PySparkTypeError(
+                    error_class="INVALID_TYPE",
+                    message_parameters={"arg_name": "args", "arg_type": type(args).__name__},
+                )
+
+        cmd = SQL(sqlQuery, _args, _named_args)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
             return DataFrame(CachedRelation(properties["sql_command_result"]), self)
@@ -697,7 +773,10 @@ class SparkSession:
 
     @property
     def streams(self) -> "StreamingQueryManager":
-        return StreamingQueryManager(self)
+        if hasattr(self, "_sqm"):
+            return self._sqm
+        self._sqm: StreamingQueryManager = StreamingQueryManager(self)
+        return self._sqm
 
     streams.__doc__ = PySparkSession.streams.__doc__
 
@@ -723,6 +802,14 @@ class SparkSession:
         return UDTFRegistration(self)
 
     udtf.__doc__ = PySparkSession.udtf.__doc__
+
+    @property
+    def dataSource(self) -> "DataSourceRegistration":
+        from pyspark.sql.connect.datasource import DataSourceRegistration
+
+        return DataSourceRegistration(self)
+
+    dataSource.__doc__ = PySparkSession.dataSource.__doc__
 
     @property
     def version(self) -> str:
@@ -817,6 +904,8 @@ class SparkSession:
         3. Starts a regular Spark session that automatically starts a Spark Connect server
           with JVM via ``spark.plugins`` feature.
         """
+        from pyspark import SparkContext, SparkConf, __version__
+
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
             # Configurations to be overwritten
@@ -919,6 +1008,16 @@ class SparkSession:
     def session_id(self) -> str:
         return self._session_id
 
+    @property
+    def _profiler_collector(self) -> ProfilerCollector:
+        return self._client._profiler_collector
+
+    @property
+    def profile(self) -> Profile:
+        return Profile(self._client._profiler_collector)
+
+    profile.__doc__ = PySparkSession.profile.__doc__
+
 
 SparkSession.__doc__ = PySparkSession.__doc__
 
@@ -939,8 +1038,6 @@ def _test() -> None:
     # Spark Connect does not support to set master together.
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
-    # RDD API is not supported in Spark Connect.
-    del pyspark.sql.connect.session.SparkSession.createDataFrame.__doc__
 
     # TODO(SPARK-41811): Implement SparkSession.sql's string formatter
     del pyspark.sql.connect.session.SparkSession.sql.__doc__

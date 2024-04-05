@@ -19,7 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import Any, Optional, Union, cast
+from typing import Any, Dict, Optional, Union, cast
 import warnings
 
 from pyspark import _NoValue
@@ -67,6 +67,19 @@ class RuntimeConf:
         return result.pairs[0][1]
 
     get.__doc__ = PySparkRuntimeConfig.get.__doc__
+
+    @property
+    def getAll(self) -> Dict[str, str]:
+        op_get_all = proto.ConfigRequest.GetAll()
+        operation = proto.ConfigRequest.Operation(get_all=op_get_all)
+        result = self._client.config(operation)
+        confs: Dict[str, str] = dict()
+        for key, value in result.pairs:
+            assert value is not None
+            confs[key] = value
+        return confs
+
+    getAll.__doc__ = PySparkRuntimeConfig.getAll.__doc__
 
     def unset(self, key: str) -> None:
         op_unset = proto.ConfigRequest.Unset(keys=[key])

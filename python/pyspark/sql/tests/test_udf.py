@@ -16,6 +16,7 @@
 #
 
 import functools
+import platform
 import pydoc
 import shutil
 import tempfile
@@ -39,8 +40,12 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
 )
 from pyspark.errors import AnalysisException, PythonException, PySparkTypeError
-from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
-from pyspark.testing.utils import QuietTest, assertDataFrameEqual
+from pyspark.testing.sqlutils import (
+    ReusedSQLTestCase,
+    test_compiled,
+    test_not_compiled_message,
+)
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 class BaseUDFTestsMixin(object):
@@ -105,7 +110,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(row[0], 5)
 
     def test_udf_registration_return_type_not_none(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_udf_registration_return_type_not_none()
 
     def check_udf_registration_return_type_not_none(self):
@@ -164,7 +169,7 @@ class BaseUDFTestsMixin(object):
         self.assertFalse(deterministic)
 
     def test_nondeterministic_udf_in_aggregate(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_nondeterministic_udf_in_aggregate()
 
     def check_nondeterministic_udf_in_aggregate(self):
@@ -431,7 +436,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(row.asDict(), Row(name="b", avg=102.0).asDict())
 
     def test_err_udf_registration(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_err_udf_registration()
 
     def check_err_udf_registration(self):
@@ -1039,6 +1044,9 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
             with self.assertRaisesRegex(Exception, "Segmentation fault"):
@@ -1047,7 +1055,7 @@ class BaseUDFTestsMixin(object):
                 self.spark.range(1).select(udf(lambda x: ctypes.string_at(0))("id")).collect()
 
     def test_err_udf_init(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_err_udf_init()
 
     def check_err_udf_init(self):

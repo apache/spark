@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution.bucketing
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
@@ -129,11 +131,27 @@ object ExtractJoinWithBuckets {
     }
   }
 
+  /**
+   * The join keys should match with expressions for output partitioning. Note that
+   * the ordering does not matter because it will be handled in `EnsureRequirements`.
+   */
+  private def satisfiesOutputPartitioning(
+      keys: Seq[Expression],
+      partitioning: Partitioning): Boolean = {
+    partitioning match {
+      case HashPartitioning(exprs, _) if exprs.length == keys.length =>
+        exprs.forall(e => keys.exists(_.semanticEquals(e)))
+      case PartitioningCollection(partitionings) =>
+        partitionings.exists(satisfiesOutputPartitioning(keys, _))
+      case _ => false
+    }
+  }
+
   private def isApplicable(j: ShuffledJoin): Boolean = {
     hasScanOperation(j.left) &&
       hasScanOperation(j.right) &&
-      j.satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
-      j.satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning)
+      satisfiesOutputPartitioning(j.leftKeys, j.left.outputPartitioning) &&
+      satisfiesOutputPartitioning(j.rightKeys, j.right.outputPartitioning)
   }
 
   private def isDivisible(numBuckets1: Int, numBuckets2: Int): Boolean = {

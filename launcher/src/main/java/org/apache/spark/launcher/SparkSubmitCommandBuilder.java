@@ -267,6 +267,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     Map<String, String> config = getEffectiveConfig();
     boolean isClientMode = isClientMode(config);
     String extraClassPath = isClientMode ? config.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH) : null;
+    String defaultExtraClassPath = config.get(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH);
+    if (extraClassPath == null || extraClassPath.trim().isEmpty()) {
+      extraClassPath = defaultExtraClassPath;
+    } else {
+      extraClassPath += File.pathSeparator + defaultExtraClassPath;
+    }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
     // Take Thrift/Connect Server as daemon
@@ -303,8 +309,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
 
-    // SPARK-36796: Always add default `--add-opens` to submit command
+    // SPARK-36796: Always add some JVM runtime default options to submit command
     addOptionString(cmd, JavaModuleOptions.defaultModuleOptions());
+    addOptionString(cmd, "-Dderby.connection.requireAuthentication=false");
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;
@@ -497,6 +504,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
         case DRIVER_JAVA_OPTIONS -> conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, value);
         case DRIVER_LIBRARY_PATH -> conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
+        case DRIVER_DEFAULT_CLASS_PATH ->
+          conf.put(SparkLauncher.DRIVER_DEFAULT_EXTRA_CLASS_PATH, value);
         case DRIVER_CLASS_PATH -> conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
         case CONF -> {
           checkArgument(value != null, "Missing argument to %s", CONF);

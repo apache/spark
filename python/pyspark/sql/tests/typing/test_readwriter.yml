@@ -26,8 +26,8 @@
 
     spark.read.load(foo=True)
 
-    spark.read.load(foo=["a"])  # E: Argument "foo" to "load" of "DataFrameReader" has incompatible type "List[str]"; expected "Union[bool, float, int, str, None]"  [arg-type]
-    spark.read.option("foo", (1, ))  # E: Argument 2 to "option" of "DataFrameReader" has incompatible type "Tuple[int]"; expected "Union[bool, float, int, str, None]"  [arg-type]
+    spark.read.load(foo=["a"])  # E: Argument "foo" to "load" of "DataFrameReader" has incompatible type "list[str]"; expected "Union[bool, float, int, str, None]"  [arg-type]
+    spark.read.option("foo", (1, ))  # E: Argument 2 to "option" of "DataFrameReader" has incompatible type "tuple[int]"; expected "Union[bool, float, int, str, None]"  [arg-type]
 
 
 - case: readStreamOptions

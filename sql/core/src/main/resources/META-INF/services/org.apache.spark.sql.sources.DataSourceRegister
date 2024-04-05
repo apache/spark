@@ -28,5 +28,5 @@ org.apache.spark.sql.execution.streaming.sources.RateStreamProvider
 org.apache.spark.sql.execution.streaming.sources.TextSocketSourceProvider
 org.apache.spark.sql.execution.datasources.binaryfile.BinaryFileFormat
 org.apache.spark.sql.execution.streaming.sources.RatePerMicroBatchProvider
-org.apache.spark.sql.execution.datasources.v2.state.StateMetadataSource
+org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataSource
 org.apache.spark.sql.execution.datasources.v2.state.StateDataSource

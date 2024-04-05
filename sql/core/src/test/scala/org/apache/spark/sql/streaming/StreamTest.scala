@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
@@ -284,7 +284,11 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
   /** Assert that a condition on the active query is true */
   class AssertOnQuery(val condition: StreamExecution => Boolean, val message: String)
     extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"AssertOnQuery(<condition>, $message)"
+    override def toString: String = if (message == "") {
+      "AssertOnQuery(<condition>)"
+    } else {
+      s"AssertOnQuery(<condition>, $message)"
+    }
   }
 
   object AssertOnQuery {
@@ -702,7 +706,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
                   // v1 source
                   case r: StreamingExecutionRelation => r.source
                   // v2 source
-                  case r: StreamingDataSourceV2Relation => r.stream
+                  case r: StreamingDataSourceV2ScanRelation => r.stream
                   // We can add data to memory stream before starting it. Then the input plan has
                   // not been processed by the streaming engine and contains `StreamingRelationV2`.
                   case r: StreamingRelationV2 if r.sourceName == "memory" =>

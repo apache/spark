@@ -20,11 +20,9 @@ package org.apache.spark.sql.execution.datasources
 import java.io.{Closeable, FileNotFoundException, IOException}
 import java.net.URI
 
-import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
+import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
@@ -33,8 +31,8 @@ import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -122,12 +120,23 @@ class FileScanRDD(
         currentIterator = null
       }
 
+      // This is called by both `hasNext` and `nextIterator`. We do not merge it into `hasNext`,
+      // to make the error enhancement in `hasNext` only apply once in the recursion (`nextIterator`
+      // calls `hasNext0`).
+      private def hasNext0: Boolean = {
+        (currentIterator != null && currentIterator.hasNext) || nextIterator()
+      }
+
       def hasNext: Boolean = {
         // Kill the task in case it has been marked as killed. This logic is from
         // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
         // to avoid performance overhead.
         context.killTaskIfInterrupted()
-        (currentIterator != null && currentIterator.hasNext) || nextIterator()
+        try {
+          hasNext0
+        } catch {
+          case e: Throwable => throw FileDataSourceV2.attachFilePath(currentFile.urlEncodedPath, e)
+        }
       }
 
       ///////////////////////////
@@ -214,12 +223,7 @@ class FileScanRDD(
       }
 
       private def readCurrentFile(): Iterator[InternalRow] = {
-        try {
-          readFunction(currentFile)
-        } catch {
-          case e: FileNotFoundException =>
-            throw QueryExecutionErrors.readCurrentFileNotFoundError(e)
-        }
+        readFunction(currentFile)
       }
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
@@ -280,20 +284,7 @@ class FileScanRDD(
             currentIterator = readCurrentFile()
           }
 
-          try {
-            hasNext
-          } catch {
-            case e: SchemaColumnConvertNotSupportedException =>
-              throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
-                currentFile.urlEncodedPath, e.getColumn, e.getLogicalType, e.getPhysicalType, e)
-            case sue: SparkUpgradeException => throw sue
-            case NonFatal(e) =>
-              e.getCause match {
-                case sue: SparkUpgradeException => throw sue
-                case _ =>
-                  throw QueryExecutionErrors.cannotReadFilesError(e, currentFile.urlEncodedPath)
-              }
-          }
+          hasNext0
         } else {
           currentFile = null
           updateMetadataRow()

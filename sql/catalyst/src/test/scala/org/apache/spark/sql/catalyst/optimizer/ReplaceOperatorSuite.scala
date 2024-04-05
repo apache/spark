@@ -265,4 +265,35 @@ class ReplaceOperatorSuite extends PlanTest {
       Join(basePlan, otherPlan, LeftAnti, Option(condition), JoinHint.NONE)).analyze
     comparePlans(result, correctAnswer)
   }
+
+  test("SPARK-46763: ReplaceDeduplicateWithAggregate non-grouping keys with duplicate attributes") {
+    val a = $"a".int
+    val b = $"b".int
+    val first_a = Alias(new First(a).toAggregateExpression(), a.name)()
+
+    val query = Project(
+      projectList = Seq(a, b),
+      Deduplicate(
+        keys = Seq(b),
+        child = Project(
+          projectList = Seq(a, a, b),
+          child = LocalRelation(Seq(a, b))
+        )
+      )
+    ).analyze
+
+    val result = Optimize.execute(query)
+    val correctAnswer = Project(
+        projectList = Seq(first_a.toAttribute, b),
+        Aggregate(
+            Seq(b),
+            Seq(first_a, first_a, b),
+            Project(
+              projectList = Seq(a, a, b),
+              child = LocalRelation(Seq(a, b))
+            )
+        )
+    ).analyze
+    comparePlans(result, correctAnswer)
+  }
 }

@@ -36,7 +36,10 @@ class RaisesTestsMixin:
         self.assertRaises(KeyError, lambda: psdf.groupby("a")[["b", "x"]])
 
 
-class RaisesTests(RaisesTestsMixin, PandasOnSparkTestCase):
+class RaisesTests(
+    RaisesTestsMixin,
+    PandasOnSparkTestCase,
+):
     pass
 
 

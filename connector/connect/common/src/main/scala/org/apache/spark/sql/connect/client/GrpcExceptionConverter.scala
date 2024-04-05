@@ -231,6 +231,7 @@ private[client] object GrpcExceptionConverter {
         errorClass = params.errorClass.getOrElse("_LEGACY_ERROR_TEMP_3105"),
         messageParameters = errorParamsToMessageParameters(params),
         params.queryContext,
+        summary = "",
         cause = params.cause.orNull)),
     errorConstructor[ArithmeticException](params =>
       new SparkArithmeticException(

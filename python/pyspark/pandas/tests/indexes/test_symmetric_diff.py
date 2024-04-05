@@ -21,7 +21,7 @@ import pandas as pd
 
 import pyspark.pandas as ps
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class IndexesSymmetricDiffMixin:
@@ -107,7 +107,7 @@ class IndexesSymmetricDiffMixin:
 
 class IndexesSymmetricDiffTests(
     IndexesSymmetricDiffMixin,
-    ComparisonTestBase,
+    PandasOnSparkTestCase,
     TestUtils,
 ):
     pass

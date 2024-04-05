@@ -87,6 +87,7 @@ ability to generate logical and physical plan for a given query using
    * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
    * [LATERAL SUBQUERY](sql-ref-syntax-qry-select-lateral-subquery.html)
    * [TRANSFORM Clause](sql-ref-syntax-qry-select-transform.html)
+   * [star (*) Clause](sql-ref-syntax-qry-star.html)
  * [EXPLAIN](sql-ref-syntax-qry-explain.html)
 
 ### Auxiliary Statements

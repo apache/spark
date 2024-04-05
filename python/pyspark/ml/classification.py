@@ -872,7 +872,7 @@ class LinearSVCModel(
         return self._call_java("intercept")
 
     @since("3.1.0")
-    def summary(self) -> "LinearSVCTrainingSummary":
+    def summary(self) -> "LinearSVCTrainingSummary":  # type: ignore[override]
         """
         Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
@@ -3318,7 +3318,9 @@ class MultilayerPerceptronClassificationModel(
         return self._call_java("weights")
 
     @since("3.1.0")
-    def summary(self) -> "MultilayerPerceptronClassificationTrainingSummary":
+    def summary(  # type: ignore[override]
+        self,
+    ) -> "MultilayerPerceptronClassificationTrainingSummary":
         """
         Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.

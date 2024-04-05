@@ -965,7 +965,12 @@ object Range {
     if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
   }
 
-  private def castAndEval[T](expression: Expression, dataType: DataType, paramIndex: Int): T = {
+  private def castAndEval[T](
+      expression: Expression, dataType: DataType, paramIndex: Int, paramName: String): T = {
+    if (!expression.foldable) {
+      throw QueryCompilationErrors.nonFoldableArgumentError(
+        "range", paramName, dataType)
+    }
     typeCoercion.implicitCast(expression, dataType)
       .map(_.eval())
       .filter(_ != null)
@@ -975,11 +980,11 @@ object Range {
       }.asInstanceOf[T]
   }
 
-  def toLong(expression: Expression, paramIndex: Int): Long =
-    castAndEval[Long](expression, LongType, paramIndex)
+  def toLong(expression: Expression, paramIndex: Int, paramName: String): Long =
+    castAndEval[Long](expression, LongType, paramIndex, paramName)
 
-  def toInt(expression: Expression, paramIndex: Int): Int =
-    castAndEval[Int](expression, IntegerType, paramIndex)
+  def toInt(expression: Expression, paramIndex: Int, paramName: String): Int =
+    castAndEval[Int](expression, IntegerType, paramIndex, paramName)
 }
 
 @ExpressionDescription(
@@ -1025,12 +1030,19 @@ case class Range(
   require(step != 0, s"step ($step) cannot be 0")
 
   def this(start: Expression, end: Expression, step: Expression, numSlices: Expression) = {
-    this(Range.toLong(start, 1), Range.toLong(end, 2), Range.toLong(step, 3),
-      Some(Range.toInt(numSlices, 4)))
+    this(
+      Range.toLong(start, 1, "start"),
+      Range.toLong(end, 2, "end"),
+      Range.toLong(step, 3, "step"),
+      Some(Range.toInt(numSlices, 4, "numSlices")))
   }
 
   def this(start: Expression, end: Expression, step: Expression) =
-    this(Range.toLong(start, 1), Range.toLong(end, 2), Range.toLong(step, 3), None)
+    this(
+      Range.toLong(start, 1, "start"),
+      Range.toLong(end, 2, "end"),
+      Range.toLong(step, 3, "step"),
+      None)
 
   def this(start: Expression, end: Expression) = this(start, end, Literal.create(1L, LongType))
 
@@ -1220,9 +1232,11 @@ object Aggregate {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))
   }
 
-  def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
+  def supportsHashAggregate(
+      aggregateBufferAttributes: Seq[Attribute], groupingExpression: Seq[Expression]): Boolean = {
     val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
-    isAggregateBufferMutable(aggregationBufferSchema)
+    isAggregateBufferMutable(aggregationBufferSchema) &&
+      groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
   }
 
   def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {

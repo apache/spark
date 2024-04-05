@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, LambdaFunction, Literal, MapFilter, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, InsertStarAction, Join, LogicalPlan, MergeAction, MergeIntoTable, ReplaceData, UpdateAction, UpdateStarAction, UpdateTable, WriteDelta}
@@ -130,11 +131,15 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
     case e if e.dataType == BooleanType =>
       e
     case e =>
-      val message = "Expected a Boolean type expression in replaceNullWithFalse, " +
-        s"but got the type `${e.dataType.catalogString}` in `${e.sql}`."
       if (Utils.isTesting) {
-        throw new IllegalArgumentException(message)
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3215",
+          messageParameters = Map(
+            "dataType" -> e.dataType.catalogString,
+            "expr" -> e.sql))
       } else {
+        val message = "Expected a Boolean type expression in replaceNullWithFalse, " +
+          s"but got the type `${e.dataType.catalogString}` in `${e.sql}`."
         logWarning(message)
         e
       }

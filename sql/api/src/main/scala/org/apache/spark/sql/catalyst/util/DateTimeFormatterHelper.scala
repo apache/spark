@@ -24,6 +24,7 @@ import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util
 import java.util.{Collections, Date, Locale}
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -231,7 +232,9 @@ private object DateTimeFormatterHelper {
                 builder.appendFraction(ChronoField.NANO_OF_SECOND, 1, secondFraction.length, false)
               }
               rest = suffix
-            case _ => throw new IllegalArgumentException(s"Unrecognized datetime pattern: $pattern")
+            case _ => throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_DATETIME_PATTERN",
+              messageParameters = Map("pattern" -> pattern))
           }
         }
       case (patternPart, _) => builder.appendLiteral(patternPart)
@@ -309,15 +312,22 @@ private object DateTimeFormatterHelper {
       case (patternPart, index) =>
         if (index % 2 == 0) {
           for (c <- patternPart if weekBasedLetters.contains(c)) {
-            throw new IllegalArgumentException(s"All week-based patterns are unsupported since" +
-              s" Spark 3.0, detected: $c, Please use the SQL function EXTRACT instead")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
+              messageParameters = Map("c" -> c.toString))
           }
           for (c <- patternPart if unsupportedLetters.contains(c) ||
             (isParsing && unsupportedLettersForParsing.contains(c))) {
-            throw new IllegalArgumentException(s"Illegal pattern character: $c")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+              messageParameters = Map(
+                "c" -> c.toString,
+                "pattern" -> pattern))
           }
           for (style <- unsupportedPatternLengths if patternPart.contains(style)) {
-            throw new IllegalArgumentException(s"Too many pattern letters: ${style.head}")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_DATETIME_PATTERN.LENGTH",
+              messageParameters = Map("pattern" -> style))
           }
           // In DateTimeFormatter, 'u' supports negative years. We substitute 'y' to 'u' here for
           // keeping the support in Spark 3.0. If parse failed in Spark 3.0, fall back to 'y'.

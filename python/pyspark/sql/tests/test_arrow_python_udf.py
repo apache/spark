@@ -29,7 +29,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
     ReusedSQLTestCase,
 )
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 
 
 @unittest.skipIf(
@@ -186,6 +186,15 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             message_parameters={
                 "feature": "Invalid return type with Arrow-optimized Python UDF: VarcharType(10)"
             },
+        )
+
+    def test_warn_no_args(self):
+        with self.assertWarns(UserWarning) as w:
+            udf(lambda: print("do"), useArrow=True)
+        self.assertEqual(
+            str(w.warning),
+            "Arrow optimization for Python UDFs cannot be enabled for functions"
+            " without arguments.",
         )
 
 

@@ -43,14 +43,14 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
-import org.apache.spark.sql.execution.python.PythonTableProvider
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{DataType, StructField, StructType, VariantType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -503,8 +503,12 @@ case class DataSource(
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
-        disallowWritingIntervals(outputColumns.map(_.dataType), forbidAnsiIntervals = true)
-        disallowWritingVariant(outputColumns.map(_.dataType))
+        outputColumns.foreach { attr =>
+          if (!dataSource.supportsDataType(attr.dataType)) {
+            throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
+              dataSource.toString, StructField(attr.toString, attr.dataType))
+          }
+        }
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
@@ -525,8 +529,12 @@ case class DataSource(
   def planForWriting(mode: SaveMode, data: LogicalPlan): LogicalPlan = {
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
-        disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = true)
-        disallowWritingVariant(data.schema.map(_.dataType))
+        data.schema.foreach { field =>
+          if (!dataSource.supportsDataType(field.dataType)) {
+            throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
+              dataSource.toString, field)
+          }
+        }
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
@@ -562,14 +570,6 @@ case class DataSource(
       TypeUtils.invokeOnceForInterval(_, forbidAnsiIntervals) {
       throw QueryCompilationErrors.cannotSaveIntervalIntoExternalStorageError()
     })
-  }
-
-  private def disallowWritingVariant(dataTypes: Seq[DataType]): Unit = {
-    dataTypes.foreach { dt =>
-      if (dt.existsRecursively(_.isInstanceOf[VariantType])) {
-        throw QueryCompilationErrors.cannotSaveVariantIntoExternalStorageError()
-      }
-    }
   }
 }
 
@@ -661,7 +661,7 @@ object DataSource extends Logging {
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
                 } else if (isUserDefinedDataSource) {
-                  classOf[PythonTableProvider]
+                  classOf[PythonDataSourceV2]
                 } else {
                   throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
@@ -686,9 +686,15 @@ object DataSource extends Logging {
           // There are multiple registered aliases for the input. If there is single datasource
           // that has "org.apache.spark" package in the prefix, we use it considering it is an
           // internal datasource within Spark.
-          val sourceNames = sources.map(_.getClass.getName)
+          val sourceNames = sources.map(_.getClass.getName).sortBy(_.toString)
           val internalSources = sources.filter(_.getClass.getName.startsWith("org.apache.spark"))
-          if (internalSources.size == 1) {
+          if (provider.equalsIgnoreCase("xml") && sources.size == 2) {
+            val externalSource = sources.filterNot(_.getClass.getName
+              .startsWith("org.apache.spark.sql.execution.datasources.xml.XmlFileFormat")
+            ).head.getClass
+            throw QueryCompilationErrors
+              .foundMultipleXMLDataSourceError(provider1, sourceNames, externalSource.getName)
+          } else if (internalSources.size == 1) {
             logWarning(s"Multiple sources found for $provider1 (${sourceNames.mkString(", ")}), " +
               s"defaulting to the internal datasource (${internalSources.head.getClass.getName}).")
             internalSources.head.getClass
@@ -728,7 +734,7 @@ object DataSource extends Logging {
       case t: TableProvider
           if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
         t match {
-          case p: PythonTableProvider => p.setShortName(provider)
+          case p: PythonDataSourceV2 => p.setShortName(provider)
           case _ =>
         }
         Some(t)
@@ -754,7 +760,7 @@ object DataSource extends Logging {
     val qualifiedPaths = pathStrings.map { pathString =>
       val path = new Path(pathString)
       val fs = path.getFileSystem(hadoopConf)
-      path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      fs.makeQualified(path)
     }
 
     // Split the paths into glob and non glob paths, because we don't need to do an existence check

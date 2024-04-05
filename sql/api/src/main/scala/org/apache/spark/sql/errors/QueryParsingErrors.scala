@@ -42,7 +42,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
-      errorClass = "COLUMN_ALIASES_IS_NOT_ALLOWED",
+      errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
       messageParameters = Map("op" -> toSQLStmt(op)),
       ctx.identifierList())
   }
@@ -387,6 +387,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def invalidStatementError(operation: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      messageParameters = Map("operation" -> toSQLStmt(operation)),
+      ctx)
+  }
+
   def descColumnForPartitionUnsupportedError(ctx: DescribeRelationContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
@@ -439,7 +446,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def invalidIdentifierError(ident: String, ctx: ErrorIdentContext): Throwable = {
+  def invalidIdentifierError(ident: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_IDENTIFIER",
       messageParameters = Map("ident" -> ident),

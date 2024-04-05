@@ -24,7 +24,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.resource.ResourceAmountUtils
 import org.apache.spark.resource.ResourceUtils.GPU
 
-class ExecutorResourceInfoSuite extends SparkFunSuite {
+class ExecutorResourceInfoSuite extends SparkFunSuite with ExecutorResourceUtils {
 
   implicit def convertMapLongToDouble(resources: Map[String, Long]): Map[String, Double] = {
     resources.map { case (k, v) => k -> ResourceAmountUtils.toFractionalResource(v) }
@@ -124,14 +124,6 @@ class ExecutorResourceInfoSuite extends SparkFunSuite {
         }
       }
     }
-  }
-
-  def compareMaps(lhs: Map[String, Double], rhs: Map[String, Double],
-                  eps: Double = 0.00000001): Boolean = {
-    lhs.size == rhs.size &&
-      lhs.zip(rhs).forall { case ((lName, lAmount), (rName, rAmount)) =>
-        lName == rName && (lAmount - rAmount).abs < eps
-      }
   }
 
   test("assign/release resource for different task requirements") {

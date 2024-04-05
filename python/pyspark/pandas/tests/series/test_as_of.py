@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -113,7 +113,11 @@ class SeriesAsOfMixin:
         self.assert_eq(psser.asof([10, np.nan]), pser.asof([10, np.nan]))
 
 
-class SeriesAsOfTests(SeriesAsOfMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesAsOfTests(
+    SeriesAsOfMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
  */
 class BaseOrdering extends Ordering[InternalRow] {
   def compare(a: InternalRow, b: InternalRow): Int = {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3116")
+    throw SparkUnsupportedOperationException()
   }
 }
 

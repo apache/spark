@@ -123,7 +123,7 @@ will compile against built-in Hive and use those classes for internal execution 
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
-<table>
+<table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>

@@ -31,6 +31,7 @@ from pyspark.sql.readwriter import (
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
@@ -792,6 +793,7 @@ class DataFrameWriter(OptionUtils):
         timestampFormat: Optional[str] = None,
         compression: Optional[str] = None,
         encoding: Optional[str] = None,
+        validateName: Optional[bool] = None,
     ) -> None:
         self.mode(mode)
         self._set_opts(
@@ -806,6 +808,7 @@ class DataFrameWriter(OptionUtils):
             timestampFormat=timestampFormat,
             compression=compression,
             encoding=encoding,
+            validateName=validateName,
         )
         self.format("xml").save(path)
 
@@ -874,8 +877,7 @@ class DataFrameWriterV2(OptionUtils):
     tableProperty.__doc__ = PySparkDataFrameWriterV2.tableProperty.__doc__
 
     def partitionedBy(self, col: "ColumnOrName", *cols: "ColumnOrName") -> "DataFrameWriterV2":
-        self._write.partitioning_columns = [col]
-        self._write.partitioning_columns.extend(cols)
+        self._write.partitioning_columns = [F._to_col(c) for c in [col] + list(cols)]
         return self
 
     partitionedBy.__doc__ = PySparkDataFrameWriterV2.partitionedBy.__doc__
@@ -914,7 +916,7 @@ class DataFrameWriterV2(OptionUtils):
 
     def overwrite(self, condition: "ColumnOrName") -> None:
         self._write.mode = "overwrite"
-        self._write.overwrite_condition = condition
+        self._write.overwrite_condition = F._to_col(condition)
         self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )

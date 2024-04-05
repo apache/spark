@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
@@ -239,10 +240,10 @@ private class TestStreamSourceProvider extends StreamSourceProvider {
     new Source {
       override def schema: StructType = TableCapabilityCheckSuite.schema
       override def getOffset: Option[Offset] = {
-        throw new UnsupportedOperationException
+        throw SparkUnsupportedOperationException()
       }
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        throw new UnsupportedOperationException
+        throw SparkUnsupportedOperationException()
       }
       override def stop(): Unit = {}
     }

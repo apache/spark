@@ -21,7 +21,7 @@ import pandas as pd
 
 from pyspark.sql import functions as sf
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -432,7 +432,11 @@ class FrameComputeMixin:
         self.assert_eq(pdf.prod(numeric_only=True), psdf.prod().sort_index(), check_exact=False)
 
 
-class FrameComputeTests(FrameComputeMixin, ComparisonTestBase, SQLTestUtils):
+class FrameComputeTests(
+    FrameComputeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

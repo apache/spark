@@ -306,7 +306,11 @@ class StatsTestsMixin:
             psdf.s.sum()
 
 
-class StatsTests(StatsTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class StatsTests(
+    StatsTestsMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

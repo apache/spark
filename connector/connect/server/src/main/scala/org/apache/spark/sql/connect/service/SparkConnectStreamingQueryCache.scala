@@ -23,15 +23,13 @@ import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.concurrent.duration.Duration
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.StreamingQuery
-import org.apache.spark.util.Clock
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
  * Caches Spark-Connect streaming query references and the sessions. When a query is stopped (i.e.
@@ -131,8 +129,7 @@ private[connect] class SparkConnectStreamingQueryCache(
   // Visible for testing.
   private[service] def shutdown(): Unit = queryCacheLock.synchronized {
     scheduledExecutor.foreach { executor =>
-      executor.shutdown()
-      executor.awaitTermination(1, TimeUnit.MINUTES)
+      ThreadUtils.shutdown(executor, FiniteDuration(1, TimeUnit.MINUTES))
     }
     scheduledExecutor = None
   }

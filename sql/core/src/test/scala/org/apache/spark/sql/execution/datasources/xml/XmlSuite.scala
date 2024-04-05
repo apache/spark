@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.EOFException
+import java.io.{EOFException, File}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDateTime}
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
+import javax.xml.stream.XMLStreamException
 
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
@@ -30,12 +32,14 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkException, SparkFileNotFoundException}
+import org.apache.spark.{DebugFilesystem, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.catalyst.xml.XmlOptions
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -177,7 +181,6 @@ class XmlSuite
   }
 
   test("DSL test bad charset name") {
-    // val exception = intercept[UnsupportedCharsetException] {
     val exception = intercept[SparkException] {
       spark.read
         .option("rowTag", "ROW")
@@ -230,25 +233,31 @@ class XmlSuite
   }
 
   test("DSL test for failing fast") {
-    val exceptionInSchemaInference = intercept[SparkException] {
-      spark.read
-        .option("rowTag", "ROW")
-        .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
-    }.getMessage
-    assert(exceptionInSchemaInference.contains(
-      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val inputFile = getTestResourcePath(resDir + "cars-malformed.xml")
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read
+          .option("rowTag", "ROW")
+          .option("mode", FailFastMode.name)
+          .xml(inputFile)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map("failFastMode" -> "FAILFAST")
+    )
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("year string")
         .option("rowTag", "ROW")
         .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
+        .xml(inputFile)
         .collect()
     }
     checkError(
-      // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParsing.getCause.getCause.asInstanceOf[SparkException],
+      exception = exceptionInParsing,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+    checkError(
+      exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
@@ -257,25 +266,30 @@ class XmlSuite
   }
 
   test("test FAILFAST with unclosed tag") {
-    val exceptionInSchemaInference = intercept[SparkException] {
-      spark.read
-        .option("rowTag", "book")
-        .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
-    }.getMessage
-    assert(exceptionInSchemaInference.contains(
-      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
+    val inputFile = getTestResourcePath(resDir + "unclosed_tag.xml")
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read
+          .option("rowTag", "book")
+          .option("mode", FailFastMode.name)
+          .xml(inputFile)
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map("failFastMode" -> "FAILFAST"))
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("_id string")
         .option("rowTag", "book")
         .option("mode", FailFastMode.name)
-        .xml(getTestResourcePath(resDir + "unclosed_tag.xml"))
+        .xml(inputFile)
         .show()
-    }.getCause.getCause
+    }
     checkError(
-      // TODO: Exception was nested two level deep as opposed to just one like json/csv
-      exception = exceptionInParsing.asInstanceOf[SparkException],
+      exception = exceptionInParsing,
+      errorClass = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+    checkError(
+      exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
       errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
@@ -1299,6 +1313,40 @@ class XmlSuite
     assert(result.select("decoded._corrupt_record").head().getString(0).nonEmpty)
   }
 
+  test("schema_of_xml with DROPMALFORMED parse error test") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
+          .collect()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      parameters = Map(
+        "funcName" -> "schema_of_xml",
+        "mode" -> "DROPMALFORMED",
+        "permissiveMode" -> "PERMISSIVE",
+        "failFastMode" -> FailFastMode.name)
+    )
+  }
+
+  test("schema_of_xml with FAILFAST parse error test") {
+    checkError(
+      exception = intercept[SparkException] {
+        spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
+          .collect()
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      parameters = Map(
+        "failFastMode" -> FailFastMode.name)
+    )
+  }
+
+  test("schema_of_xml with PERMISSIVE check no error test") {
+      val s = spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'PERMISSIVE'))""")
+        .collect()
+      assert(s.head.get(0) == "STRUCT<_corrupt_record: STRING>")
+  }
+
+
   test("from_xml with PERMISSIVE parse mode with no corrupt col schema") {
     // XML contains error
     val xmlData =
@@ -1342,6 +1390,23 @@ class XmlSuite
     val df3 = df2.select(col("fromXML.*"))
     assert(df3.collect().length === 3)
     checkAnswer(df3, df)
+  }
+
+  test("to_xml: input must be struct data type") {
+    val df = Seq(1, 2).toDF("value")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(to_xml($"value")).collect()
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"to_xml(value)\"",
+        "paramIndex" -> ordinalNumber(0),
+        "inputSql" -> "\"value\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"STRUCT\""),
+      context = ExpectedContext(fragment = "to_xml", getCurrentClassCallSitePattern)
+    )
   }
 
   test("decimals with scale greater than precision") {
@@ -1661,19 +1726,17 @@ class XmlSuite
   }
 
   test("Issue 588: Ensure fails when data is not present, with or without schema") {
-    val exception1 = intercept[AnalysisException] {
-      spark.read.xml("/this/file/does/not/exist")
-    }
     checkError(
-      exception = exception1,
+      exception = intercept[AnalysisException] {
+        spark.read.xml("/this/file/does/not/exist")
+      },
       errorClass = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
-    val exception2 = intercept[AnalysisException] {
-      spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
-    }
     checkError(
-      exception = exception2,
+      exception = intercept[AnalysisException] {
+        spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
+      },
       errorClass = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
@@ -2382,14 +2445,20 @@ class XmlSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
+        val actualPath = path.toPath.toUri.toURL.toString
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
         }
+        checkErrorMatchPVals(
+          exception = err,
+          errorClass = "TASK_WRITE_FAILED",
+          parameters = Map("path" -> s"$actualPath.*"))
+        val msg = err.getCause.getMessage
         assert(
-          err.getMessage.contains("Unsupported field: OffsetSeconds") ||
-            err.getMessage.contains("Unable to extract value") ||
-            err.getMessage.contains("Unable to extract ZoneId"))
+          msg.contains("Unsupported field: OffsetSeconds") ||
+            msg.contains("Unable to extract value") ||
+            msg.contains("Unable to extract ZoneId"))
       }
     }
   }
@@ -2533,6 +2602,16 @@ class XmlSuite
       .xml(input)
 
     checkAnswer(df, Seq(Row(Row(Array(1, 2, 3), Array(1, 2)))))
+  }
+
+  test("ignore commented row tags") {
+    val results = spark.read.format("xml")
+      .option("rowTag", "ROW")
+      .option("multiLine", "true")
+      .load(getTestResourcePath(resDir + "commented-row.xml"))
+
+    val expectedResults = Seq.range(1, 11).map(Row(_))
+    checkAnswer(results, expectedResults)
   }
 
   test("capture values interspersed between elements - nested struct") {
@@ -2769,11 +2848,13 @@ class XmlSuite
       val df = spark.read.option("rowTag", "ROW").option("multiLine", true).xml(xmlPath.toString)
       fs.delete(xmlPath, true)
       withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
-        val e = intercept[SparkException] {
-          df.collect()
-        }
-        assert(e.getCause.isInstanceOf[SparkFileNotFoundException])
-        assert(e.getCause.getMessage.contains(".xml does not exist"))
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            df.collect()
+          },
+          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          parameters = Map("path" -> s".*$dir.*")
+        )
       }
 
       sampledTestData.write.option("rowTag", "ROW").xml(xmlPath.toString)
@@ -2827,5 +2908,148 @@ class XmlSuite
         }
       }
     }
+  }
+
+  test("XML Validate Name") {
+    val data = Seq(Row("Random String"))
+
+    def checkValidation(fieldName: String,
+                        errorMsg: String,
+                        validateName: Boolean = true): Unit = {
+      val schema = StructType(Seq(StructField(fieldName, StringType)))
+      val df = spark.createDataFrame(data.asJava, schema)
+
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        validateName match {
+          case false =>
+            df.write
+              .option("rowTag", "ROW")
+              .option("validateName", false)
+              .option("declaration", "")
+              .option("indent", "")
+              .mode(SaveMode.Overwrite)
+              .xml(path)
+            // read file back and check its content
+            val xmlFile = new File(path).listFiles()
+              .filter(_.isFile)
+              .filter(_.getName.endsWith("xml")).head
+            val actualContent = Files.readString(xmlFile.toPath).replaceAll("\\n", "")
+            assert(actualContent ===
+              s"<${XmlOptions.DEFAULT_ROOT_TAG}><ROW>" +
+                s"<$fieldName>${data.head.getString(0)}</$fieldName>" +
+                s"</ROW></${XmlOptions.DEFAULT_ROOT_TAG}>")
+
+          case true =>
+            val e = intercept[SparkException] {
+              df.write
+                .option("rowTag", "ROW")
+                .mode(SaveMode.Overwrite)
+                .xml(path)
+            }
+            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString.stripSuffix("/")
+            checkErrorMatchPVals(
+              exception = e,
+              errorClass = "TASK_WRITE_FAILED",
+              parameters = Map("path" -> s"$actualPath.*"))
+            assert(e.getCause.isInstanceOf[XMLStreamException])
+            assert(e.getCause.getMessage.contains(errorMsg))
+        }
+      }
+    }
+
+    checkValidation("", "Illegal to pass empty name")
+    checkValidation(" ", "Illegal first name character ' '")
+    checkValidation("1field", "Illegal first name character '1'")
+    checkValidation("field name with space", "Illegal name character ' '")
+    checkValidation("field", "", false)
+  }
+
+  test("SPARK-46355: Check Number of open files") {
+    withSQLConf("fs.file.impl" -> classOf[XmlSuiteDebugFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true") {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        val numFiles = 10
+        val numRecords = 10000
+        val data =
+          spark.sparkContext.parallelize(
+            (0 until numRecords).map(i => Row(i.toLong, (i * 2).toLong)))
+        val schema = buildSchema(field("a1", LongType), field("a2", LongType))
+        val df = spark.createDataFrame(data, schema)
+
+        // Write numFiles files
+        df.repartition(numFiles)
+          .write
+          .mode(SaveMode.Overwrite)
+          .option("rowTag", "row")
+          .xml(path)
+
+        // Serialized file read for Schema inference
+        val dfRead = spark.read
+          .option("rowTag", "row")
+          .xml(path)
+        assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
+        assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+
+        XmlSuiteDebugFileSystem.reset()
+        // Serialized file read for parsing across multiple executors
+        assert(dfRead.count() === numRecords)
+        assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
+        assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+      }
+    }
+  }
+}
+
+// Mock file system that checks the number of open files
+class XmlSuiteDebugFileSystem extends DebugFilesystem {
+
+  override def open(f: org.apache.hadoop.fs.Path, bufferSize: Int): FSDataInputStream = {
+    val wrapped: FSDataInputStream = super.open(f, bufferSize)
+    // All files should be closed before reading next one
+    XmlSuiteDebugFileSystem.open()
+    new FSDataInputStream(wrapped.getWrappedStream) {
+      override def close(): Unit = {
+        try {
+          wrapped.close()
+        } finally {
+          XmlSuiteDebugFileSystem.close()
+        }
+      }
+    }
+  }
+}
+
+object XmlSuiteDebugFileSystem {
+  private val openCounterPerThread = new ConcurrentHashMap[Long, Int]()
+  private val maxFilesPerThread = new ConcurrentHashMap[Long, Int]()
+
+  def reset() : Unit = {
+    maxFilesPerThread.clear()
+  }
+
+  def open() : Unit = {
+    val threadId = Thread.currentThread().getId
+    // assert that there are no open files for this executor
+    assert(openCounterPerThread.getOrDefault(threadId, 0) == 0)
+    openCounterPerThread.put(threadId, 1)
+    maxFilesPerThread.put(threadId, maxFilesPerThread.getOrDefault(threadId, 0) + 1)
+  }
+
+  def close(): Unit = {
+    val threadId = Thread.currentThread().getId
+    if (openCounterPerThread.get(threadId) == 1) {
+      openCounterPerThread.put(threadId, 0)
+    }
+    assert(openCounterPerThread.get(threadId) == 0)
+  }
+
+  def maxFiles() : Int = {
+    maxFilesPerThread.values().asScala.max
+  }
+
+  def totalFiles() : Int = {
+    maxFilesPerThread.values().asScala.sum
   }
 }

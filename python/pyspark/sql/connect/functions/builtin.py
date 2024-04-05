@@ -45,6 +45,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
+    SortOrder,
     Expression,
     LiteralExpression,
     ColumnReference,
@@ -59,7 +60,14 @@ from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.connect.udtf import _create_py_udtf
 from pyspark.sql import functions as pysparkfuncs
-from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
+from pyspark.sql.types import (
+    _from_numpy_type,
+    DataType,
+    LongType,
+    StructType,
+    ArrayType,
+    StringType,
+)
 
 # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
 # for code reuse.
@@ -76,18 +84,20 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udtf import UserDefinedTableFunction
 
 
-def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
-    if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
-    elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
-    else:
-        return Column(ColumnReference(unparsed_identifier=col, plan_id=plan_id))
-
-
 def _to_col(col: "ColumnOrName") -> Column:
     assert isinstance(col, (Column, str))
     return col if isinstance(col, Column) else column(col)
+
+
+def _sort_col(col: "ColumnOrName") -> Column:
+    assert isinstance(col, (Column, str))
+    if isinstance(col, Column):
+        if isinstance(col._expr, SortOrder):
+            return col
+        else:
+            return col.asc()
+    else:
+        return column(col).asc()
 
 
 def _invoke_function(name: str, *args: Union[Column, Expression]) -> Column:
@@ -224,7 +234,12 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    return _to_col_with_plan_id(col=col, plan_id=None)
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col))
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -1014,6 +1029,8 @@ corr.__doc__ = pysparkfuncs.corr.__doc__
 
 
 def count(col: "ColumnOrName") -> Column:
+    if isinstance(col, Column) and isinstance(col._expr, UnresolvedStar):
+        col = lit(1)
     return _invoke_function_over_columns("count", col)
 
 
@@ -2024,6 +2041,13 @@ def str_to_map(
 str_to_map.__doc__ = pysparkfuncs.str_to_map.__doc__
 
 
+def parse_json(col: "ColumnOrName") -> Column:
+    return _invoke_function("parse_json", _to_col(col))
+
+
+parse_json.__doc__ = pysparkfuncs.parse_json.__doc__
+
+
 def posexplode(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("posexplode", col)
 
@@ -2118,7 +2142,11 @@ schema_of_xml.__doc__ = pysparkfuncs.schema_of_xml.__doc__
 
 
 def shuffle(col: "ColumnOrName") -> Column:
-    return _invoke_function("shuffle", _to_col(col), lit(random.randint(0, sys.maxsize)))
+    return _invoke_function(
+        "shuffle",
+        _to_col(col),
+        LiteralExpression(random.randint(0, sys.maxsize), LongType()),
+    )
 
 
 shuffle.__doc__ = pysparkfuncs.shuffle.__doc__
@@ -2844,6 +2872,20 @@ def mask(
 mask.__doc__ = pysparkfuncs.mask.__doc__
 
 
+def collate(col: "ColumnOrName", collation: str) -> Column:
+    return _invoke_function("collate", _to_col(col), lit(collation))
+
+
+collate.__doc__ = pysparkfuncs.collate.__doc__
+
+
+def collation(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("collation", col)
+
+
+collation.__doc__ = pysparkfuncs.collation.__doc__
+
+
 # Date/Timestamp functions
 
 
@@ -2985,6 +3027,13 @@ def monthname(col: "ColumnOrName") -> Column:
 
 
 monthname.__doc__ = pysparkfuncs.monthname.__doc__
+
+
+def dayname(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("dayname", col)
+
+
+dayname.__doc__ = pysparkfuncs.dayname.__doc__
 
 
 def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:

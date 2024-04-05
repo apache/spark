@@ -483,6 +483,17 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     }
     assert(e.getMessage.contains("corrupted due to DISK_ISSUE"))
   }
+
+  test("SPARK-39771: warn when shuffle block number is too large") {
+    sc = new SparkContext("local", "test", conf)
+    val logAppender = new LogAppender("warn when shuffle block number is too large")
+    withLogAppender(logAppender) {
+      sc.parallelize(1 to 100000, 100000).map(x => (x, x)).reduceByKey(_ + _).toDebugString
+    }
+    assert(logAppender
+      .loggingEvents
+      .count(_.getMessage.getFormattedMessage.contains(s"The number of shuffle blocks")) == 1)
+  }
 }
 
 /**

@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Collate, Collation, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -32,8 +32,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -329,10 +330,13 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
         messageParameters = Map.empty)
     }
 
-    schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
-      case _: AtomicType => // OK
-      case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
-    }
+    schema
+      .filter(f => normalizedPartitionCols.contains(f.name))
+      .foreach { field =>
+        if (!PartitioningUtils.canPartitionOn(field.dataType)) {
+          throw QueryCompilationErrors.invalidPartitionColumnDataTypeError(field)
+        }
+      }
 
     normalizedPartitionCols
   }
@@ -357,6 +361,13 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           case dt if RowOrdering.isOrderable(dt) => // OK
           case other => failAnalysis(s"Cannot use ${other.catalogString} for sorting column")
         }
+
+        schema.filter(f => normalizedBucketSpec.bucketColumnNames.contains(f.name))
+          .foreach { field =>
+            if (!BucketingUtils.canBucketOn(field.dataType)) {
+              throw QueryCompilationErrors.invalidBucketColumnDataTypeError(field.dataType)
+            }
+          }
 
         Some(normalizedBucketSpec)
 
@@ -590,4 +601,22 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
       )
       c.copy(tableDesc = newTable)
   }
+}
+
+object CollationCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case operator: LogicalPlan =>
+        operator.expressions.foreach(_.foreach(
+          e =>
+            if (isCollationExpression(e) && !SQLConf.get.collationEnabled) {
+              throw QueryCompilationErrors.collationNotEnabledError()
+            }
+          )
+        )
+    }
+  }
+
+  private def isCollationExpression(expression: Expression): Boolean =
+    expression.isInstanceOf[Collation] || expression.isInstanceOf[Collate]
 }

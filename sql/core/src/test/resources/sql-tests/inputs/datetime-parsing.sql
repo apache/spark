@@ -33,6 +33,7 @@ select to_timestamp('9', 'D');
 select to_timestamp('300', 'D');
 select to_timestamp('09', 'DD');
 select to_timestamp('99', 'DD');
+select to_timestamp('100', 'DD');
 select to_timestamp('009', 'DDD');
 select to_timestamp('365', 'DDD');
 select to_timestamp('31-365', 'dd-DDD');

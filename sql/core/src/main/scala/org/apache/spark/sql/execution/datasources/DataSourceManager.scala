@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-
-import scala.jdk.CollectionConverters._
 
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.python.UserDefinedPythonDataSource
+import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.util.Utils
 
 
@@ -35,15 +32,14 @@ import org.apache.spark.util.Utils
  * their short names or fully qualified names.
  */
 class DataSourceManager extends Logging {
+  import DataSourceManager._
+
   // Lazy to avoid being invoked during Session initialization.
   // Otherwise, it goes infinite loop, session -> Python runner -> SQLConf -> session.
-  private lazy val dataSourceBuilders = {
-    val builders = new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
-    builders.putAll(DataSourceManager.initialDataSourceBuilders.asJava)
-    builders
-  }
+  private lazy val staticDataSourceBuilders = initialStaticDataSourceBuilders
 
-  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+  private val runtimeDataSourceBuilders =
+    new ConcurrentHashMap[String, UserDefinedPythonDataSource]()
 
   /**
    * Register a data source builder for the given provider.
@@ -51,7 +47,11 @@ class DataSourceManager extends Logging {
    */
   def registerDataSource(name: String, source: UserDefinedPythonDataSource): Unit = {
     val normalizedName = normalize(name)
-    val previousValue = dataSourceBuilders.put(normalizedName, source)
+    if (staticDataSourceBuilders.contains(normalizedName)) {
+      // Cannot overwrite static Python Data Sources.
+      throw QueryCompilationErrors.dataSourceAlreadyExists(name)
+    }
+    val previousValue = runtimeDataSourceBuilders.put(normalizedName, source)
     if (previousValue != null) {
       logWarning(f"The data source $name replaced a previously registered data source.")
     }
@@ -63,7 +63,9 @@ class DataSourceManager extends Logging {
    */
   def lookupDataSource(name: String): UserDefinedPythonDataSource = {
     if (dataSourceExists(name)) {
-      dataSourceBuilders.get(normalize(name))
+      val normalizedName = normalize(name)
+      staticDataSourceBuilders.getOrElse(
+        normalizedName, runtimeDataSourceBuilders.get(normalizedName))
     } else {
       throw QueryCompilationErrors.dataSourceDoesNotExist(name)
     }
@@ -73,12 +75,14 @@ class DataSourceManager extends Logging {
    * Checks if a data source with the specified name exists (case-insensitive).
    */
   def dataSourceExists(name: String): Boolean = {
-    dataSourceBuilders.containsKey(normalize(name))
+    val normalizedName = normalize(name)
+    staticDataSourceBuilders.contains(normalizedName) ||
+      runtimeDataSourceBuilders.containsKey(normalizedName)
   }
 
   override def clone(): DataSourceManager = {
     val manager = new DataSourceManager
-    dataSourceBuilders.forEach((k, v) => manager.registerDataSource(k, v))
+    runtimeDataSourceBuilders.forEach((k, v) => manager.registerDataSource(k, v))
     manager
   }
 }
@@ -88,17 +92,22 @@ object DataSourceManager extends Logging {
   // Visible for testing
   private[spark] var dataSourceBuilders: Option[Map[String, UserDefinedPythonDataSource]] = None
   private lazy val shouldLoadPythonDataSources: Boolean = {
-    Utils.checkCommandAvailable(PythonUtils.defaultPythonExec) &&
-      // Make sure PySpark zipped files also exist.
-      PythonUtils.sparkPythonPaths.forall(new File(_).exists())
+    Utils.checkCommandAvailable(PythonUtils.defaultPythonExec)
   }
 
-  private def initialDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
-    if (Utils.isTesting || shouldLoadPythonDataSources) this.synchronized {
+  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+
+  private def initialStaticDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
+    if (shouldLoadPythonDataSources) this.synchronized {
       if (dataSourceBuilders.isEmpty) {
         val maybeResult = try {
           Some(UserDefinedPythonDataSource.lookupAllDataSourcesInPython())
         } catch {
+          case e: Throwable if e.toString.contains(
+              "ModuleNotFoundError: No module named 'pyspark'") =>
+            // If PySpark is not in the Python path at all, suppress the warning
+            // To make it less noisy, see also SPARK-47311.
+            None
           case e: Throwable =>
             // Even if it fails for whatever reason, we shouldn't make the whole
             // application fail.
@@ -109,7 +118,7 @@ object DataSourceManager extends Logging {
 
         dataSourceBuilders = maybeResult.map { result =>
           result.names.zip(result.dataSources).map { case (name, dataSource) =>
-            name ->
+            normalize(name) ->
               UserDefinedPythonDataSource(PythonUtils.createPythonFunction(dataSource))
           }.toMap
         }

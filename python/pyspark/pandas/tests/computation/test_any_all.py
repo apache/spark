@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -149,7 +149,11 @@ class FrameAnyAllMixin:
             psdf.any(axis=1)
 
 
-class FrameAnyAllTests(FrameAnyAllMixin, ComparisonTestBase, SQLTestUtils):
+class FrameAnyAllTests(
+    FrameAnyAllMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

@@ -30,7 +30,7 @@ import org.codehaus.commons.compiler.{CompileException, InternalCompilerExceptio
 import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{SparkException, TaskContext, TaskKilledException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -349,7 +349,7 @@ class CodegenContext extends Logging {
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
     val value = addMutableState(javaType(dataType), variableName)
     val code = UserDefinedType.sqlType(dataType) match {
-      case StringType => code"$value = $initCode.clone();"
+      case _: StringType => code"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => code"$value = $initCode.copy();"
       case _ => code"$value = $initCode;"
     }
@@ -622,11 +622,14 @@ class CodegenContext extends Logging {
       s"((java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2)"
     case DoubleType =>
       s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
+    case st: StringType if st.supportsBinaryOrdering => s"$c1.binaryEquals($c2)"
+    case st: StringType => s"$c1.semanticEquals($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
+    case CalendarIntervalType => s"$c1.equals($c2)"
     case NullType => "false"
     case _ =>
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError(
@@ -649,19 +652,16 @@ class CodegenContext extends Logging {
     case FloatType =>
       val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
       s"$clsName.compareFloats($c1, $c2)"
-    // use c1 - c2 may overflow
+    case st: StringType if st.supportsBinaryOrdering => s"$c1.binaryCompare($c2)"
+    case st: StringType => s"$c1.semanticCompare($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
+    case CalendarIntervalType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
-      val elementA = freshName("elementA")
-      val isNullA = freshName("isNullA")
-      val elementB = freshName("elementB")
-      val isNullB = freshName("isNullB")
       val compareFunc = freshName("compareArray")
       val minLength = freshName("minLength")
-      val jt = javaType(elementType)
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
@@ -674,22 +674,7 @@ class CodegenContext extends Logging {
             int lengthB = b.numElements();
             int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
             for (int i = 0; i < $minLength; i++) {
-              boolean $isNullA = a.isNullAt(i);
-              boolean $isNullB = b.isNullAt(i);
-              if ($isNullA && $isNullB) {
-                // Nothing
-              } else if ($isNullA) {
-                return -1;
-              } else if ($isNullB) {
-                return 1;
-              } else {
-                $jt $elementA = ${getValue("a", elementType, "i")};
-                $jt $elementB = ${getValue("b", elementType, "i")};
-                int comp = ${genComp(elementType, elementA, elementB)};
-                if (comp != 0) {
-                  return comp;
-                }
-              }
+              ${genCompElementsAt("a", "b", "i", elementType)}
             }
 
             if (lengthA < lengthB) {
@@ -717,10 +702,69 @@ class CodegenContext extends Logging {
           }
         """
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
+    case map: MapType =>
+      val compareFunc = freshName("compareMapData")
+      val funcCode = genCompMapData(map.keyType, map.valueType, compareFunc)
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("compare", dataType)
+  }
+
+  private def genCompMapData(
+      keyType: DataType,
+      valueType: DataType,
+      compareFunc: String): String = {
+    s"""
+       |public int $compareFunc(MapData a, MapData b) {
+       |  int lengthA = a.numElements();
+       |  int lengthB = b.numElements();
+       |  ArrayData keyArrayA = a.keyArray();
+       |  ArrayData valueArrayA = a.valueArray();
+       |  ArrayData keyArrayB = b.keyArray();
+       |  ArrayData valueArrayB = b.valueArray();
+       |  int minLength = (lengthA > lengthB) ? lengthB : lengthA;
+       |  for (int i = 0; i < minLength; i++) {
+       |    ${genCompElementsAt("keyArrayA", "keyArrayB", "i", keyType)}
+       |    ${genCompElementsAt("valueArrayA", "valueArrayB", "i", valueType)}
+       |  }
+       |
+       |  if (lengthA < lengthB) {
+       |    return -1;
+       |  } else if (lengthA > lengthB) {
+       |    return 1;
+       |  }
+       |  return 0;
+       |}
+     """.stripMargin
+  }
+
+  private def genCompElementsAt(arrayA: String, arrayB: String, i: String,
+    elementType : DataType): String = {
+    val elementA = freshName("elementA")
+    val isNullA = freshName("isNullA")
+    val elementB = freshName("elementB")
+    val isNullB = freshName("isNullB")
+    val jt = javaType(elementType);
+    s"""
+       |boolean $isNullA = $arrayA.isNullAt($i);
+       |boolean $isNullB = $arrayB.isNullAt($i);
+       |if ($isNullA && $isNullB) {
+       |  // Nothing
+       |} else if ($isNullA) {
+       |  return -1;
+       |} else if ($isNullB) {
+       |  return 1;
+       |} else {
+       |  $jt $elementA = ${getValue(arrayA, elementType, i)};
+       |  $jt $elementB = ${getValue(arrayB, elementType, i)};
+       |  int comp = ${genComp(elementType, elementA, elementB)};
+       |  if (comp != 0) {
+       |    return comp;
+       |  }
+       |}
+     """.stripMargin
   }
 
   /**
@@ -1484,6 +1528,7 @@ object CodeGenerator extends Logging {
       classOf[TaskContext].getName,
       classOf[TaskKilledException].getName,
       classOf[InputMetrics].getName,
+      classOf[CollationFactory].getName,
       QueryExecutionErrors.getClass.getName.stripSuffix("$")
     )
     evaluator.setExtendedClass(classOf[GeneratedClass])
@@ -1640,7 +1685,7 @@ object CodeGenerator extends Logging {
         case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
-        case PhysicalStringType => s"$input.getUTF8String($ordinal)"
+        case _: PhysicalStringType => s"$input.getUTF8String($ordinal)"
         case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
         case PhysicalVariantType => s"$input.getVariant($ordinal)"
         case _ => s"($jt)$input.get($ordinal, null)"
@@ -1714,7 +1759,7 @@ object CodeGenerator extends Logging {
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
       // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
-      case StringType | _: StructType | _: ArrayType | _: MapType =>
+      case _: StringType | _: StructType | _: ArrayType | _: MapType =>
         s"$row.update($ordinal, $value.copy())"
       case _ => s"$row.update($ordinal, $value)"
     }
@@ -1767,9 +1812,11 @@ object CodeGenerator extends Logging {
         s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
       case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
       case CalendarIntervalType => s"$vector.putInterval($rowId, $value);"
-      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
+      case _: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
-        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3233",
+          messageParameters = Map("dataType" -> dataType.toString))
     }
   }
 
@@ -1928,7 +1975,7 @@ object CodeGenerator extends Logging {
       case PhysicalLongType => JAVA_LONG
       case _: PhysicalMapType => "MapData"
       case PhysicalShortType => JAVA_SHORT
-      case PhysicalStringType => "UTF8String"
+      case _: PhysicalStringType => "UTF8String"
       case _: PhysicalStructType => "InternalRow"
       case _: PhysicalVariantType => "VariantVal"
       case _ => "Object"
@@ -1947,7 +1994,7 @@ object CodeGenerator extends Logging {
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]
     case BinaryType => classOf[Array[Byte]]
-    case StringType => classOf[UTF8String]
+    case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]

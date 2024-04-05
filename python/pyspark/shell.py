@@ -29,7 +29,7 @@ import warnings
 import sys
 
 import pyspark
-from pyspark.context import SparkContext
+from pyspark.core.context import SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.context import SQLContext
 from pyspark.sql.utils import is_remote
@@ -45,11 +45,30 @@ if getattr(builtins, "__IPYTHON__", False):
         if parent_dir in sys.path:
             sys.path.remove(parent_dir)
 
-
 if is_remote():
     try:
         # Creates pyspark.sql.connect.SparkSession.
         spark = SparkSession.builder.getOrCreate()
+
+        from pyspark.sql.connect.shell import PROGRESS_BAR_ENABLED
+
+        # Check if th eprogress bar needs to be disabled.
+        if PROGRESS_BAR_ENABLED not in os.environ:
+            os.environ[PROGRESS_BAR_ENABLED] = "1"
+        else:
+            val = os.getenv(PROGRESS_BAR_ENABLED, "false")
+            if val.lower().strip() == "false":
+                os.environ[PROGRESS_BAR_ENABLED] = "0"
+            elif val.lower().strip() == "true":
+                os.environ[PROGRESS_BAR_ENABLED] = "1"
+
+        val = os.environ[PROGRESS_BAR_ENABLED]
+        if val not in ("1", "0"):
+            raise ValueError(
+                f"Environment variable '{PROGRESS_BAR_ENABLED}' must "
+                f"be set to either 1 or 0, found: {val}"
+            )
+
     except Exception:
         import sys
         import traceback

@@ -20,7 +20,7 @@ license: |
 ---
 
 Spark SQL provides two function features to meet a wide range of user needs: built-in functions and user-defined functions (UDFs).
-Built-in functions are commonly used routines that Spark SQL predefines and a complete list of the functions can be found in the [Built-in Functions](api/sql/) API document. UDFs allow users to define their own functions when the system’s built-in functions are not enough to perform the desired task.
+Built-in functions are commonly used routines that Spark SQL predefines and a complete list of the functions can be found in the [Built-in Functions](api/sql/index.html) API document. UDFs allow users to define their own functions when the system’s built-in functions are not enough to perform the desired task.
 
 ### Built-in Functions
 

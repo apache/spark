@@ -706,6 +706,39 @@ class ClientSuite extends SparkFunSuite
     assert(client.getPreloadedStatCache(sparkConf.get(JARS_TO_DISTRIBUTE), mockFsLookup).size === 2)
   }
 
+  Seq(
+      "client",
+      "cluster"
+    ).foreach { case (deployMode) =>
+      test(s"SPARK-47208: minimum memory overhead is correctly set in ($deployMode mode)") {
+        val sparkConf = new SparkConf()
+          .set("spark.app.name", "foo-test-app")
+          .set(SUBMIT_DEPLOY_MODE, deployMode)
+          .set(DRIVER_MIN_MEMORY_OVERHEAD, 500L)
+        val args = new ClientArguments(Array())
+
+        val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+        val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+        val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+        val client = new Client(args, sparkConf, null)
+        client.createApplicationSubmissionContext(
+          new YarnClientApplication(getNewApplicationResponse, appContext),
+          containerLaunchContext)
+
+        appContext.getApplicationName should be ("foo-test-app")
+        // flag should only work for cluster mode
+        if (deployMode == "cluster") {
+          // 1Gb driver default + 500 overridden minimum default overhead
+          appContext.getResource should be (Resource.newInstance(1524L, 1))
+        } else {
+          // 512 driver default (non-cluster) + 384 overhead default
+          // that can't be changed in non cluster mode.
+          appContext.getResource should be (Resource.newInstance(896L, 1))
+        }
+      }
+    }
+
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),

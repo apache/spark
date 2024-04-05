@@ -923,13 +923,7 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       tableName: String,
       throwException: Boolean): Table = {
     recordHiveCall()
-    val table = try {
-      hive.getTable(dbName, tableName, throwException)
-    } catch {
-      // Hive may have bugs and still throw an exception even if `throwException` is false.
-      case e: HiveException if !throwException =>
-        null
-    }
+    val table = hive.getTable(dbName, tableName, throwException)
     if (table != null) {
       table.getTTable.setTableName(tableName)
       table.getTTable.setDbName(dbName)

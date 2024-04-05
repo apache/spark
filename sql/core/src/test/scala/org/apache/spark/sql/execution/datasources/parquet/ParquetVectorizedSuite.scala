@@ -420,7 +420,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     BATCH_SIZE_CONFIGS.foreach { batchSize =>
       Seq(true, false).foreach { dictionaryEnabled =>
         val pageSizes = Seq(4, 4, 4, 4)
-        var firstRowIndexes = Seq(10L, 20, 30, 40)
+        val firstRowIndexes = Seq(10L, 20, 30, 40)
         var ranges = Seq((0L, 5L))
         testNestedStringArrayOneLevel(Some(firstRowIndexes), Some(ranges), pageSizes,
           Seq(),

@@ -106,6 +106,31 @@ object SparkException {
       messageParameters = Map("message" -> msg),
       cause = cause)
   }
+
+  /**
+   * This is like the Scala require precondition, except it uses SparkIllegalArgumentException.
+   * @param requirement The requirement you want to check
+   * @param errorClass The error class to type if the requirement isn't passed
+   * @param messageParameters Message parameters to append to the message
+   */
+  def require(
+      requirement: Boolean,
+      errorClass: String,
+      messageParameters: => Map[String, String]): Unit = {
+    if (!requirement) {
+      throw new SparkIllegalArgumentException(errorClass, messageParameters)
+    }
+  }
+
+  /**
+   * Utility method to construct message params from Java Map.
+   * @param messageParameters The Java Map.
+   * @return Scala collection that can be passed to SparkException constructor.
+   */
+  def constructMessageParams(
+      messageParameters: java.util.Map[String, String]): Map[String, String] = {
+    messageParameters.asScala.toMap
+  }
 }
 
 /**
@@ -226,6 +251,20 @@ private[spark] class SparkUnsupportedOperationException private(
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
   override def getErrorClass: String = errorClass.orNull
+}
+
+private[spark] object SparkUnsupportedOperationException {
+  def apply(): SparkUnsupportedOperationException = {
+    val stackTrace = Thread.currentThread().getStackTrace
+    val messageParameters = if (stackTrace.length >= 4) {
+      val element = stackTrace(3)
+      Map("className" -> element.getClassName, "methodName" -> element.getMethodName)
+    } else {
+      Map("className" -> "?", "methodName" -> "?")
+    }
+    new SparkUnsupportedOperationException(
+      "UNSUPPORTED_CALL.WITHOUT_SUGGESTION", messageParameters)
+  }
 }
 
 /**
@@ -359,9 +398,9 @@ private[spark] class SparkIllegalArgumentException private(
   def this(
     errorClass: String,
     messageParameters: Map[String, String],
-    context: Array[QueryContext] = Array.empty,
-    summary: String = "",
-    cause: Throwable = null) = {
+    context: Array[QueryContext],
+    summary: String,
+    cause: Throwable) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
       Option(cause),
@@ -370,6 +409,25 @@ private[spark] class SparkIllegalArgumentException private(
       context
     )
   }
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    cause: Throwable) =
+    this(errorClass, messageParameters, Array.empty[QueryContext], "", cause)
+
+  def this(
+    errorClass: String,
+    messageParameters: Map[String, String]) =
+    this(errorClass, messageParameters, cause = null)
+
+  def this(
+    errorClass: String,
+    messageParameters: java.util.Map[String, String]) =
+    this(errorClass, messageParameters.asScala.toMap)
+
+  def this(errorClass: String) =
+    this(errorClass, messageParameters = Map.empty[String, String], cause = null)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 

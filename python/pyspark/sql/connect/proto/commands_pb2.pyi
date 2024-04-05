@@ -53,6 +53,34 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+class _StreamingQueryEventType:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+
+class _StreamingQueryEventTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_StreamingQueryEventType.ValueType],
+    builtins.type,
+):  # noqa: F821
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    QUERY_PROGRESS_UNSPECIFIED: _StreamingQueryEventType.ValueType  # 0
+    QUERY_PROGRESS_EVENT: _StreamingQueryEventType.ValueType  # 1
+    QUERY_TERMINATED_EVENT: _StreamingQueryEventType.ValueType  # 2
+    QUERY_IDLE_EVENT: _StreamingQueryEventType.ValueType  # 3
+
+class StreamingQueryEventType(
+    _StreamingQueryEventType, metaclass=_StreamingQueryEventTypeEnumTypeWrapper
+):
+    """The enum used for client side streaming query listener event
+    There is no QueryStartedEvent defined here,
+    it is added as a field in WriteStreamOperationStartResult
+    """
+
+QUERY_PROGRESS_UNSPECIFIED: StreamingQueryEventType.ValueType  # 0
+QUERY_PROGRESS_EVENT: StreamingQueryEventType.ValueType  # 1
+QUERY_TERMINATED_EVENT: StreamingQueryEventType.ValueType  # 2
+QUERY_IDLE_EVENT: StreamingQueryEventType.ValueType  # 3
+global___StreamingQueryEventType = StreamingQueryEventType
+
 class Command(google.protobuf.message.Message):
     """A [[Command]] is an operation that is executed by the server that does not directly consume or
     produce a relational result.
@@ -70,6 +98,9 @@ class Command(google.protobuf.message.Message):
     GET_RESOURCES_COMMAND_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_MANAGER_COMMAND_FIELD_NUMBER: builtins.int
     REGISTER_TABLE_FUNCTION_FIELD_NUMBER: builtins.int
+    STREAMING_QUERY_LISTENER_BUS_COMMAND_FIELD_NUMBER: builtins.int
+    REGISTER_DATA_SOURCE_FIELD_NUMBER: builtins.int
+    CREATE_RESOURCE_PROFILE_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -96,6 +127,14 @@ class Command(google.protobuf.message.Message):
         self,
     ) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction: ...
     @property
+    def streaming_query_listener_bus_command(self) -> global___StreamingQueryListenerBusCommand: ...
+    @property
+    def register_data_source(
+        self,
+    ) -> pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource: ...
+    @property
+    def create_resource_profile_command(self) -> global___CreateResourceProfileCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -115,6 +154,11 @@ class Command(google.protobuf.message.Message):
         streaming_query_manager_command: global___StreamingQueryManagerCommand | None = ...,
         register_table_function: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedTableFunction
         | None = ...,
+        streaming_query_listener_bus_command: global___StreamingQueryListenerBusCommand
+        | None = ...,
+        register_data_source: pyspark.sql.connect.proto.relations_pb2.CommonInlineUserDefinedDataSource
+        | None = ...,
+        create_resource_profile_command: global___CreateResourceProfileCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -124,10 +168,14 @@ class Command(google.protobuf.message.Message):
             b"command_type",
             "create_dataframe_view",
             b"create_dataframe_view",
+            "create_resource_profile_command",
+            b"create_resource_profile_command",
             "extension",
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "register_data_source",
+            b"register_data_source",
             "register_function",
             b"register_function",
             "register_table_function",
@@ -136,6 +184,8 @@ class Command(google.protobuf.message.Message):
             b"sql_command",
             "streaming_query_command",
             b"streaming_query_command",
+            "streaming_query_listener_bus_command",
+            b"streaming_query_listener_bus_command",
             "streaming_query_manager_command",
             b"streaming_query_manager_command",
             "write_operation",
@@ -153,10 +203,14 @@ class Command(google.protobuf.message.Message):
             b"command_type",
             "create_dataframe_view",
             b"create_dataframe_view",
+            "create_resource_profile_command",
+            b"create_resource_profile_command",
             "extension",
             b"extension",
             "get_resources_command",
             b"get_resources_command",
+            "register_data_source",
+            b"register_data_source",
             "register_function",
             b"register_function",
             "register_table_function",
@@ -165,6 +219,8 @@ class Command(google.protobuf.message.Message):
             b"sql_command",
             "streaming_query_command",
             b"streaming_query_command",
+            "streaming_query_listener_bus_command",
+            b"streaming_query_listener_bus_command",
             "streaming_query_manager_command",
             b"streaming_query_manager_command",
             "write_operation",
@@ -189,6 +245,9 @@ class Command(google.protobuf.message.Message):
             "get_resources_command",
             "streaming_query_manager_command",
             "register_table_function",
+            "streaming_query_listener_bus_command",
+            "register_data_source",
+            "create_resource_profile_command",
             "extension",
         ]
         | None
@@ -979,23 +1038,51 @@ class WriteStreamOperationStartResult(google.protobuf.message.Message):
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
+    QUERY_STARTED_EVENT_JSON_FIELD_NUMBER: builtins.int
     @property
     def query_id(self) -> global___StreamingQueryInstanceId:
         """(Required) Query instance. See `StreamingQueryInstanceId`."""
     name: builtins.str
     """An optional query name."""
+    query_started_event_json: builtins.str
+    """Optional query started event if there is any listener registered on the client side."""
     def __init__(
         self,
         *,
         query_id: global___StreamingQueryInstanceId | None = ...,
         name: builtins.str = ...,
+        query_started_event_json: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["query_id", b"query_id"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_query_started_event_json",
+            b"_query_started_event_json",
+            "query_id",
+            b"query_id",
+            "query_started_event_json",
+            b"query_started_event_json",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["name", b"name", "query_id", b"query_id"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_query_started_event_json",
+            b"_query_started_event_json",
+            "name",
+            b"name",
+            "query_id",
+            b"query_id",
+            "query_started_event_json",
+            b"query_started_event_json",
+        ],
     ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_query_started_event_json", b"_query_started_event_json"
+        ],
+    ) -> typing_extensions.Literal["query_started_event_json"] | None: ...
 
 global___WriteStreamOperationStartResult = WriteStreamOperationStartResult
 
@@ -1801,6 +1888,130 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
 
 global___StreamingQueryManagerCommandResult = StreamingQueryManagerCommandResult
 
+class StreamingQueryListenerBusCommand(google.protobuf.message.Message):
+    """The protocol for client-side StreamingQueryListener.
+    This command will only be set when either the first listener is added to the client, or the last
+    listener is removed from the client.
+    The add_listener_bus_listener command will only be set true in the first case.
+    The remove_listener_bus_listener command will only be set true in the second case.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ADD_LISTENER_BUS_LISTENER_FIELD_NUMBER: builtins.int
+    REMOVE_LISTENER_BUS_LISTENER_FIELD_NUMBER: builtins.int
+    add_listener_bus_listener: builtins.bool
+    remove_listener_bus_listener: builtins.bool
+    def __init__(
+        self,
+        *,
+        add_listener_bus_listener: builtins.bool = ...,
+        remove_listener_bus_listener: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "add_listener_bus_listener",
+            b"add_listener_bus_listener",
+            "command",
+            b"command",
+            "remove_listener_bus_listener",
+            b"remove_listener_bus_listener",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "add_listener_bus_listener",
+            b"add_listener_bus_listener",
+            "command",
+            b"command",
+            "remove_listener_bus_listener",
+            b"remove_listener_bus_listener",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["command", b"command"]
+    ) -> (
+        typing_extensions.Literal["add_listener_bus_listener", "remove_listener_bus_listener"]
+        | None
+    ): ...
+
+global___StreamingQueryListenerBusCommand = StreamingQueryListenerBusCommand
+
+class StreamingQueryListenerEvent(google.protobuf.message.Message):
+    """The protocol for the returned events in the long-running response channel."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EVENT_JSON_FIELD_NUMBER: builtins.int
+    EVENT_TYPE_FIELD_NUMBER: builtins.int
+    event_json: builtins.str
+    """(Required) The json serialized event, all StreamingQueryListener events have a json method"""
+    event_type: global___StreamingQueryEventType.ValueType
+    """(Required) Query event type used by client to decide how to deserialize the event_json"""
+    def __init__(
+        self,
+        *,
+        event_json: builtins.str = ...,
+        event_type: global___StreamingQueryEventType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "event_json", b"event_json", "event_type", b"event_type"
+        ],
+    ) -> None: ...
+
+global___StreamingQueryListenerEvent = StreamingQueryListenerEvent
+
+class StreamingQueryListenerEventsResult(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EVENTS_FIELD_NUMBER: builtins.int
+    LISTENER_BUS_LISTENER_ADDED_FIELD_NUMBER: builtins.int
+    @property
+    def events(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___StreamingQueryListenerEvent
+    ]: ...
+    listener_bus_listener_added: builtins.bool
+    def __init__(
+        self,
+        *,
+        events: collections.abc.Iterable[global___StreamingQueryListenerEvent] | None = ...,
+        listener_bus_listener_added: builtins.bool | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_listener_bus_listener_added",
+            b"_listener_bus_listener_added",
+            "listener_bus_listener_added",
+            b"listener_bus_listener_added",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_listener_bus_listener_added",
+            b"_listener_bus_listener_added",
+            "events",
+            b"events",
+            "listener_bus_listener_added",
+            b"listener_bus_listener_added",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_listener_bus_listener_added", b"_listener_bus_listener_added"
+        ],
+    ) -> typing_extensions.Literal["listener_bus_listener_added"] | None: ...
+
+global___StreamingQueryListenerEventsResult = StreamingQueryListenerEventsResult
+
 class GetResourcesCommand(google.protobuf.message.Message):
     """Command to get the output of 'SparkContext.resources'"""
 
@@ -1858,3 +2069,43 @@ class GetResourcesCommandResult(google.protobuf.message.Message):
     ) -> None: ...
 
 global___GetResourcesCommandResult = GetResourcesCommandResult
+
+class CreateResourceProfileCommand(google.protobuf.message.Message):
+    """Command to create ResourceProfile"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PROFILE_FIELD_NUMBER: builtins.int
+    @property
+    def profile(self) -> pyspark.sql.connect.proto.common_pb2.ResourceProfile:
+        """(Required) The ResourceProfile to be built on the server-side."""
+    def __init__(
+        self,
+        *,
+        profile: pyspark.sql.connect.proto.common_pb2.ResourceProfile | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["profile", b"profile"]
+    ) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["profile", b"profile"]) -> None: ...
+
+global___CreateResourceProfileCommand = CreateResourceProfileCommand
+
+class CreateResourceProfileCommandResult(google.protobuf.message.Message):
+    """Response for command 'CreateResourceProfileCommand'."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    PROFILE_ID_FIELD_NUMBER: builtins.int
+    profile_id: builtins.int
+    """(Required) Server-side generated resource profile id."""
+    def __init__(
+        self,
+        *,
+        profile_id: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["profile_id", b"profile_id"]
+    ) -> None: ...
+
+global___CreateResourceProfileCommandResult = CreateResourceProfileCommandResult

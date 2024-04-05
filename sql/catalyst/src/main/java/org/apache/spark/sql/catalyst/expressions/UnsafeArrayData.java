@@ -102,7 +102,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public Object[] array() {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3127");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   /**
@@ -274,7 +274,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3128");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override

@@ -1474,6 +1474,8 @@ test_that("column functions", {
   c31 <- sec(c1) + csc(c1) + cot(c1)
   c32 <- ln(c1) + positive(c2) + negative(c3)
   c33 <- width_bucket(lit(2.5), lit(2.0), lit(3.0), lit(10L))
+  c34 <- collate(c, "UNICODE")
+  c35 <- collation(c)
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -2063,6 +2065,7 @@ test_that("date functions on a DataFrame", {
   expect_equal(collect(select(df, year(df$b)))[, 1], c(2012, 2013, 2014))
   expect_equal(collect(select(df, month(df$b)))[, 1], c(12, 12, 12))
   expect_equal(collect(select(df, monthname(df$b)))[, 1], c("Dec", "Dec", "Dec"))
+  expect_equal(collect(select(df, dayname(df$b)))[, 1], c("Thu", "Sat", "Mon"))
   expect_equal(collect(select(df, last_day(df$b)))[, 1],
                c(as.Date("2012-12-31"), as.Date("2013-12-31"), as.Date("2014-12-31")))
   expect_equal(collect(select(df, next_day(df$b, "MONDAY")))[, 1],

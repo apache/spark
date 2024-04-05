@@ -634,9 +634,7 @@ trait ShuffleSpec {
    *  - [[isCompatibleWith]] returns false on the side where the `clustering` is from.
    */
   def createPartitioning(clustering: Seq[Expression]): Partitioning =
-    throw new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_3112",
-      messageParameters = Map("class" -> getClass.getCanonicalName))
+    throw SparkUnsupportedOperationException()
 }
 
 case object SinglePartitionShuffleSpec extends ShuffleSpec {

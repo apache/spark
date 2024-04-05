@@ -24,14 +24,14 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, TimeZone}
-import javax.servlet.http.HttpServletRequest
-import javax.ws.rs.core.{MediaType, MultivaluedMap, Response}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
 import org.apache.spark.internal.Logging
@@ -220,7 +220,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
-    <script type="module" src={prependBaseUri(request, "/static/log-view.js")}></script>
+    <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
     <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
   }
@@ -531,8 +531,8 @@ private[spark] object UIUtils extends Logging {
    * the whole string will rendered as a simple escaped text.
    *
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
-   * attempts to embed links outside Spark UI, or other tags like &lt;script&gt; will cause in
-   * the whole description to be treated as plain text.
+   * attempts to embed links outside Spark UI, other tags like &lt;script&gt;, or inline scripts
+   * like `onclick` will cause in the whole description to be treated as plain text.
    *
    * @param desc        the original job or stage description string, which may contain html tags.
    * @param basePathUri with which to prepend the relative links; this is used when plainText is
@@ -552,7 +552,13 @@ private[spark] object UIUtils extends Logging {
 
       // Verify that this has only anchors and span (we are wrapping in span)
       val allowedNodeLabels = Set("a", "span", "br")
-      val illegalNodes = (xml \\ "_").filterNot(node => allowedNodeLabels.contains(node.label))
+      val allowedAttributes = Set("class", "href")
+      val illegalNodes =
+        (xml \\ "_").filterNot { node =>
+          allowedNodeLabels.contains(node.label) &&
+            // Verify we only have href attributes
+            node.attributes.map(_.key).forall(allowedAttributes.contains)
+        }
       if (illegalNodes.nonEmpty) {
         throw new IllegalArgumentException(
           "Only HTML anchors allowed in job descriptions\n" +

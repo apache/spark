@@ -106,7 +106,11 @@ class TimedeltaIndexTestsMixin:
         self.assert_eq(self.neg_psidx.microseconds, self.neg_pidx.microseconds)
 
 
-class TimedeltaIndexTests(TimedeltaIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+class TimedeltaIndexTests(
+    TimedeltaIndexTestsMixin,
+    PandasOnSparkTestCase,
+    TestUtils,
+):
     pass
 
 

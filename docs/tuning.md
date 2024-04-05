@@ -41,12 +41,12 @@ Often, this will be the first thing you should tune to optimize a Spark applicat
 Spark aims to strike a balance between convenience (allowing you to work with any Java type
 in your operations) and performance. It provides two serialization libraries:
 
-* [Java serialization](https://docs.oracle.com/javase/8/docs/api/java/io/Serializable.html):
+* [Java serialization](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/io/Serializable.html):
   By default, Spark serializes objects using Java's `ObjectOutputStream` framework, and can work
   with any class you create that implements
-  [`java.io.Serializable`](https://docs.oracle.com/javase/8/docs/api/java/io/Serializable.html).
+  [`java.io.Serializable`](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/io/Serializable.html).
   You can also control the performance of your serialization more closely by extending
-  [`java.io.Externalizable`](https://docs.oracle.com/javase/8/docs/api/java/io/Externalizable.html).
+  [`java.io.Externalizable`](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/io/Externalizable.html).
   Java serialization is flexible but often quite slow, and leads to large
   serialized formats for many classes.
 * [Kryo serialization](https://github.com/EsotericSoftware/kryo): Spark can also use
@@ -196,7 +196,7 @@ the space allocated to the RDD cache to mitigate this.
 **Measuring the Impact of GC**
 
 The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of
-time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to the Java options.  (See the [configuration guide](configuration.html#Dynamically-Loading-Spark-Properties) for info on passing Java options to Spark jobs.)  Next time your Spark job is run, you will see messages printed in the worker's logs
+time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to the Java options.  (See the [configuration guide](configuration.html#dynamically-loading-spark-properties) for info on passing Java options to Spark jobs.)  Next time your Spark job is run, you will see messages printed in the worker's logs
 each time a garbage collection occurs. Note these logs will be on your cluster's worker nodes (in the `stdout` files in
 their work directories), *not* on your driver program.
 
@@ -204,7 +204,7 @@ their work directories), *not* on your driver program.
 
 To further tune garbage collection, we first need to understand some basic information about memory management in the JVM:
 
-* Java Heap space is divided in to two regions Young and Old. The Young generation is meant to hold short-lived objects
+* Java Heap space is divided into two regions Young and Old. The Young generation is meant to hold short-lived objects
   while the Old generation is intended for objects with longer lifetimes.
 
 * The Young generation is further divided into three regions \[Eden, Survivor1, Survivor2\].
@@ -232,10 +232,8 @@ temporary objects created during task execution. Some steps which may be useful 
   value of the JVM's `NewRatio` parameter. Many JVMs default this to 2, meaning that the Old generation 
   occupies 2/3 of the heap. It should be large enough such that this fraction exceeds `spark.memory.fraction`.
   
-* Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
-  garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
-  increase the [G1 region size](http://www.oracle.com/technetwork/articles/java/g1gc-1984535.html) 
-  with `-XX:G1HeapRegionSize`.
+* Since 4.0.0, Spark uses JDK 17 by default, which also makes the G1GC garbage collector the default. Note that with
+  large executor heap sizes, it may be important to increase the G1 region size with `-XX:G1HeapRegionSize`.
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
@@ -245,7 +243,7 @@ temporary objects created during task execution. Some steps which may be useful 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
 
 Our experience suggests that the effect of GC tuning depends on your application and the amount of memory available.
-There are [many more tuning options](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/index.html) described online,
+There are [many more tuning options](https://docs.oracle.com/en/java/javase/17/gctuning/introduction-garbage-collection-tuning.html) described online,
 but at a high level, managing how frequently full GC takes place can help in reducing the overhead.
 
 GC tuning flags for executors can be specified by setting `spark.executor.defaultJavaOptions` or `spark.executor.extraJavaOptions` in

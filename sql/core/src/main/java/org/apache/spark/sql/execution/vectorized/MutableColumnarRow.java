@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.*;
@@ -96,7 +98,7 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public boolean anyNull() {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
@@ -196,7 +198,8 @@ public final class MutableColumnarRow extends InternalRow {
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
     } else {
-      throw new UnsupportedOperationException("Datatype not supported " + dataType);
+      throw new SparkUnsupportedOperationException(
+        "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dataType.toString()));
     }
   }
 
@@ -224,7 +227,8 @@ public final class MutableColumnarRow extends InternalRow {
       } else if (dt instanceof CalendarIntervalType) {
         setInterval(ordinal, (CalendarInterval) value);
       } else {
-        throw new UnsupportedOperationException("Datatype not supported " + dt);
+        throw new SparkUnsupportedOperationException(
+          "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dt.toString()));
       }
     }
   }

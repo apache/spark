@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst
 
 import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.reflect.{ParameterizedType, Type, TypeVariable}
-import java.util.{List => JList, Map => JMap}
+import java.util.{List => JList, Map => JMap, Set => JSet}
 import javax.annotation.Nonnull
 
 import scala.jdk.CollectionConverters._
@@ -109,6 +109,10 @@ object JavaTypeInference {
       ArrayEncoder(elementEncoder, elementEncoder.nullable)
 
     case c: Class[_] if classOf[JList[_]].isAssignableFrom(c) =>
+      val element = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
+      IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
+
+    case c: Class[_] if classOf[JSet[_]].isAssignableFrom(c) =>
       val element = encoderFor(c.getTypeParameters.array(0), seenTypeSet, typeVariables)
       IterableEncoder(ClassTag(c), element, element.nullable, lenientSerialization = false)
 

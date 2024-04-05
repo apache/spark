@@ -38,11 +38,12 @@ object SVDPlusPlus {
       var gamma7: Double)
     extends Serializable
 
+  // scalastyle:off line.size.limit
   /**
-   * Implement SVD++ based on "Factorization Meets the Neighborhood:
-   * a Multifaceted Collaborative Filtering Model",
-   * available at <a href="http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf">
-   * here</a>.
+   * Implement SVD++ based on "Factorization Meets the Neighborhood: a Multifaceted
+   * Collaborative Filtering Model",
+   * <a href="https://web.archive.org/web/20220403174543/https://people.engr.tamu.edu/huangrh/Spring16/papers_course/matrix_factorization.pdf">
+   * available here</a>.
    *
    * The prediction rule is rui = u + bu + bi + qi*(pu + |N(u)|^^-0.5^^*sum(y)),
    * see the details on page 6.
@@ -53,6 +54,7 @@ object SVDPlusPlus {
    *
    * @return a graph with vertex attributes containing the trained model
    */
+  // scalastyle:on line.size.limit
   def run(edges: RDD[Edge[Double]], conf: Conf)
     : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
   {

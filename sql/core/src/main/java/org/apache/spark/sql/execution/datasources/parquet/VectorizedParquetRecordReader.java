@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns;
 import scala.Option;
 import scala.jdk.javaapi.CollectionConverters;
@@ -260,10 +261,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       MemoryMode memMode,
       StructType partitionColumns,
       InternalRow partitionValues) {
-    StructType batchSchema = new StructType();
-    for (StructField f: sparkSchema.fields()) {
-      batchSchema = batchSchema.add(f);
-    }
+    StructType batchSchema = new StructType(sparkSchema.fields());
+
     int constantColumnLength = 0;
     if (partitionColumns != null) {
       for (StructField f : partitionColumns.fields()) {
@@ -375,7 +374,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         ColumnDescriptor desc = column.descriptor().get();
         ColumnDescriptor fd = fileSchema.getColumnDescription(desc.getPath());
         if (!fd.equals(desc)) {
-          throw new UnsupportedOperationException("Schema evolution not supported.");
+          throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3185");
         }
       } else {
         for (ParquetColumn childColumn : CollectionConverters.asJava(column.children())) {

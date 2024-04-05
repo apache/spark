@@ -29,13 +29,11 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{Cast, EmptyRow, ExprUtils, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-
 
 /**
  * Constructs a parser for a given schema that translates CSV data to an [[InternalRow]].
@@ -72,8 +70,7 @@ class UnivocityParser(
   // positions. Generally assigned by input configuration options, except when input column(s) have
   // default values, in which case we omit the explicit indexes in order to know how many tokens
   // were present in each line instead.
-  private def columnPruning: Boolean = options.columnPruning &&
-    !requiredSchema.exists(_.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY))
+  private def columnPruning: Boolean = options.isColumnPruningEnabled(requiredSchema)
 
   // When column pruning is enabled, the parser only parses the required columns based on
   // their positions in the data schema.
@@ -139,6 +136,7 @@ class UnivocityParser(
 
   // Retrieve the raw record string.
   private def getCurrentInput: UTF8String = {
+    if (tokenizer.getContext == null) return null
     val currentContent = tokenizer.getContext.currentParsedContent()
     if (currentContent == null) null else UTF8String.fromString(currentContent.stripLineEnd)
   }
@@ -273,8 +271,7 @@ class UnivocityParser(
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 
-    // We don't actually hit this exception though, we keep it for understandability
-    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
+    case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)
   }
 
   private def nullSafeDatum(

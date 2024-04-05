@@ -32,7 +32,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, Table => MetaStoreApiTable, _}
 import org.apache.hadoop.hive.ql.Driver
@@ -150,7 +149,7 @@ private[hive] class HiveClientImpl(
         // hive.metastore.warehouse.dir is determined in SharedState after the CliSessionState
         // instance constructed, we need to follow that change here.
         warehouseDir.foreach { dir =>
-          ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
+          ret.getConf.setVar(HiveConf.getConfVars("hive.metastore.warehouse.dir"), dir)
         }
         ret
       } else {
@@ -161,8 +160,8 @@ private[hive] class HiveClientImpl(
 
   // Log the default warehouse location.
   logInfo(
-    s"Warehouse location for Hive client " +
-      s"(version ${version.fullVersion}) is ${conf.getVar(ConfVars.METASTOREWAREHOUSE)}")
+    s"Warehouse location for Hive client (version ${version.fullVersion}) is " +
+    s"${conf.getVar(HiveConf.getConfVars("hive.metastore.warehouse.dir"))}")
 
   private def newState(): SessionState = {
     val hiveConf = newHiveConf(sparkConf, hadoopConf, extraConfig, Some(initClassLoader))
@@ -192,8 +191,8 @@ private[hive] class HiveClientImpl(
     // bin/spark-shell, bin/spark-sql and sbin/start-thriftserver.sh to automatically create the
     // Derby Metastore when running Spark in the non-production environment.
     val isEmbeddedMetaStore = {
-      val msUri = hiveConf.getVar(ConfVars.METASTOREURIS)
-      val msConnUrl = hiveConf.getVar(ConfVars.METASTORECONNECTURLKEY)
+      val msUri = hiveConf.getVar(HiveConf.getConfVars("hive.metastore.uris"))
+      val msConnUrl = hiveConf.getVar(HiveConf.getConfVars("javax.jdo.option.ConnectionURL"))
       (msUri == null || msUri.trim().isEmpty) &&
         (msConnUrl != null && msConnUrl.startsWith("jdbc:derby"))
     }
@@ -211,7 +210,7 @@ private[hive] class HiveClientImpl(
   }
 
   // We use hive's conf for compatibility.
-  private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
+  private val retryLimit = conf.getIntVar(HiveConf.getConfVars("hive.metastore.failure.retries"))
   private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)
 
   /**
@@ -1056,11 +1055,22 @@ private[hive] object HiveClientImpl extends Logging {
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
   private def getSparkSQLDataType(hc: FieldSchema): DataType = {
+    // For struct types, Hive metastore API uses unquoted element names, so does the spark catalyst
+    // generates catalog string to conform with.
+    // For example, both struct<x:int,y.z:int> and struct<x:int,y.z:int> are valid cases
+    // in `FieldSchema`, while the original form of the 2nd one, which from user API, is
+    // struct<x:int,`y.z`:int>. Because  we use `CatalystSqlParser.parseDataType` to verify the
+    // type, we need to covert the unquoted element names to quoted ones.
+    // Examples:
+    //   struct<x:int,y.z:int> -> struct<`x`:int,`y.z`:int>
+    //   array<struct<x:int,y.z:int>> -> array<struct<`x`:int,`y.z`:int>>
+    //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
+    val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
     try {
-      CatalystSqlParser.parseDataType(hc.getType)
+      CatalystSqlParser.parseDataType(typeStr)
     } catch {
       case e: ParseException =>
-        throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, hc.getType, hc.getName)
+        throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, typeStr, hc.getName)
     }
   }
 
@@ -1285,7 +1295,7 @@ private[hive] object HiveClientImpl extends Logging {
   def newHiveConf(
       sparkConf: SparkConf,
       hadoopConf: JIterable[JMap.Entry[String, String]],
-      extraConfig: Map[String, String],
+      extraConfig: Map[String, String] = Map.empty,
       classLoader: Option[ClassLoader] = None): HiveConf = {
     val hiveConf = new HiveConf(classOf[SessionState])
     // HiveConf is a Hadoop Configuration, which has a field of classLoader and
@@ -1318,10 +1328,11 @@ private[hive] object HiveClientImpl extends Logging {
         " false to disable useless hive logic")
       hiveConf.setBoolean("hive.session.history.enabled", false)
     }
-    // If this is tez engine, SessionState.start might bring extra logic to initialize tez stuff,
-    // which is useless for spark.
-    if (hiveConf.get("hive.execution.engine") == "tez") {
-      logWarning("Detected HiveConf hive.execution.engine is 'tez' and will be reset to 'mr'" +
+    // If this is non-mr engine, e.g. spark, tez, SessionState.start might bring extra logic to
+    // initialize spark or tez stuff, which is useless for spark.
+    val engine = hiveConf.get("hive.execution.engine")
+    if (engine != "mr") {
+      logWarning(s"Detected HiveConf hive.execution.engine is '$engine' and will be reset to 'mr'" +
         " to disable useless hive logic")
       hiveConf.set("hive.execution.engine", "mr", SOURCE_SPARK)
     }

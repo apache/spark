@@ -62,6 +62,12 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       accumUpdates: Seq[AccumulatorV2[_, _]],
       metricPeaks: Array[Long],
       taskInfo: TaskInfo): Unit = {
+    // Set task accumulables emulating DAGScheduler behavior to enable tests related to
+    // `TaskInfo.accumulables`.
+    accumUpdates.foreach(acc =>
+      taskInfo.setAccumulables(
+        acc.toInfo(Some(acc.value), Some(acc.value)) +: taskInfo.accumulables)
+    )
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
 
@@ -228,6 +234,51 @@ class TaskSetManagerSuite
       sched = null
     }
     super.afterEach()
+  }
+
+  test("SPARK-46383: TaskInfo accumulables are cleared upon task completion") {
+    val conf = new SparkConf().
+      set(config.DROP_TASK_INFO_ACCUMULABLES_ON_TASK_COMPLETION, true)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(2)
+    val clock = new ManualClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val accumUpdates = taskSet.tasks.head.metrics.internalAccums
+
+    // Offer a host. This will launch the first task.
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)._1
+    assert(taskOption.isDefined)
+
+    clock.advance(1)
+    // Tell it the first task has finished successfully
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
+    assert(sched.endedTasks(0) === Success)
+
+    // Only one task was launched and it completed successfully, thus the TaskInfo accumulables
+    // should be empty.
+    assert(!manager.taskInfos.exists(t => !t._2.accumulables.isEmpty))
+    assert(manager.taskAttempts.flatMap(t => t.filter(!_.accumulables.isEmpty)).isEmpty)
+
+    // Fail the second task (MAX_TASK_FAILURES - 1) times.
+    (1 to manager.maxTaskFailures - 1).foreach { index =>
+      val offerResult = manager.resourceOffer("exec1", "host1", ANY)._1
+      assert(offerResult.isDefined,
+        "Expect resource offer on iteration %s to return a task".format(index))
+      assert(offerResult.get.index === 1)
+      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
+    }
+
+    clock.advance(1)
+    // Successfully finish the second task.
+    val taskOption1 = manager.resourceOffer("exec1", "host1", ANY)._1
+    manager.handleSuccessfulTask(taskOption1.get.taskId, createTaskResult(1, accumUpdates))
+    assert(sched.endedTasks(1) === Success)
+    // The TaskInfo accumulables should be empty as the second task has now completed successfully.
+    assert(!manager.taskInfos.exists(t => !t._2.accumulables.isEmpty))
+    assert(manager.taskAttempts.flatMap(t => t.filter(!_.accumulables.isEmpty)).isEmpty)
+
+    assert(sched.finishedManagers.contains(manager))
   }
 
   test("TaskSet with no preferences") {
@@ -1962,6 +2013,7 @@ class TaskSetManagerSuite
     val conf = new SparkConf()
     conf.set(config.SPECULATION_ENABLED, true)
     conf.set(config.SPECULATION_QUANTILE.key, speculationQuantile.toString)
+    conf.set(config.SPECULATION_MULTIPLIER.key, "1.5")
     // Set the number of slots per executor
     conf.set(config.EXECUTOR_CORES.key, numExecutorCores.toString)
     conf.set(config.CPUS_PER_TASK.key, numCoresPerTask.toString)
@@ -2363,6 +2415,7 @@ class TaskSetManagerSuite
     // minTimeToSpeculation parameter to checkSpeculatableTasks
     val conf = new SparkConf()
       .set(config.SPECULATION_MULTIPLIER, 0.0)
+      .set(config.SPECULATION_QUANTILE, 0.75)
       .set(config.SPECULATION_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     val ser = sc.env.closureSerializer.newInstance()

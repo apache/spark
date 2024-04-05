@@ -18,10 +18,11 @@ package org.apache.spark.sql.execution.datasources.v2.state
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStore, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, ReadStateStore, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -53,15 +54,13 @@ class StatePartitionReader(
   private val keySchema = SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
   private val valueSchema = SchemaUtil.getSchemaAsDataType(schema, "value").asInstanceOf[StructType]
 
-  private lazy val store: ReadStateStore = {
+  private lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-
     val allStateStoreMetadata = new StateMetadataPartitionReader(
       partition.sourceOptions.stateCheckpointLocation.getParent.toString, hadoopConf)
       .stateMetadata.toArray
-
     val stateStoreMetadata = allStateStoreMetadata.filter { entry =>
       entry.operatorId == partition.sourceOptions.operatorId &&
         entry.stateStoreName == partition.sourceOptions.storeName
@@ -78,9 +77,23 @@ class StatePartitionReader(
       stateStoreMetadata.head.numColsPrefixKey
     }
 
-    StateStore.getReadOnly(stateStoreProviderId, keySchema, valueSchema,
-      numColsPrefixKey = numColsPrefixKey, version = partition.sourceOptions.batchId + 1,
-      storeConf = storeConf, hadoopConf = hadoopConf.value)
+    // TODO: currently we don't support RangeKeyScanStateEncoderSpec. Support for this will be
+    // added in the future along with state metadata changes.
+    // Filed JIRA here: https://issues.apache.org/jira/browse/SPARK-47524
+    val keyStateEncoderType = if (numColsPrefixKey > 0) {
+      PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+    } else {
+      NoPrefixKeyStateEncoderSpec(keySchema)
+    }
+
+    StateStoreProvider.createAndInit(
+      stateStoreProviderId, keySchema, valueSchema, keyStateEncoderType,
+      useColumnFamilies = false, storeConf, hadoopConf.value,
+      useMultipleValuesPerKey = false)
+  }
+
+  private lazy val store: ReadStateStore = {
+    provider.getReadStore(partition.sourceOptions.batchId + 1)
   }
 
   private lazy val iter: Iterator[InternalRow] = {
@@ -99,28 +112,19 @@ class StatePartitionReader(
     }
   }
 
-  private val joinedRow = new JoinedRow()
-
-  private def addMetadata(row: InternalRow): InternalRow = {
-    val metadataRow = new GenericInternalRow(
-      StateTable.METADATA_COLUMNS.map(_.name()).map {
-        case "_partition_id" => partition.partition.asInstanceOf[Any]
-      }.toArray
-    )
-    joinedRow.withLeft(row).withRight(metadataRow)
-  }
-
-  override def get(): InternalRow = addMetadata(current)
+  override def get(): InternalRow = current
 
   override def close(): Unit = {
     current = null
     store.abort()
+    provider.close()
   }
 
   private def unifyStateRowPair(pair: (UnsafeRow, UnsafeRow)): InternalRow = {
-    val row = new GenericInternalRow(2)
+    val row = new GenericInternalRow(3)
     row.update(0, pair._1)
     row.update(1, pair._2)
+    row.update(2, partition.partition)
     row
   }
 }
