@@ -30,6 +30,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
@@ -200,6 +201,11 @@ class SparkConnectPlanner(
       plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
     }
     plan
+  }
+
+  @DeveloperApi
+  def transformRelation(bytes: Array[Byte]): LogicalPlan = {
+    transformRelation(proto.Relation.parseFrom(bytes))
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -1468,6 +1474,11 @@ class SparkConnectPlanner(
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
     }
+  }
+
+  @DeveloperApi
+  def transformExpression(bytes: Array[Byte]): Expression = {
+    transformExpression(proto.Expression.parseFrom(bytes))
   }
 
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
