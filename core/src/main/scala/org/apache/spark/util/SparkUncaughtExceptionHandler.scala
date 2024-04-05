@@ -66,7 +66,8 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
       case oom: OutOfMemoryError =>
         try {
           logError(
-            log"Uncaught OutOfMemoryError in thread ${MDC(THREAD, thread)}, process halted.", oom)
+            log"Uncaught OutOfMemoryError in thread ${MDC(THREAD, thread)}, process halted.",
+            oom)
         } catch {
           // absorb any exception/error since we're halting the process
           case _: Throwable =>
@@ -75,7 +76,8 @@ private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: 
       case t: Throwable =>
         try {
           logError(
-            log"Another uncaught exception in thread ${MDC(THREAD, thread)}, process halted.", t)
+            log"Another uncaught exception in thread ${MDC(THREAD, thread)}, process halted.",
+            t)
         } catch {
           case _: Throwable =>
         }

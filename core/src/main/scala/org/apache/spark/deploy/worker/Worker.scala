@@ -796,7 +796,7 @@ private[deploy] class Worker(
           case Failure(t) =>
             val failures = executorStateSyncFailureAttempts.getOrElse(fullId, 0) + 1
             if (failures < executorStateSyncMaxAttempts) {
-              logError(log"Failed to send ${MDC(EXECUTOR_STATE_CHANGED, newState)}" +
+              logError(log"Failed to send ${MDC(EXECUTOR_STATE, newState)}" +
                 log" to Master ${MDC(MASTER_URL, masterRef)}, will retry " +
                 log"(${MDC(FAILURES, failures)}/" +
                 log"${MDC(MAX_ATTEMPTS, executorStateSyncMaxAttempts)}).", t)
@@ -812,7 +812,7 @@ private[deploy] class Worker(
               }
               self.send(newState)
             } else {
-              logError(log"Failed to send ${MDC(EXECUTOR_STATE_CHANGED, newState)} " +
+              logError(log"Failed to send ${MDC(EXECUTOR_STATE, newState)} " +
                 log"to Master ${MDC(MASTER_URL, masterRef)} for " +
                 log"${MDC(MAX_ATTEMPTS, executorStateSyncMaxAttempts)} times. Giving up.")
               System.exit(1)

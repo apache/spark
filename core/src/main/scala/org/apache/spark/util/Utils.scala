@@ -1276,13 +1276,13 @@ private[spark] object Utils
       case t: Throwable =>
         val currentThreadName = Thread.currentThread().getName
         if (sc != null) {
-          logError(
-            log"uncaught error in thread ${MDC(THREAD, currentThreadName)}, stopping SparkContext",
-            t)
+          logError(log"uncaught error in thread ${MDC(THREAD_NAME, currentThreadName)}, " +
+              log"stopping SparkContext", t)
           sc.stopInNewThread()
         }
         if (!NonFatal(t)) {
-          logError(log"throw uncaught fatal error in thread ${MDC(THREAD, currentThreadName)}", t)
+          logError(
+            log"throw uncaught fatal error in thread ${MDC(THREAD_NAME, currentThreadName)}", t)
           throw t
         }
     }
@@ -1295,7 +1295,7 @@ private[spark] object Utils
     } catch {
       case NonFatal(t) =>
         logError(
-          log"Uncaught exception in thread ${MDC(THREAD, Thread.currentThread().getName)}", t)
+          log"Uncaught exception in thread ${MDC(THREAD_NAME, Thread.currentThread().getName)}", t)
     }
   }
 
@@ -1851,7 +1851,7 @@ private[spark] object Utils
         throw ct
       case t: Throwable =>
         logError(
-          log"Uncaught exception in thread ${MDC(THREAD, Thread.currentThread().getName)}", t)
+          log"Uncaught exception in thread ${MDC(THREAD_NAME, Thread.currentThread().getName)}", t)
         throw t
     }
   }
@@ -1866,7 +1866,7 @@ private[spark] object Utils
         throw ct
       case t: Throwable =>
         logError(
-          log"Uncaught exception in thread ${MDC(THREAD, Thread.currentThread().getName)}", t)
+          log"Uncaught exception in thread ${MDC(THREAD_NAME, Thread.currentThread().getName)}", t)
         scala.util.Failure(t)
     }
   }

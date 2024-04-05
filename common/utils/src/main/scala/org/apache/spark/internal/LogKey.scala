@@ -45,7 +45,7 @@ object LogKey extends Enumeration {
   val EVENT_LOOP = Value
   val EVENT_QUEUE = Value
   val EXECUTOR_ID = Value
-  val EXECUTOR_STATE_CHANGED = Value
+  val EXECUTOR_STATE = Value
   val EXIT_CODE = Value
   val FAILURES = Value
   val HOST = Value
@@ -93,6 +93,7 @@ object LogKey extends Enumeration {
   val TASK_SET_NAME = Value
   val TASK_STATE = Value
   val THREAD = Value
+  val THREAD_NAME = Value
   val TID = Value
   val TIMEOUT = Value
   val URI = Value

@@ -662,7 +662,7 @@ private[spark] class Executor(
           // other exceptions.  Its *possible* this is what the user meant to do (though highly
           // unlikely).  So we will log an error and keep going.
           logError(log"${LogMDC(TASK_NAME, taskName)} completed successfully though internally " +
-            log"it encountered unrecoverable fetch failures!  Most likely this means user code " +
+            log"it encountered unrecoverable fetch failures! Most likely this means user code " +
             log"is incorrectly swallowing Spark's internal " +
             log"${LogMDC(CLASS_NAME, classOf[FetchFailedException])}", fetchFailure)
         }
