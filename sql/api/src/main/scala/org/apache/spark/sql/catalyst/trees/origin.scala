@@ -119,7 +119,7 @@ object PySparkCurrentOrigin {
    */
   def pop(): Option[mutable.Map[String, String]] = {
     if (pysparkCallSiteQueue.get().nonEmpty) {
-      Some(pysparkCallSiteQueue.get().dequeue()) // Return and remove the first element
+      Some(pysparkCallSiteQueue.get().dequeue())
     } else {
       None
     }
