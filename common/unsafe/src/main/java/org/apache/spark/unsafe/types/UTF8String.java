@@ -1137,7 +1137,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Replace all occurrences of search in this with replace respecting collation with id = collationId.
+   * Replace all occurrences of search in this with replace respecting given collation.
    * @param search the string to be searched
    * @param replace the start position of the current string for searching
    * @param collationId the id of applied collation
@@ -1151,7 +1151,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private UTF8String collationAwareReplace(UTF8String search, UTF8String replace, int collationId) {
-    // This collation aware implementation is based on existing implementation on UTF8String with default collation
+    // This collation aware implementation is based on existing implementation on UTF8String
     if (numBytes == 0 || search.numBytes == 0) {
       return this;
     }
