@@ -32,7 +32,8 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{APP_DESC, APP_ID, EXECUTOR_ID, RETRY_COUNT}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.Deploy.WorkerSelectionPolicy._
@@ -568,8 +569,9 @@ private[deploy] class Master(
               && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
               val execs = appInfo.executors.values
               if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                  s"${appInfo.retryCount} times; removing it")
+                logError(log"Application ${MDC(APP_DESC, appInfo.desc.name)} " +
+                  log"with ID ${MDC(APP_ID, appInfo.id)} " +
+                  log"failed ${MDC(RETRY_COUNT, appInfo.retryCount)} times; removing it")
                 removeApplication(appInfo, ApplicationState.FAILED)
               }
             }
@@ -1245,7 +1247,9 @@ private[deploy] class Master(
         Some(executorId.toInt)
       } catch {
         case e: NumberFormatException =>
-          logError(s"Encountered executor with a non-integer ID: $executorId. Ignoring")
+          // scalastyle:off line.size.limit
+          logError(log"Encountered executor with a non-integer ID: ${MDC(EXECUTOR_ID, executorId)}. Ignoring")
+          // scalastyle:on
           None
       }
     }

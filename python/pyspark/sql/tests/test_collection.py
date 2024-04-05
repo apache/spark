@@ -35,7 +35,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 
 class DataFrameCollectionTestsMixin:
@@ -145,7 +144,7 @@ class DataFrameCollectionTestsMixin:
 
     @unittest.skipIf(have_pandas, "Required Pandas was found.")
     def test_to_pandas_required_pandas_not_found(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             with self.assertRaisesRegex(ImportError, "Pandas >= .* must be installed"):
                 self._to_pandas()
 
@@ -309,7 +308,7 @@ class DataFrameCollectionTestsMixin:
         self.assertEqual(expected, list(it))
 
     def test_to_local_iterator_not_fully_consumed(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_to_local_iterator_not_fully_consumed()
 
     def check_to_local_iterator_not_fully_consumed(self):

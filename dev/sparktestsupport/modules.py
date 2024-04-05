@@ -430,12 +430,12 @@ pyspark_core = Module(
     source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming))"],
     python_test_goals=[
         # doctests
-        "pyspark.rdd",
-        "pyspark.context",
-        "pyspark.conf",
-        "pyspark.broadcast",
+        "pyspark.core.rdd",
+        "pyspark.core.context",
+        "pyspark.core.conf",
+        "pyspark.core.broadcast",
         "pyspark.accumulators",
-        "pyspark.files",
+        "pyspark.core.files",
         "pyspark.serializers",
         "pyspark.profiler",
         "pyspark.shuffle",
@@ -533,6 +533,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_converter",
         "pyspark.sql.tests.test_pandas_sqlmetrics",
         "pyspark.sql.tests.test_python_datasource",
+        "pyspark.sql.tests.test_python_streaming_datasource",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",
@@ -569,6 +570,7 @@ pyspark_resource = Module(
         "pyspark.resource.profile",
         # unittests
         "pyspark.resource.tests.test_resources",
+        "pyspark.resource.tests.test_connect_resources",
     ],
 )
 
@@ -1057,6 +1059,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg",
         "pyspark.sql.tests.connect.test_parity_pandas_udf_window",
+        "pyspark.sql.tests.connect.test_resources",
+        "pyspark.sql.tests.connect.shell.test_progress",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and

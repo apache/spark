@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions.variant
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
+
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.VariantUtil._
-import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   // Zero-extend each byte in the array with the appropriate number of bytes.
@@ -32,141 +38,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val padding = List.fill(size - 1)(0.toByte)
       b :: padding
     }
-  }
-
-  test("parse_json") {
-    def check(json: String, expectedValue: Array[Byte], expectedMetadata: Array[Byte]): Unit = {
-      checkEvaluation(ParseJson(Literal(json)), new VariantVal(expectedValue, expectedMetadata))
-    }
-
-    // Dictionary size is `0` for value 0. An empty dictionary contains one offset `0` for the
-    // one-past-the-end position (i.e. the sum of all string lengths).
-    val emptyMetadata = Array[Byte](VERSION, 0, 0)
-    check("null", Array(primitiveHeader(NULL)), emptyMetadata)
-    check("true", Array(primitiveHeader(TRUE)), emptyMetadata)
-    check("false", Array(primitiveHeader(FALSE)), emptyMetadata)
-    check("1", Array(primitiveHeader(INT1), 1), emptyMetadata)
-    check("-1", Array(primitiveHeader(INT1), -1), emptyMetadata)
-    check("127", Array(primitiveHeader(INT1), 127), emptyMetadata)
-    check("128", Array(primitiveHeader(INT2), -128, 0), emptyMetadata)
-    check("-32768", Array(primitiveHeader(INT2), 0, -128), emptyMetadata)
-    check("-32769", Array(primitiveHeader(INT4), -1, 127, -1, -1), emptyMetadata)
-    check("2147483647", Array(primitiveHeader(INT4), -1, -1, -1, 127), emptyMetadata)
-    check("2147483648", Array(primitiveHeader(INT8), 0, 0, 0, -128, 0, 0, 0, 0), emptyMetadata)
-    check("9223372036854775807",
-      Array(primitiveHeader(INT8), -1, -1, -1, -1, -1, -1, -1, 127), emptyMetadata)
-    check("-9223372036854775808",
-      Array(primitiveHeader(INT8), 0, 0, 0, 0, 0, 0, 0, -128), emptyMetadata)
-    check("9223372036854775808",
-      Array(primitiveHeader(DECIMAL16), 0, 0, 0, 0, 0, 0, 0, 0, -128, 0, 0, 0, 0, 0, 0, 0, 0),
-      emptyMetadata)
-    check("1.0", Array(primitiveHeader(DECIMAL4), 1, 10, 0, 0, 0), emptyMetadata)
-    check("1.01", Array(primitiveHeader(DECIMAL4), 2, 101, 0, 0, 0), emptyMetadata)
-    check("99999.9999", Array(primitiveHeader(DECIMAL4), 4, -1, -55, -102, 59), emptyMetadata)
-    check("99999.99999",
-      Array(primitiveHeader(DECIMAL8), 5, -1, -29, 11, 84, 2, 0, 0, 0), emptyMetadata)
-    check("0.000000001", Array(primitiveHeader(DECIMAL4), 9, 1, 0, 0, 0), emptyMetadata)
-    check("0.0000000001",
-      Array(primitiveHeader(DECIMAL8), 10, 1, 0, 0, 0, 0, 0, 0, 0), emptyMetadata)
-    check("9" * 38,
-      Array[Byte](primitiveHeader(DECIMAL16), 0) ++ BigInt("9" * 38).toByteArray.reverse,
-      emptyMetadata)
-    check("1" + "0" * 38,
-      Array(primitiveHeader(DOUBLE)) ++
-        BigInt(java.lang.Double.doubleToLongBits(1E38)).toByteArray.reverse,
-      emptyMetadata)
-    check("\"\"", Array(shortStrHeader(0)), emptyMetadata)
-    check("\"abcd\"", Array(shortStrHeader(4), 'a', 'b', 'c', 'd'), emptyMetadata)
-    check("\"" + ("x" * 63) + "\"",
-      Array(shortStrHeader(63)) ++ Array.fill(63)('x'.toByte), emptyMetadata)
-    check("\"" + ("y" * 64) + "\"",
-      Array[Byte](primitiveHeader(LONG_STR), 64, 0, 0, 0) ++ Array.fill(64)('y'.toByte),
-      emptyMetadata)
-    check("{}", Array(objectHeader(false, 1, 1),
-      /* size */ 0,
-      /* offset list */ 0), emptyMetadata)
-    check("[]", Array(arrayHeader(false, 1),
-      /* size */ 0,
-      /* offset list */ 0), emptyMetadata)
-    check("""{"a": 1, "b": 2, "c": "3"}""", Array(objectHeader(false, 1, 1),
-      /* size */ 3,
-      /* id list */ 0, 1, 2,
-      /* offset list */ 0, 2, 4, 6,
-      /* field data */ primitiveHeader(INT1), 1, primitiveHeader(INT1), 2, shortStrHeader(1), '3'),
-      Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c'))
-    check("""{"z": 1, "y": 2, "x": "3"}""", Array(objectHeader(false, 1, 1),
-      /* size */ 3,
-      /* id list */ 2, 1, 0,
-      /* offset list */ 4, 2, 0, 6,
-      /* field data */ primitiveHeader(INT1), 1, primitiveHeader(INT1), 2, shortStrHeader(1), '3'),
-      Array(VERSION, 3, 0, 1, 2, 3, 'z', 'y', 'x'))
-    check("""[null, true, {"false" : 0}]""", Array(arrayHeader(false, 1),
-      /* size */ 3,
-      /* offset list */ 0, 1, 2, 9,
-      /* element data */ primitiveHeader(NULL), primitiveHeader(TRUE), objectHeader(false, 1, 1),
-      /* size */ 1,
-      /* id list */ 0,
-      /* offset list */ 0, 2,
-      /* field data */ primitiveHeader(INT1), 0),
-      Array(VERSION, 1, 0, 5, 'f', 'a', 'l', 's', 'e'))
-  }
-
-  test("parse_json negative") {
-    for (json <- Seq("", "[", "+1", "1a", """{"a": 1, "b": 2, "a": "3"}""")) {
-      checkExceptionInExpression[SparkException](ParseJson(Literal(json)),
-        "Malformed records are detected in record parsing")
-    }
-    for (json <- Seq("\"" + "a" * (16 * 1024 * 1024) + "\"",
-      (0 to 4 * 1024 * 1024).mkString("[", ",", "]"))) {
-      checkExceptionInExpression[SparkRuntimeException](ParseJson(Literal(json)),
-        "Cannot build variant bigger than 16.0 MiB")
-    }
-  }
-
-  test("round-trip") {
-    def check(input: String, output: String = null): Unit = {
-      checkEvaluation(
-        StructsToJson(Map.empty, ParseJson(Literal(input))),
-        if (output != null) output else input
-      )
-    }
-
-    check("null")
-    check("true")
-    check("false")
-    check("-1")
-    check("1.0E10")
-    check("\"\"")
-    check("\"" + ("a" * 63) + "\"")
-    check("\"" + ("b" * 64) + "\"")
-    // scalastyle:off nonascii
-    check("\"" + ("你好，世界" * 20) + "\"")
-    // scalastyle:on nonascii
-    check("[]")
-    check("{}")
-    // scalastyle:off nonascii
-    check(
-      "[null, true,   false,-1, 1e10, \"\\uD83D\\uDE05\", [ ], { } ]",
-      "[null,true,false,-1,1.0E10,\"😅\",[],{}]"
-    )
-    // scalastyle:on nonascii
-    check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
-  }
-
-  test("to_json with nested variant") {
-    checkEvaluation(
-      StructsToJson(Map.empty, CreateArray(Seq(ParseJson(Literal("{}")),
-        ParseJson(Literal("\"\"")),
-        ParseJson(Literal("[1, 2, 3]"))))),
-      "[{},\"\",[1,2,3]]"
-    )
-    checkEvaluation(
-      StructsToJson(Map.empty, CreateNamedStruct(Seq(
-        Literal("a"), ParseJson(Literal("""{ "x": 1, "y": null, "z": "str" }""")),
-        Literal("b"), ParseJson(Literal("[[]]")),
-        Literal("c"), ParseJson(Literal("false"))))),
-      """{"a":{"x":1,"y":null,"z":"str"},"b":[[]],"c":false}"""
-    )
   }
 
   test("to_json malformed") {
@@ -363,5 +234,412 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expectedResult4 =
       s"""{"a":"y","b":true}"""
     check(expectedResult4, smallObject, smallMetadata)
+  }
+
+  private def variantGet(input: String, path: String, dataType: DataType): VariantGet = {
+    val inputVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
+    VariantGet(Literal(inputVariant), Literal(path), dataType, failOnError = true)
+  }
+
+  private def tryVariantGet(input: String, path: String, dataType: DataType): VariantGet = {
+    val inputVariant = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(input))
+    VariantGet(Literal(inputVariant), Literal(path), dataType, failOnError = false)
+  }
+
+  private def testVariantGet(input: String, path: String, dataType: DataType, output: Any): Unit = {
+    checkEvaluation(variantGet(input, path, dataType), output)
+    checkEvaluation(
+      VariantGet(variantGet(input, path, VariantType), Literal("$"), dataType, failOnError = true),
+      output
+    )
+    checkEvaluation(tryVariantGet(input, path, dataType), output)
+  }
+
+  // If an individual element cannot be cast to the target type, `variant_get` will return an error
+  // and `try_variant_get` will only set that element to be null.
+  private def testInvalidVariantGet(
+      input: String,
+      path: String,
+      dataType: DataType,
+      parameters: Map[String, String] = null,
+      tryOutput: Any = null): Unit = {
+    checkErrorInExpression[SparkRuntimeException](
+      variantGet(input, path, dataType),
+      "INVALID_VARIANT_CAST",
+      Option(parameters).getOrElse(
+        Map("value" -> input, "dataType" -> ("\"" + dataType.sql + "\"")))
+    )
+    checkEvaluation(tryVariantGet(input, path, dataType), tryOutput)
+  }
+
+  test("variant_get cast") {
+    // Source type is string.
+    testVariantGet("\"true\"", "$", BooleanType, true)
+    testVariantGet("\"false\"", "$", BooleanType, false)
+    testVariantGet("\" t \"", "$", BooleanType, true)
+    testInvalidVariantGet("\"true\"", "$", IntegerType)
+    testVariantGet("\"1\"", "$", IntegerType, 1)
+    testVariantGet("\"9223372036854775807\"", "$", LongType, 9223372036854775807L)
+    testVariantGet("\"-0.0\"", "$", DoubleType, -0.0)
+    testVariantGet("\"inf\"", "$", DoubleType, Double.PositiveInfinity)
+    testVariantGet("\"-inf\"", "$", DoubleType, Double.NegativeInfinity)
+    testVariantGet("\"nan\"", "$", DoubleType, Double.NaN)
+    testVariantGet("\"12.34\"", "$", FloatType, 12.34f)
+    testVariantGet("\"12.34\"", "$", DecimalType(9, 4), Decimal(12.34))
+    testVariantGet("\"1970-01-01\"", "$", DateType, 0)
+    testVariantGet("\"1970-03-01\"", "$", DateType, 59)
+
+    // Source type is boolean.
+    testVariantGet("true", "$", BooleanType, true)
+    testVariantGet("false", "$", BooleanType, false)
+    testVariantGet("true", "$", ByteType, 1.toByte)
+    testVariantGet("true", "$", DoubleType, 1.0)
+    testVariantGet("true", "$", DecimalType(18, 17), Decimal(1))
+    testInvalidVariantGet("true", "$", DecimalType(18, 18))
+    testVariantGet("false", "$", DecimalType(18, 18), Decimal(0))
+
+    // Source type is integer.
+    testVariantGet("1", "$", BooleanType, true)
+    testVariantGet("0", "$", BooleanType, false)
+    testInvalidVariantGet("1", "$", BinaryType)
+    testVariantGet("127", "$", ByteType, 127.toByte)
+    testInvalidVariantGet("128", "$", ByteType)
+    testVariantGet("-32768", "$", ShortType, (-32768).toShort)
+    testInvalidVariantGet("-32769", "$", ShortType)
+    testVariantGet("2147483647", "$", IntegerType, 2147483647)
+    testInvalidVariantGet("2147483648", "$", IntegerType)
+    testVariantGet("9223372036854775807", "$", LongType, 9223372036854775807L)
+    testVariantGet("-9223372036854775808", "$", LongType, -9223372036854775808L)
+    testVariantGet("2147483647", "$", FloatType, 2147483647.0f)
+    testVariantGet("2147483647", "$", DoubleType, 2147483647.0d)
+    testVariantGet("1", "$", DecimalType(9, 4), Decimal(1))
+    testVariantGet("99999999", "$", DecimalType(38, 30), Decimal(99999999))
+    testInvalidVariantGet("100000000", "$", DecimalType(38, 30))
+    testInvalidVariantGet("12345", "$", DecimalType(6, 3))
+    testVariantGet("-1", "$", TimestampType, -1000000L)
+    testVariantGet("9223372036854", "$", TimestampType, 9223372036854000000L)
+    testInvalidVariantGet("9223372036855", "$", TimestampType)
+    testInvalidVariantGet("0", "$", TimestampNTZType)
+
+    // Source type is double. Always use scientific notation to avoid decimal.
+    testVariantGet("1E0", "$", BooleanType, true)
+    testVariantGet("0E0", "$", BooleanType, false)
+    testVariantGet("-0E0", "$", BooleanType, false)
+    testVariantGet("127E0", "$", ByteType, 127.toByte)
+    testInvalidVariantGet(
+      "128E0",
+      "$",
+      ByteType,
+      Map("value" -> "128.0", "dataType" -> "\"TINYINT\"")
+    )
+    testVariantGet("-9.223372036854776E18", "$", LongType, Long.MinValue)
+    testInvalidVariantGet("-9.223372036854778E18", "$", LongType)
+    testVariantGet("1E308", "$", FloatType, Float.PositiveInfinity)
+    testVariantGet("12345E-4", "$", DecimalType(5, 2), Decimal(1.23))
+    testVariantGet("9999999999E-2", "$", DecimalType(38, 30), Decimal(99999999.99))
+    testInvalidVariantGet(
+      "100000000E0",
+      "$",
+      DecimalType(38, 30),
+      Map("value" -> "1.0E8", "dataType" -> "\"DECIMAL(38,30)\"")
+    )
+    testVariantGet("9223372036854.5E0", "$", TimestampType, 9223372036854500352L)
+    testInvalidVariantGet(
+      "9223372036855E0",
+      "$",
+      TimestampType,
+      Map("value" -> "9.223372036855E12", "dataType" -> "\"TIMESTAMP\"")
+    )
+
+    // Source type is decimal.
+    testVariantGet("1.0", "$", BooleanType, true)
+    testVariantGet("0.0", "$", BooleanType, false)
+    testVariantGet("-0.0", "$", BooleanType, false)
+    testVariantGet("2147483647.999", "$", IntegerType, 2147483647)
+    testInvalidVariantGet("9223372036854775808", "$", LongType)
+    testVariantGet("-9223372036854775808.0", "$", LongType, -9223372036854775808L)
+    testVariantGet("123.0", "$", DecimalType(6, 3), Decimal(123000, 6, 3))
+    testVariantGet("1.14", "$", DecimalType(2, 1), Decimal(11, 2, 1))
+    testVariantGet("1.15", "$", DecimalType(2, 1), Decimal(12, 2, 1))
+    testVariantGet(
+      "0.0000000009999999994",
+      "$",
+      DecimalType(18, 18),
+      Decimal("0.000000000999999999")
+    )
+    testVariantGet("0.0000000009999999995", "$", DecimalType(18, 18), Decimal("0.000000001"))
+    testInvalidVariantGet("9.5", "$", DecimalType(1, 0))
+    testVariantGet("9999999999999999999.9999999999999999999", "$", FloatType, 1e19f)
+    testVariantGet("9999999999999999999.9999999999999999999", "$", DoubleType, 1e19)
+    testVariantGet(
+      "9999999999999999999.9999999999999999999",
+      "$",
+      StringType,
+      "9999999999999999999.9999999999999999999"
+    )
+    // Input doesn't fit into decimal, use double instead, which causes a loss of precision.
+    testVariantGet("9999999999999999999.99999999999999999999", "$", StringType, "1.0E19")
+    // Input fits into `decimal(38, 38)`.
+    testVariantGet(
+      "0.99999999999999999999999999999999999999",
+      "$",
+      DecimalType(38, 38),
+      Decimal("0.99999999999999999999999999999999999999")
+    )
+    testVariantGet("1.10", "$", StringType, "1.1")
+    testVariantGet("-1.00", "$", StringType, "-1")
+    // Test Decimal(N, 0).
+    testVariantGet("-100000000000000000000", "$", StringType, "-100000000000000000000")
+    testVariantGet(
+      "99999999999999999999000000000000000000",
+      "$",
+      StringType,
+      "99999999999999999999000000000000000000"
+    )
+
+    // Source type is null.
+    testVariantGet("null", "$", BooleanType, null)
+    testVariantGet("null", "$", IntegerType, null)
+    testVariantGet("null", "$", DoubleType, null)
+    testVariantGet("null", "$", DecimalType(18, 9), null)
+    testVariantGet("null", "$", TimestampType, null)
+    testVariantGet("null", "$", DateType, null)
+  }
+
+  test("variant_get path extraction") {
+    // Test case adapted from `JsonExpressionsSuite`.
+    val json =
+      """
+        |{"store":{"fruit":[{"weight":8,"type":"apple"},{"weight":9,"type":"pear"}],
+        |"basket":[[1,2,{"b":"y","a":"x"}],[3,4],[5,6]],"book":[{"author":"Nigel Rees",
+        |"title":"Sayings of the Century","category":"reference","price":8.95},
+        |{"author":"Herman Melville","title":"Moby Dick","category":"fiction","price":8.99,
+        |"isbn":"0-553-21311-3"},{"author":"J. R. R. Tolkien","title":"The Lord of the Rings",
+        |"category":"fiction","reader":[{"age":25,"name":"bob"},{"age":26,"name":"jack"}],
+        |"price":22.99,"isbn":"0-395-19395-8"}],"bicycle":{"price":19.95,"color":"red"}},
+        |"email":"amy@only_for_json_udf_test.net","owner":"amy","zip code":"94025",
+        |"fb:testid":"1234"}
+        |""".stripMargin
+    testVariantGet(json, "$.store.bicycle", StringType, """{"color":"red","price":19.95}""")
+    checkEvaluation(
+      VariantGet(
+        tryVariantGet(json, "$.store.bicycle", VariantType),
+        Literal("$"),
+        StringType,
+        failOnError = true
+      ),
+      """{"color":"red","price":19.95}"""
+    )
+    testVariantGet(json, "$.store.bicycle.color", StringType, "red")
+    testVariantGet(json, "$.store.bicycle.price", DoubleType, 19.95)
+    testVariantGet(
+      json,
+      "$.store.book",
+      StringType,
+      """[{"author":"Nigel Rees","category":"reference","price":8.95,"title":
+        |"Sayings of the Century"},{"author":"Herman Melville","category":"fiction","isbn":
+        |"0-553-21311-3","price":8.99,"title":"Moby Dick"},{"author":"J. R. R. Tolkien","category":
+        |"fiction","isbn":"0-395-19395-8","price":22.99,"reader":[{"age":25,"name":"bob"},{"age":26,
+        |"name":"jack"}],"title":"The Lord of the Rings"}]""".stripMargin.replace("\n", "")
+    )
+    testVariantGet(
+      json,
+      "$.store.book[0]",
+      StringType,
+      """{"author":"Nigel Rees","category":"reference","price":8.95,"title":
+        |"Sayings of the Century"}""".stripMargin.replace("\n", "")
+    )
+    testVariantGet(json, "$.store.book[0].category", StringType, "reference")
+    testVariantGet(json, "$.store.book[1].price", DoubleType, 8.99)
+    testVariantGet(json, "$.store.book[2].reader[0].name", StringType, "bob")
+    testVariantGet(json, "$.store.book[2].reader[1].age", IntegerType, 26)
+    testVariantGet(json, "$.store.basket[0][1]", IntegerType, 2)
+    testVariantGet(json, "$.store.basket[0][2]", StringType, """{"a":"x","b":"y"}""")
+    testVariantGet(json, "$.zip code", IntegerType, 94025)
+    testVariantGet(json, "$.fb:testid", IntegerType, 1234)
+    testVariantGet(
+      json,
+      "$.store.fruit",
+      DataType.fromDDL("array<struct<weight int, type string>>"),
+      Array(Row(8, "apple"), Row(9, "pear"))
+    )
+    testVariantGet(
+      json,
+      "$.store.book[0]",
+      DataType.fromDDL("struct<author string, title string, category string, price decimal(4, 2)>"),
+      Row("Nigel Rees", "Sayings of the Century", "reference", Decimal(8.95))
+    )
+  }
+
+  test("variant_get negative") {
+    testVariantGet("""{"a": 1}""", "$[0]", IntegerType, null)
+    testVariantGet("""{"a": 1}""", "$.A", IntegerType, null)
+    testVariantGet("[1]", "$.a", IntegerType, null)
+    testVariantGet("[1]", "$[1]", IntegerType, null)
+    testVariantGet("1", "$.a", IntegerType, null)
+    testVariantGet("1", "$[0]", IntegerType, null)
+    testInvalidVariantGet(
+      """{"a": 1}""",
+      "$",
+      IntegerType,
+      Map("value" -> "{\"a\":1}", "dataType" -> "\"INT\"")
+    )
+    testInvalidVariantGet("[1]", "$", IntegerType)
+  }
+
+  test("variant_get large") {
+    val numKeys = 256
+
+    var json = (0 until numKeys).map(_.toString).mkString("[", ",", "]")
+    for (i <- 0 until numKeys) {
+      testVariantGet(json, "$[" + i + "]", IntegerType, i)
+    }
+    testVariantGet(json, "$[" + numKeys + "]", IntegerType, null)
+
+    json = (0 until numKeys).map(i => s""""$i": $i""").mkString("{", ",", "}")
+    for (i <- 0 until numKeys) {
+      testVariantGet(json, "$." + i, IntegerType, i)
+    }
+    testVariantGet(json, "$." + numKeys, IntegerType, null)
+  }
+
+  test("variant_get timestamp") {
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid.getId) {
+        def toMicros(time: LocalDateTime, zoneId: ZoneId): Long = {
+          val instant = time.atZone(zoneId).toInstant
+          instant.getEpochSecond * 1000000L + instant.getNano / 1000L
+        }
+
+        val input = "\"2026-04-05 5:16:07\""
+        val expected = LocalDateTime.of(2026, 4, 5, 5, 16, 7, 0)
+        testVariantGet(input, "$", TimestampType, toMicros(expected, zid))
+        testVariantGet(input, "$", TimestampNTZType, toMicros(expected, ZoneOffset.UTC))
+      }
+    }
+  }
+
+  test("variant_get overflow") {
+    for (ansi <- Seq(false, true)) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        // `variant_get` is not affected by the ANSI flag. It doesn't have the LEGACY mode.
+        testInvalidVariantGet(
+          """{"a": 2147483648}""",
+          "$.a",
+          IntegerType,
+          Map("value" -> "2147483648", "dataType" -> "\"INT\"")
+        )
+      }
+    }
+  }
+
+  test("variant_get nested") {
+    testVariantGet("null", "$", DataType.fromDDL("a int"), null)
+    testVariantGet("{}", "$", DataType.fromDDL("a int"), Row(null))
+    testVariantGet("""{"a": 1}""", "$", DataType.fromDDL("a int"), Row(1))
+    testInvalidVariantGet("1", "$", DataType.fromDDL("a int"))
+    testVariantGet("""{"a": 1, "b": "2"}""", "$", DataType.fromDDL("a int, b string"), Row(1, "2"))
+    testVariantGet("""{"a": 1, "b": "2"}""", "$", DataType.fromDDL("a string, b int"), Row("1", 2))
+    testVariantGet("""{"b": "2", "a": 1}""", "$", DataType.fromDDL("a string, b int"), Row("1", 2))
+    testVariantGet(
+      """{"a": 1, "d": 2, "c": 3}""",
+      "$",
+      DataType.fromDDL("a int, b int, c int"),
+      Row(1, null, 3)
+    )
+    testInvalidVariantGet(
+      """{"a": 1, "b": "2"}""",
+      "$",
+      DataType.fromDDL("a int, b boolean"),
+      Map("value" -> "\"2\"", "dataType" -> "\"BOOLEAN\""),
+      Row(1, null)
+    )
+
+    testVariantGet("null", "$", DataType.fromDDL("array<int>"), null)
+    testVariantGet("[]", "$", DataType.fromDDL("array<int>"), Array())
+    testInvalidVariantGet("{}", "$", DataType.fromDDL("array<int>"))
+    testVariantGet(
+      """[1, 2, 3, null, "4", 5.0]""",
+      "$",
+      DataType.fromDDL("array<int>"),
+      Array(1, 2, 3, null, 4, 5)
+    )
+    testVariantGet(
+      """[1, 2, 3, null, "4", 5.0]""",
+      "$",
+      DataType.fromDDL("array<string>"),
+      Array("1", "2", "3", null, "4", "5")
+    )
+    testVariantGet(
+      """[[1], [2, 3], [4, 5, 6], [7, 8, 9, 10]]""",
+      "$",
+      DataType.fromDDL("array<array<int>>"),
+      Array(Array(1), Array(2, 3), Array(4, 5, 6), Array(7, 8, 9, 10))
+    )
+    testInvalidVariantGet(
+      """[1, 2, 3, "hello"]""",
+      "$",
+      DataType.fromDDL("array<int>"),
+      Map("value" -> "\"hello\"", "dataType" -> "\"INT\""),
+      Array(1, 2, 3, null)
+    )
+
+    testVariantGet("null", "$", DataType.fromDDL("map<string, int>"), null)
+    testVariantGet("{}", "$", DataType.fromDDL("map<string, int>"), Map())
+    testInvalidVariantGet("[]", "$", DataType.fromDDL("map<string, int>"))
+    testVariantGet(
+      """{"a": 1, "b": "2", "c": null}""",
+      "$",
+      DataType.fromDDL("map<string, int>"),
+      Map("a" -> 1, "b" -> 2, "c" -> null)
+    )
+    testVariantGet(
+      """{"a": {}, "b": {"c": "d"}, "e": {"f": "g"}}""",
+      "$",
+      DataType.fromDDL("map<string, map<string, string>>"),
+      Map("a" -> Map(), "b" -> Map("c" -> "d"), "e" -> Map("f" -> "g"))
+    )
+    testInvalidVariantGet(
+      """{"a": 1, "b": "2", "c": {}}""",
+      "$",
+      DataType.fromDDL("map<string, int>"),
+      Map("value" -> "{}", "dataType" -> "\"INT\""),
+      Map("a" -> 1, "b" -> 2, "c" -> null)
+    )
+
+    testVariantGet(
+      """[{"a": 1}, {"b": 2}, null, {}]""",
+      "$",
+      DataType.fromDDL("array<struct<a int, b int>>"),
+      Array(Row(1, null), Row(null, 2), null, Row(null, null))
+    )
+    testVariantGet(
+      """[{"a": 1}, {"b": 2}, null, {}]""",
+      "$",
+      DataType.fromDDL("array<map<string, int>>"),
+      Array(Map("a" -> 1), Map("b" -> 2), null, Map())
+    )
+  }
+
+  test("variant_get path") {
+    def checkInvalidPath(path: String): Unit = {
+      checkErrorInExpression[SparkRuntimeException](
+        variantGet("0", path, IntegerType),
+        "INVALID_VARIANT_GET_PATH",
+        Map("path" -> path, "functionName" -> "`variant_get`")
+      )
+    }
+
+    testVariantGet("""{"1": {"2": {"3": [4]}}}""", "$.1.2.3[0]", IntegerType, 4)
+    testVariantGet("""{"1": {"2": {"3": [4]}}}""", "$.1.2.3['0']", IntegerType, null)
+    // scalastyle:off nonascii
+    testVariantGet("""{"你好": {"世界": "hello"}}""", """$['你好']["世界"]""", StringType, "hello")
+    // scalastyle:on nonascii
+
+    checkInvalidPath("")
+    checkInvalidPath(".a")
+    checkInvalidPath("$1")
+    checkInvalidPath("$[-1]")
+    checkInvalidPath("""$['"]""")
   }
 }

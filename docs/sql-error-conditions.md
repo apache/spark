@@ -267,14 +267,6 @@ Error parsing descriptor bytes into Protobuf FileDescriptorSet.
 
 `<message>`. If necessary set `<ansiConfig>` to "false" to bypass this error.
 
-### CANNOT_READ_FILE_FOOTER
-
-SQLSTATE: KD001
-
-Could not read footer for file: `<file>`. Please ensure that the file is in either ORC or Parquet format.
-If not, please convert it to a valid format. If the file is in the valid format, please check if it is corrupt.
-If it is, you can choose to either ignore it or fix the corruption.
-
 ### CANNOT_RECOGNIZE_HIVE_TYPE
 
 [SQLSTATE: 429BB](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -397,6 +389,14 @@ Cannot find a short name for the codec `<codecName>`.
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The value `<collationName>` does not represent a correct collation name. Suggested valid collation name: [`<proposal>`].
+
+### [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
+
+[SQLSTATE: 42P21](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Could not determine which collation to use for string functions and operators.
+
+For more details see [COLLATION_MISMATCH](sql-error-conditions-collation-mismatch-error-class.html)
 
 ### [COLLECTION_SIZE_LIMIT_EXCEEDED](sql-error-conditions-collection-size-limit-exceeded-error-class.html)
 
@@ -732,11 +732,13 @@ For more details see [FAILED_JDBC](sql-error-conditions-failed-jdbc-error-class.
 
 Failed parsing struct: `<raw>`.
 
-### FAILED_READ_FILE
+### [FAILED_READ_FILE](sql-error-conditions-failed-read-file-error-class.html)
 
 SQLSTATE: KD001
 
 Encountered error while reading file `<path>`.
+
+For more details see [FAILED_READ_FILE](sql-error-conditions-failed-read-file-error-class.html)
 
 ### FAILED_REGISTER_CLASS_WITH_KRYO
 
@@ -950,6 +952,12 @@ For more details see [INCONSISTENT_BEHAVIOR_CROSS_VERSION](sql-error-conditions-
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Max offset with `<rowsPerSecond>` rowsPerSecond is `<maxSeconds>`, but 'rampUpTimeSeconds' is `<rampUpTimeSeconds>`.
+
+### INDETERMINATE_COLLATION
+
+[SQLSTATE: 42P22](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Function called requires knowledge of the collation it should apply, but indeterminate collation was found. Use COLLATE function to set the collation explicitly.
 
 ### INDEX_ALREADY_EXISTS
 
@@ -1512,6 +1520,19 @@ Invalid usage of `<elem>` in `<prettyName>`.
 [SQLSTATE: 42K09](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Variable type must be string type but got `<varType>`.
+
+### INVALID_VARIANT_CAST
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The variant value ``<value>`` cannot be cast into ``<dataType>``. Please use `try_variant_get` instead.
+
+### INVALID_VARIANT_GET_PATH
+
+[SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The path ``<path>`` is not a valid variant extraction path in ``<functionName>``.
+A valid path should start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
 
 ### INVALID_VIEW_TEXT
 
@@ -2173,6 +2194,12 @@ Failed to perform stateful processor operation=`<operationType>` with invalid ha
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 Failed to perform stateful processor operation=`<operationType>` with invalid timeoutMode=`<timeoutMode>`
+
+### STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=`<groupingKey>`.
 
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 

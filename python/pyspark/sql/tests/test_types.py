@@ -862,16 +862,28 @@ class TypesTestsMixin:
             if k != "varchar" and k != "char":
                 self.assertEqual(t(), _parse_datatype_string(k))
         self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(StringType(), _parse_datatype_string("string"))
         self.assertEqual(StringType(), _parse_datatype_string("string collate UTF8_BINARY"))
         self.assertEqual(StringType(), _parse_datatype_string("string COLLATE UTF8_BINARY"))
-        self.assertEqual(StringType(0), _parse_datatype_string("string"))
-        self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE UTF8_BINARY"))
-        self.assertEqual(StringType(0), _parse_datatype_string("string COLLATE   UTF8_BINARY"))
-        self.assertEqual(StringType(1), _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"))
-        self.assertEqual(StringType(2), _parse_datatype_string("string COLLATE UNICODE"))
-        self.assertEqual(StringType(2), _parse_datatype_string("string COLLATE `UNICODE`"))
-        self.assertEqual(StringType(3), _parse_datatype_string("string COLLATE UNICODE_CI"))
-        self.assertEqual(StringType(3), _parse_datatype_string("string COLLATE `UNICODE_CI`"))
+        self.assertEqual(
+            StringType.fromCollationId(0), _parse_datatype_string("string COLLATE   UTF8_BINARY")
+        )
+        self.assertEqual(
+            StringType.fromCollationId(1),
+            _parse_datatype_string("string COLLATE UTF8_BINARY_LCASE"),
+        )
+        self.assertEqual(
+            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE UNICODE")
+        )
+        self.assertEqual(
+            StringType.fromCollationId(2), _parse_datatype_string("string COLLATE `UNICODE`")
+        )
+        self.assertEqual(
+            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE UNICODE_CI")
+        )
+        self.assertEqual(
+            StringType.fromCollationId(3), _parse_datatype_string("string COLLATE `UNICODE_CI`")
+        )
         self.assertEqual(CharType(1), _parse_datatype_string("char(1)"))
         self.assertEqual(CharType(10), _parse_datatype_string("char( 10   )"))
         self.assertEqual(CharType(11), _parse_datatype_string("char( 11)"))
@@ -1216,10 +1228,10 @@ class TypesTestsMixin:
         instances = [
             NullType(),
             StringType(),
-            StringType(0),
-            StringType(1),
-            StringType(2),
-            StringType(3),
+            StringType("UTF8_BINARY"),
+            StringType("UTF8_BINARY_LCASE"),
+            StringType("UNICODE"),
+            StringType("UNICODE_CI"),
             CharType(10),
             VarcharType(10),
             BinaryType(),
@@ -1412,13 +1424,17 @@ class TypesTestsMixin:
     def test_collated_string(self):
         dfs = [
             self.spark.sql("SELECT 'abc' collate UTF8_BINARY_LCASE"),
-            self.spark.createDataFrame([], StructType([StructField("id", StringType(1))])),
+            self.spark.createDataFrame(
+                [], StructType([StructField("id", StringType("UTF8_BINARY_LCASE"))])
+            ),
         ]
         for df in dfs:
             # performs both datatype -> proto & proto -> datatype conversions
             self.assertEqual(
-                df.to(StructType([StructField("new", StringType(1))])).schema[0].dataType,
-                StringType(1),
+                df.to(StructType([StructField("new", StringType("UTF8_BINARY_LCASE"))]))
+                .schema[0]
+                .dataType,
+                StringType("UTF8_BINARY_LCASE"),
             )
 
 
@@ -1558,7 +1574,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
             (1.0, StringType()),
             ([], StringType()),
             ({}, StringType()),
-            ("", StringType(1)),
+            ("", StringType("UTF8_BINARY_LCASE")),
             # Char
             ("", CharType(10)),
             (1, CharType(10)),
@@ -1627,7 +1643,7 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
         failure_spec = [
             # String (match anything but None)
             (None, StringType(), ValueError),
-            (None, StringType(1), ValueError),
+            (None, StringType("UTF8_BINARY_LCASE"), ValueError),
             # CharType (match anything but None)
             (None, CharType(10), ValueError),
             # VarcharType (match anything but None)

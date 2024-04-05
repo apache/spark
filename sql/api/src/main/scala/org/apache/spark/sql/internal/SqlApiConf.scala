@@ -79,6 +79,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def charVarcharAsString: Boolean = false
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
-  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.EXCEPTION
+  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
   override def defaultStringType: StringType = StringType
 }

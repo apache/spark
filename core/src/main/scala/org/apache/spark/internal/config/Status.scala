@@ -69,7 +69,7 @@ private[spark] object Status {
         "will be reported for the status of the running spark app.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LIVE_UI_LOCAL_STORE_DIR = ConfigBuilder("spark.ui.store.path")
     .doc("Local directory where to cache application information for live UI. By default this is " +

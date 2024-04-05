@@ -19,6 +19,7 @@ from pyspark.errors.exceptions.base import (
     PySparkIndexError,
     PySparkAttributeError,
 )
+from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -63,7 +64,7 @@ from pyspark.errors import (
     PySparkNotImplementedError,
     PySparkRuntimeError,
 )
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
@@ -72,7 +73,6 @@ from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
-    SortOrder,
     ColumnReference,
     UnresolvedRegex,
     UnresolvedStar,
@@ -349,15 +349,6 @@ class DataFrame:
     def repartitionByRange(  # type: ignore[misc]
         self, numPartitions: Union[int, "ColumnOrName"], *cols: "ColumnOrName"
     ) -> "DataFrame":
-        def _convert_col(col: "ColumnOrName") -> Column:
-            if isinstance(col, Column):
-                if isinstance(col._expr, SortOrder):
-                    return col
-                else:
-                    return col.asc()
-            else:
-                return F.col(col).asc()
-
         if isinstance(numPartitions, int):
             if not numPartitions > 0:
                 raise PySparkValueError(
@@ -375,14 +366,14 @@ class DataFrame:
             else:
                 return DataFrame(
                     plan.RepartitionByExpression(
-                        self._plan, numPartitions, [_convert_col(c) for c in cols]
+                        self._plan, numPartitions, [F._sort_col(c) for c in cols]
                     ),
                     self.sparkSession,
                 )
         elif isinstance(numPartitions, (str, Column)):
             return DataFrame(
                 plan.RepartitionByExpression(
-                    self._plan, None, [_convert_col(c) for c in [numPartitions] + list(cols)]
+                    self._plan, None, [F._sort_col(c) for c in [numPartitions] + list(cols)]
                 ),
                 self.sparkSession,
             )
@@ -655,7 +646,7 @@ class DataFrame:
             if isinstance(col, Column):
                 return col
             else:
-                return Column(ColumnReference(col, df._plan._plan_id))
+                return df._col(col)
 
         return DataFrame(
             plan.AsOfJoin(
@@ -729,7 +720,7 @@ class DataFrame:
                 message_parameters={"arg_name": "ascending", "arg_type": type(ascending).__name__},
             )
 
-        return _cols
+        return [F._sort_col(c) for c in _cols]
 
     def sort(
         self,
@@ -1041,7 +1032,7 @@ class DataFrame:
                     )
 
         return DataFrame(
-            plan.Hint(self._plan, name, list(parameters)),
+            plan.Hint(self._plan, name, [F.lit(p) for p in list(parameters)]),
             session=self._session,
         )
 
@@ -1443,8 +1434,25 @@ class DataFrame:
                 message_parameters={},
             )
 
+        def _convert_int_to_float(v: Any) -> Any:
+            # a bool is also an int
+            if v is not None and not isinstance(v, bool) and isinstance(v, int):
+                return float(v)
+            else:
+                return v
+
+        _replacements = []
+        for k, v in rep_dict.items():
+            _k = _convert_int_to_float(k)
+            _v = _convert_int_to_float(v)
+            _replacements.append((F.lit(_k), F.lit(_v)))
+
         return DataFrame(
-            plan.NAReplace(child=self._plan, cols=subset, replacements=rep_dict),
+            plan.NAReplace(
+                child=self._plan,
+                cols=subset,
+                replacements=_replacements,
+            ),
             session=self._session,
         )
 
@@ -1661,6 +1669,8 @@ class DataFrame:
                 error_class="NOT_DICT",
                 message_parameters={"arg_name": "fractions", "arg_type": type(fractions).__name__},
             )
+
+        _fractions = []
         for k, v in fractions.items():
             if not isinstance(k, (float, int, str)):
                 raise PySparkTypeError(
@@ -1672,10 +1682,16 @@ class DataFrame:
                         "item_type": type(k).__name__,
                     },
                 )
-            fractions[k] = float(v)
+            _fractions.append((F.lit(k), float(v)))
+
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         return DataFrame(
-            plan.StatSampleBy(child=self._plan, col=F._to_col(col), fractions=fractions, seed=seed),
+            plan.StatSampleBy(
+                child=self._plan,
+                col=F._to_col(col),
+                fractions=_fractions,
+                seed=seed,
+            ),
             session=self._session,
         )
 
@@ -1700,12 +1716,7 @@ class DataFrame:
                 error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
             )
 
-        return Column(
-            ColumnReference(
-                unparsed_identifier=name,
-                plan_id=self._plan._plan_id,
-            )
-        )
+        return self._col(name)
 
     __getattr__.__doc__ = PySparkDataFrame.__getattr__.__doc__
 
@@ -1736,17 +1747,14 @@ class DataFrame:
 
                 # validate the column name
                 if not hasattr(self._session, "is_mock_session"):
-                    # Different from __getattr__, the name here can be quoted like df['`id`'].
-                    # Only validate the name when it is not in the cached schema.
-                    if item not in self.columns:
+                    from pyspark.sql.connect.types import verify_col_name
+
+                    # Try best to verify the column name with cached schema
+                    # If fails, fall back to the server side validation
+                    if not verify_col_name(item, self.schema):
                         self.select(item).isLocal()
 
-                return Column(
-                    ColumnReference(
-                        unparsed_identifier=item,
-                        plan_id=self._plan._plan_id,
-                    )
-                )
+                return self._col(item)
         elif isinstance(item, Column):
             return self.filter(item)
         elif isinstance(item, (list, tuple)):
@@ -1758,6 +1766,14 @@ class DataFrame:
                 error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
                 message_parameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
+
+    def _col(self, name: str) -> Column:
+        return Column(
+            ColumnReference(
+                unparsed_identifier=name,
+                plan_id=self._plan._plan_id,
+            )
+        )
 
     def __dir__(self) -> List[str]:
         attrs = set(super().__dir__())
@@ -2044,6 +2060,7 @@ class DataFrame:
         schema: Union[StructType, str],
         evalType: int,
         barrier: bool,
+        profile: Optional[ResourceProfile],
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -2055,7 +2072,11 @@ class DataFrame:
 
         return DataFrame(
             plan.MapPartitions(
-                child=self._plan, function=udf_obj, cols=self.columns, is_barrier=barrier
+                child=self._plan,
+                function=udf_obj,
+                cols=self.columns,
+                is_barrier=barrier,
+                profile=profile,
             ),
             session=self._session,
         )
@@ -2065,8 +2086,11 @@ class DataFrame:
         func: "PandasMapIterFunction",
         schema: Union[StructType, str],
         barrier: bool = False,
+        profile: Optional[ResourceProfile] = None,
     ) -> "DataFrame":
-        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, barrier)
+        return self._map_partitions(
+            func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, barrier, profile
+        )
 
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
@@ -2075,8 +2099,11 @@ class DataFrame:
         func: "ArrowMapIterFunction",
         schema: Union[StructType, str],
         barrier: bool = False,
+        profile: Optional[ResourceProfile] = None,
     ) -> "DataFrame":
-        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF, barrier)
+        return self._map_partitions(
+            func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF, barrier, profile
+        )
 
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 

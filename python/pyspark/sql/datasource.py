@@ -160,6 +160,29 @@ class DataSource(ABC):
             message_parameters={"feature": "writer"},
         )
 
+    def streamWriter(self, schema: StructType, overwrite: bool) -> "DataSourceStreamWriter":
+        """
+        Returns a :class:`DataSourceStreamWriter` instance for writing data into a streaming sink.
+
+        The implementation is required for writable streaming data sources.
+
+        Parameters
+        ----------
+        schema : :class:`StructType`
+            The schema of the data to be written.
+        overwrite : bool
+            A flag indicating whether to overwrite existing data when writing current microbatch.
+
+        Returns
+        -------
+        writer : :class:`DataSourceStreamWriter`
+            A writer instance for writing data into a streaming sink.
+        """
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "streamWriter"},
+        )
+
     def streamReader(self, schema: StructType) -> "DataSourceStreamReader":
         """
         Returns a :class:`DataSourceStreamReader` instance for reading streaming data.
@@ -509,6 +532,77 @@ class DataSourceWriter(ABC):
         ----------
         messages : list of :class:`WriterCommitMessage`\\s
             A list of commit messages.
+        """
+        ...
+
+
+class DataSourceStreamWriter(ABC):
+    """
+    A base class for data stream writers. Data stream writers are responsible for writing
+    the data to the streaming sink.
+
+    .. versionadded: 4.0.0
+    """
+
+    @abstractmethod
+    def write(self, iterator: Iterator[Row]) -> "WriterCommitMessage":
+        """
+        Writes data into the streaming sink.
+
+        This method is called on executors to write data to the streaming data sink in
+        each microbatch. It accepts an iterator of input data and returns a single row
+        representing a commit message, or None if there is no commit message.
+
+        The driver collects commit messages, if any, from all executors and passes them
+        to the ``commit`` method if all tasks run successfully. If any task fails, the
+        ``abort`` method will be called with the collected commit messages.
+
+        Parameters
+        ----------
+        iterator : Iterator[Row]
+            An iterator of input data.
+
+        Returns
+        -------
+        WriterCommitMessage : a serializable commit message
+        """
+        ...
+
+    def commit(self, messages: List["WriterCommitMessage"], batchId: int) -> None:
+        """
+        Commits this microbatch with a list of commit messages.
+
+        This method is invoked on the driver when all tasks run successfully. The
+        commit messages are collected from the ``write`` method call from each task,
+        and are passed to this method. The implementation should use the commit messages
+        to commit the microbatch in the streaming sink.
+
+        Parameters
+        ----------
+        messages : List[WriterCommitMessage]
+            A list of commit messages.
+        batchId: int
+            An integer that uniquely identifies a batch of data being written.
+            The integer increase by 1 with each microbatch processed.
+        """
+        ...
+
+    def abort(self, messages: List["WriterCommitMessage"], batchId: int) -> None:
+        """
+        Aborts this microbatch due to task failures.
+
+        This method is invoked on the driver when one or more tasks failed. The commit
+        messages are collected from the ``write`` method call from each task, and are
+        passed to this method. The implementation should use the commit messages to
+        abort the microbatch in the streaming sink.
+
+        Parameters
+        ----------
+        messages : List[WriterCommitMessage]
+            A list of commit messages.
+        batchId: int
+            An integer that uniquely identifies a batch of data being written.
+            The integer increase by 1 with each microbatch processed.
         """
         ...
 
