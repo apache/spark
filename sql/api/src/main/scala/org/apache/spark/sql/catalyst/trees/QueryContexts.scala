@@ -157,19 +157,17 @@ case class DataFrameQueryContext(stackTrace: Seq[StackTraceElement]) extends Que
 
   override val callSite: String = stackTrace.tail.mkString("\n")
 
-  val pysparkOriginInfo: mutable.Map[String, String] = PySparkCurrentOrigin.get()
+  val pysparkOriginInfo: Option[mutable.Map[String, String]] = PySparkCurrentOrigin.pop()
 
-  val pysparkFragment: String = pysparkOriginInfo.getOrElse("fragment", "")
+  val pysparkFragment: String = pysparkOriginInfo.map(_.getOrElse("fragment", "")).getOrElse("")
 
-  val pysparkCallSite: String = pysparkOriginInfo.getOrElse("callSite", "")
+  val pysparkCallSite: String = pysparkOriginInfo.map(_.getOrElse("callSite", "")).getOrElse("")
 
   val (displayedFragment, displayedCallsite) = if (pysparkOriginInfo.nonEmpty) {
     (pysparkFragment, pysparkCallSite)
   } else {
     (fragment, callSite)
   }
-
-  PySparkCurrentOrigin.clear()
 
   override lazy val summary: String = {
     val builder = new StringBuilder

@@ -963,6 +963,65 @@ class DataFrameTestsMixin:
                 pyspark_fragment="multiply",
             )
 
+            # Multiple expressions in df.select (`divide` is problematic)
+            with self.assertRaises(ArithmeticException) as pe:
+                df.select(df.id - 10, df.id + 4, df.id / 0, df.id * 5).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="DIVIDE_BY_ZERO",
+                message_parameters={"config": '"spark.sql.ansi.enabled"'},
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="divide",
+            )
+
+            # Multiple expressions in df.select (`plus` is problematic)
+            with self.assertRaises(NumberFormatException) as pe:
+                df.select(df.id - 10, df.id + "string", df.id / 10, df.id * 5).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="plus",
+            )
+
+            # Multiple expressions in df.select (`minus` is problematic)
+            with self.assertRaises(NumberFormatException) as pe:
+                df.select(df.id - "string", df.id + 4, df.id / 10, df.id * 5).collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="minus",
+            )
+
+            # Multiple expressions in df.select (`multiply` is problematic)
+            with self.assertRaises(NumberFormatException) as pe:
+                df.select(df.id - 10, df.id + 4, df.id / 10, df.id * "string").collect()
+            self.check_error(
+                exception=pe.exception,
+                error_class="CAST_INVALID_INPUT",
+                message_parameters={
+                    "expression": "'string'",
+                    "sourceType": '"STRING"',
+                    "targetType": '"BIGINT"',
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
+                },
+                query_context_type=QueryContextType.DataFrame,
+                pyspark_fragment="multiply",
+            )
+
             # DataFrameQueryContext without pysparkCallSite
             with self.assertRaises(AnalysisException) as pe:
                 df.select("non-existing-column")
