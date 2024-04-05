@@ -43,12 +43,16 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 private[sql] object AvroUtils extends Logging {
+
+  AvroFileFormat.registerCustomAvroTypes()
+
   def inferSchema(
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val conf = spark.sessionState.newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
+
 
     if (parsedOptions.parameters.contains(IGNORE_EXTENSION)) {
       logWarning(s"Option $IGNORE_EXTENSION is deprecated. Please use the " +

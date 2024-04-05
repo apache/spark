@@ -82,6 +82,35 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Logical type: dae") {
+    val avroTypeJson =
+      s"""
+         |{
+         |  "type": "record",
+         |  "name": "Entry",
+         |  "fields": [
+         |    {
+         |      "name": "rate",
+         |      "type": [
+         |        "null",
+         |        {
+         |          "type": "long",
+         |          "logicalType": "custom-decimal",
+         |          "precision": 38,
+         |          "scale": 9
+         |        }
+         |      ],
+         |      "default": null
+         |    }
+         |  ]
+         |}
+         |
+   """.stripMargin
+
+    val df = spark.read.format("avro").option("avroSchema", avroTypeJson).load()
+    assert(df.schema.fields(0).dataType == DecimalType(38, 9))
+  }
+
   // scalastyle:off line.size.limit
   val timestampSchema = s"""
       {
