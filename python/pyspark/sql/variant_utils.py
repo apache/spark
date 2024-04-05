@@ -20,7 +20,7 @@ import json
 import struct
 from array import array
 from typing import Any
-
+from pyspark.errors import PySparkValueError
 
 class VariantUtils:
     """
@@ -116,7 +116,7 @@ class VariantUtils:
     @classmethod
     def _check_index(cls, pos: int, length: int) -> None:
         if pos < 0 or pos >= length:
-            raise Exception("Malformed Variant")
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
     def _get_type_info(cls, value: bytes, pos: int):
@@ -136,14 +136,14 @@ class VariantUtils:
         offset_size = ((metadata[0] >> 6) & 0x3) + 1
         dict_size = cls._read_long(metadata, 1, offset_size, signed=False)
         if id >= dict_size:
-            raise Exception("Malformed Variant")
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         string_start = 1 + (dict_size + 2) * offset_size
         offset = cls._read_long(metadata, 1 + (id + 1) * offset_size, offset_size, signed=False)
         next_offset = cls._read_long(
             metadata, 1 + (id + 2) * offset_size, offset_size, signed=False
         )
         if offset > next_offset:
-            raise Exception("Malformed Variant")
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         cls._check_index(string_start + next_offset - 1, len(metadata))
         return metadata[string_start + offset : (string_start + next_offset)].decode("utf-8")
 
@@ -154,7 +154,7 @@ class VariantUtils:
         if basic_type != VariantUtils.PRIMITIVE or (
             type_info != VariantUtils.TRUE and type_info != VariantUtils.FALSE
         ):
-            raise Exception("Unexpected Variant type: %s" % (str(bool)))
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         return type_info == VariantUtils.TRUE
 
     @classmethod
@@ -162,7 +162,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise Exception("Unexpected Variant type: %s" % (str(int)))
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         if type_info == VariantUtils.INT1:
             return cls._read_long(value, pos + 1, 1, signed=True)
         elif type_info == VariantUtils.INT2:
@@ -171,7 +171,7 @@ class VariantUtils:
             return cls._read_long(value, pos + 1, 4, signed=True)
         elif type_info == VariantUtils.INT8:
             return cls._read_long(value, pos + 1, 8, signed=True)
-        raise Exception("Unexpected Variant type: %s" % (str(int)))
+        raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
     def _get_string(cls, value: bytes, pos: int) -> str:
@@ -190,14 +190,14 @@ class VariantUtils:
                 length = cls._read_long(value, pos + 1, VariantUtils.U32_SIZE, signed=False)
             cls._check_index(start + length - 1, len(value))
             return value[start : start + length].decode("utf-8")
-        raise Exception("Unexpected Variant type: %s" % (str(str)))
+        raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
     def _get_double(cls, value: bytes, pos: int) -> float:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.DOUBLE:
-            raise Exception("Unexpected Variant type: %s" % (str(float)))
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         return struct.unpack("d", value[pos + 1 : pos + 9])[0]
 
     @classmethod
@@ -205,7 +205,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise Exception("Unexpected Variant type: %s" % (str(Decimal)))
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         scale = value[pos + 1]
         unscaled = 0
         if type_info == VariantUtils.DECIMAL4:
@@ -216,7 +216,7 @@ class VariantUtils:
             cls._check_index(pos + 17, len(value))
             unscaled = int.from_bytes(value[pos + 2 : pos + 18], byteorder="little", signed=True)
         else:
-            raise Exception("Unexpected Variant type: %s" % (str(Decimal)))
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
 
     @classmethod
@@ -253,7 +253,7 @@ class VariantUtils:
             return decimal.Decimal
         elif type_info == VariantUtils.LONG_STR:
             return str
-        raise Exception("Malformed Variant")
+        raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
     def _to_json(cls, value: bytes, metadata: bytes, pos: int) -> Any:
@@ -327,7 +327,7 @@ class VariantUtils:
         elif variant_type == decimal.Decimal:
             return cls._get_decimal(value, pos)
         else:
-            raise Exception("Malformed Variant")
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
     def _handle_object(cls, value: bytes, metadata: bytes, pos: int, func):
@@ -338,7 +338,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.OBJECT:
-            raise Exception("Malformed Variant")
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         large_size = ((type_info >> 4) & 0x1) != 0
         size_bytes = VariantUtils.U32_SIZE if large_size else 1
         num_fields = cls._read_long(value, pos + 1, size_bytes, signed=False)
@@ -367,7 +367,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.ARRAY:
-            raise Exception("Malformed Variant")
+            raise PySparkValueError(error_class="MALFORMED_VARIANT")
         large_size = ((type_info >> 2) & 0x1) != 0
         size_bytes = VariantUtils.U32_SIZE if large_size else 1
         num_fields = cls._read_long(value, pos + 1, size_bytes, signed=False)
