@@ -295,8 +295,9 @@ private[connect] object ErrorUtils extends Logging {
             original)
         } else {
           // Other errors are server RPC errors, return them as ERROR.
-          logError(log"Spark Connect RPC error during: ${MDC(OP_TYPE, opType)}. " +
-            log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
+          logError(
+            log"Spark Connect RPC error during: ${MDC(OP_TYPE, opType)}. " +
+              log"UserId: ${MDC(USER_ID, userId)}. SessionId: ${MDC(SESSION_ID, sessionId)}.",
             original)
         }
 
