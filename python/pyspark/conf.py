@@ -62,8 +62,8 @@ class SparkConf:
 
     Examples
     --------
-    >>> from pyspark.conf import SparkConf
-    >>> from pyspark.context import SparkContext
+    >>> from pyspark import SparkConf
+    >>> from pyspark import SparkContext
     >>> conf = SparkConf()
     >>> conf.setMaster("local").setAppName("My app")
     <pyspark.conf.SparkConf object at ...>
