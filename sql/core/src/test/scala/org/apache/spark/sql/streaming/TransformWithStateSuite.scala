@@ -804,16 +804,46 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
 }
 
 class MetricsStatefulProcessor
-  extends RunningCountStatefulProcessorWithProcTimeTimerUpdates
-    with StatefulProcessor[String, String, (String, String)] {
+  extends StatefulProcessorWithInitialState[String, String, (String, String), String] {
+  @transient private var _timerState: ValueState[Long] = _
+  @transient protected var _countState: ValueState[Long] = _
   @transient protected var _valueStateToDelete: ValueState[Long] = _
   @transient protected var _listState: ListState[Long] = _
   @transient protected var _mapState: MapState[String, Long] = _
 
+  private def handleProcessingTimeBasedTimers(
+      key: String,
+      expiryTimestampMs: Long): Iterator[(String, String)] = {
+    _timerState.clear()
+    Iterator((key, "-1"))
+  }
+
+  private def processUnexpiredRows(
+      key: String,
+      currCount: Long,
+      count: Long,
+      timerValues: TimerValues): Unit = {
+    _countState.update(count)
+    if (key == "a") {
+      var nextTimerTs: Long = 0L
+      if (currCount == 0) {
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 5000
+        getHandle.registerTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      } else if (currCount == 1) {
+        getHandle.deleteTimer(_timerState.get())
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 7500
+        getHandle.registerTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      }
+    }
+  }
+
   override def init(
       outputMode: OutputMode,
       timeoutMode: TimeoutMode): Unit = {
-    super.init(outputMode, timeoutMode)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
     _valueStateToDelete = getHandle.getValueState(
       "valueStateToDelete", Encoders.scalaLong)
     _listState = getHandle.getListState(
@@ -821,6 +851,21 @@ class MetricsStatefulProcessor
     _mapState = getHandle.getMapState(
       "mapStateMetricsTest", Encoders.STRING, Encoders.scalaLong)
     getHandle.deleteIfExists("valueStateToDelete")
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    if (expiredTimerInfo.isValid()) {
+      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
+    } else {
+      val currCount = _countState.getOption().getOrElse(0L)
+      val count = currCount + inputRows.size
+      processUnexpiredRows(key, currCount, count, timerValues)
+      Iterator((key, count.toString))
+    }
   }
 }
 
