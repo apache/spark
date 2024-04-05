@@ -1818,10 +1818,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
       val output = union.output
-      def eligibleForPushdown(e: Expression): Boolean = {
-        e.deterministic
-      }
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(eligibleForPushdown)
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
 
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
