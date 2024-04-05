@@ -112,21 +112,30 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
     override def queryTransform: String => String = _.toLowerCase(Locale.ROOT)
   }
 
+  val collateNormalize = "COLLATE_NORMALIZE"
   val randomizeCase = "RANDOMIZE_CASE"
 
   // List of batches of runs which should yield the same result when run on a query
   val checks: Seq[Seq[CollationCheck]] = Seq(
     Seq(
-      CaseSensitiveCollationCheck("tpcds_utf8", "UTF8_BINARY", "LOWER"),
+      CaseSensitiveCollationCheck("tpcds_utf8", "UTF8_BINARY", collateNormalize),
       CaseInsensitiveCollationCheck("tpcds_utf8_random", "UTF8_BINARY_LCASE", randomizeCase)
     ),
     Seq(
-      CaseSensitiveCollationCheck("tpcds_unicode", "UNICODE", "LOWER"),
+      CaseSensitiveCollationCheck("tpcds_unicode", "UNICODE", collateNormalize),
       CaseInsensitiveCollationCheck("tpcds_unicode_random", "UNICODE_CI", randomizeCase)
     )
   )
 
   override def createTables(): Unit = {
+    spark.udf.register(
+      collateNormalize,
+      functions.udf((s: String) => {
+        s match {
+          case null => null
+          case _ => s.trim.toLowerCase(Locale.ROOT)
+        }
+      }))
     spark.udf.register(
       randomizeCase,
       functions.udf((s: String) => {
@@ -134,7 +143,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
           case null => null
           case _ =>
             val random = new scala.util.Random()
-            s.map(c => if (random.nextBoolean()) c.toUpper else c.toLower)
+            s.trim.map(c => if (random.nextBoolean()) c.toUpper else c.toLower)
         }
       }).asNondeterministic())
     checks.flatten.foreach(check => {
@@ -207,6 +216,7 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
         checks.foreach(batch => {
           val res = batch.map(check =>
             withDB(check.dbName)(getQueryOutput(check.queryTransform(query)).toLowerCase()))
+          res.map(queryOutput => assert(queryOutput.nonEmpty))
           if (res.nonEmpty) res.foreach(currRes => assertResult(currRes)(res.head))
         })
       } catch {
