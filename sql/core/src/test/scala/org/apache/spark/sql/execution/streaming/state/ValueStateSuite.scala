@@ -187,8 +187,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
     val storeConf = new StateStoreConf(new SQLConf())
     val ex = intercept[StateStoreMultipleColumnFamiliesNotSupportedException] {
       provider.init(
-        storeId, keySchema, valueSchema, 0, useColumnFamilies = true,
-        storeConf, new Configuration)
+        storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+        useColumnFamilies = true, storeConf, new Configuration)
     }
     checkError(
       ex,
@@ -326,27 +326,29 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
 
   import StateStoreTestsHelper._
 
-  protected var schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
-  protected var schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+  protected def schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
+  protected def schemaForValueRow: StructType = new StructType().add("value", BinaryType)
+
+  protected def useMultipleValuesPerKey = false
 
   protected def newStoreProviderWithStateVariable(
       useColumnFamilies: Boolean): RocksDBStateStoreProvider = {
     newStoreProviderWithStateVariable(StateStoreId(newDir(), Random.nextInt(), 0),
-      numColsPrefixKey = 0,
+      NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
       useColumnFamilies = useColumnFamilies)
   }
 
   protected def newStoreProviderWithStateVariable(
       storeId: StateStoreId,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
       sqlConf: SQLConf = SQLConf.get,
       conf: Configuration = new Configuration,
       useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
-      storeId, schemaForKeyRow, schemaForValueRow, numColsPrefixKey = numColsPrefixKey,
+      storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,
       useColumnFamilies,
-      new StateStoreConf(sqlConf), conf)
+      new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey)
     provider
   }
 

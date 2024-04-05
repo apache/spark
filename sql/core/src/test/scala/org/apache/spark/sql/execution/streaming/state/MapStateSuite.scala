@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{BinaryType, StructType}
  */
 class MapStateSuite extends StateVariableSuiteBase {
   // Overwrite Key schema as MapState use composite key
-  schemaForKeyRow = new StructType()
+  override def schemaForKeyRow: StructType = new StructType()
     .add("key", BinaryType)
     .add("userKey", BinaryType)
 

@@ -29,22 +29,13 @@ class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedConnec
     def test_wrong_args(self):
         self.check_wrong_args()
 
-    def test_apply_in_pandas_not_returning_pandas_dataframe(self):
-        self.check_apply_in_pandas_not_returning_pandas_dataframe()
-
-    def test_apply_in_pandas_returning_wrong_column_names(self):
-        self.check_apply_in_pandas_returning_wrong_column_names()
-
-    def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
-        self.check_apply_in_pandas_returning_no_column_names_and_wrong_amount()
-
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_apply_in_pandas_returning_incompatible_type(self):
-        self.check_apply_in_pandas_returning_incompatible_type()
+        super().test_apply_in_pandas_returning_incompatible_type()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_wrong_return_type(self):
-        self.check_wrong_return_type()
+        super().test_wrong_return_type()
 
 
 if __name__ == "__main__":

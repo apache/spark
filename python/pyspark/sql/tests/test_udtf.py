@@ -30,8 +30,8 @@ from pyspark.errors import (
     AnalysisException,
     PySparkPicklingError,
 )
-from pyspark.files import SparkFiles
-from pyspark.rdd import PythonEvalType
+from pyspark.core.files import SparkFiles
+from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
     array,
     create_map,

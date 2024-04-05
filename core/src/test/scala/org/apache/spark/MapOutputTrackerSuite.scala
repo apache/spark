@@ -936,6 +936,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val newConf = new SparkConf
     newConf.set("spark.shuffle.push.enabled", "true")
     newConf.set("spark.shuffle.service.enabled", "true")
+    newConf.set("spark.shuffle.service.removeShuffle", "false")
     newConf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     newConf.set(IS_TESTING, true)
 

@@ -26,7 +26,8 @@ import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.{MetricsServlet, PrometheusServlet, Sink}
 import org.apache.spark.metrics.source.{Source, StaticSources}
@@ -227,7 +228,7 @@ private[spark] class MetricsSystem private (
           }
         } catch {
           case e: Exception =>
-            logError("Sink class " + classPath + " cannot be instantiated")
+            logError(log"Sink class ${MDC(CLASS_NAME, classPath)} cannot be instantiated")
             throw e
         }
       }

@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+import java.util.UUID
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, StatefulProcessorCannotPerformOperationWithInvalidHandleState, StateStoreMultipleColumnFamiliesNotSupportedException}
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -111,6 +115,27 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
     Iterator((key, "-1"))
   }
 
+  protected def processUnexpiredRows(
+      key: String,
+      currCount: Long,
+      count: Long,
+      timerValues: TimerValues): Unit = {
+    _countState.update(count)
+    if (key == "a") {
+      var nextTimerTs: Long = 0L
+      if (currCount == 0) {
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 5000
+        getHandle.registerTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      } else if (currCount == 1) {
+        getHandle.deleteTimer(_timerState.get())
+        nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 7500
+        getHandle.registerTimer(nextTimerTs)
+        _timerState.update(nextTimerTs)
+      }
+    }
+  }
+
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
@@ -121,20 +146,7 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
     } else {
       val currCount = _countState.getOption().getOrElse(0L)
       val count = currCount + inputRows.size
-      _countState.update(count)
-      if (key == "a") {
-        var nextTimerTs: Long = 0L
-        if (currCount == 0) {
-          nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 5000
-          getHandle.registerTimer(nextTimerTs)
-          _timerState.update(nextTimerTs)
-        } else if (currCount == 1) {
-          getHandle.deleteTimer(_timerState.get())
-          nextTimerTs = timerValues.getCurrentProcessingTimeInMs() + 7500
-          getHandle.registerTimer(nextTimerTs)
-          _timerState.update(nextTimerTs)
-        }
-      }
+      processUnexpiredRows(key, currCount, count, timerValues)
       Iterator((key, count.toString))
     }
   }
@@ -188,12 +200,24 @@ class MaxEventTimeStatefulProcessor
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
   }
 
+  protected def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
+    val timeoutDelaySec = 5
+    val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
+    _maxEventTimeState.update(maxEventTimeSec)
+
+    val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
+    if (registeredTimerMs < timeoutTimestampMs) {
+      getHandle.deleteTimer(registeredTimerMs)
+      getHandle.registerTimer(timeoutTimestampMs)
+      _timerState.update(timeoutTimestampMs)
+    }
+  }
+
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, Long)],
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
-    val timeoutDelaySec = 5
     if (expiredTimerInfo.isValid()) {
       _maxEventTimeState.clear()
       Iterator((key, -1))
@@ -201,15 +225,7 @@ class MaxEventTimeStatefulProcessor
       val valuesSeq = inputRows.toSeq
       val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
         _maxEventTimeState.getOption().getOrElse(0L))
-      val timeoutTimestampMs = (maxEventTimeSec + timeoutDelaySec) * 1000
-      _maxEventTimeState.update(maxEventTimeSec)
-
-      val registeredTimerMs: Long = _timerState.getOption().getOrElse(0L)
-      if (registeredTimerMs < timeoutTimestampMs) {
-        getHandle.deleteTimer(registeredTimerMs)
-        getHandle.registerTimer(timeoutTimestampMs)
-        _timerState.update(timeoutTimestampMs)
-      }
+      processUnexpiredRows(maxEventTimeSec)
       Iterator((key, maxEventTimeSec.toInt))
     }
   }
@@ -650,6 +666,101 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       )
     }
   }
+
+  /** Create a text file with a single data item */
+  private def createFile(data: String, srcDir: File): File =
+    stringToFile(new File(srcDir, s"${UUID.randomUUID()}.txt"), data)
+
+  private def createFileStream(srcDir: File): Dataset[(String, String)] = {
+    spark
+      .readStream
+      .option("maxFilesPerTrigger", "1")
+      .text(srcDir.getCanonicalPath)
+      .select("value").as[String]
+      .groupByKey(x => x)
+      .transformWithState(new RunningCountStatefulProcessor(),
+        TimeoutMode.NoTimeouts(),
+        OutputMode.Update())
+  }
+
+  test("transformWithState - availableNow trigger mode, rate limit is respected") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+
+        // Set up a query to read text files one at a time
+        val df = createFileStream(srcDir)
+
+        testStream(df)(
+          StartStream(trigger = Trigger.AvailableNow()),
+          ProcessAllAvailable(),
+          CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
+          StopStream,
+          Execute { _ =>
+            createFile("a", srcDir)
+          },
+          StartStream(trigger = Trigger.AvailableNow()),
+          ProcessAllAvailable(),
+          CheckNewAnswer(("a", "2"))
+        )
+
+        var index = 0
+        val foreachBatchDf = df.writeStream
+          .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+            index += 1
+          })
+          .trigger(Trigger.AvailableNow())
+          .start()
+
+        try {
+          foreachBatchDf.awaitTermination()
+          assert(index == 4)
+        } finally {
+          foreachBatchDf.stop()
+        }
+      }
+    }
+  }
+
+  test("transformWithState - availableNow trigger mode, multiple restarts") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName) {
+      withTempDir { srcDir =>
+        Seq("a", "b", "c").foreach(createFile(_, srcDir))
+        val df = createFileStream(srcDir)
+
+        var index = 0
+
+        def startTriggerAvailableNowQueryAndCheck(expectedIdx: Int): Unit = {
+          val q = df.writeStream
+            .foreachBatch((_: Dataset[(String, String)], _: Long) => {
+              index += 1
+            })
+            .trigger(Trigger.AvailableNow)
+            .start()
+          try {
+            assert(q.awaitTermination(streamingTimeout.toMillis))
+            assert(index == expectedIdx)
+          } finally {
+            q.stop()
+          }
+        }
+        // start query for the first time
+        startTriggerAvailableNowQueryAndCheck(3)
+
+        // add two files and restart
+        createFile("a", srcDir)
+        createFile("b", srcDir)
+        startTriggerAvailableNowQueryAndCheck(8)
+
+        // try restart again
+        createFile("d", srcDir)
+        startTriggerAvailableNowQueryAndCheck(14)
+      }
+    }
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
@@ -667,6 +778,26 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
       AddData(inputData, "a"),
       ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] { t =>
         assert(t.getMessage.contains("not supported"))
+      }
+    )
+  }
+
+  test("transformWithStateWithInitialState - streaming with hdfsStateStoreProvider should fail") {
+    val inputData = MemoryStream[InitInputRow]
+    val initDf = Seq(("init_1", 40.0), ("init_2", 100.0)).toDS()
+      .groupByKey(x => x._1)
+      .mapValues(x => x)
+    val result = inputData.toDS()
+      .groupByKey(x => x.key)
+      .transformWithState(new AccumulateStatefulProcessorWithInitState(),
+        TimeoutMode.NoTimeouts(), OutputMode.Append(), initDf
+      )
+    testStream(result, OutputMode.Update())(
+      AddData(inputData, InitInputRow("a", "add", -1.0)),
+      ExpectFailure[StateStoreMultipleColumnFamiliesNotSupportedException] {
+        (t: Throwable) => {
+          assert(t.getMessage.contains("not supported"))
+        }
       }
     )
   }

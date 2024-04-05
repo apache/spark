@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.HOST
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -199,13 +199,13 @@ private[scheduler] class HealthTracker (
             logInfo(s"Decommissioning all executors on excluded host $node " +
               s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
             if (!a.decommissionExecutorsOnHost(node)) {
-              logError(s"Decommissioning executors on $node failed.")
+              logError(log"Decommissioning executors on ${MDC(HOST, node)} failed.")
             }
           } else {
             logInfo(s"Killing all executors on excluded host $node " +
               s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
             if (!a.killExecutorsOnHost(node)) {
-              logError(s"Killing executors on node $node failed.")
+              logError(log"Killing executors on node ${MDC(HOST, node)} failed.")
             }
           }
         case None =>

@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
 
-private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
+private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
@@ -92,20 +92,31 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    def getCatalystTypeForBitArray: Option[DataType] = {
+      md.putLong("binarylong", 1)
+      if (conf.legacyMySqlBitArrayMappingEnabled) {
+        Some(LongType)
+      } else {
+        Some(BinaryType)
+      }
+    }
     sqlType match {
       case Types.VARBINARY if "BIT".equalsIgnoreCase(typeName) && size != 1 =>
-        // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
-        // byte arrays instead of longs.
-        md.putLong("binarylong", 1)
-        Some(LongType)
-      case Types.BIT if "TINYINT".equalsIgnoreCase(typeName) =>
-        Some(BooleanType)
+        // MariaDB connector behaviour
+        getCatalystTypeForBitArray
+      case Types.BIT if size > 1 =>
+        // MySQL connector behaviour
+        getCatalystTypeForBitArray
       case Types.VARCHAR if "TINYTEXT".equalsIgnoreCase(typeName) =>
         // TINYTEXT is Types.VARCHAR(63) from mysql jdbc, but keep it AS-IS for historical reason
         Some(StringType)
-      case Types.VARCHAR if "JSON".equalsIgnoreCase(typeName) =>
-        // Some MySQL JDBC drivers converts JSON type into Types.VARCHAR with a precision of -1.
+      case Types.VARCHAR | Types.CHAR if "JSON".equalsIgnoreCase(typeName) =>
+        // scalastyle:off line.size.limit
+        // Some MySQL JDBC drivers convert JSON type into Types.VARCHAR(-1) or Types.CHAR(Int.Max).
+        // MySQL Connector/J 5.x as an example:
+        // https://github.com/mysql/mysql-connector-j/blob/release/5.1/src/com/mysql/jdbc/MysqlDefs.java#L295
         // Explicitly converts it into StringType here.
+        // scalastyle:on line.size.limit
         Some(StringType)
       case Types.TINYINT =>
         if (md.build().getBoolean("isSigned")) {
@@ -113,6 +124,18 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         } else {
           Some(ShortType)
         }
+      case Types.SMALLINT =>
+        if (md.build().getBoolean("isSigned")) {
+          Some(ShortType)
+        } else {
+          Some(IntegerType)
+        }
+      case Types.INTEGER if "MEDIUMINT UNSIGNED".equalsIgnoreCase(typeName) =>
+        // Signed values in [-8388608, 8388607] and unsigned values in [0, 16777215],
+        // both of them fit IntegerType
+        Some(IntegerType)
+      case Types.REAL | Types.FLOAT =>
+        if (md.build().getBoolean("isSigned")) Some(FloatType) else Some(DoubleType)
       case Types.TIMESTAMP if "DATETIME".equalsIgnoreCase(typeName) =>
         // scalastyle:off line.size.limit
         // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
@@ -200,6 +223,12 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
     case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
+    case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    // scalastyle:off line.size.limit
+    // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
+    // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
+    // scalastyle:on line.size.limit
+    case TimestampNTZType => Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
