@@ -1108,21 +1108,21 @@ case class Hex(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, BinaryType, StringType))
+    Seq(TypeCollection(LongType, BinaryType, StringTypeAnyCollation))
 
     override def dataType: DataType = SQLConf.get.defaultStringType
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])
     case BinaryType => Hex.hex(num.asInstanceOf[Array[Byte]])
-    case StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
+    case _: StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (c) => {
       val hex = Hex.getClass.getName.stripSuffix("$")
       s"${ev.value} = " + (child.dataType match {
-        case StringType => s"""$hex.hex($c.getBytes());"""
+        case _: StringType => s"""$hex.hex($c.getBytes());"""
         case _ => s"""$hex.hex($c);"""
       })
     })

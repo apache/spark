@@ -645,6 +645,14 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         },
         errorClass = "COLLATION_MISMATCH.IMPLICIT"
       )
+
+      // check if substring passes through implicit collation
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT substr('a' COLLATE UNICODE, 0, 1) == substr('b' COLLATE UNICODE_CI, 0, 1)")
+        },
+        errorClass = "COLLATION_MISMATCH.IMPLICIT"
+      )
     }
   }
 

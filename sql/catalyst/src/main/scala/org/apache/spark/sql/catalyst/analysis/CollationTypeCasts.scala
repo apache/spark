@@ -18,11 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least}
+import org.apache.spark.sql.catalyst.expressions.{ArrayJoin, BinaryExpression, CaseWhen, Cast, Coalesce, Concat, ConcatWs, CreateArray, Expression, Greatest, If, In, InSubquery, Least, Substring}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType, StringTypePriority}
@@ -48,15 +47,11 @@ object CollationTypeCasts extends TypeCoercionRule {
         val newElseValue =
           caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType))
         CaseWhen(newBranches, newElseValue)
-    /*
-    case substrExpr: Substring
-      if substrExpr.str.dataType.isInstanceOf[StringType] &&
-        !substrExpr.str.dataType.asInstanceOf[StringType]
-          .priority.equals(StringTypePriority.ImplicitST) =>
-      val st = substrExpr.str.dataType.asInstanceOf[StringType]
-      st.priority = StringTypePriority.ImplicitST
-      Substring(Cast(substrExpr.str, st), substrExpr.pos, substrExpr.len)
-    */
+
+    case substrExpr: Substring =>
+      substrExpr.withNewChildren(
+        collateToSingleType(Seq(substrExpr.str)) :+ substrExpr.pos :+ substrExpr.len)
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: BinaryExpression | _: ConcatWs) =>
