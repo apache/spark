@@ -30,9 +30,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:15.1):
+ * To run this test suite for a specific version (e.g., postgres:16.2):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:15.1
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:16.2
  *     ./build/sbt -Pdocker-integration-tests
  *     "testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
  * }}}
@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:15.1-alpine")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:16.2-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
