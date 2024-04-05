@@ -21,12 +21,14 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
@@ -258,6 +260,7 @@ class QueryExecution(
       QueryPlan.append(executedPlan,
         append, verbose = false, addSuffix = false, maxFields = maxFields)
     }
+    extendedExplainInfo(append, executedPlan)
     append("\n")
   }
 
@@ -317,6 +320,7 @@ class QueryExecution(
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
       append("\n== Physical Plan ==\n")
       QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
+      extendedExplainInfo(append, executedPlan)
     } catch {
       case e: AnalysisException => append(e.toString)
     }
@@ -367,6 +371,23 @@ class QueryExecution(
    */
   private def withRedaction(message: String): String = {
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, message)
+  }
+
+  def extendedExplainInfo(append: String => Unit, plan: SparkPlan): Unit = {
+    val generators = sparkSession.sessionState.conf.getConf(SQLConf.EXTENDED_EXPLAIN_PROVIDERS)
+      .getOrElse(Seq.empty)
+    val extensions = Utils.loadExtensions(classOf[ExtendedExplainGenerator],
+      generators,
+      sparkSession.sparkContext.conf)
+    if (extensions.nonEmpty) {
+      extensions.foreach(extension =>
+        try {
+          append(s"\n== Extended Information (${extension.title}) ==\n")
+          append(extension.generateExtendedInfo(plan))
+        } catch {
+          case NonFatal(e) => logWarning(s"Cannot use $extension to get extended information.", e)
+        })
+    }
   }
 
   /** A special namespace for commands that can be used to debug query execution. */

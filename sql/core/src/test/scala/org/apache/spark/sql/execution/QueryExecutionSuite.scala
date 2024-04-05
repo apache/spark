@@ -16,17 +16,21 @@
  */
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable
 import scala.io.Source
 
-import org.apache.spark.sql.{AnalysisException, Dataset, FastOperator}
+import org.apache.spark.sql.{AnalysisException, Dataset, ExtendedExplainGenerator, FastOperator}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, QueryPlanningTrackerCallback}
 import org.apache.spark.sql.catalyst.analysis.CurrentNamespace
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LogicalPlan, OneRowRelation, Project, ShowTables, SubqueryAlias}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.datasources.v2.ShowTablesExec
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -336,6 +340,28 @@ class QueryExecutionSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-47289: extended explain info") {
+    val concat = new PlanStringConcat()
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.EXTENDED_EXPLAIN_PROVIDERS.key -> "org.apache.spark.sql.execution.ExtendedInfo") {
+      val left = Seq((1, 10L), (2, 100L), (3, 1000L)).toDF("l1", "l2")
+      val right = Seq((1, 2), (2, 3), (3, 5)).toDF("r1", "r2")
+      val data = left.join(right, $"l1" === $"r1")
+      val df = data.selectExpr("l2 + r2")
+      // execute the plan so that the final adaptive plan is available
+      df.collect()
+      val qe = df.queryExecution
+      qe.extendedExplainInfo(concat.append, qe.executedPlan)
+      val info = concat.toString
+      val expected = "\n== Extended Information (Test) ==\n" +
+        "Scan Info: LocalTableScan\n" +
+        "Project Info: Project\n" +
+        "SMJ Info: SortMergeJoin"
+      assert(info == expected)
+    }
+  }
+
   case class MockCallbackEagerCommand(
       var trackerAnalyzed: QueryPlanningTracker = null,
       var trackerReadyForExecution: QueryPlanningTracker = null)
@@ -411,5 +437,47 @@ class QueryExecutionSuite extends SharedSparkSession {
       assert(trackerAnalyzed != null)
       assert(trackerReadyForExecution != null)
     }
+  }
+}
+
+class ExtendedInfo extends ExtendedExplainGenerator {
+
+  override def title: String = "Test"
+
+  override def generateExtendedInfo(plan: SparkPlan): String = {
+    val info = mutable.LinkedHashSet[String]() // don't allow duplicates
+    extensionInfo(plan, info)
+    info.mkString("\n")
+  }
+
+  def getActualPlan(plan: SparkPlan): SparkPlan = {
+    plan match {
+      case p : AdaptiveSparkPlanExec => p.executedPlan
+      case p : QueryStageExec => p.plan
+      case p : WholeStageCodegenExec => p.child
+      case p => p
+    }
+  }
+
+  def extensionInfo(p: SparkPlan, info: mutable.Set[String]): Unit = {
+    //    val info = mutable.Set[String]() // don't allow duplicates
+    val actualPlan = getActualPlan(p)
+    if (actualPlan.innerChildren.nonEmpty) {
+      actualPlan.innerChildren.foreach(c => {
+        extensionInfo(c.asInstanceOf[SparkPlan], info)
+      })
+    }
+    if (actualPlan.children.nonEmpty) {
+      actualPlan.children.foreach(c => {
+        extensionInfo(c, info)
+      })
+    }
+    actualPlan match {
+      case p : LocalTableScanExec => info += s"Scan Info: ${p.nodeName}"
+      case p : SortMergeJoinExec => info += s"SMJ Info: ${p.nodeName}"
+      case p : ProjectExec => info += s"Project Info: ${p.nodeName}"
+      case _ =>
+    }
+    ()
   }
 }
