@@ -1,2 +1,0 @@
---SET spark.sql.legacy.timeParserPolicy=EXCEPTION
---IMPORT datetime-formatting.sql

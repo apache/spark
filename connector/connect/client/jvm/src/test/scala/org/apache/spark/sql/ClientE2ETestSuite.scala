@@ -75,7 +75,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   for (enrichErrorEnabled <- Seq(false, true)) {
     test(s"cause exception - ${enrichErrorEnabled}") {
       withSQLConf("spark.sql.connect.enrichError.enabled" -> enrichErrorEnabled.toString,
-      "spark.sql.legacy.timeParserPolicy" -> "EXCEPTION") {
+        "spark.sql.legacy.timeParserPolicy" -> "EXCEPTION") {
         val ex = intercept[SparkUpgradeException] {
           spark
             .sql("""
