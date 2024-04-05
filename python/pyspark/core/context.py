@@ -175,7 +175,7 @@ class SparkContext:
         environment: Optional[Dict[str, Any]] = None,
         batchSize: int = 0,
         serializer: "Serializer" = CPickleSerializer(),
-        conf: Optional[SparkConf] = None,
+        conf: Optional["SparkConf"] = None,
         gateway: Optional[JavaGateway] = None,
         jsc: Optional[JavaObject] = None,
         profiler_cls: Type[BasicProfiler] = BasicProfiler,
@@ -229,7 +229,7 @@ class SparkContext:
         environment: Optional[Dict[str, Any]],
         batchSize: int,
         serializer: Serializer,
-        conf: Optional[SparkConf],
+        conf: Optional["SparkConf"],
         jsc: JavaObject,
         profiler_cls: Type[BasicProfiler] = BasicProfiler,
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
@@ -428,7 +428,7 @@ class SparkContext:
         cls,
         instance: Optional["SparkContext"] = None,
         gateway: Optional[JavaGateway] = None,
-        conf: Optional[SparkConf] = None,
+        conf: Optional["SparkConf"] = None,
     ) -> None:
         """
         Checks whether a SparkContext is initialized or not.
@@ -491,7 +491,7 @@ class SparkContext:
         self.stop()
 
     @classmethod
-    def getOrCreate(cls, conf: Optional[SparkConf] = None) -> "SparkContext":
+    def getOrCreate(cls, conf: Optional["SparkConf"] = None) -> "SparkContext":
         """
         Get or instantiate a :class:`SparkContext` and register it as a singleton object.
 
@@ -2560,7 +2560,7 @@ class SparkContext:
                 message_parameters={},
             )
 
-    def getConf(self) -> SparkConf:
+    def getConf(self) -> "SparkConf":
         """Return a copy of this SparkContext's configuration :class:`SparkConf`.
 
         .. versionadded:: 2.1.0
