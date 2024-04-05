@@ -172,7 +172,7 @@ private[sql] class AvroFileFormat extends FileFormat
   }
 }
 
-object AvroFileFormat {
+private[avro] object AvroFileFormat {
   val IgnoreFilesWithoutExtensionProperty = "avro.mapred.ignore.inputs.without.extension"
 
   /**
