@@ -21,8 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey
-import org.apache.spark.internal.LogKey.{COLUMN_DATA_TYPE, COLUMN_DEFAULT_VALUE, COLUMN_NAME}
+import org.apache.spark.internal.LogKey.{COLUMN_DATA_TYPE, COLUMN_DEFAULT_VALUE, COLUMN_NAME, ERROR}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis._
@@ -41,8 +40,6 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
-
-import scala.reflect.internal.Reporter.ERROR
 
 /**
  * This object contains fields to help process DEFAULT columns.
@@ -329,7 +326,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
               log"for column ${MDC(COLUMN_NAME, colName)} " +
               log"from ${MDC(COLUMN_DATA_TYPE, l.dataType)} " +
               log"to ${MDC(COLUMN_DATA_TYPE, targetType)} " +
-              log"due to ${MDC(LogKey.ERROR, e.getMessage)}", e)
+              log"due to ${MDC(ERROR, e.getMessage)}", e)
             None
         }
       case _ => None

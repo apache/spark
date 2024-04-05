@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.csv
 
 import com.univocity.parsers.common.AbstractParser
 import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
+
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.internal.LogKey.{COLUMN_NAME, CSV_HEADER_LENGTH, NUM_COLUMNS}
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.LogKey.{COLUMN_NAME, CSV_HEADER_LENGTH, NUM_COLUMNS}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
