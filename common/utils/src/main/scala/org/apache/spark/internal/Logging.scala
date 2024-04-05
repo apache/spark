@@ -43,33 +43,21 @@ case class MDC(key: LogKey, value: Any)
  * Wrapper class for log messages that include a logging context.
  * This is used as the return type of the string interpolator `LogStringContext`.
  */
-case class MessageWithContext(
-    message: String,
-    context: java.util.HashMap[String, String],
-    stripMarginFromMessage: Boolean = false) {
+case class MessageWithContext(message: String, context: java.util.HashMap[String, String]) {
   def +(mdc: MessageWithContext): MessageWithContext = {
     val resultMap = new java.util.HashMap(context)
     resultMap.putAll(mdc.context)
-    MessageWithContext(
-      message + mdc.message,
-      resultMap,
-      mdc.stripMarginFromMessage || stripMarginFromMessage)
+    MessageWithContext(message + mdc.message, resultMap)
   }
 
-  def stripMargin: MessageWithContext = copy(stripMarginFromMessage = true)
+  def stripMargin: MessageWithContext = copy(message = message.stripMargin)
 }
 
 /**
  * Companion class for lazy evaluation of the MessageWithContext instance.
  */
 class LogEntry(messageWithContext: => MessageWithContext) {
-  def message: String = {
-    if (messageWithContext.stripMarginFromMessage) {
-      messageWithContext.message.stripMargin
-    } else {
-      messageWithContext.message
-    }
-  }
+  def message: String = messageWithContext.message
 
   def context: java.util.HashMap[String, String] = messageWithContext.context
 }
@@ -165,24 +153,8 @@ trait Logging {
     if (log.isDebugEnabled) log.debug(msg)
   }
 
-  protected def logDebug(entry: LogEntry): Unit = {
-    if (log.isDebugEnabled) {
-      withLogContext(entry.context) {
-        log.debug(entry.message)
-      }
-    }
-  }
-
   protected def logTrace(msg: => String): Unit = {
     if (log.isTraceEnabled) log.trace(msg)
-  }
-
-  protected def logTrace(entry: LogEntry): Unit = {
-    if (log.isTraceEnabled) {
-      withLogContext(entry.context) {
-        log.trace(entry.message)
-      }
-    }
   }
 
   protected def logWarning(msg: => String): Unit = {

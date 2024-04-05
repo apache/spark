@@ -104,12 +104,12 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
 
   private def logBasedOnLevel(f: => MessageWithContext): Unit = {
     logLevel match {
-      case "TRACE" => logTrace(f)
-      case "DEBUG" => logDebug(f)
+      case "TRACE" => logTrace(f.message)
+      case "DEBUG" => logDebug(f.message)
       case "INFO" => logInfo(f)
       case "WARN" => logWarning(f)
       case "ERROR" => logError(f)
-      case _ => logTrace(f)
+      case _ => logTrace(f.message)
     }
   }
 }
