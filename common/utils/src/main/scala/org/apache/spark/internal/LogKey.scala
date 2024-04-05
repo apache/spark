@@ -29,6 +29,7 @@ object LogKey extends Enumeration {
   val BLOCK_MANAGER_ID = Value
   val BROADCAST_ID = Value
   val BUCKET = Value
+  val BYTECODE_SIZE = Value
   val CATEGORICAL_FEATURES = Value
   val CLASS_LOADER = Value
   val CLASS_NAME = Value
@@ -50,6 +51,7 @@ object LogKey extends Enumeration {
   val FAILURES = Value
   val HOST = Value
   val JOB_ID = Value
+  val JOIN_CONDITION = Value
   val LEARNING_RATE = Value
   val LINE = Value
   val LINE_NUM = Value
@@ -72,6 +74,7 @@ object LogKey extends Enumeration {
   val PATHS = Value
   val POD_ID = Value
   val PORT = Value
+  val QUERY_PLAN = Value
   val RANGE = Value
   val RDD_ID = Value
   val REASON = Value
@@ -79,6 +82,9 @@ object LogKey extends Enumeration {
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
   val RPC_ADDRESS = Value
+  val RULE_BATCH_NAME = Value
+  val RULE_NAME = Value
+  val RULE_NUMBER_OF_RUNS = Value
   val SHUFFLE_BLOCK_INFO = Value
   val SHUFFLE_ID = Value
   val SHUFFLE_MERGE_ID = Value
@@ -96,9 +102,12 @@ object LogKey extends Enumeration {
   val THREAD_NAME = Value
   val TID = Value
   val TIMEOUT = Value
+  val TIME_UNITS = Value
   val URI = Value
   val USER_NAME = Value
+  val WATERMARK_CONSTRAINT = Value
   val WORKER_URL = Value
+  val XSD_PATH = Value
 
   type LogKey = Value
 }
