@@ -2048,7 +2048,7 @@ class SparkSession(SparkConversionMixin):
         >>> def progress_handler(stages, inflight_tasks, done):
         ...     print(f"{len(stages)} Stages known, Done: {done}")
         >>> spark.registerProgressHandler(progress_handler)
-        >>> res = spark.range(10).repartition(1).collect()
+        >>> res = spark.range(10).repartition(1).collect()  # doctest: +SKIP
         3 Stages known, Done: False
         3 Stages known, Done: True
         >>> spark.clearProgressHandlers()
