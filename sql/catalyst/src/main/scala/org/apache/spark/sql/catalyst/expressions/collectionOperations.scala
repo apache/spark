@@ -2149,7 +2149,7 @@ case class ArrayJoin(
     }
   }
 
-  override def dataType: DataType = array.asInstanceOf[ArrayType].elementType
+  override def dataType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
 
   override def prettyName: String = "array_join"
 }

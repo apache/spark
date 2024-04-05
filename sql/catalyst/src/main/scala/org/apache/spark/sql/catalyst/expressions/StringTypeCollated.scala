@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, NullType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, StringType}
 
 /**
  * StringTypeCollated is an abstract class for StringType with collation support.
@@ -60,7 +60,7 @@ case object StringTypeAnyCollation extends StringTypeCollated {
 case class AbstractArrayType(elementType: StringTypeCollated) extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType =
-    ArrayType(StringType, containsNull = true)
+    ArrayType(elementType.defaultConcreteType, containsNull = true)
 
   override private[sql] def acceptsType(other: DataType): Boolean = {
     other.isInstanceOf[ArrayType] &&
