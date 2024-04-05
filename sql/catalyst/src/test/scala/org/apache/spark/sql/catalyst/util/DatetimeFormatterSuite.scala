@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import java.time.DateTimeException
 
 import org.scalatest.matchers.must.Matchers
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
 
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{date, UTC}
 import org.apache.spark.sql.internal.SQLConf
