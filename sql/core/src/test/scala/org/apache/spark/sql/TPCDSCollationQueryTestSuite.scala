@@ -27,6 +27,33 @@ import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
+/**
+ * End-to-end tests to validate TPC-DS query results against collation-aware
+ * modified data and queries.
+ *
+ * For each collation, table schemas are replicated into two databases in such way that in first
+ * DB all table columns are collated with specified collation, while the second DB collates table
+ * columns with case-insensitive version of the collation. Tables from first DB are then populated
+ * with lowercase-converted data from tpc-ds kit and tables from second DB are populated with
+ * randomized-case data.
+ *
+ * When running arbitrary SQL query, we convert the query to lowercase for execution
+ * against first DB; second DB receives original query. Results should compare equal
+ * ignoring case. We use this method to validate collations are working with arbitrary standard
+ * SQL constructs.
+ *
+ * To run this test suite:
+ * {{{
+ *   SPARK_TPCDS_DATA=<path of TPCDS SF=1 data>
+ *     build/sbt "sql/testOnly *TPCDSCollationQueryTestSuite"
+ * }}}
+ *
+ * To run a single test file upon change:
+ * {{{
+ *   SPARK_TPCDS_DATA=<path of TPCDS SF=1 data>
+ *     build/sbt "sql/testOnly *TPCDSCollationQueryTestSuite -- -z q79"
+ * }}}
+ */
 @ExtendedSQLTest
 class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelper {
 
