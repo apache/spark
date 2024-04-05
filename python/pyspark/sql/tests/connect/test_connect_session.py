@@ -495,6 +495,26 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = DefaultChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)
 
+    def test_channel_options(self):
+        # SPARK-47694
+        chan = DefaultChannelBuilder(
+            "sc://host", [("grpc.max_send_message_length", 1860000), ("test", "robert")]
+        )
+        options = chan._channel_options
+        self.assertEqual(
+            [k for k, _ in options].count("grpc.max_send_message_length"),
+            1,
+            "only one occurrence for defaults",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "grpc.max_send_message_length"),
+            1860000,
+            "overwrites defaults",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "test"), "robert", "new values are picked up"
+        )
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_session import *  # noqa: F401

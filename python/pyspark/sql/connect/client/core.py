@@ -115,11 +115,12 @@ class ChannelBuilder:
     PARAM_USER_ID = "user_id"
     PARAM_USER_AGENT = "user_agent"
     PARAM_SESSION_ID = "session_id"
-    MAX_MESSAGE_LENGTH = 128 * 1024 * 1024
+
+    GRPC_MAX_MESSAGE_LENGTH_DEFAULT = 128 * 1024 * 1024
 
     GRPC_DEFAULT_OPTIONS = [
-        ("grpc.max_send_message_length", MAX_MESSAGE_LENGTH),
-        ("grpc.max_receive_message_length", MAX_MESSAGE_LENGTH),
+        ("grpc.max_send_message_length", GRPC_MAX_MESSAGE_LENGTH_DEFAULT),
+        ("grpc.max_receive_message_length", GRPC_MAX_MESSAGE_LENGTH_DEFAULT),
     ]
 
     def __init__(
@@ -132,7 +133,8 @@ class ChannelBuilder:
         self._channel_options: List[Tuple[str, Any]] = ChannelBuilder.GRPC_DEFAULT_OPTIONS
 
         if channelOptions is not None:
-            self._channel_options = self._channel_options + channelOptions
+            for key, value in channelOptions:
+                self.setChannelOption(key, value)
 
     def get(self, key: str) -> Any:
         """
@@ -151,6 +153,14 @@ class ChannelBuilder:
 
     def set(self, key: str, value: Any) -> None:
         self._params[key] = value
+
+    def setChannelOption(self, key: str, value: Any) -> None:
+        # overwrite option if it exists already else append it
+        for i, option in enumerate(self._channel_options):
+            if option[0] == key:
+                self._channel_options[i] = (key, value)
+                return
+        self._channel_options.append((key, value))
 
     def add_interceptor(self, interceptor: grpc.UnaryStreamClientInterceptor) -> None:
         self._interceptors.append(interceptor)
