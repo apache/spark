@@ -67,5 +67,5 @@ case class AbstractArrayType(elementType: StringTypeCollated) extends AbstractDa
       elementType.acceptsType(other.asInstanceOf[ArrayType].elementType)
   }
 
-  override private[spark] def simpleString: String = "array"
+  override private[spark] def simpleString: String = s"array<${elementType.simpleString}>"
 }
