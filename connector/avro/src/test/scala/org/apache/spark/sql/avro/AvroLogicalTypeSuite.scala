@@ -82,7 +82,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Logical type: dae") {
+  test("custom logical type registration test") {
     val avroTypeJson =
       s"""
          |{
@@ -90,7 +90,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
          |  "name": "Entry",
          |  "fields": [
          |    {
-         |      "name": "rate",
+         |      "name": "test_col",
          |      "type": [
          |        "null",
          |        {

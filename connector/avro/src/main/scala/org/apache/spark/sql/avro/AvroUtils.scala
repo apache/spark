@@ -53,7 +53,6 @@ private[sql] object AvroUtils extends Logging {
     val conf = spark.sessionState.newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
 
-
     if (parsedOptions.parameters.contains(IGNORE_EXTENSION)) {
       logWarning(s"Option $IGNORE_EXTENSION is deprecated. Please use the " +
         "general data source option pathGlobFilter for filtering file names.")
