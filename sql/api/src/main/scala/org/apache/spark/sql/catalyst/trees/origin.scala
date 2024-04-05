@@ -90,6 +90,11 @@ object CurrentOrigin {
 /**
  * Provides detailed call site information on PySpark.
  * This information is generated in PySpark and stored in the form of a Map.
+ * The 'fragment' represents the method name or the action within the PySpark code
+ * that initiated the call, serving as a brief descriptor of the operation being performed.
+ * The 'callSite' provides a more detailed context, including the file name and line number in the
+ * PySpark user code where the operation originated, offering precise location information for
+ * debugging purposes.
  */
 object PySparkCurrentOrigin {
   private val pysparkCallSite = new ThreadLocal[mutable.Map[String, String]]() {
