@@ -47,6 +47,7 @@ from py4j.java_collections import JavaMap
 from py4j.protocol import Py4JError
 
 from pyspark import accumulators
+from pyspark.conf import SparkConf
 from pyspark.accumulators import Accumulator
 from pyspark.core.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.core.files import SparkFiles
@@ -73,7 +74,6 @@ from pyspark.errors import PySparkRuntimeError
 from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
 if TYPE_CHECKING:
-    from pyspark.conf import SparkConf
     from pyspark.accumulators import AccumulatorParam
 
 __all__ = ["SparkContext"]
@@ -145,7 +145,7 @@ class SparkContext:
 
     Examples
     --------
-    >>> from pyspark.context import SparkContext
+    >>> from pyspark.core.context import SparkContext
     >>> sc = SparkContext('local', 'test')
     >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
@@ -175,7 +175,7 @@ class SparkContext:
         environment: Optional[Dict[str, Any]] = None,
         batchSize: int = 0,
         serializer: "Serializer" = CPickleSerializer(),
-        conf: Optional["SparkConf"] = None,
+        conf: Optional[SparkConf] = None,
         gateway: Optional[JavaGateway] = None,
         jsc: Optional[JavaObject] = None,
         profiler_cls: Type[BasicProfiler] = BasicProfiler,
@@ -229,14 +229,12 @@ class SparkContext:
         environment: Optional[Dict[str, Any]],
         batchSize: int,
         serializer: Serializer,
-        conf: Optional["SparkConf"],
+        conf: Optional[SparkConf],
         jsc: JavaObject,
         profiler_cls: Type[BasicProfiler] = BasicProfiler,
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
         memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ) -> None:
-        from pyspark.conf import SparkConf
-
         self.environment = environment or {}
         # java gateway must have been launched at this point.
         if conf is not None and conf._jconf is not None:
@@ -428,7 +426,7 @@ class SparkContext:
         cls,
         instance: Optional["SparkContext"] = None,
         gateway: Optional[JavaGateway] = None,
-        conf: Optional["SparkConf"] = None,
+        conf: Optional[SparkConf] = None,
     ) -> None:
         """
         Checks whether a SparkContext is initialized or not.
@@ -491,7 +489,7 @@ class SparkContext:
         self.stop()
 
     @classmethod
-    def getOrCreate(cls, conf: Optional["SparkConf"] = None) -> "SparkContext":
+    def getOrCreate(cls, conf: Optional[SparkConf] = None) -> "SparkContext":
         """
         Get or instantiate a :class:`SparkContext` and register it as a singleton object.
 
@@ -513,8 +511,6 @@ class SparkContext:
         >>> SparkContext.getOrCreate()
         <SparkContext ...>
         """
-        from pyspark.conf import SparkConf
-
         with SparkContext._lock:
             if SparkContext._active_spark_context is None:
                 SparkContext(conf=conf or SparkConf())
@@ -2560,13 +2556,11 @@ class SparkContext:
                 message_parameters={},
             )
 
-    def getConf(self) -> "SparkConf":
+    def getConf(self) -> SparkConf:
         """Return a copy of this SparkContext's configuration :class:`SparkConf`.
 
         .. versionadded:: 2.1.0
         """
-        from pyspark.conf import SparkConf
-
         conf = SparkConf()
         conf.setAll(self._conf.getAll())
         return conf
@@ -2604,7 +2598,6 @@ class SparkContext:
 
 def _test() -> None:
     import doctest
-    from pyspark.conf import SparkConf
 
     globs = globals().copy()
     conf = SparkConf().set("spark.ui.enabled", "True")

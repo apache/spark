@@ -126,15 +126,15 @@ class SparkConf:
         if _jconf:
             self._jconf = _jconf
         else:
-            _jvm = None
+            jvm = None
             if not is_remote_only():
                 from pyspark.core.context import SparkContext
 
-                _jvm = _jvm or SparkContext._jvm
+                jvm = _jvm or SparkContext._jvm
 
-            if _jvm is not None:
+            if jvm is not None:
                 # JVM is created, so create self._jconf directly through JVM
-                self._jconf = _jvm.SparkConf(loadDefaults)
+                self._jconf = jvm.SparkConf(loadDefaults)
                 self._conf = None
             else:
                 # JVM is not created, so store data in self._conf first
