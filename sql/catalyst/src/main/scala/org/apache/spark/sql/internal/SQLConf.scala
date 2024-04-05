@@ -3396,6 +3396,7 @@ object SQLConf {
       .doc("When true, always inline common expressions instead of using the WITH expression. " +
         "This may lead to duplicated expressions and the config should only be enabled if you " +
         "hit bugs caused by the WITH expression.")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
