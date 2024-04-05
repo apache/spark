@@ -157,31 +157,37 @@ class SubstituteExecuteImmediate(val catalogManager: CatalogManager)
   private def parseStatement(
       queryString: String,
       targetVariables: Seq[Expression]): LogicalPlan = {
-    // If targetVariables is defined, statement needs to be a query.
-    // Otherwise, it can be anything.
-    val plan = if (targetVariables.nonEmpty) {
-      try {
-        catalogManager.v1SessionCatalog.parser.parseQuery(queryString)
-      } catch {
-        case e: ParseException =>
-          // Since we do not have a way of telling that parseQuery failed because of
-          // actual parsing error or because statement was passed where query was expected,
-          // we need to make sure that parsePlan wouldn't throw
-          catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
+    try {
+      // If targetVariables is defined, statement needs to be a query.
+      // Otherwise, it can be anything.
+      val plan = if (targetVariables.nonEmpty) {
+        try {
+          catalogManager.v1SessionCatalog.parser.parseQuery(queryString)
+        } catch {
+          case e: ParseException =>
+            // Since we do not have a way of telling that parseQuery failed because of
+            // actual parsing error or because statement was passed where query was expected,
+            // we need to make sure that parsePlan wouldn't throw
+            catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
 
-          // Plan was successfully parsed, but query wasn't - throw.
-          throw QueryCompilationErrors.invalidStatementForExecuteInto(queryString)
+            // Plan was successfully parsed, but query wasn't - throw.
+            throw QueryCompilationErrors.invalidStatementForExecuteInto(queryString)
+        }
+      } else {
+        catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
       }
-    } else {
-      catalogManager.v1SessionCatalog.parser.parsePlan(queryString)
-    }
 
-    // do not allow nested execute immediate
-    if (plan.containsPattern(EXECUTE_IMMEDIATE)) {
-      throw QueryCompilationErrors.nestedExecuteImmediate(queryString)
-    }
+      // do not allow nested execute immediate
+      if (plan.containsPattern(EXECUTE_IMMEDIATE)) {
+        throw QueryCompilationErrors.nestedExecuteImmediate(queryString)
+      }
 
-    plan
+      plan
+    } catch {
+      case so: java.lang.StackOverflowError =>
+        throw QueryCompilationErrors.executeImmediateStackOverflow()
+      case e: Throwable => throw e
+    }
   }
 
   private def getVariableReference(expr: Expression, nameParts: Seq[String]): VariableReference = {

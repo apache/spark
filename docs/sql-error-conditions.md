@@ -652,6 +652,12 @@ EXCEPT column `<columnName>` was resolved and expected to be StructType, but fou
 
 Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
 
+### EXECUTE_IMMEDIATE_FAILED_TO_PARSE_STACK_OVERFLOW
+
+SQLSTATE: 07501
+
+EXECUTE IMMEDIATE hit stack overflow while parsing the SQL query. 
+
 ### EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES
 
 [SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
