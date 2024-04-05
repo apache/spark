@@ -27,7 +27,8 @@ import org.json4s.{DefaultFormats, Extraction, Formats}
 import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.COMPONENT
 import org.apache.spark.resource.{ResourceAllocation, ResourceID, ResourceInformation, ResourceRequirement}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -103,9 +104,10 @@ private[spark] object StandaloneResourceUtils extends Logging {
       writeResourceAllocationJson(allocations, tmpFile)
     } catch {
       case NonFatal(e) =>
-        val errMsg = s"Exception threw while preparing resource file for $compShortName"
+        val errMsg =
+          log"Exception threw while preparing resource file for ${MDC(COMPONENT, compShortName)}"
         logError(errMsg, e)
-        throw new SparkException(errMsg, e)
+        throw new SparkException(errMsg.message, e)
     }
     val resourcesFile = File.createTempFile(s"resource-$compShortName-", ".json", dir)
     tmpFile.renameTo(resourcesFile)
