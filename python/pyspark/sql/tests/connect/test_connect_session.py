@@ -109,6 +109,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
             {
                 "spark.sql.connect.enrichError.enabled": True,
                 "spark.sql.pyspark.jvmStacktrace.enabled": False,
+                "spark.sql.legacy.timeParserPolicy": "EXCEPTION",
             }
         ):
             with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": False}):
