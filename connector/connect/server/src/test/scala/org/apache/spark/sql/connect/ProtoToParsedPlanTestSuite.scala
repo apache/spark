@@ -26,7 +26,7 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.LogKey.FILE_NAME
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
@@ -176,7 +176,7 @@ class ProtoToParsedPlanTestSuite
     val relativePath = inputFilePath.relativize(file)
     val fileName = relativePath.getFileName.toString
     if (!fileName.endsWith(".proto.bin")) {
-      logError(log"Skipping ${MDC(FILE_NAME, fileName)}")
+      logError(log"Skipping ${MDC(PATH, fileName)}")
       return
     }
     val name = fileName.stripSuffix(".proto.bin")
