@@ -77,7 +77,7 @@ try:
     # python/packaging/classic/setup.py
     _minimum_pandas_version = "1.4.4"
     _minimum_numpy_version = "1.21"
-    _minimum_pyarrow_version = "4.0.0"
+    _minimum_pyarrow_version = "15.0.2"
     _minimum_grpc_version = "1.59.3"
     _minimum_googleapis_common_protos_version = "1.56.4"
 

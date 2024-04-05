@@ -157,7 +157,7 @@ Package                    Supported version Note
 ========================== ========================= ======================================================================================
 `py4j`                     >=0.10.9.7                Required
 `pandas`                   >=1.4.4                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
-`pyarrow`                  >=4.0.0                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
+`pyarrow`                  >=15.0.2                  Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`                    >=1.21                    Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
 `grpcio`                   >=1.62.0                  Required for Spark Connect
 `grpcio-status`            >=1.62.0                  Required for Spark Connect
