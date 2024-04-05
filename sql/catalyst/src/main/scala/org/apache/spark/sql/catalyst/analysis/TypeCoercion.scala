@@ -1017,7 +1017,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (ArrayType(fromType, fn), ArrayType(toType: DataType, true)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
 
-      case (ArrayType(fromType, fn), ArrayTypeCollated(toType: StringTypeCollated)) =>
+      case (ArrayType(fromType, fn), AbstractArrayType(toType: StringTypeCollated)) =>
         implicitCast(fromType, toType).map(ArrayType(_, true)).orNull
 
       case (ArrayType(fromType, true), ArrayType(toType: DataType, false)) => null

@@ -2002,9 +2002,9 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(ArrayTypeCollated(StringTypeAnyCollation), StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(AbstractArrayType(StringTypeAnyCollation), StringTypeAnyCollation, StringTypeAnyCollation)
   } else {
-    Seq(ArrayTypeCollated(StringTypeAnyCollation), StringTypeAnyCollation)
+    Seq(AbstractArrayType(StringTypeAnyCollation), StringTypeAnyCollation)
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {

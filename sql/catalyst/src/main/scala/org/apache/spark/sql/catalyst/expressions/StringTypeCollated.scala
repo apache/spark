@@ -57,7 +57,7 @@ case object StringTypeAnyCollation extends StringTypeCollated {
  * Use ArrayType(StringTypeCollated) for expressions supporting different type of
  * collations in ArrayTypes
  */
-case class ArrayTypeCollated(elementType: StringTypeCollated) extends AbstractDataType {
+case class AbstractArrayType(elementType: StringTypeCollated) extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType =
     ArrayType(StringType, containsNull = true)
