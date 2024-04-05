@@ -93,15 +93,31 @@ object TimeWindowing extends Rule[LogicalPlan] {
           }
         }
 
+        // scalastyle:off
+        println("wei-== resolveTimeWindows, window: " + window)
+        println("wei-== resolveTimeWindows, window.timeColumn: " + window.timeColumn)
+        println("wei-== resolveTimeWindows, window.timeColumn.dataType: " + window.timeColumn.dataType)
+        println("wei-== resolveTimeWindows, window.timeColumn class: " + window.timeColumn.getClass)
+//        println("wei-== resolveTimeWindows, window.timeColumn child: " + window.timeColumn.child)
+//        println("wei-== resolveTimeWindows, window.timeColumn output metadata: " + window.timeColumn.output.map(_.metadata))
+
+
         val metadata = window.timeColumn match {
           case a: Attribute => a.metadata
+//          case e: Cast => println("wei== Cast child: " + e.child + " child type: " + e.child.getClass); Metadata.empty
           case _ => Metadata.empty
         }
 
-        val newMetadata = new MetadataBuilder()
+
+        val newMetadataBuilder = new MetadataBuilder()
           .withMetadata(metadata)
           .putBoolean(TimeWindow.marker, true)
-          .build()
+
+        // for each child output metadata, also add it here
+        child.output.map(_.metadata).foreach { m =>
+          newMetadataBuilder.withMetadata(m)
+        }
+        val newMetadata = newMetadataBuilder.build()
 
         def getWindow(i: Int, dataType: DataType): Expression = {
           val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
@@ -121,6 +137,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
               Nil)
         }
 
+        println("wei== resolveTimeWindows, newMetadata: " + newMetadata)
+
         val windowAttr = AttributeReference(
           WINDOW_COL_NAME, window.dataType, metadata = newMetadata)()
 
@@ -133,8 +151,22 @@ object TimeWindowing extends Rule[LogicalPlan] {
           }
 
           // For backwards compatibility we add a filter to filter out nulls
-          val filterExpr = IsNotNull(window.timeColumn)
-
+          val filterExpr = window.timeColumn match {
+            case c: Cast =>
+              println("wei=== window.timeColumn is Cast")
+              IsNotNull(
+                Alias(c,c.child.prettyName)(
+                  exprId = child.output(0).exprId,
+                  explicitMetadata = Some(newMetadata))
+              )
+            case _ => IsNotNull(window.timeColumn)
+          }
+//            IsNotNull(window.timeColumn)
+          println("wei=== windowStruct metadata: " + windowStruct.metadata)
+          println("wei=== windowStruct attr metadat: " + windowStruct.toAttribute.metadata)
+          println("wei=== child output metadata: " + child.output.map(_.metadata))
+          println("wei=== Filter(filterExpr, child)) output metadata: " + Filter(filterExpr, child).output.map(_.metadata))
+          println("wei=== project output metadata: " + Project(windowStruct +: child.output, Filter(filterExpr, child)).output.map(_.metadata))
           replacedPlan.withNewChildren(
             Project(windowStruct +: child.output,
               Filter(filterExpr, child)) :: Nil)
@@ -161,6 +193,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val substitutedPlan = Filter(filterExpr,
             Expand(projections, windowAttr +: child.output, child))
 
+          println("wei=== substitutedPlan output metadata: " + substitutedPlan.output.map(_.metadata))
+
           val renamedPlan = p transformExpressions {
             case t: TimeWindow => windowAttr
           }
@@ -174,7 +208,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }
   }
 }
-
+// scalastyle:on
 /** Maps a time column to a session window. */
 object SessionWindowing extends Rule[LogicalPlan] {
   import org.apache.spark.sql.catalyst.dsl.expressions._

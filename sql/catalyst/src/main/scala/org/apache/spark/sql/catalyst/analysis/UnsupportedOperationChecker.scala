@@ -202,10 +202,33 @@ object UnsupportedOperationChecker extends Logging {
       case InternalOutputModes.Append if aggregates.nonEmpty =>
         val aggregate = aggregates.head
 
+        // scalastyle:off
+        println("wei=== aggregate is: " + aggregate)
+
+        val subqueryAlias = plan.collect {
+          case s: SubqueryAlias => s
+        }.head
+
+        println("wei=== subqueryAlias is: " + subqueryAlias)
+        println("wei=== subqueryAlias output is: " + subqueryAlias.output)
+        println("wei=== subqueryAlias output metadata is: " + subqueryAlias.output.map(_.metadata))
+
+        println("wei=== subqueryAlias child output is: " + subqueryAlias.child.output)
+        println("wei=== subqueryAlias child output metadata is: " + subqueryAlias.child.output.map(_.metadata))
+
+        val filter = plan.collect {
+          case f: Filter => f
+        }.head
+
+        println("wei=== filter is: " + filter)
+        println("wei=== filter output is: " + filter.output)
+        println("wei=== filter output metadata is: " + filter.output.map(_.metadata))
+
         // Find any attributes that are associated with an eventTime watermark.
         val watermarkAttributes = aggregate.groupingExpressions.collect {
           case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => a
         }
+        // scala style: on
 
         // We can append rows to the sink once the group is under the watermark. Without this
         // watermark a group is never "finished" so we would never output anything.

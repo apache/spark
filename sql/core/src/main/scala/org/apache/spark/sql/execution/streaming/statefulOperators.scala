@@ -284,6 +284,7 @@ trait WatermarkSupport extends SparkPlan {
 
   /** Generate an expression that matches data older than the watermark */
   private def watermarkExpression(watermark: Option[Long]): Option[Expression] = {
+    println("wei---- watermarkExpression, watermark: " + watermark)
     WatermarkSupport.watermarkExpression(
       WatermarkSupport.findEventTimeColumn(child.output,
         allowMultipleEventTimeColumns = !allowMultipleStatefulOperators), watermark)
@@ -385,6 +386,8 @@ object WatermarkSupport {
   def findEventTimeColumn(
       attrs: Seq[Attribute],
       allowMultipleEventTimeColumns: Boolean): Option[Attribute] = {
+    println("wei=== findEventTimeColumn, attrs: " + attrs)
+    println("wei=== findEventTimeColumn, attrs metadata: " + attrs.map(_.metadata))
     val eventTimeCols = attrs.filter(_.metadata.contains(EventTimeWatermark.delayKey))
     if (!allowMultipleEventTimeColumns) {
       // There is a case projection leads the same column (same exprId) to appear more than one
