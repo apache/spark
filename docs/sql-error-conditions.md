@@ -2173,7 +2173,7 @@ Star (*) is not allowed in a select list when GROUP BY an ordinal position is us
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-State store operation=`<operationType>` on state=`<stateName>` does not support TTL in NoTTL() mode.
+Cannot use TTL for state=`<stateName>` in NoTTL() mode.
 
 ### STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE
 
@@ -2193,18 +2193,11 @@ Failed to perform stateful processor operation=`<operationType>` with invalid ti
 
 Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=`<groupingKey>`.
 
-### STATEFUL_PROCESSOR_CANNOT_USE_TTL_DURATION_IN_EVENT_TIME_TTL_MODE
+### STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-TTL duration is not allowed for event time ttl expiration on State store operation=`<operationType>` on state=`<stateName>`.
-Use absolute expiration time instead.
-
-### STATEFUL_PROCESSOR_TTL_VALUE_CANNOT_BE_NEGATIVE
-
-[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
-
-TTL value cannot be negative for State store operation=`<operationType>` on state=`<stateName>`.
+TTL duration must be greater than zero for State store operation=`<operationType>` on state=`<stateName>`.
 
 ### STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS
 

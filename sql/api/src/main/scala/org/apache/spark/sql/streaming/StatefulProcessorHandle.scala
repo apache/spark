@@ -41,6 +41,12 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    */
   def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T]
 
+  def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      tTLConfig: TTLConfig): ValueState[T]
+
+
   /**
    * Creates new or returns existing list state associated with stateName.
    * The ListState persists values of type T.

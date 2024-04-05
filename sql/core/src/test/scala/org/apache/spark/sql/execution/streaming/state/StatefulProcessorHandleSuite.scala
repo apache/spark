@@ -44,15 +44,6 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  private def getTtlMode(ttlMode: String): TTLMode = {
-    ttlMode match {
-      case "NoTTL" => TTLMode.NoTTL()
-      case "ProcessingTime" => TTLMode.ProcessingTimeTTL()
-      case "EventTime" => TTLMode.EventTimeTTL()
-      case _ => throw new IllegalArgumentException(s"Invalid ttlMode=$ttlMode")
-    }
-  }
-
   Seq("NoTimeouts", "ProcessingTime", "EventTime").foreach { timeoutMode =>
     test(s"value state creation with timeoutMode=$timeoutMode should succeed") {
       tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
@@ -227,19 +218,17 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
     }
   }
 
-  Seq("ProcessingTime", "EventTime").foreach { ttlMode =>
-    test(s"ttl States are populated for ttlMode=$ttlMode") {
-      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-        val store = provider.getStore(0)
-        val handle = new StatefulProcessorHandleImpl(store,
-          UUID.randomUUID(), keyExprEncoder, getTtlMode(ttlMode), TimeoutMode.NoTimeouts(),
-          batchTimestampMs = Some(10), eventTimeWatermarkMs = Some(100))
+  test(s"ttl States are populated for ttlMode=ProcessingTime") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val handle = new StatefulProcessorHandleImpl(store,
+        UUID.randomUUID(), keyExprEncoder, TTLMode.ProcessingTimeTTL(), TimeoutMode.NoTimeouts(),
+        batchTimestampMs = Some(10))
 
-        val valueState = handle.getValueState("testState", Encoders.STRING)
+      val valueState = handle.getValueState("testState", Encoders.STRING)
 
-        assert(handle.ttlStates.size() === 1)
-        assert(handle.ttlStates.get(0) === valueState)
-      }
+      assert(handle.ttlStates.size() === 1)
+      assert(handle.ttlStates.get(0) === valueState)
     }
   }
 

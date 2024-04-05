@@ -125,14 +125,9 @@ object StateStoreErrors {
     new StatefulProcessorCannotReInitializeState(groupingKey)
   }
 
-  def cannotProvideTTLDurationForNoTTLMode(operationType: String,
-      stateName: String): StatefulProcessorCannotAssignTTLInNoTTLMode = {
-    new StatefulProcessorCannotAssignTTLInNoTTLMode(operationType, stateName)
-  }
-
-  def cannotProvideTTLDurationForEventTimeTTLMode(operationType: String,
-      stateName: String): StatefulProcessorCannotUseTTLDurationInEventTimeTTLMode = {
-    new StatefulProcessorCannotUseTTLDurationInEventTimeTTLMode(operationType, stateName)
+  def cannotProvideTTLConfigForNoTTLMode(stateName: String):
+    StatefulProcessorCannotAssignTTLInNoTTLMode = {
+    new StatefulProcessorCannotAssignTTLInNoTTLMode(stateName)
   }
 
   def ttlCannotBeNegative(operationType: String,
@@ -215,23 +210,14 @@ class StateStoreNullTypeOrderingColsNotSupported(fieldName: String, index: Strin
     errorClass = "STATE_STORE_NULL_TYPE_ORDERING_COLS_NOT_SUPPORTED",
     messageParameters = Map("fieldName" -> fieldName, "index" -> index))
 
-class StatefulProcessorCannotAssignTTLInNoTTLMode(
-    operationType: String,
-    stateName: String)
+class StatefulProcessorCannotAssignTTLInNoTTLMode(stateName: String)
   extends SparkUnsupportedOperationException(
     errorClass = "STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE",
-    messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))
-
-class StatefulProcessorCannotUseTTLDurationInEventTimeTTLMode(
-    operationType: String,
-    stateName: String)
-  extends SparkUnsupportedOperationException(
-    errorClass = "STATEFUL_PROCESSOR_CANNOT_USE_TTL_DURATION_IN_EVENT_TIME_TTL_MODE",
-    messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))
+    messageParameters = Map("stateName" -> stateName))
 
 class StatefulProcessorTTLCannotBeNegative(
     operationType: String,
     stateName: String)
   extends SparkUnsupportedOperationException(
-    errorClass = "STATEFUL_PROCESSOR_TTL_VALUE_CANNOT_BE_NEGATIVE",
+    errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
     messageParameters = Map("operationType" -> operationType, "stateName" -> stateName))

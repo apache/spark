@@ -100,7 +100,6 @@ class StateTypesEncoder[GK, V](
 
   /**
    * Encode the specified value in Spark UnsafeRow with no ttl.
-   * The ttl expiration will be set to -1, specifying no TTL.
    */
   def encodeValue(value: V): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
@@ -112,7 +111,7 @@ class StateTypesEncoder[GK, V](
    * Encode the specified value in Spark UnsafeRow
    * with provided ttl expiration.
    */
-  def encodeValue(value: V, expirationMs: Long = -1): UnsafeRow = {
+  def encodeValue(value: V, expirationMs: Long): UnsafeRow = {
     val objRow: InternalRow = objToRowSerializer.apply(value)
     val bytes = objRow.asInstanceOf[UnsafeRow].getBytes()
     valueProjection(InternalRow(bytes, expirationMs))
@@ -131,6 +130,8 @@ class StateTypesEncoder[GK, V](
    * return None.
    */
   def decodeTtlExpirationMs(row: UnsafeRow): Option[Long] = {
+    // ensure ttl has been set
+    assert(hasTtl)
     val expirationMs = row.getLong(1)
     if (expirationMs == -1) {
       None

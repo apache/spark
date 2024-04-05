@@ -15,28 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming;
+package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Experimental;
-import org.apache.spark.sql.catalyst.plans.logical.*;
+import java.time.Duration
 
 /**
- * Represents the type of ttl modes possible for the Dataset operations
- * {@code transformWithState}.
+ * TTL Configuration for state variable.
+ *
+ * @param ttlDuration time to live duration for state
+ *                    stored in the state variable.
  */
-@Experimental
-@Evolving
-public class TTLMode {
-
-  /**
-   * Specifies that there is no TTL for the user state. User state would not
-   * be cleaned up by Spark automatically.
-   */
-  public static final TTLMode NoTTL() { return NoTTL$.MODULE$; }
-
-  /**
-   * Specifies that all ttl durations for user state are in processing time.
-   */
-  public static final TTLMode ProcessingTimeTTL() { return ProcessingTimeTTL$.MODULE$; }
-}
+case class TTLConfig(ttlDuration: Duration)

@@ -25,7 +25,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, TTLMode, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeoutMode, TTLConfig, TTLMode, ValueState}
 import org.apache.spark.util.Utils
 
 /**
@@ -81,8 +81,7 @@ class StatefulProcessorHandleImpl(
     ttlMode: TTLMode,
     timeoutMode: TimeoutMode,
     isStreaming: Boolean = true,
-    batchTimestampMs: Option[Long] = None,
-    eventTimeWatermarkMs: Option[Long] = None)
+    batchTimestampMs: Option[Long] = None)
   extends StatefulProcessorHandle with Logging {
   import StatefulProcessorHandleState._
 
@@ -113,15 +112,6 @@ class StatefulProcessorHandleImpl(
 
   private var currState: StatefulProcessorHandleState = CREATED
 
-  private val ttlExpirationMs =
-    if (ttlMode == TTLMode.ProcessingTimeTTL()) {
-      batchTimestampMs
-    } else if (ttlMode == TTLMode.EventTimeTTL()) {
-      eventTimeWatermarkMs
-    } else {
-      None
-    }
-
   def setHandleState(newState: StatefulProcessorHandleState): Unit = {
     currState = newState
   }
@@ -133,16 +123,22 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state")
 
-    if (ttlMode == TTLMode.NoTTL()) {
-      new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
-    } else {
-      assert(ttlExpirationMs.isDefined)
-      val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-        keyEncoder, valEncoder, ttlMode, ttlExpirationMs.get)
-      ttlStates.add(valueStateWithTTL)
+    new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder)
+  }
 
-      valueStateWithTTL
-    }
+  override def getValueState[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ValueState[T] = {
+    verifyStateVarOperations("get_value_state")
+    validateTTLConfig(ttlConfig, stateName)
+
+    assert(batchTimestampMs.isDefined)
+    val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get)
+    ttlStates.add(valueStateWithTTL)
+
+    valueStateWithTTL
   }
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
@@ -242,5 +238,14 @@ class StatefulProcessorHandleImpl(
     verifyStateVarOperations("get_map_state")
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder, userKeyEnc, valEncoder)
     resultState
+  }
+
+  private def validateTTLConfig(ttlConfig: TTLConfig, stateName: String): Unit = {
+    val ttlDuration = ttlConfig.ttlDuration
+    if (ttlMode != TTLMode.ProcessingTimeTTL()) {
+      throw StateStoreErrors.cannotProvideTTLConfigForNoTTLMode(stateName)
+    } else if (ttlDuration != null && ttlDuration.isNegative) {
+      throw StateStoreErrors.ttlCannotBeNegative("update", stateName)
+    }
   }
 }

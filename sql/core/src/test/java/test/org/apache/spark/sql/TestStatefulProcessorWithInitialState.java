@@ -17,7 +17,6 @@
 
 package test.org.apache.spark.sql;
 
-import java.time.Duration;
 import java.util.*;
 
 import scala.jdk.javaapi.CollectionConverters;
@@ -46,7 +45,7 @@ public class TestStatefulProcessorWithInitialState
 
   @Override
   public void handleInitialState(Integer key, String initialState, TimerValues timerValues) {
-    testState.update(initialState, Duration.ZERO);
+    testState.update(initialState);
   }
 
   @Override

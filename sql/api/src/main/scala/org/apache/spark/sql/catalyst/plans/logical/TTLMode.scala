@@ -22,5 +22,3 @@ import org.apache.spark.sql.streaming.TTLMode
 case object NoTTL extends TTLMode
 
 case object ProcessingTimeTTL extends TTLMode
-
-case object EventTimeTTL extends TTLMode

@@ -17,7 +17,6 @@
 
 package test.org.apache.spark.sql;
 
-import java.time.Duration;
 import java.util.*;
 
 import scala.jdk.javaapi.CollectionConverters;
@@ -89,7 +88,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       }
 
       count += numRows;
-      countState.update(count, Duration.ZERO);
+      countState.update(count);
       assert (countState.get() == count);
 
       result.add(sb.toString());

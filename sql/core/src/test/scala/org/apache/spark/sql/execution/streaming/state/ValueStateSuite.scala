@@ -30,7 +30,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, ValueStateImplWithTTL}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{TimeoutMode, TTLMode, ValueState}
+import org.apache.spark.sql.streaming.{TimeoutMode, TTLConfig, TTLMode, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -312,112 +312,85 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  Seq(TTLMode.ProcessingTimeTTL(), TTLMode.EventTimeTTL()).foreach { ttlMode =>
-    test(s"test Value state TTL for $ttlMode") {
-      tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-        val store = provider.getStore(0)
-        val timestampMs = 10
-        val handle = createHandleForTtlMode(ttlMode, store, timestampMs)
 
-        val testState: ValueStateImplWithTTL[String] = handle.getValueState[String]("testState",
-          Encoders.STRING).asInstanceOf[ValueStateImplWithTTL[String]]
-        ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-        testState.update("v1")
-        assert(testState.get() === "v1")
-        assert(testState.getWithoutEnforcingTTL().get === "v1")
-
-        var ttlValue = testState.getTTLValue()
-        assert(ttlValue.isEmpty)
-        var ttlStateValueIterator = testState.getValuesInTTLState()
-        assert(ttlStateValueIterator.isEmpty)
-
-        testState.clear()
-        assert(!testState.exists())
-        assert(testState.get() === null)
-
-        val ttlExpirationMs = timestampMs + 60000
-
-        if (ttlMode == TTLMode.ProcessingTimeTTL()) {
-          testState.update("v1", Duration.ofMinutes(1))
-        } else {
-          testState.update("v1", ttlExpirationMs)
-        }
-        assert(testState.get() === "v1")
-        assert(testState.getWithoutEnforcingTTL().get === "v1")
-
-        ttlValue = testState.getTTLValue()
-        assert(ttlValue.isDefined)
-        assert(ttlValue.get === ttlExpirationMs)
-        ttlStateValueIterator = testState.getValuesInTTLState()
-        assert(ttlStateValueIterator.hasNext)
-        assert(ttlStateValueIterator.next() === ttlExpirationMs)
-        assert(ttlStateValueIterator.isEmpty)
-
-        // increment batchProcessingTime, or watermark and ensure expired value is not returned
-        val nextBatchHandle = createHandleForTtlMode(ttlMode, store, ttlExpirationMs)
-
-        val nextBatchTestState: ValueStateImplWithTTL[String] = nextBatchHandle
-          .getValueState[String]("testState", Encoders.STRING)
-          .asInstanceOf[ValueStateImplWithTTL[String]]
-        ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-
-        // ensure get does not return the expired value
-        assert(!nextBatchTestState.exists())
-        assert(nextBatchTestState.get() === null)
-
-        // ttl value should still exist in state
-        ttlValue = nextBatchTestState.getTTLValue()
-        assert(ttlValue.isDefined)
-        assert(ttlValue.get === ttlExpirationMs)
-        ttlStateValueIterator = nextBatchTestState.getValuesInTTLState()
-        assert(ttlStateValueIterator.hasNext)
-        assert(ttlStateValueIterator.next() === ttlExpirationMs)
-        assert(ttlStateValueIterator.isEmpty)
-
-        // getWithoutTTL should still return the expired value
-        assert(nextBatchTestState.getWithoutEnforcingTTL().get === "v1")
-
-        nextBatchTestState.clear()
-        assert(!nextBatchTestState.exists())
-        assert(nextBatchTestState.get() === null)
-
-        nextBatchTestState.clear()
-        assert(!nextBatchTestState.exists())
-        assert(nextBatchTestState.get() === null)
-      }
-    }
-  }
-
-  test("test TTL duration throws error for event time") {
+  test(s"test Value state TTL") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
-      val eventTimeWatermarkMs = 10
+      val timestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        TTLMode.EventTimeTTL(), TimeoutMode.NoTimeouts(),
-        eventTimeWatermarkMs = Some(eventTimeWatermarkMs))
+        TTLMode.ProcessingTimeTTL(), TimeoutMode.NoTimeouts(),
+        batchTimestampMs = Some(timestampMs))
 
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
       val testState: ValueStateImplWithTTL[String] = handle.getValueState[String]("testState",
-        Encoders.STRING).asInstanceOf[ValueStateImplWithTTL[String]]
+        Encoders.STRING, ttlConfig).asInstanceOf[ValueStateImplWithTTL[String]]
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      testState.update("v1")
+      assert(testState.get() === "v1")
+      assert(testState.getWithoutEnforcingTTL().get === "v1")
+
+      var ttlValue = testState.getTTLValue()
+      assert(ttlValue.isEmpty)
+      var ttlStateValueIterator = testState.getValuesInTTLState()
+      assert(ttlStateValueIterator.isEmpty)
+
+      testState.clear()
+      assert(!testState.exists())
+      assert(testState.get() === null)
+
+      val ttlExpirationMs = timestampMs + 60000
+
+      testState.update("v1")
+      assert(testState.get() === "v1")
+      assert(testState.getWithoutEnforcingTTL().get === "v1")
+
+      ttlValue = testState.getTTLValue()
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get === ttlExpirationMs)
+      ttlStateValueIterator = testState.getValuesInTTLState()
+      assert(ttlStateValueIterator.hasNext)
+      assert(ttlStateValueIterator.next() === ttlExpirationMs)
+      assert(ttlStateValueIterator.isEmpty)
+
+      // increment batchProcessingTime, or watermark and ensure expired value is not returned
+      val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        TTLMode.ProcessingTimeTTL(), TimeoutMode.NoTimeouts(),
+        batchTimestampMs = Some(timestampMs))
+
+      val nextBatchTestState: ValueStateImplWithTTL[String] = nextBatchHandle
+        .getValueState[String]("testState", Encoders.STRING)
+        .asInstanceOf[ValueStateImplWithTTL[String]]
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
-      val ex = intercept[SparkUnsupportedOperationException] {
-        testState.update("v1", Duration.ofMinutes(1))
-      }
+      // ensure get does not return the expired value
+      assert(!nextBatchTestState.exists())
+      assert(nextBatchTestState.get() === null)
 
-      checkError(
-        ex,
-        errorClass = "STATEFUL_PROCESSOR_CANNOT_USE_TTL_DURATION_IN_EVENT_TIME_TTL_MODE",
-        parameters = Map(
-          "operationType" -> "update",
-          "stateName" -> "testState"
-        ),
-        matchPVals = true
-      )
+      // ttl value should still exist in state
+      ttlValue = nextBatchTestState.getTTLValue()
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get === ttlExpirationMs)
+      ttlStateValueIterator = nextBatchTestState.getValuesInTTLState()
+      assert(ttlStateValueIterator.hasNext)
+      assert(ttlStateValueIterator.next() === ttlExpirationMs)
+      assert(ttlStateValueIterator.isEmpty)
+
+      // getWithoutTTL should still return the expired value
+      assert(nextBatchTestState.getWithoutEnforcingTTL().get === "v1")
+
+      nextBatchTestState.clear()
+      assert(!nextBatchTestState.exists())
+      assert(nextBatchTestState.get() === null)
+
+      nextBatchTestState.clear()
+      assert(!nextBatchTestState.exists())
+      assert(nextBatchTestState.get() === null)
     }
   }
 
-  test("test negative TTL duration throws error") {
+  test("test negative or zero TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
@@ -426,73 +399,22 @@ class ValueStateSuite extends StateVariableSuiteBase {
         TTLMode.ProcessingTimeTTL(), TimeoutMode.NoTimeouts(),
         batchTimestampMs = Some(batchTimestampMs))
 
-      val testState: ValueStateImplWithTTL[String] = handle.getValueState[String]("testState",
-        Encoders.STRING).asInstanceOf[ValueStateImplWithTTL[String]]
-      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      Seq(Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
+        val ttlConfig = TTLConfig(ttlDuration)
+        val ex = intercept[SparkUnsupportedOperationException] {
+          handle.getValueState[String]("testState", Encoders.STRING, ttlConfig)
+        }
 
-      val ex = intercept[SparkUnsupportedOperationException] {
-        testState.update("v1", Duration.ofMinutes(-1))
+        checkError(
+          ex,
+          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          parameters = Map(
+            "operationType" -> "update",
+            "stateName" -> "testState"
+          ),
+          matchPVals = true
+        )
       }
-
-      checkError(
-        ex,
-        errorClass = "STATEFUL_PROCESSOR_TTL_VALUE_CANNOT_BE_NEGATIVE",
-        parameters = Map(
-          "operationType" -> "update",
-          "stateName" -> "testState"
-        ),
-        matchPVals = true
-      )
-    }
-  }
-
-  test("test negative expirationMs throws error") {
-    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
-      val store = provider.getStore(0)
-      val eventTimeWatermarkMs = 10
-      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        TTLMode.EventTimeTTL(), TimeoutMode.NoTimeouts(),
-        eventTimeWatermarkMs = Some(eventTimeWatermarkMs))
-
-      val testState: ValueStateImplWithTTL[String] = handle.getValueState[String]("testState",
-        Encoders.STRING).asInstanceOf[ValueStateImplWithTTL[String]]
-      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
-
-      val ex = intercept[SparkUnsupportedOperationException] {
-        testState.update("v1", -10)
-      }
-
-      checkError(
-        ex,
-        errorClass = "STATEFUL_PROCESSOR_TTL_VALUE_CANNOT_BE_NEGATIVE",
-        parameters = Map(
-          "operationType" -> "update",
-          "stateName" -> "testState"
-        ),
-        matchPVals = true
-      )
-    }
-  }
-
-  private def createHandleForTtlMode(
-      ttlMode: TTLMode,
-      store: StateStore,
-      timestampMs: Long): StatefulProcessorHandleImpl = {
-    if (ttlMode == TTLMode.ProcessingTimeTTL()) {
-      new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        ttlMode, TimeoutMode.NoTimeouts(),
-        batchTimestampMs = Some(timestampMs))
-    } else if (ttlMode == TTLMode.EventTimeTTL()) {
-      new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        ttlMode, TimeoutMode.NoTimeouts(),
-        eventTimeWatermarkMs = Some(timestampMs))
-    } else {
-      new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
-        ttlMode, TimeoutMode.NoTimeouts())
     }
   }
 }

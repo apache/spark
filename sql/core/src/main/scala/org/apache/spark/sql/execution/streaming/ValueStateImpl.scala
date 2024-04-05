@@ -16,13 +16,11 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.time.Duration
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.ValueState
 
 /**
@@ -43,7 +41,6 @@ class ValueStateImpl[S](
 
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder, stateName)
-  private[sql] val ttlState: Option[SingleKeyTTLStateImpl] = None
 
   initialize()
 
@@ -75,29 +72,7 @@ class ValueStateImpl[S](
   }
 
   /** Function to update and overwrite state associated with given key */
-  override def update(
-      newState: S,
-      ttlDuration: Duration = Duration.ZERO): Unit = {
-
-    if (ttlDuration != Duration.ZERO) {
-      throw StateStoreErrors.cannotProvideTTLDurationForNoTTLMode("update", stateName)
-    }
-
-    val encodedValue = stateTypesEncoder.encodeValue(newState)
-    val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
-    store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
-      encodedValue, stateName)
-  }
-
-  /** Function to update and overwrite state associated with given key */
-  override def update(
-      newState: S,
-      expirationMs: Long): Unit = {
-
-    if (expirationMs != -1) {
-      throw StateStoreErrors.cannotProvideTTLDurationForNoTTLMode("update", stateName)
-    }
-
+  override def update(newState: S): Unit = {
     val encodedValue = stateTypesEncoder.encodeValue(newState)
     val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
     store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),

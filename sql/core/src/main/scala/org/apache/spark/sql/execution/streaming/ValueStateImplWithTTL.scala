@@ -16,14 +16,12 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.time.Duration
-
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
-import org.apache.spark.sql.streaming.{TTLMode, ValueState}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
+import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 
 /**
  * Class that provides a concrete implementation for a single value state associated with state
@@ -33,8 +31,8 @@ import org.apache.spark.sql.streaming.{TTLMode, ValueState}
  * @param stateName - name of logical state partition
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
- * @param ttlMode    - TTL Mode for values  stored in this state
- * @param batchTtlExpirationMs - ttl expiration for the current batch.
+ * @param ttlConfig  - TTL configuration for values  stored in this state
+ * @param batchTimestampMs - current batch processing timestamp.
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImplWithTTL[S](
@@ -42,19 +40,19 @@ class ValueStateImplWithTTL[S](
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
     valEncoder: Encoder[S],
-    ttlMode: TTLMode,
-    batchTtlExpirationMs: Long)
-  extends SingleKeyTTLStateImpl(stateName, store, batchTtlExpirationMs) with ValueState[S] {
+    ttlConfig: TTLConfig,
+    batchTimestampMs: Long)
+  extends SingleKeyTTLStateImpl(stateName, store, batchTimestampMs) with ValueState[S] {
 
   private val keySerializer = keyExprEnc.createSerializer()
   private val stateTypesEncoder = StateTypesEncoder(keySerializer, valEncoder,
     stateName, hasTtl = true)
+  private val ttlExpirationMs =
+    StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
 
   initialize()
 
   private def initialize(): Unit = {
-    assert(ttlMode != TTLMode.NoTTL())
-
     store.createColFamilyIfAbsent(stateName, KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL,
       NoPrefixKeyStateEncoderSpec(KEY_ROW_SCHEMA))
   }
@@ -88,51 +86,12 @@ class ValueStateImplWithTTL[S](
   }
 
   /** Function to update and overwrite state associated with given key */
-  override def update(
-      newState: S,
-      ttlDuration: Duration = Duration.ZERO): Unit = {
-
-    if (ttlMode == TTLMode.EventTimeTTL() && ttlDuration != Duration.ZERO) {
-      throw StateStoreErrors.cannotProvideTTLDurationForEventTimeTTLMode("update", stateName)
-    }
-
-    if (ttlDuration != null && ttlDuration.isNegative) {
-      throw StateStoreErrors.ttlCannotBeNegative("update", stateName)
-    }
-
-    val expirationTimeInMs =
-      if (ttlDuration != null && ttlDuration != Duration.ZERO) {
-        StateTTL.calculateExpirationTimeForDuration(ttlDuration, batchTtlExpirationMs)
-      } else {
-        -1
-      }
-
-    doUpdate(newState, expirationTimeInMs)
-  }
-
-  override def update(
-      newState: S,
-      expirationTimeInMs: Long): Unit = {
-
-    if (expirationTimeInMs < 0) {
-      throw StateStoreErrors.ttlCannotBeNegative(
-        "update", stateName)
-    }
-
-    doUpdate(newState, expirationTimeInMs)
-  }
-
-  private def doUpdate(newState: S,
-      expirationTimeInMs: Long): Unit = {
-    val encodedValue = stateTypesEncoder.encodeValue(newState, expirationTimeInMs)
-
+  override def update(newState: S): Unit = {
+    val encodedValue = stateTypesEncoder.encodeValue(newState, ttlExpirationMs)
     val serializedGroupingKey = stateTypesEncoder.serializeGroupingKey()
     store.put(stateTypesEncoder.encodeSerializedGroupingKey(serializedGroupingKey),
       encodedValue, stateName)
-
-    if (expirationTimeInMs != -1) {
-      upsertTTLForStateKey(expirationTimeInMs, serializedGroupingKey)
-    }
+    upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey)
   }
 
   /** Function to remove state for given key */
@@ -153,16 +112,13 @@ class ValueStateImplWithTTL[S](
 
   private def isExpired(valueRow: UnsafeRow): Boolean = {
     val expirationMs = stateTypesEncoder.decodeTtlExpirationMs(valueRow)
-    val isExpired = expirationMs.map(
-      StateTTL.isExpired(_, batchTtlExpirationMs))
-
-    isExpired.isDefined && isExpired.get
+    expirationMs.exists(StateTTL.isExpired(_, batchTimestampMs))
   }
 
   /*
    * Internal methods to probe state for testing. The below methods exist for unit tests
    * to read the state ttl values, and ensure that values are persisted correctly in
-   * the underlying  state store.
+   * the underlying state store.
    */
 
   /**

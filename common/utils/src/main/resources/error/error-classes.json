@@ -3562,7 +3562,7 @@
   },
   "STATEFUL_PROCESSOR_CANNOT_ASSIGN_TTL_IN_NO_TTL_MODE" : {
     "message" : [
-      "State store operation=<operationType> on state=<stateName> does not support TTL in NoTTL() mode."
+      "Cannot use TTL for state=<stateName> in NoTTL() mode."
     ],
     "sqlState" : "42802"
   },
@@ -3584,16 +3584,9 @@
     ],
     "sqlState" : "42802"
   },
-  "STATEFUL_PROCESSOR_CANNOT_USE_TTL_DURATION_IN_EVENT_TIME_TTL_MODE" : {
+  "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE" : {
     "message" : [
-      "TTL duration is not allowed for event time ttl expiration on State store operation=<operationType> on state=<stateName>.",
-      "Use absolute expiration time instead."
-    ],
-    "sqlState" : "42802"
-  },
-  "STATEFUL_PROCESSOR_TTL_VALUE_CANNOT_BE_NEGATIVE" : {
-    "message" : [
-      "TTL value cannot be negative for State store operation=<operationType> on state=<stateName>."
+      "TTL duration must be greater than zero for State store operation=<operationType> on state=<stateName>."
     ],
     "sqlState" : "42802"
   },

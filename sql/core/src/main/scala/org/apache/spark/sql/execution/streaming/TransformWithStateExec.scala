@@ -83,7 +83,7 @@ case class TransformWithStateExec(
     if (ttlMode == TTLMode.ProcessingTimeTTL() || timeoutMode == TimeoutMode.ProcessingTime()) {
       // TODO: check if we can return true only if actual timers are registered
       true
-    } else if (ttlMode == TTLMode.EventTimeTTL() || timeoutMode == TimeoutMode.EventTime()) {
+    } else if (timeoutMode == TimeoutMode.EventTime()) {
       eventTimeWatermarkForEviction.isDefined &&
         newInputWatermark > eventTimeWatermarkForEviction.get
     } else {
@@ -414,7 +414,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, ttlMode, timeoutMode,
-      isStreaming, batchTimestampMs, eventTimeWatermarkForEviction)
+      isStreaming, batchTimestampMs)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeoutMode, ttlMode)
@@ -470,11 +470,6 @@ case class TransformWithStateExec(
     ttlMode match {
       case ProcessingTimeTTL =>
         if (batchTimestampMs.isEmpty) {
-          StateStoreErrors.missingTTLValues(timeoutMode.toString)
-        }
-
-      case EventTimeTTL =>
-        if (eventTimeWatermarkForEviction.isEmpty) {
           StateStoreErrors.missingTTLValues(timeoutMode.toString)
         }
 
