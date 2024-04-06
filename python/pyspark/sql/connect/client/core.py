@@ -897,11 +897,12 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        for response in self._execute_and_fetch_as_iterator(req, observations):
-            if isinstance(response, StructType):
-                yield response
-            elif isinstance(response, pa.RecordBatch):
-                yield pa.Table.from_batches([response])
+        with Progress(handlers=self._progress_handlers) as progress:
+            for response in self._execute_and_fetch_as_iterator(req, observations, progress):
+                if isinstance(response, StructType):
+                    yield response
+                elif isinstance(response, pa.RecordBatch):
+                    yield pa.Table.from_batches([response])
 
     def to_table(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
@@ -1411,26 +1412,27 @@ class SparkConnectClient(object):
         schema: Optional[StructType] = None
         properties: Dict[str, Any] = {}
 
-        progress = Progress(handlers=self._progress_handlers)
-        for response in self._execute_and_fetch_as_iterator(req, observations, progress=progress):
-            if isinstance(response, StructType):
-                schema = response
-            elif isinstance(response, pa.RecordBatch):
-                batches.append(response)
-            elif isinstance(response, PlanMetrics):
-                metrics.append(response)
-            elif isinstance(response, PlanObservedMetrics):
-                observed_metrics.append(response)
-            elif isinstance(response, dict):
-                properties.update(**response)
-            else:
-                raise PySparkValueError(
-                    error_class="UNKNOWN_RESPONSE",
-                    message_parameters={
-                        "response": response,
-                    },
-                )
-        progress.finish()
+        with Progress(handlers=self._progress_handlers) as progress:
+            for response in self._execute_and_fetch_as_iterator(
+                req, observations, progress=progress
+            ):
+                if isinstance(response, StructType):
+                    schema = response
+                elif isinstance(response, pa.RecordBatch):
+                    batches.append(response)
+                elif isinstance(response, PlanMetrics):
+                    metrics.append(response)
+                elif isinstance(response, PlanObservedMetrics):
+                    observed_metrics.append(response)
+                elif isinstance(response, dict):
+                    properties.update(**response)
+                else:
+                    raise PySparkValueError(
+                        error_class="UNKNOWN_RESPONSE",
+                        message_parameters={
+                            "response": response,
+                        },
+                    )
 
         if len(batches) > 0:
             if self_destruct:

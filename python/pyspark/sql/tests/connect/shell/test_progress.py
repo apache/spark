@@ -77,17 +77,22 @@ class ProgressBarTest(unittest.TestCase, PySparkErrorTestUtils):
         handler_called = 0
         done_called = False
 
-        def handler(stages: Iterable[StageInfo], inflight_tasks: int, done: bool):
+        def handler(
+            stages: Iterable[StageInfo], inflight_tasks: int, operation_id: str, done: bool
+        ):
             nonlocal handler_called, done_called
             handler_called = 1
             self.assertEqual(100, sum(map(lambda x: x.num_tasks, stages)))
             self.assertEqual(50, sum(map(lambda x: x.num_completed_tasks, stages)))
             self.assertEqual(999, sum(map(lambda x: x.num_bytes_read, stages)))
             self.assertEqual(10, inflight_tasks)
+            self.assertEqual(operation_id, "operation_id")
             done_called = done
 
         buffer = StringIO()
-        p = Progress(char="+", output=buffer, enabled=True, handlers=[handler])
+        p = Progress(
+            char="+", output=buffer, enabled=True, handlers=[handler], operation_id="operation_id"
+        )
         p.update_ticks(stages, 1)
         stages = [StageInfo(0, 100, 50, 999, False)]
         p.update_ticks(stages, 10)
