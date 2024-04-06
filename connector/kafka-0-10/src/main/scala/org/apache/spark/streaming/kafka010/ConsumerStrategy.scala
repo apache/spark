@@ -26,7 +26,8 @@ import org.apache.kafka.clients.consumer._
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CONFIG
 import org.apache.spark.kafka010.KafkaConfigUpdater
 
 /**
@@ -108,8 +109,8 @@ private case class Subscribe[K, V](
         consumer.poll(0)
       } catch {
         case x: NoOffsetForPartitionException if shouldSuppress =>
-          logWarning("Catching NoOffsetForPartitionException since " +
-            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is none.  See KAFKA-3370")
+          logWarning(log"Catching NoOffsetForPartitionException since " +
+            log"${MDC(CONFIG, ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)} is none. See KAFKA-3370")
       }
       toSeek.asScala.foreach { case (topicPartition, offset) =>
           consumer.seek(topicPartition, offset)
@@ -162,8 +163,8 @@ private case class SubscribePattern[K, V](
         consumer.poll(0)
       } catch {
         case x: NoOffsetForPartitionException if shouldSuppress =>
-          logWarning("Catching NoOffsetForPartitionException since " +
-            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is none.  See KAFKA-3370")
+          logWarning(log"Catching NoOffsetForPartitionException since " +
+            log"${MDC(CONFIG, ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)} is none. See KAFKA-3370")
       }
       toSeek.asScala.foreach { case (topicPartition, offset) =>
           consumer.seek(topicPartition, offset)
