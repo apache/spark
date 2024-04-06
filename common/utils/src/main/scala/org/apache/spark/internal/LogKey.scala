@@ -81,6 +81,7 @@ object LogKey extends Enumeration {
   val OLD_VALUE = Value
   val OPTIMIZER_CLASS_NAME = Value
   val OP_ID = Value
+  val OP_TYPE = Value
   val PARTITION_ID = Value
   val PATH = Value
   val PATHS = Value
@@ -96,6 +97,7 @@ object LogKey extends Enumeration {
   val REDUCE_ID = Value
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
+  val RETRY_INTERVAL = Value
   val RPC_ADDRESS = Value
   val RULE_BATCH_NAME = Value
   val RULE_NAME = Value
@@ -122,13 +124,14 @@ object LogKey extends Enumeration {
   val THREAD = Value
   val THREAD_NAME = Value
   val TID = Value
-  val TIP = Value
   val TIMEOUT = Value
+  val TIP = Value
   val TOPIC_PARTITION = Value
   val TOTAL_EFFECTIVE_TIME = Value
   val TOTAL_TIME = Value
-  val URI = Value
   val UNTIL_OFFSET = Value
+  val URI = Value
+  val USER_ID = Value
   val USER_NAME = Value
   val WAIT_RESULT_TIME = Value
   val WAIT_SEND_TIME = Value
