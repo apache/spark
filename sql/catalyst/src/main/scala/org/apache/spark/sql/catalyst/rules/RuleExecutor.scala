@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.rules
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MessageWithContext}
+import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
@@ -56,10 +58,10 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
   def logRule(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
     if (!newPlan.fastEquals(oldPlan)) {
       if (logRules.isEmpty || logRules.get.contains(ruleName)) {
-        def message(): String = {
-          s"""
-             |=== Applying Rule $ruleName ===
-             |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
+        def message(): MessageWithContext = {
+          log"""
+             |=== Applying Rule ${MDC(RULE_NAME, ruleName)} ===
+             |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
            """.stripMargin
         }
 
@@ -70,14 +72,14 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
 
   def logBatch(batchName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
     if (logBatches.isEmpty || logBatches.get.contains(batchName)) {
-      def message(): String = {
+      def message(): MessageWithContext = {
         if (!oldPlan.fastEquals(newPlan)) {
-          s"""
-             |=== Result of Batch $batchName ===
-             |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
+          log"""
+             |=== Result of Batch ${MDC(RULE_BATCH_NAME, batchName)} ===
+             |${MDC(QUERY_PLAN, sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n"))}
           """.stripMargin
         } else {
-          s"Batch $batchName has no effect."
+          log"Batch ${MDC(RULE_BATCH_NAME, batchName)} has no effect."
         }
       }
 
@@ -88,26 +90,26 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
   def logMetrics(metrics: QueryExecutionMetrics): Unit = {
     val totalTime = metrics.time / NANOS_PER_SECOND.toDouble
     val totalTimeEffective = metrics.timeEffective / NANOS_PER_SECOND.toDouble
-    val message =
-      s"""
+    val message: MessageWithContext =
+      log"""
          |=== Metrics of Executed Rules ===
-         |Total number of runs: ${metrics.numRuns}
-         |Total time: $totalTime seconds
-         |Total number of effective runs: ${metrics.numEffectiveRuns}
-         |Total time of effective runs: $totalTimeEffective seconds
+         |Total number of runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numRuns)}
+         |Total time: ${MDC(TIME_UNITS, totalTime)} seconds
+         |Total number of effective runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numEffectiveRuns)}
+         |Total time of effective runs: ${MDC(TIME_UNITS, totalTimeEffective)} seconds
       """.stripMargin
 
     logBasedOnLevel(message)
   }
 
-  private def logBasedOnLevel(f: => String): Unit = {
+  private def logBasedOnLevel(f: => MessageWithContext): Unit = {
     logLevel match {
-      case "TRACE" => logTrace(f)
-      case "DEBUG" => logDebug(f)
+      case "TRACE" => logTrace(f.message)
+      case "DEBUG" => logDebug(f.message)
       case "INFO" => logInfo(f)
       case "WARN" => logWarning(f)
       case "ERROR" => logError(f)
-      case _ => logTrace(f)
+      case _ => logTrace(f.message)
     }
   }
 }

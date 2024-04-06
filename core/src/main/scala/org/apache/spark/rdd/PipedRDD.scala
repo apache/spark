@@ -34,7 +34,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.LogKey.{COMMAND, ERROR}
+import org.apache.spark.internal.LogKey.{COMMAND, ERROR, PATH}
 import org.apache.spark.internal.MDC
 import org.apache.spark.util.Utils
 
@@ -107,8 +107,9 @@ private[spark] class PipedRDD[T: ClassTag](
         pb.directory(taskDirFile)
         workInTaskDirectory = true
       } catch {
-        case e: Exception => logError("Unable to setup task working directory: " + e.getMessage +
-          " (" + taskDirectory + ")", e)
+        case e: Exception =>
+          logError(log"Unable to setup task working directory: ${MDC(ERROR, e.getMessage)}" +
+          log" (${MDC(PATH, taskDirectory)})", e)
       }
     }
 
