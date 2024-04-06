@@ -625,7 +625,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val timerTimestamps: Seq[(Byte, Int)] = Seq((0x33, 10), (0x1A, 40), (0x1F, 1), (0x01, 68),
         (0x7F, 2000), (0x01, 27), (0x01, 394), (0x01, 5), (0x03, 980), (0x35, 2112),
         (0x11, -190), (0x1A, -69), (0x01, -344245), (0x31, -901),
-        (0x06, 90118), (0x09, 95118), (0x06, 87210))
+        (-1, 90118), (-127, 95118), (-128, 87210))
       timerTimestamps.foreach { ts =>
         // order by byte col first and then by int col
         val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
