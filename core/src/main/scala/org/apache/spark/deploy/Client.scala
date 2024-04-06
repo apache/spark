@@ -32,7 +32,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{DRIVER_ID, RPC_ADDRESS}
+import org.apache.spark.internal.LogKey.{DRIVER_ID, ERROR, RPC_ADDRESS}
 import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
@@ -61,7 +61,7 @@ private class ClientEndpoint(
       t => t match {
         case ie: InterruptedException => // Exit normally
         case e: Throwable =>
-          logError(e.getMessage, e)
+          logError(log"${MDC(ERROR, e.getMessage)}", e)
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
       })
 

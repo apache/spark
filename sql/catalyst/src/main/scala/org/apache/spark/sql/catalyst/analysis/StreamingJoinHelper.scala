@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
@@ -107,7 +109,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case _ => None
       }
       if (stateWatermark.nonEmpty) {
-        logInfo(s"Condition $joinCondition generated watermark constraint = ${stateWatermark.get}")
+        logInfo(log"Condition ${MDC(JOIN_CONDITION, joinCondition)} generated " +
+          log"watermark constraint = ${MDC(WATERMARK_CONSTRAINT, stateWatermark.get)}")
       }
       stateWatermark
     }
@@ -195,7 +198,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     }.reduceLeft(Add(_, _))
 
     // Calculate the constraint value
-    logInfo(s"Final expression to evaluate constraint:\t$exprWithWatermarkSubstituted")
+    logInfo(log"Final expression to evaluate " +
+      log"constraint:\t${MDC(WATERMARK_CONSTRAINT, exprWithWatermarkSubstituted)}")
     val constraintValue = exprWithWatermarkSubstituted.eval().asInstanceOf[java.lang.Double]
     Some((Double2double(constraintValue) / 1000.0).toLong)
   }
