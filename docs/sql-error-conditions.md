@@ -2236,7 +2236,7 @@ Please only use the StatefulProcessor within the transformWithState operator.
 
 [SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Incorrect number of ordering columns=`<numOrderingCols>` for range scan encoder. Ordering columns cannot be zero or greater than num of schema columns.
+Incorrect number of ordering ordinals=`<numOrderingCols>` for range scan encoder. The number of ordering ordinals cannot be zero or greater than number of schema columns.
 
 ### STATE_STORE_INCORRECT_NUM_PREFIX_COLS_FOR_PREFIX_SCAN
 
