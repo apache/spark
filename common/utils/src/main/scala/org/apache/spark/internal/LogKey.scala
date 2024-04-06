@@ -41,7 +41,6 @@ object LogKey extends Enumeration {
   val CONTAINER_ID = Value
   val COUNT = Value
   val DRIVER_ID = Value
-  val EFFECTIVE_TIME = Value
   val END_POINT = Value
   val ERROR = Value
   val EVENT_LOOP = Value
@@ -103,6 +102,7 @@ object LogKey extends Enumeration {
   val THREAD_NAME = Value
   val TID = Value
   val TIMEOUT = Value
+  val TOTAL_EFFECTIVE_TIME = Value
   val TOTAL_TIME = Value
   val URI = Value
   val USER_NAME = Value

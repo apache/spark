@@ -94,9 +94,9 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
       log"""
          |=== Metrics of Executed Rules ===
          |Total number of runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numRuns)}
-         |Total time: ${MDC(EFFECTIVE_TIME, totalTime)} ms
+         |Total time: ${MDC(TOTAL_TIME, totalTime)} ms
          |Total number of effective runs: ${MDC(RULE_NUMBER_OF_RUNS, metrics.numEffectiveRuns)}
-         |Total time of effective runs: ${MDC(TOTAL_TIME, totalTimeEffective)} ms
+         |Total time of effective runs: ${MDC(TOTAL_EFFECTIVE_TIME, totalTimeEffective)} ms
       """.stripMargin
 
     logBasedOnLevel(message)
