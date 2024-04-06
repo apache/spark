@@ -285,12 +285,11 @@ class RangeKeyScanStateEncoder(
   //    [foo, bar, baz, buzz]
   // We might order by bar and buzz, leading to:
   //    [bar, buzz, foo, baz]
-  // We need to project back to the original schema, keySchema
+  // We need to create a projection that sends, for example, the buzz at index 1 to index
+  // 3. Thus, for every record in the original schema, we compute where it would be in
+  // the joined row and created a projection based on that.
   private val restoreKeyProjection: UnsafeProjection = {
     val refs = keySchema.zipWithIndex.map { case (field, originalOrdinal) =>
-      // If the ordinal is in the orderingOrdinals, we use the index
-      // in the orderingOrdinals. If it isn't, we add the length of
-      // orderingOrdinals, and then use the index in the remainingKeyFieldsWithOrdinal.
       val ordinalInJoinedRow = if (orderingOrdinals.contains(originalOrdinal)) {
           orderingOrdinals.indexOf(originalOrdinal)
       } else {
