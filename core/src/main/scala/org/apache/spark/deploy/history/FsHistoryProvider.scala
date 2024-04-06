@@ -37,7 +37,8 @@ import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Status._
@@ -920,7 +921,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case e: AccessControlException =>
         logWarning(s"Insufficient permission while compacting log for $rootPath", e)
       case e: Exception =>
-        logError(s"Exception while compacting log for $rootPath", e)
+        logError(log"Exception while compacting log for ${MDC(PATH, rootPath)}", e)
     } finally {
       endProcessing(rootPath)
     }
@@ -1402,7 +1403,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         case _: AccessControlException =>
           logInfo(s"No permission to delete $log, ignoring.")
         case ioe: IOException =>
-          logError(s"IOException in cleaning $log", ioe)
+          logError(log"IOException in cleaning ${MDC(PATH, log)}", ioe)
       }
     }
     deleted

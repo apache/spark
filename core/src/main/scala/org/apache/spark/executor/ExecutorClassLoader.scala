@@ -30,7 +30,7 @@ import org.apache.xbean.asm9.Opcodes._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKey, MDC}
 import org.apache.spark.util.ParentClassLoader
 
 /**
@@ -183,7 +183,8 @@ class ExecutorClassLoader(
         None
       case e: Exception =>
         // Something bad happened while checking if the class exists
-        logError(s"Failed to check existence of class $name on REPL class server at $uri", e)
+        logError(log"Failed to check existence of class ${MDC(LogKey.CLASS_NAME, name)} " +
+          log"on REPL class server at ${MDC(LogKey.URI, uri)}", e)
         if (userClassPathFirst) {
           // Allow to try to load from "parentLoader"
           None

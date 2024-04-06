@@ -22,7 +22,8 @@ import java.io.File
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{LOG_TYPE, PATH}
 import org.apache.spark.ui.JettyUtils.createServletHandler
 import org.apache.spark.ui.WebUI
 import org.apache.spark.util.Utils.{getFileLength, offsetBytes}
@@ -95,7 +96,8 @@ private[deploy] object Utils extends Logging {
       (logText, startIndex, endIndex, totalLength)
     } catch {
       case e: Exception =>
-        logError(s"Error getting $logType logs from directory $logDirectory", e)
+        logError(log"Error getting ${MDC(LOG_TYPE, logType)} logs from " +
+          log"directory ${MDC(PATH, logDirectory)}", e)
         ("Error getting logs due to exception: " + e.getMessage, 0, 0, 0)
     }
   }
