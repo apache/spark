@@ -60,7 +60,6 @@ object LogKey extends Enumeration {
   val LOG_TYPE = Value
   val MASTER_URL = Value
   val MAX_ATTEMPTS = Value
-  val MAX_BETWEEN_RETRIES = Value
   val MAX_CATEGORIES = Value
   val MAX_EXECUTOR_FAILURES = Value
   val MAX_SIZE = Value
@@ -84,6 +83,7 @@ object LogKey extends Enumeration {
   val REDUCE_ID = Value
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
+  val RETRY_INTERVAL_MILLISECOND = Value
   val RPC_ADDRESS = Value
   val RULE_BATCH_NAME = Value
   val RULE_NAME = Value
