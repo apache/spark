@@ -42,7 +42,7 @@ import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{BLOCK_ID, COUNT, SLEEP_TIME_SECONDS}
+import org.apache.spark.internal.LogKey.{BLOCK_ID, COUNT, SLEEP_TIME}
 import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
@@ -616,7 +616,7 @@ private[spark] class BlockManager(
       shuffleManagerMeta)
 
     val MAX_ATTEMPTS = conf.get(config.SHUFFLE_REGISTRATION_MAX_ATTEMPTS)
-    val SLEEP_TIME_SECS = 5
+    val SLEEP_TIME_MS = 5000
 
     for (i <- 1 to MAX_ATTEMPTS) {
       try {
@@ -628,8 +628,8 @@ private[spark] class BlockManager(
         case e: Exception if i < MAX_ATTEMPTS =>
           logError(log"Failed to connect to external shuffle server, will retry " +
             log"${MDC(COUNT, MAX_ATTEMPTS - i)} more times after waiting " +
-            log"${MDC(SLEEP_TIME_SECONDS, SLEEP_TIME_SECS)} seconds...", e)
-          Thread.sleep(SLEEP_TIME_SECS * 1000L)
+            log"${MDC(SLEEP_TIME, SLEEP_TIME_MS)} ms...", e)
+          Thread.sleep(SLEEP_TIME_MS)
         case NonFatal(e) => throw SparkCoreErrors.unableToRegisterWithExternalShuffleServerError(e)
       }
     }

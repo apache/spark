@@ -94,7 +94,7 @@ object LogKey extends Enumeration {
   val SHUFFLE_ID = Value
   val SHUFFLE_MERGE_ID = Value
   val SIZE = Value
-  val SLEEP_TIME_SECONDS = Value
+  val SLEEP_TIME = Value
   val STAGE_ID = Value
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
@@ -107,7 +107,8 @@ object LogKey extends Enumeration {
   val THREAD_NAME = Value
   val TID = Value
   val TIMEOUT = Value
-  val TIME_UNITS = Value
+  val TOTAL_EFFECTIVE_TIME = Value
+  val TOTAL_TIME = Value
   val URI = Value
   val USER_ID = Value
   val USER_NAME = Value
