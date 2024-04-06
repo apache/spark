@@ -27,7 +27,7 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{RETRY_INTERVAL_MILLISECOND, SHARD_ID, WORKER_URL}
+import org.apache.spark.internal.LogKey.{RETRY_INTERVAL, SHARD_ID, WORKER_URL}
 
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
@@ -169,7 +169,7 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
           val backOffMillis = Random.nextInt(maxBackOffMillis)
           Thread.sleep(backOffMillis)
           logError(log"Retryable Exception: Random " +
-            log"backOffMillis=${MDC(RETRY_INTERVAL_MILLISECOND, backOffMillis)}", e)
+            log"backOffMillis=${MDC(RETRY_INTERVAL, backOffMillis)}", e)
           retryRandom(expression, numRetriesLeft - 1, maxBackOffMillis)
         /* Throw:  Shutdown has been requested by the Kinesis Client Library. */
         case _: ShutdownException =>
