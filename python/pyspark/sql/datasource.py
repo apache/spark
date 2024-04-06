@@ -14,8 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
 from abc import ABC, abstractmethod
 from collections import UserDict
+from itertools import chain
 from typing import Any, Dict, Iterator, List, Sequence, Tuple, Type, Union, TYPE_CHECKING
 
 from pyspark.sql import Row
@@ -158,6 +160,12 @@ class DataSource(ABC):
         raise PySparkNotImplementedError(
             error_class="NOT_IMPLEMENTED",
             message_parameters={"feature": "writer"},
+        )
+
+    def simpleStreamReader(self, schema: StructType) -> "SimpleDataSourceStreamReader":
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "simpleStreamReader"},
         )
 
     def streamWriter(self, schema: StructType, overwrite: bool) -> "DataSourceStreamWriter":
@@ -469,6 +477,55 @@ class DataSourceStreamReader(ABC):
         ...
 
 
+class SimpleInputPartition(InputPartition):
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+
+class SimpleDataSourceStreamReader(ABC):
+    def read(self, start: dict) -> (Iterator[Tuple], dict):
+        ...
+
+    def commit(self, end: dict) -> None:
+        ...
+
+
+class SimpleStreamReaderWrapper(DataSourceStreamReader):
+    def __init__(self, simple_reader):
+        self.current_offset = None
+        self.simple_reader = simple_reader
+        self.cache = []
+
+    def initialOffset(self):
+        return None
+
+    def latestOffset(self):
+        (iter, end) = self.simple_reader.read(self.current_offset)
+        self.cache.append((self.current_offset, end, iter))
+        self.current_offset = end
+        return end
+
+    def commit(self, end: dict):
+        if self.current_offset is None:
+            self.current_offset = end
+        self.simple_reader.commit(end)
+
+    def partitions(self, start: dict, end: dict):
+        assert (self.cache[-1][1] == end)
+        start_idx = 0
+        for i in range(len(self.cache)):
+            # print(json.dumps(self.cache[i][0]) + " ggg " + json.dumps(self.cache[i][1]))
+            if json.dumps(self.cache[i][0]) == json.dumps(start):
+                start_idx = i
+        iters = [entry[2] for entry in self.cache[start_idx:]]
+        iter = chain(iters)
+        return [SimpleInputPartition(start, end, iter)]
+
+    def read(self, input_partition: InputPartition):
+        return self.simple_reader.read(input_partition.start)[0]
+
+
 class DataSourceWriter(ABC):
     """
     A base class for data source writers. Data source writers are responsible for saving
@@ -635,8 +692,8 @@ class DataSourceRegistration:
         self.sparkSession = sparkSession
 
     def register(
-        self,
-        dataSource: Type["DataSource"],
+            self,
+            dataSource: Type["DataSource"],
     ) -> None:
         """Register a Python user-defined data source.
 

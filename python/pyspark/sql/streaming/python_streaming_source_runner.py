@@ -18,22 +18,25 @@
 import os
 import sys
 import json
-from typing import IO
+from typing import IO, Iterable, Iterator, Tuple
 
 from pyspark.accumulators import _accumulatorRegistry
-from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkRuntimeError
+from pyspark.errors import IllegalArgumentException, PySparkAssertionError, PySparkNotImplementedError, PySparkRuntimeError
+from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_int,
     write_int,
     write_with_length,
     SpecialLengths,
 )
-from pyspark.sql.datasource import DataSource, DataSourceStreamReader
+from pyspark.sql.datasource import DataSource, DataSourceStreamReader, SimpleDataSourceStreamReader, SimpleStreamReaderWrapper, InputPartition
+from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
     StructType,
 )
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.sql.worker.plan_data_source_read import records_to_arrow_batches
+from pyspark.util import handle_worker_exception
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -48,6 +51,7 @@ INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
 COMMIT_FUNC_ID = 887
+SEND_BATCH_FUNC_ID = 888
 
 
 def initial_offset_func(reader: DataSourceStreamReader, outfile: IO) -> None:
@@ -74,6 +78,18 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)
+
+
+def send_batch_func(rows: Iterator[Tuple], outfile: IO, schema, data_source) -> None:
+    write_int(6, outfile)
+    batches = records_to_arrow_batches(rows, 1000, schema, data_source)
+    serializer = ArrowStreamSerializer()
+    try:
+        serializer.dump_stream(batches, outfile)
+    except BaseException as e:
+        print(e)
+    write_int(222, outfile)
+
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -112,7 +128,10 @@ def main(infile: IO, outfile: IO) -> None:
 
         # Instantiate data source reader.
         try:
-            reader = data_source.streamReader(schema=schema)
+            try:
+                reader = data_source.streamReader(schema=schema)
+            except PySparkNotImplementedError:
+                reader = SimpleStreamReaderWrapper(data_source.simpleStreamReader(schema=schema))
             # Initialization succeed.
             write_int(0, outfile)
             outfile.flush()
@@ -128,6 +147,9 @@ def main(infile: IO, outfile: IO) -> None:
                     partitions_func(reader, infile, outfile)
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
+                elif func_id == SEND_BATCH_FUNC_ID:
+                    rows = [(0,), (15,), (30,)]
+                    send_batch_func(iter(rows), outfile, schema, data_source)
                 else:
                     raise IllegalArgumentException(
                         error_class="UNSUPPORTED_OPERATION",

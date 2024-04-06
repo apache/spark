@@ -23,13 +23,18 @@ import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, Data
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.vector.ipc.ArrowStreamReader
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
 object PythonStreamingSourceRunner {
   // When the python process for python_streaming_source_runner receives one of the
@@ -38,6 +43,7 @@ object PythonStreamingSourceRunner {
   val LATEST_OFFSET_FUNC_ID = 885
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
+  val SEND_BATCH_FUNC_ID = 888
 }
 
 /**
@@ -198,5 +204,36 @@ class PythonStreamingSourceRunner(
       case e: Exception =>
         logError("Exception when trying to kill worker", e)
     }
+  }
+
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"stream reader for $pythonExec", 0, Long.MaxValue)
+
+  def readBatches(): Iterator[InternalRow] = {
+    dataOut.writeInt(SEND_BATCH_FUNC_ID)
+    dataOut.flush()
+    assert(dataIn.readInt() == 6)
+    val reader = new ArrowStreamReader(dataIn, allocator)
+    val root = reader.getVectorSchemaRoot()
+    val schema = ArrowUtils.fromArrowSchema(root.getSchema())
+    val vectors = root.getFieldVectors().asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
+    assert(schema == outputSchema)
+    val rows = ArrayBuffer[InternalRow]()
+    while (reader.loadNextBatch()) {
+      val batch = new ColumnarBatch(vectors)
+      batch.setNumRows(root.getRowCount)
+      batch.rowIterator().asScala.foreach { p =>
+        // println(s"lsdf: ${p.getInt(0)}")
+      }
+      rows.appendAll(batch.rowIterator().asScala.map(_.copy()))
+    }
+    rows.zipWithIndex.foreach { p =>
+      println(s"lsdf: ${p._1.getInt(0)}")
+    }
+    reader.close(false)
+    assert(dataIn.readInt() == 222)
+    rows.iterator
   }
 }
