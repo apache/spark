@@ -940,9 +940,10 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     }
     assert(e3.getMessage.contains("AMBIGUOUS_COLUMN_REFERENCE"))
 
-    // df1.join(df1_filter, df1("i") === 1) fails in classic spark due to:
-    // org.apache.spark.sql.AnalysisException: Column i#24 are ambiguous
+    // TODO(SPARK-47749): Dataframe.collect should accept duplicated column names
     assert(
+      // df1.join(df1_filter, df1("i") === 1) fails in classic spark due to:
+      // org.apache.spark.sql.AnalysisException: Column i#24 are ambiguous
       df1.join(df1_filter, df1("i") === 1).columns ===
         Array("i", "j", "i", "j"))
 
