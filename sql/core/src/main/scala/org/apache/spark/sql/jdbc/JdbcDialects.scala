@@ -798,6 +798,9 @@ abstract class JdbcDialect extends Serializable with Logging {
   protected final def getTimestampType(md: Metadata): DataType = {
     JdbcUtils.getTimestampType(md.getBoolean("isTimestampNTZ"))
   }
+
+  @Since("4.0.0")
+  def getArrayDimension(conn: Connection, tableName: String, columnName: String): Option[Int] = None
 }
 
 /**
