@@ -23,7 +23,6 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.internal.Logging
@@ -147,7 +146,7 @@ private case class SubscribePattern[K, V](
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
     val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
     val consumer = new KafkaConsumer[K, V](updatedKafkaParams)
-    consumer.subscribe(pattern, new NoOpConsumerRebalanceListener())
+    consumer.subscribe(pattern)
     val toSeek = if (currentOffsets.isEmpty) {
       offsets
     } else {

@@ -271,7 +271,8 @@ private[spark] class DiskBlockObjectWriter(
           logError(log"Exception occurred while reverting partial writes to file "
             + log"${MDC(PATH, file)}, ${MDC(ERROR, ce.getMessage)}")
         case e: Exception =>
-          logError("Uncaught exception while reverting partial writes to file " + file, e)
+          logError(
+            log"Uncaught exception while reverting partial writes to file ${MDC(PATH, file)}", e)
       } finally {
         if (truncateStream != null) {
           truncateStream.close()

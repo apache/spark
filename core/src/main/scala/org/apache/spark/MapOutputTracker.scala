@@ -781,7 +781,7 @@ private[spark] class MapOutputTrackerMaster(
                   .getOrElse(Seq.empty[BlockManagerId]))
             }
           } catch {
-            case NonFatal(e) => logError(e.getMessage, e)
+            case NonFatal(e) => logError(log"${MDC(ERROR, e.getMessage)}", e)
           }
         }
       } catch {
