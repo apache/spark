@@ -204,7 +204,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       } else {
         logError(
           log"Python version < ${MDC(VERSION, TestUtils.minimumPythonSupportedVersion)}, " +
-          "the running environment is unavailable.")
+          log"the running environment is unavailable.")
       }
     }
 
