@@ -22,7 +22,7 @@ import scala.util.control.Breaks._
 import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watch}
 import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.SparkConf
@@ -174,6 +174,35 @@ private[spark] class Client(
       val otherKubernetesResources = resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
       addOwnerReference(createdDriverPod, otherKubernetesResources)
       kubernetesClient.resourceList(otherKubernetesResources: _*).forceConflicts().serverSideApply()
+
+      def checkMissingResources(): Seq[HasMetadata] = {
+        val createdResources =
+          kubernetesClient.resourceList(otherKubernetesResources: _*).get().asScala
+        if (createdResources.size < otherKubernetesResources.size) {
+          otherKubernetesResources.filter(resource => {
+            !createdResources.exists(created =>
+              created.getMetadata.getName.equals(resource.getMetadata.getName))
+          })
+        } else {
+          Seq.empty
+        }
+      }
+
+      val maxRetries = conf.get(KUBERNETES_RESOURCES_MAX_RETRIES).getOrElse(-1)
+      breakable {
+        for (i <- 0 to maxRetries) {
+          val missingResources = checkMissingResources()
+          if (missingResources.nonEmpty) {
+            if (i == maxRetries) {
+              throw new KubernetesClientException(
+                s"Failed creating kubernetes resources: $missingResources")
+            }
+            kubernetesClient.resourceList(missingResources: _*).forceConflicts().serverSideApply()
+          } else {
+            break()
+          }
+        }
+      }
     } catch {
       case NonFatal(e) =>
         kubernetesClient.pods().resource(createdDriverPod).delete()
