@@ -31,7 +31,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.deploy.SparkSubmitTestUtils
-import org.apache.spark.internal.LogKey.VERSION
+import org.apache.spark.internal.LogKey.PYTHON_VERSION
 import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
@@ -203,7 +203,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         }
       } else {
         logError(
-          log"Python version < ${MDC(VERSION, TestUtils.minimumPythonSupportedVersion)}, " +
+          log"Python version < ${MDC(PYTHON_VERSION, TestUtils.minimumPythonSupportedVersion)}, " +
           log"the running environment is unavailable.")
       }
     }

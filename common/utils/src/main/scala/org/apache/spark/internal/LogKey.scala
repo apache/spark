@@ -113,7 +113,7 @@ object LogKey extends Enumeration {
   val URI = Value
   val USER_ID = Value
   val USER_NAME = Value
-  val VERSION = Value
+  val PYTHON_VERSION = Value
   val WATERMARK_CONSTRAINT = Value
   val WORKER_URL = Value
   val XSD_PATH = Value
