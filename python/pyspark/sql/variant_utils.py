@@ -22,6 +22,7 @@ from array import array
 from typing import Any
 from pyspark.errors import PySparkValueError
 
+
 class VariantUtils:
     """
     A utility class for VariantVal.
