@@ -51,7 +51,6 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     AutoBatchedSerializer,
     BatchedSerializer,
@@ -62,8 +61,6 @@ from pyspark.serializers import (
     CPickleSerializer,
     Serializer,
     pack_long,
-    read_int,
-    write_int,
 )
 from pyspark.join import (
     python_join,
@@ -86,42 +83,28 @@ from pyspark.shuffle import (
     ExternalGroupBy,
 )
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import fail_on_stopiteration, _parse_memory
+from pyspark.util import (
+    fail_on_stopiteration,
+    _parse_memory,
+    _load_from_socket,
+    _local_iterator_from_socket,
+)
 from pyspark.errors import PySparkRuntimeError
+
+# for backward compatibility references.
+from pyspark.util import PythonEvalType  # noqa: F401
 
 
 if TYPE_CHECKING:
-    import socket
-    import io
-
     from py4j.java_gateway import JavaObject
-    from py4j.java_collections import JavaArray
 
-    from pyspark._typing import NonUDFType
     from pyspark._typing import S, NumberOrArray
-    from pyspark.context import SparkContext
-    from pyspark.sql.pandas._typing import (
-        PandasScalarUDFType,
-        PandasGroupedMapUDFType,
-        PandasGroupedAggUDFType,
-        PandasWindowAggUDFType,
-        PandasScalarIterUDFType,
-        PandasMapIterUDFType,
-        PandasCogroupedMapUDFType,
-        ArrowMapIterUDFType,
-        PandasGroupedMapUDFWithStateType,
-        ArrowGroupedMapUDFType,
-        ArrowCogroupedMapUDFType,
-    )
+    from pyspark.core.context import SparkContext
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.types import AtomicType, StructType
     from pyspark.sql._typing import (
         AtomicValue,
         RowLike,
-        SQLArrowBatchedUDFType,
-        SQLArrowTableUDFType,
-        SQLBatchedUDFType,
-        SQLTableUDFType,
     )
 
 T = TypeVar("T")
@@ -135,36 +118,6 @@ V3 = TypeVar("V3")
 
 
 __all__ = ["RDD"]
-
-
-class PythonEvalType:
-    """
-    Evaluation type of python rdd.
-
-    These values are internal to PySpark.
-
-    These values should match values in org.apache.spark.api.python.PythonEvalType.
-    """
-
-    NON_UDF: "NonUDFType" = 0
-
-    SQL_BATCHED_UDF: "SQLBatchedUDFType" = 100
-    SQL_ARROW_BATCHED_UDF: "SQLArrowBatchedUDFType" = 101
-
-    SQL_SCALAR_PANDAS_UDF: "PandasScalarUDFType" = 200
-    SQL_GROUPED_MAP_PANDAS_UDF: "PandasGroupedMapUDFType" = 201
-    SQL_GROUPED_AGG_PANDAS_UDF: "PandasGroupedAggUDFType" = 202
-    SQL_WINDOW_AGG_PANDAS_UDF: "PandasWindowAggUDFType" = 203
-    SQL_SCALAR_PANDAS_ITER_UDF: "PandasScalarIterUDFType" = 204
-    SQL_MAP_PANDAS_ITER_UDF: "PandasMapIterUDFType" = 205
-    SQL_COGROUPED_MAP_PANDAS_UDF: "PandasCogroupedMapUDFType" = 206
-    SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
-    SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
-    SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
-    SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
-
-    SQL_TABLE_UDF: "SQLTableUDFType" = 300
-    SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
 
 
 def portable_hash(x: Hashable) -> int:
@@ -224,100 +177,6 @@ class BoundedFloat(float):
         obj.low = low
         obj.high = high
         return obj
-
-
-def _create_local_socket(sock_info: "JavaArray") -> "io.BufferedRWPair":
-    """
-    Create a local socket that can be used to load deserialized data from the JVM
-
-    Parameters
-    ----------
-    sock_info : tuple
-        Tuple containing port number and authentication secret for a local socket.
-
-    Returns
-    -------
-    sockfile file descriptor of the local socket
-    """
-    sockfile: "io.BufferedRWPair"
-    sock: "socket.socket"
-    port: int = sock_info[0]
-    auth_secret: str = sock_info[1]
-    sockfile, sock = local_connect_and_auth(port, auth_secret)
-    # The RDD materialization time is unpredictable, if we set a timeout for socket reading
-    # operation, it will very possibly fail. See SPARK-18281.
-    sock.settimeout(None)
-    return sockfile
-
-
-def _load_from_socket(sock_info: "JavaArray", serializer: Serializer) -> Iterator[Any]:
-    """
-    Connect to a local socket described by sock_info and use the given serializer to yield data
-
-    Parameters
-    ----------
-    sock_info : tuple
-        Tuple containing port number and authentication secret for a local socket.
-    serializer : class:`Serializer`
-        The PySpark serializer to use
-
-    Returns
-    -------
-    result of meth:`Serializer.load_stream`,
-    usually a generator that yields deserialized data
-    """
-    sockfile = _create_local_socket(sock_info)
-    # The socket will be automatically closed when garbage-collected.
-    return serializer.load_stream(sockfile)
-
-
-def _local_iterator_from_socket(sock_info: "JavaArray", serializer: Serializer) -> Iterator[Any]:
-    class PyLocalIterable:
-        """Create a synchronous local iterable over a socket"""
-
-        def __init__(self, _sock_info: "JavaArray", _serializer: Serializer):
-            port: int
-            auth_secret: str
-            jsocket_auth_server: "JavaObject"
-            port, auth_secret, self.jsocket_auth_server = _sock_info
-            self._sockfile = _create_local_socket((port, auth_secret))
-            self._serializer = _serializer
-            self._read_iter: Iterator[Any] = iter([])  # Initialize as empty iterator
-            self._read_status = 1
-
-        def __iter__(self) -> Iterator[Any]:
-            while self._read_status == 1:
-                # Request next partition data from Java
-                write_int(1, self._sockfile)
-                self._sockfile.flush()
-
-                # If response is 1 then there is a partition to read, if 0 then fully consumed
-                self._read_status = read_int(self._sockfile)
-                if self._read_status == 1:
-                    # Load the partition data as a stream and read each item
-                    self._read_iter = self._serializer.load_stream(self._sockfile)
-                    for item in self._read_iter:
-                        yield item
-
-                # An error occurred, join serving thread and raise any exceptions from the JVM
-                elif self._read_status == -1:
-                    self.jsocket_auth_server.getResult()
-
-        def __del__(self) -> None:
-            # If local iterator is not fully consumed,
-            if self._read_status == 1:
-                try:
-                    # Finish consuming partition data stream
-                    for _ in self._read_iter:
-                        pass
-                    # Tell Java to stop sending data and close connection
-                    write_int(0, self._sockfile)
-                    self._sockfile.flush()
-                except Exception:
-                    # Ignore any errors, socket is automatically closed when garbage-collected
-                    pass
-
-    return iter(PyLocalIterable(sock_info, serializer))
 
 
 class Partitioner:
@@ -5343,7 +5202,7 @@ class RDDBarrier(Generic[T]):
         ...
         >>> barrier = rdd.barrier()
         >>> barrier
-        <pyspark.rdd.RDDBarrier ...>
+        <pyspark.core.rdd.RDDBarrier ...>
         >>> barrier.mapPartitions(f).collect()
         [3, 7]
         """
@@ -5396,7 +5255,7 @@ class RDDBarrier(Generic[T]):
         ...
         >>> barrier = rdd.barrier()
         >>> barrier
-        <pyspark.rdd.RDDBarrier ...>
+        <pyspark.core.rdd.RDDBarrier ...>
         >>> barrier.mapPartitionsWithIndex(f).sum()
         6
         """
@@ -5509,7 +5368,7 @@ class PipelinedRDD(RDD[U], Generic[T, U]):
 def _test() -> None:
     import doctest
     import tempfile
-    from pyspark.context import SparkContext
+    from pyspark.core.context import SparkContext
 
     tmp_dir = tempfile.TemporaryDirectory()
     globs = globals().copy()

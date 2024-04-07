@@ -29,7 +29,7 @@ from warnings import warn
 
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.loose_version import LooseVersion
-from pyspark.rdd import _load_from_socket
+from pyspark.util import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.pandas.types import _dedup_names
 from pyspark.sql.types import (

@@ -24,7 +24,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.LISTENER
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -246,7 +247,7 @@ private[spark] class TaskContextImpl(
             }
           }
           listenerExceptions += e
-          logError(s"Error in $name", e)
+          logError(log"Error in ${MDC(LISTENER, name)}", e)
       }
     }
     if (listenerExceptions.nonEmpty) {

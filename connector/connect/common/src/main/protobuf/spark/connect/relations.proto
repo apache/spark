@@ -23,6 +23,7 @@ import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
+import "spark/connect/common.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -893,6 +894,9 @@ message MapPartitions {
 
   // (Optional) Whether to use barrier mode execution or not.
   optional bool is_barrier = 3;
+
+  // (Optional) ResourceProfile id used for the stage level scheduling.
+  optional int32 profile_id = 4;
 }
 
 message GroupMap {

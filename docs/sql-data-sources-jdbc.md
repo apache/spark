@@ -432,7 +432,7 @@ SELECT * FROM resultTable
 
 ### Mapping Spark SQL Data Types from MySQL
 
-The below table describe the data type conversions from MySQL data types to Spark SQL Data Types,
+The below table describes the data type conversions from MySQL data types to Spark SQL Data Types,
 when reading data from a MySQL table using the built-in jdbc data source with the MySQL Connector/J
 as the activated JDBC Driver. Note that, different JDBC drivers, such as Maria Connector/J, which
 are also available to connect MySQL, may have different mapping rules.
@@ -681,7 +681,7 @@ are also available to connect MySQL, may have different mapping rules.
 
 ### Mapping Spark SQL Data Types to MySQL
 
-The below table describe the data type conversions from Spark SQL Data Types to MySQL data types,
+The below table describes the data type conversions from Spark SQL Data Types to MySQL data types,
 when creating, altering, or writing data to a MySQL table using the built-in jdbc data source with
 the MySQL Connector/J as the activated JDBC Driver.
 
@@ -711,8 +711,8 @@ may have different mapping rules.
     </tr>
     <tr>
       <td>ShortType</td>
-      <td>INTEGER</td>
-      <td></td>
+      <td>SMALLINT</td>
+      <td>For Spark 3.5 and previous, it maps to INTEGER</td>
     </tr>
     <tr>
       <td>IntegerType</td>
@@ -789,3 +789,223 @@ The Spark Catalyst data types below are not supported with suitable MYSQL types.
 - NullType
 - ObjectType
 - VariantType
+
+
+### Mapping Spark SQL Data Types from PostgreSQL
+
+The below table describes the data type conversions from PostgreSQL data types to Spark SQL Data Types,
+when reading data from a Postgres table using the built-in jdbc data source with the [PostgreSQL JDBC Driver](https://mvnrepository.com/artifact/org.postgresql/postgresql)
+as the activated JDBC Driver. Note that, different JDBC drivers, or different versions might result slightly different.
+
+
+<table>
+  <thead>
+    <tr>
+      <th><b>PostgreSQL Data Type</b></th>
+      <th><b>Spark SQL Data Type</b></th>
+      <th><b>Remarks</b></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>boolean</td>
+      <td>BooleanType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>smallint, smallserial</td>
+      <td>ShortType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>integer, serial</td>
+      <td>IntegerType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>bigint, bigserial</td>
+      <td>LongType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>float, float(p),  real</td>
+      <td>FloatType</td>
+      <td>1 &le; p &le; 24</td>
+    </tr>
+    <tr>
+      <td>float(p)</td>
+      <td>DoubleType</td>
+      <td>25 &le; p &le; 53</td>
+    </tr>
+    <tr>
+      <td>double precision</td>
+      <td>DoubleType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>numeric, decimal</td>
+      <td>DecimalType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>character varying(n), varchar(n)</td>
+      <td>VarcharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>character(n), char(n), bpchar(n)</td>
+      <td>CharType(n)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>bpchar</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>text</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>bytea</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>date</td>
+      <td>DateType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>timestamp [ (p) ] [ without time zone ]</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>timestamp [ (p) ] [ without time zone ]</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>timestamp [ (p) ] with time zone</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>time [ (p) ] [ without time zone ]</td>
+      <td>TimestampType</td>
+      <td>(Default)preferTimestampNTZ=false or spark.sql.timestampType=TIMESTAMP_LTZ</td>
+    </tr>
+    <tr>
+      <td>time [ (p) ] [ without time zone ]</td>
+      <td>TimestampNTZType</td>
+      <td>preferTimestampNTZ=true or spark.sql.timestampType=TIMESTAMP_NTZ</td>
+    </tr>
+    <tr>
+      <td>time [ (p) ] with time zone</td>
+      <td>TimestampType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>interval [ fields ] [ (p) ]</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>ENUM</td>
+      <td>StringType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>money</td>
+      <td>StringType</td>
+      <td>Monetary Types</td>
+    </tr>
+    <tr>
+      <td>inet, cidr, macaddr, macaddr8</td>
+      <td>StringType</td>
+      <td>Network Address Types</td>
+    </tr>
+    <tr>
+      <td>point, line, lseg, box, path, polygon, circle</td>
+      <td>StringType</td>
+      <td>Geometric Types</td>
+    </tr>
+    <tr>
+      <td>pg_lsn</td>
+      <td>StringType</td>
+      <td>Log Sequence Number</td>
+    </tr>
+    <tr>
+      <td>bit, bit(1)</td>
+      <td>BooleanType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>bit( &gt;1 )</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>bit varying( any )</td>
+      <td>BinaryType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>tsvector, tsquery</td>
+      <td>StringType</td>
+      <td>Text Search Types</td>
+    </tr>
+    <tr>
+      <td>uuid</td>
+      <td>StringType</td>
+      <td>Universally Unique Identifier Type</td>
+    </tr>
+    <tr>
+      <td>xml</td>
+      <td>StringType</td>
+      <td>XML Type</td>
+    </tr>
+    <tr>
+      <td>json, jsonb</td>
+      <td>StringType</td>
+      <td>JSON Types</td>
+    </tr>
+    <tr>
+      <td>array</td>
+      <td>ArrayType</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>Composite Types</td>
+      <td>StringType</td>
+      <td>Types created by CREATE TYPE syntax.</td>
+    </tr>
+    <tr>
+      <td>int4range, int8range, numrange, tsrange, tstzrange, daterange, etc</td>
+      <td>StringType</td>
+      <td>Range Types</td>
+    </tr>
+    <tr>
+      <td>Domain Types</td>
+      <td>(Decided by the underlying type)</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>oid</td>
+      <td>DecimalType(20, 0)</td>
+      <td>Object Identifier Types</td>
+    </tr>
+    <tr>
+      <td>regxxx</td>
+      <td>StringType</td>
+      <td>Object Identifier Types</td>
+    </tr>
+    <tr>
+      <td>void</td>
+      <td>NullType</td>
+      <td>void is a Postgres pseudo type, other pseudo types have not yet been verified</td>
+    </tr>
+  </tbody>
+</table>

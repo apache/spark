@@ -47,9 +47,9 @@ private[sql] object ArrowUtils {
     case LongType => new ArrowType.Int(8 * 8, true)
     case FloatType => new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE)
     case DoubleType => new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE)
-    case StringType if !largeVarTypes => ArrowType.Utf8.INSTANCE
+    case _: StringType if !largeVarTypes => ArrowType.Utf8.INSTANCE
     case BinaryType if !largeVarTypes => ArrowType.Binary.INSTANCE
-    case StringType if largeVarTypes => ArrowType.LargeUtf8.INSTANCE
+    case _: StringType if largeVarTypes => ArrowType.LargeUtf8.INSTANCE
     case BinaryType if largeVarTypes => ArrowType.LargeBinary.INSTANCE
     case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
     case DateType => new ArrowType.Date(DateUnit.DAY)

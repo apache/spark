@@ -333,6 +333,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
+    .doc("A comma-separated list of classes that implement the" +
+      " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
+      " extended plan information from the providers in explain plan and in the UI")
+    .version("4.0.0")
+    .stringConf
+    .toSequence
+    .createOptional
+
   val DYNAMIC_PARTITION_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
       .doc("When true, we will generate predicate for partition column when it's used as join key")
@@ -1544,6 +1553,18 @@ object SQLConf {
         "Spark will group the partitions by only those keys that are in the join keys." +
         s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
         "is false."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS =
+    buildConf("spark.sql.sources.v2.bucketing.allowCompatibleTransforms.enabled")
+      .doc("Whether to allow storage-partition join in the case where the partition transforms " +
+        "are compatible but not identical.  This config requires both " +
+        s"${V2_BUCKETING_ENABLED.key} and ${V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key} to be " +
+        s"enabled and ${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} " +
+        "to be disabled."
       )
       .version("4.0.0")
       .booleanConf
@@ -3247,6 +3268,16 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val DISABLE_MAP_KEY_NORMALIZATION =
+    buildConf("spark.sql.legacy.disableMapKeyNormalization")
+      .internal()
+      .doc("Disables key normalization when creating a map with `ArrayBasedMapBuilder`. When " +
+        "set to `true` it will prevent key normalization when building a map, which will " +
+        "allow for values such as `-0.0` and `0.0` to be present as distinct keys.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val FASTFAIL_ON_FILEFORMAT_OUTPUT =
     buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
       .internal()
@@ -3380,13 +3411,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val REPLACE_NULLIF_USING_WITH_EXPR =
-    buildConf("spark.databricks.sql.replaceNullIfUsingWithExpr")
+  val ALWAYS_INLINE_COMMON_EXPR =
+    buildConf("spark.sql.alwaysInlineCommonExpr")
       .internal()
-      .doc("When true, NullIf expressions are rewritten using With expressions to avoid " +
-        "expression duplication.")
+      .doc("When true, always inline common expressions instead of using the WITH expression. " +
+        "This may lead to duplicated expressions and the config should only be enabled if you " +
+        "hit bugs caused by the WITH expression.")
+      .version("4.0.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
@@ -4006,13 +4039,13 @@ object SQLConf {
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
       "dates/timestamps in a locale-sensitive manner, which is the approach before Spark 3.0. " +
       "When set to CORRECTED, classes from java.time.* packages are used for the same purpose. " +
-      "The default value is EXCEPTION, RuntimeException is thrown when we will get different " +
-      "results.")
+      "When set to EXCEPTION, RuntimeException is thrown when we will get different " +
+      "results. The default is CORRECTED.")
     .version("3.0.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
-    .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
+    .createWithDefault(LegacyBehaviorPolicy.CORRECTED.toString)
 
   val LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC =
     buildConf("spark.sql.legacy.followThreeValuedLogicInArrayExists")
@@ -5301,6 +5334,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingAllowJoinKeysSubsetOfPartitionKeys: Boolean =
     getConf(SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS)
+
+  def v2BucketingAllowCompatibleTransforms: Boolean =
+    getConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
