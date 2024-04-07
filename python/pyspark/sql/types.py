@@ -1495,6 +1495,7 @@ class VariantVal:
 
     Examples
     --------
+    >>> from pyspark.sql.functions import *
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
     >>> v = df.select(parse_json(df.json).alias("var")).collect()[0].var
     >>> v.toPython()
