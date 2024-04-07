@@ -80,6 +80,7 @@ object LogKey extends Enumeration {
   val RANGE = Value
   val RDD_ID = Value
   val REASON = Value
+  val RECEIVED_BLOCK_INFO = Value
   val REDUCE_ID = Value
   val REMOTE_ADDRESS = Value
   val RETRY_COUNT = Value
@@ -96,6 +97,7 @@ object LogKey extends Enumeration {
   val SIZE = Value
   val SLEEP_TIME = Value
   val STAGE_ID = Value
+  val STREAM_ID = Value
   val SUBMISSION_ID = Value
   val SUBSAMPLING_RATE = Value
   val TASK_ATTEMPT_ID = Value
