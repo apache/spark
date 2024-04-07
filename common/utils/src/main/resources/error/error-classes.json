@@ -4708,6 +4708,12 @@
     ],
     "sqlState" : "22023"
   },
+  "VARIANT_DUPLICATE_KEY" : {
+    "message" : [
+      "Failed to build variant because of a duplicate object key `<key>`."
+    ],
+    "sqlState" : "22023"
+  },
   "VARIANT_SIZE_LIMIT" : {
     "message" : [
       "Cannot build variant bigger than <sizeLimit> in <functionName>.",

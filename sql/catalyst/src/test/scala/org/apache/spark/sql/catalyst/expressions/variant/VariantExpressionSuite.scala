@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
@@ -796,5 +798,29 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "\u0001\u0002\u0003")
     checkCast(Array(primitiveHeader(BINARY), 5, 0, 0, 0, 72, 101, 108, 108, 111), StringType,
       "Hello")
+  }
+
+  test("cast to variant") {
+    def check[T : TypeTag](input: T, expectedJson: String): Unit = {
+      val cast = Cast(Literal.create(input), VariantType, evalMode = EvalMode.ANSI)
+      checkEvaluation(StructsToJson(Map.empty, cast), expectedJson)
+    }
+
+    check(null.asInstanceOf[String], null)
+    for (input <- Seq[Any](false, true, 0.toByte, 1.toShort, 2, 3L, 4.0F, 5.0D)) {
+      check(input, input.toString)
+    }
+    check(Array(null, "a", "b", "c"), """[null,"a","b","c"]""")
+    check(Map("z" -> 1, "y" -> 2, "x" -> 3), """{"x":3,"y":2,"z":1}""")
+    check(Array(parseJson("""{"a": 1,"b": [1, 2, 3]}"""),
+      parseJson("""{"c": true,"d": {"e": "str"}}""")),
+      """[{"a":1,"b":[1,2,3]},{"c":true,"d":{"e":"str"}}]""")
+    val struct = Literal.create(
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
+      StructType.fromDDL("c ARRAY<STRING>,b MAP<STRING, STRING>,a STRUCT<i: INT>"))
+    check(struct, """{"a":{"i":0},"b":{"a":"123","b":"true","c":"f"},"c":["123","true","f"]}""")
   }
 }
