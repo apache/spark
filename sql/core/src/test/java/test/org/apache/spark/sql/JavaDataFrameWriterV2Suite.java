@@ -17,12 +17,6 @@
 
 package test.org.apache.spark.sql;
 
-import java.io.File;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -32,7 +26,9 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.util.Utils;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.apache.spark.sql.functions.*;
 

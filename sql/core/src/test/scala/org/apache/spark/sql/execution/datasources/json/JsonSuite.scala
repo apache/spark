@@ -3825,7 +3825,7 @@ abstract class JsonSuite
     "when not explicitly specify the schema") {
     checkError(
       exception = intercept[AnalysisException] {
-        spark.read.json()
+        spark.read.json().collect()
       },
       errorClass = "UNABLE_TO_INFER_SCHEMA",
       parameters = Map("format" -> "JSON")

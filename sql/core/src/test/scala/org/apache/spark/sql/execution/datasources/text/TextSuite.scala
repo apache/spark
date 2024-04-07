@@ -258,7 +258,7 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
     "when not explicitly specify the schema") {
     checkError(
       exception = intercept[AnalysisException] {
-        spark.read.text()
+        spark.read.text().collect()
       },
       errorClass = "UNABLE_TO_INFER_SCHEMA",
       parameters = Map("format" -> "Text")

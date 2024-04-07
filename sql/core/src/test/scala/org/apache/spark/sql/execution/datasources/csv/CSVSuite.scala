@@ -3347,7 +3347,7 @@ abstract class CSVSuite
     "when not explicitly specify the schema") {
     checkError(
       exception = intercept[AnalysisException] {
-        spark.read.csv()
+        spark.read.csv().collect()
       },
       errorClass = "UNABLE_TO_INFER_SCHEMA",
       parameters = Map("format" -> "CSV")

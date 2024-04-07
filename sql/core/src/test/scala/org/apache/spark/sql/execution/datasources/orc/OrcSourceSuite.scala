@@ -597,7 +597,7 @@ abstract class OrcSuite
     "when not explicitly specify the schema") {
     checkError(
       exception = intercept[AnalysisException] {
-        spark.read.orc()
+        spark.read.orc().collect()
       },
       errorClass = "UNABLE_TO_INFER_SCHEMA",
       parameters = Map("format" -> "ORC")

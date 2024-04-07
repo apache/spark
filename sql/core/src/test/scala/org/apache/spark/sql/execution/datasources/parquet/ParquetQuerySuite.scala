@@ -1155,7 +1155,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     "when not explicitly specify the schema") {
     checkError(
       exception = intercept[AnalysisException] {
-        spark.read.parquet()
+        spark.read.parquet().collect()
       },
       errorClass = "UNABLE_TO_INFER_SCHEMA",
       parameters = Map("format" -> "Parquet")

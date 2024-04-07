@@ -3005,7 +3005,7 @@ class XmlSuite
     "when not explicitly specify the schema") {
     checkError(
       exception = intercept[AnalysisException] {
-        spark.read.option("rowTag", "ROW").xml()
+        spark.read.option("rowTag", "ROW").xml().collect()
       },
       errorClass = "UNABLE_TO_INFER_SCHEMA",
       parameters = Map("format" -> "XML")

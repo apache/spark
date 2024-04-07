@@ -24,10 +24,6 @@ import org.apache.spark.sql.types.{StringType, StructType}
 object TextUtils {
 
   def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
-    if (files.nonEmpty) {
-      Some(new StructType().add("value", StringType))
-    } else {
-      None
-    }
+    Some(new StructType().add("value", StringType))
   }
 }

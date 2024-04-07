@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.datasources.xml.TextInputXmlDataSource
 import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -538,9 +538,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def csv(paths: String*): DataFrame = {
-    format("csv").load(paths : _*)
-  }
+  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
 
   /**
    * Loads a XML file and returns the result as a `DataFrame`. See the documentation on the
@@ -662,9 +660,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def orc(paths: String*): DataFrame = {
-    format("orc").load(paths: _*)
-  }
+  def orc(paths: String*): DataFrame = format("orc").load(paths : _*)
 
   /**
    * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
@@ -722,6 +718,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def text(paths: String*): DataFrame = {
+    if (userSpecifiedSchema.isEmpty && paths.isEmpty) {
+      throw QueryCompilationErrors.dataSchemaNotSpecifiedError("Text")
+    }
     format("text").load(paths : _*)
   }
 
@@ -760,8 +759,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
     assertNoSpecifiedSchema("textFile")
-    val schema = new StructType().add("value", StringType)
-    format("text").schema(schema).load(paths : _*).select("value").
+    format("text").load(paths : _*).select("value").
       as[String](sparkSession.implicits.newStringEncoder)
   }
 
