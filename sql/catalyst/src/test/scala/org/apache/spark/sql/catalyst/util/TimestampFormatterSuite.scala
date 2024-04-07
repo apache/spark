@@ -36,23 +36,25 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
   override protected def useDateFormatter: Boolean = false
 
   test("parsing timestamps using time zones") {
-    val localDate = "2018-12-02T10:11:12.001234"
-    val expectedMicros = Map(
-      "UTC" -> 1543745472001234L,
-      PST.getId -> 1543774272001234L,
-      CET.getId -> 1543741872001234L,
-      "Africa/Dakar" -> 1543745472001234L,
-      "America/Los_Angeles" -> 1543774272001234L,
-      "Asia/Urumqi" -> 1543723872001234L,
-      "Asia/Hong_Kong" -> 1543716672001234L,
-      "Europe/Brussels" -> 1543741872001234L)
-    outstandingTimezonesIds.foreach { zoneId =>
-      val formatter = TimestampFormatter(
-        "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-        getZoneId(zoneId),
-        isParsing = true)
-      val microsSinceEpoch = formatter.parse(localDate)
-      assert(microsSinceEpoch === expectedMicros(zoneId))
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "EXCEPTION") {
+      val localDate = "2018-12-02T10:11:12.001234"
+      val expectedMicros = Map(
+        "UTC" -> 1543745472001234L,
+        PST.getId -> 1543774272001234L,
+        CET.getId -> 1543741872001234L,
+        "Africa/Dakar" -> 1543745472001234L,
+        "America/Los_Angeles" -> 1543774272001234L,
+        "Asia/Urumqi" -> 1543723872001234L,
+        "Asia/Hong_Kong" -> 1543716672001234L,
+        "Europe/Brussels" -> 1543741872001234L)
+      outstandingTimezonesIds.foreach { zoneId =>
+        val formatter = TimestampFormatter(
+          "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+          getZoneId(zoneId),
+          isParsing = true)
+        val microsSinceEpoch = formatter.parse(localDate)
+        assert(microsSinceEpoch === expectedMicros(zoneId))
+      }
     }
   }
 

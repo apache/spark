@@ -32,7 +32,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging, MDC}
-import org.apache.spark.internal.LogKey.{BLOCK_MANAGER_ID, OLD_BLOCK_MANAGER_ID}
+import org.apache.spark.internal.LogKey.{BLOCK_MANAGER_ID, EXECUTOR_ID, OLD_BLOCK_MANAGER_ID}
 import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
@@ -328,7 +328,8 @@ class BlockManagerMasterEndpoint(
         // care about the return result of removing blocks. That way we avoid breaking
         // down the whole application.
         case NonFatal(e) =>
-          logError(s"Cannot determine whether executor $executorId is alive or not.", e)
+          logError(log"Cannot determine whether executor " +
+            log"${MDC(EXECUTOR_ID, executorId)} is alive or not.", e)
           false
       }
       if (!isAlive) {
