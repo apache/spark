@@ -491,7 +491,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
   }
 
   test("check jdbc() does not support partitioning, bucketBy or sortBy") {
-    val df = spark.read.text(Utils.createTempDir(namePrefix = "text").getCanonicalPath)
+    val df = spark.read.schema(textSchema).text(
+      Utils.createTempDir(namePrefix = "text").getCanonicalPath)
 
     var w = df.write.partitionBy("value")
     var e = intercept[AnalysisException](w.jdbc(null, null, null))
@@ -624,9 +625,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
 
     // Reader, without user specified schema
-    withTempDir { tmpDir =>
-      testRead(spark.read.textFile(tmpDir.getCanonicalPath).toDF(), Seq.empty, textSchema)
-    }
+    testRead(spark.read.textFile().toDF(), Seq.empty, textSchema)
     testRead(spark.read.textFile(dir).toDF(), data, textSchema)
     testRead(spark.read.textFile(dir, dir).toDF(), data ++ data, textSchema)
     testRead(spark.read.textFile(Seq(dir, dir): _*).toDF(), data ++ data, textSchema)
@@ -650,15 +649,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     val schema = df.schema
 
     // Reader, without user specified schema
-    withTempDir { tmpDir =>
-      checkError(
-        exception = intercept[AnalysisException] {
-          testRead(spark.read.csv(tmpDir.getCanonicalPath), Seq.empty, schema)
-        },
-        errorClass = "UNABLE_TO_INFER_SCHEMA",
-        parameters = Map("format" -> "CSV")
-      )
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        testRead(spark.read.csv(), Seq.empty, schema)
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "CSV")
+    )
 
     testRead(spark.read.csv(dir), data, schema)
     testRead(spark.read.csv(dir, dir), data ++ data, schema)
@@ -681,11 +678,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[AnalysisException] {
-      withTempDir { tmpDir =>
-        testRead(spark.read.json(tmpDir.getCanonicalPath), Seq.empty, schema)
-      }
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        testRead(spark.read.json(), Seq.empty, schema)
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "JSON")
+    )
+
     testRead(spark.read.json(dir), data, schema)
     testRead(spark.read.json(dir, dir), data ++ data, schema)
     testRead(spark.read.json(Seq(dir, dir): _*), data ++ data, schema)
@@ -709,11 +709,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[AnalysisException] {
-      withTempDir { tmpDir =>
-         testRead(spark.read.parquet(tmpDir.getCanonicalPath), Seq.empty, schema)
-      }
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        testRead(spark.read.parquet(), Seq.empty, schema)
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "Parquet")
+    )
     testRead(spark.read.parquet(dir), data, schema)
     testRead(spark.read.parquet(dir, dir), data ++ data, schema)
     testRead(spark.read.parquet(Seq(dir, dir): _*), data ++ data, schema)
@@ -739,11 +741,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       val schema = df.schema
 
       // Reader, without user specified schema
-      intercept[AnalysisException] {
-        withTempDir { tmpDir =>
-          testRead(spark.read.orc(tmpDir.getCanonicalPath), Seq.empty, schema)
-        }
-      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          testRead(spark.read.orc(), Seq.empty, schema)
+        },
+        errorClass = "UNABLE_TO_INFER_SCHEMA",
+        parameters = Map("format" -> "ORC")
+      )
       testRead(spark.read.orc(dir), data, schema)
       testRead(spark.read.orc(dir, dir), data ++ data, schema)
       testRead(spark.read.orc(Seq(dir, dir): _*), data ++ data, schema)

@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.datasources.xml.TextInputXmlDataSource
 import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -361,7 +361,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def json(paths: String*): DataFrame = {
-    assertNonEmptyPaths(paths: _*)
     userSpecifiedSchema.foreach(checkJsonSchema)
     format("json").load(paths : _*)
   }
@@ -540,7 +539,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = {
-    assertNonEmptyPaths(paths: _*)
     format("csv").load(paths : _*)
   }
 
@@ -570,7 +568,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def xml(paths: String*): DataFrame = {
-    assertNonEmptyPaths(paths: _*)
     userSpecifiedSchema.foreach(checkXmlSchema)
     format("xml").load(paths: _*)
   }
@@ -639,7 +636,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def parquet(paths: String*): DataFrame = {
-    assertNonEmptyPaths(paths: _*)
     format("parquet").load(paths: _*)
   }
 
@@ -667,7 +663,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def orc(paths: String*): DataFrame = {
-    assertNonEmptyPaths(paths: _*)
     format("orc").load(paths: _*)
   }
 
@@ -727,7 +722,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def text(paths: String*): DataFrame = {
-    assertNonEmptyPaths(paths: _*)
     format("text").load(paths : _*)
   }
 
@@ -766,7 +760,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
     assertNoSpecifiedSchema("textFile")
-    text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
+    val schema = new StructType().add("value", StringType)
+    format("text").schema(schema).load(paths : _*).select("value").
+      as[String](sparkSession.implicits.newStringEncoder)
   }
 
   /**
@@ -775,15 +771,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   private def assertNoSpecifiedSchema(operation: String): Unit = {
     if (userSpecifiedSchema.nonEmpty) {
       throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedError(operation)
-    }
-  }
-
-  /**
-   * A convenient function for paths validation in APIs.
-   */
-  private def assertNonEmptyPaths(paths: String*): Unit = {
-    if (userSpecifiedSchema.isEmpty) {
-      require(paths.nonEmpty, "The paths cannot be empty")
     }
   }
 

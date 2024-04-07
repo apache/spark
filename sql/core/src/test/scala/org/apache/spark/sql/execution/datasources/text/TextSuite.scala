@@ -256,10 +256,13 @@ abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFi
 
   test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` non empty " +
     "when not explicitly specify the schema") {
-    val e = intercept[IllegalArgumentException] {
-      spark.read.text()
-    }
-    assert(e.getMessage === "requirement failed: The paths cannot be empty")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.text()
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "Text")
+    )
   }
 
   test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` can empty " +

@@ -3852,7 +3852,7 @@
   },
   "UNABLE_TO_INFER_SCHEMA" : {
     "message" : [
-      "Unable to infer schema for <format>. It must be specified manually."
+      "Unable to infer schema for <format>. Please manually specify the schema or make the input paths not empty"
     ],
     "sqlState" : "42KD9"
   },

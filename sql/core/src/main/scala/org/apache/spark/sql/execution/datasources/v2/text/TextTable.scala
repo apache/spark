@@ -21,8 +21,9 @@ import org.apache.hadoop.fs.FileStatus
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
+import org.apache.spark.sql.execution.datasources.text.TextUtils
 import org.apache.spark.sql.execution.datasources.v2.FileTable
-import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class TextTable(
@@ -36,8 +37,9 @@ case class TextTable(
   override def newScanBuilder(options: CaseInsensitiveStringMap): TextScanBuilder =
     TextScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 
-  override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    Some(StructType(Array(StructField("value", StringType))))
+  override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
+    TextUtils.inferSchema(files)
+  }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
     new WriteBuilder {

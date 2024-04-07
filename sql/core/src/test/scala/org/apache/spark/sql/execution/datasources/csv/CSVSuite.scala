@@ -3343,15 +3343,18 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` non empty " +
+  test("SPARK-47649: the parameter `inputs` of the function `csv(paths: String*)` non empty " +
     "when not explicitly specify the schema") {
-    val e = intercept[IllegalArgumentException] {
-      spark.read.csv()
-    }
-    assert(e.getMessage === "requirement failed: The paths cannot be empty")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.csv()
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "CSV")
+    )
   }
 
-  test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` can empty " +
+  test("SPARK-47649: the parameter `inputs` of the function `csv(paths: String*)` can empty " +
     "when explicitly specify the schema") {
     val schema = StructType(Seq(StructField("column", StringType)))
     val df = spark.read.schema(schema).csv()

@@ -166,6 +166,9 @@ object OrcUtils extends Logging {
 
   def inferSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
     : Option[StructType] = {
+    if (files.isEmpty) {
+      return None
+    }
     val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(

@@ -39,10 +39,9 @@ import static org.apache.spark.sql.functions.*;
 public class JavaDataFrameWriterV2Suite {
   private static StructType schema = new StructType().add("s", "string");
   private SparkSession spark = null;
-  private transient String input;
 
   public Dataset<Row> df() {
-    return spark.read().schema(schema).text(input);
+    return spark.read().schema(schema).text();
   }
 
   @BeforeEach
@@ -50,12 +49,10 @@ public class JavaDataFrameWriterV2Suite {
     this.spark = new TestSparkSession();
     spark.conf().set("spark.sql.catalog.testcat", InMemoryTableCatalog.class.getName());
     spark.sql("CREATE TABLE testcat.t (s string) USING foo");
-    input = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "input").toString();
   }
 
   @AfterEach
   public void dropTestTable() {
-    Utils.deleteRecursively(new File(input));
     spark.sql("DROP TABLE testcat.t");
     spark.stop();
   }

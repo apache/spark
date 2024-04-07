@@ -53,6 +53,9 @@ object ParquetUtils extends Logging {
       sparkSession: SparkSession,
       parameters: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    if (files.isEmpty) {
+      return None
+    }
     val parquetOptions = new ParquetOptions(parameters, sparkSession.sessionState.conf)
 
     // Should we merge schemas from all Parquet part-files?

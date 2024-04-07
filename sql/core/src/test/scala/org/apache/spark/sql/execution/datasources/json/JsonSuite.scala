@@ -3821,15 +3821,18 @@ abstract class JsonSuite
     }
   }
 
-  test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` non empty " +
+  test("SPARK-47649: the parameter `inputs` of the function `json(paths: String*)` non empty " +
     "when not explicitly specify the schema") {
-    val e = intercept[IllegalArgumentException] {
-      spark.read.json()
-    }
-    assert(e.getMessage === "requirement failed: The paths cannot be empty")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.json()
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "JSON")
+    )
   }
 
-  test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` can empty " +
+  test("SPARK-47649: the parameter `inputs` of the function `json(paths: String*)` can empty " +
     "when explicitly specify the schema") {
     val schema = StructType(Seq(StructField("column", StringType)))
     val df = spark.read.schema(schema).json()

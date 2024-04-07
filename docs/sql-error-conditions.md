@@ -2443,7 +2443,7 @@ Unable to fetch tables of Hive database: `<dbName>`.
 
 [SQLSTATE: 42KD9](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Unable to infer schema for `<format>`. It must be specified manually.
+Unable to infer schema for `<format>`. Please manually specify the schema or make the input paths not empty
 
 ### UNBOUND_SQL_PARAMETER
 

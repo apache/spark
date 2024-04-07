@@ -34,7 +34,7 @@ import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
-import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{AnalysisException, Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
@@ -593,15 +593,18 @@ abstract class OrcSuite
     assert(OrcOptions.isValidOption("compression"))
   }
 
-  test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` non empty " +
+  test("SPARK-47649: the parameter `inputs` of the function `orc(paths: String*)` non empty " +
     "when not explicitly specify the schema") {
-    val e = intercept[IllegalArgumentException] {
-      spark.read.orc()
-    }
-    assert(e.getMessage === "requirement failed: The paths cannot be empty")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.read.orc()
+      },
+      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      parameters = Map("format" -> "ORC")
+    )
   }
 
-  test("SPARK-47649: the parameter `inputs` of the function `text(paths: String*)` can empty " +
+  test("SPARK-47649: the parameter `inputs` of the function `orc(paths: String*)` can empty " +
     "when explicitly specify the schema") {
     val schema = StructType(Seq(StructField("column", StringType)))
     val df = spark.read.schema(schema).orc()
