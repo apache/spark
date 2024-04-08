@@ -34,7 +34,8 @@ object LogKey extends Enumeration {
   val CATEGORICAL_FEATURES = Value
   val CLASS_LOADER = Value
   val CLASS_NAME = Value
-  val COLUMN_DATA_TYPE = Value
+  val COLUMN_DATA_TYPE_SOURCE = Value
+  val COLUMN_DATA_TYPE_TARGET = Value
   val COLUMN_DEFAULT_VALUE = Value
   val COLUMN_NAME = Value
   val COMMAND = Value
@@ -44,6 +45,10 @@ object LogKey extends Enumeration {
   val CONFIG2 = Value
   val CONTAINER_ID = Value
   val COUNT = Value
+  val CSV_HEADER_COLUMN_NAME = Value
+  val CSV_HEADER_COLUMN_NAMES = Value
+  val CSV_SCHEMA_FIELD_NAME = Value
+  val CSV_SCHEMA_FIELD_NAMES = Value
   val CSV_HEADER_LENGTH = Value
   val CSV_SOURCE = Value
   val DRIVER_ID = Value
@@ -62,6 +67,7 @@ object LogKey extends Enumeration {
   val HOST = Value
   val JOB_ID = Value
   val JOIN_CONDITION = Value
+  val JOIN_CONDITION_SUB_EXPRESSION = Value
   val LEARNING_RATE = Value
   val LINE = Value
   val LINE_NUM = Value
@@ -90,7 +96,8 @@ object LogKey extends Enumeration {
   val PORT = Value
   val QUERY_HINT = Value
   val QUERY_PLAN = Value
-  val QUERY_PLAN_LENGTH = Value
+  val QUERY_PLAN_LENGTH_ACTUAL = Value
+  val QUERY_PLAN_LENGTH_MAX = Value
   val RANGE = Value
   val RDD_ID = Value
   val REASON = Value
@@ -111,7 +118,6 @@ object LogKey extends Enumeration {
   val SIZE = Value
   val SLEEP_TIME = Value
   val SLEEP_TIME_SECONDS = Value
-  val SQL_CONF_KEY = Value
   val SQL_TEXT = Value
   val STAGE_ID = Value
   val SUBMISSION_ID = Value

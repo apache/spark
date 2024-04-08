@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.{COLUMN_DATA_TYPE, COLUMN_DEFAULT_VALUE, COLUMN_NAME, ERROR}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis._
@@ -324,8 +324,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
           case e @ ( _: SparkThrowable | _: RuntimeException) =>
             logWarning(log"Failed to cast default value '${MDC(COLUMN_DEFAULT_VALUE, l)}' " +
               log"for column ${MDC(COLUMN_NAME, colName)} " +
-              log"from ${MDC(COLUMN_DATA_TYPE, l.dataType)} " +
-              log"to ${MDC(COLUMN_DATA_TYPE, targetType)} " +
+              log"from ${MDC(COLUMN_DATA_TYPE_SOURCE, l.dataType)} " +
+              log"to ${MDC(COLUMN_DATA_TYPE_TARGET, targetType)} " +
               log"due to ${MDC(ERROR, e.getMessage)}", e)
             None
         }

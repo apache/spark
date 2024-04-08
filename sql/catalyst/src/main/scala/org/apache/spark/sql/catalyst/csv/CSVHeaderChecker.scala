@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.csv
 
 import com.univocity.parsers.common.AbstractParser
 import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
+
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
-import org.apache.spark.internal.LogKey.{COLUMN_NAME, CSV_HEADER_LENGTH, CSV_SOURCE, NUM_COLUMNS}
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -76,10 +77,10 @@ class CSVHeaderChecker(
           if (nameInHeader != nameInSchema) {
             errorMessage = Some(
               log"""|CSV header does not conform to the schema.
-                    | Header: ${MDC(COLUMN_NAME, columnNames.mkString(", "))}
-                    | Schema: ${MDC(COLUMN_NAME, fieldNames.mkString(", "))}
-                    |Expected: ${MDC(COLUMN_NAME, fieldNames(i))}
-                    |but found: ${MDC(COLUMN_NAME, columnNames(i))}
+                    | Header: ${MDC(CSV_HEADER_COLUMN_NAMES, columnNames.mkString(", "))}
+                    | Schema: ${MDC(CSV_SCHEMA_FIELD_NAMES, fieldNames.mkString(", "))}
+                    |Expected: ${MDC(CSV_SCHEMA_FIELD_NAME, fieldNames(i))}
+                    |but found: ${MDC(CSV_HEADER_COLUMN_NAME, columnNames(i))}
                     |${MDC(CSV_SOURCE, source)}""".stripMargin)
           }
           i += 1

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.SQL_CONF_KEY
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -77,7 +77,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
     } else if (hasCharVarchar(dt)) {
       logWarning(log"The Spark cast operator does not support char/varchar type and simply treats" +
         log" them as string type. Please use string type directly to avoid confusion. Otherwise," +
-        log" you can set ${MDC(SQL_CONF_KEY, SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key)} " +
+        log" you can set ${MDC(CONFIG, SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key)} " +
         log"to true, so that Spark treat them as string type as same as Spark 3.0 and earlier")
       replaceCharVarcharWithString(dt)
     } else {
