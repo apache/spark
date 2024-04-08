@@ -1349,7 +1349,7 @@ class VariantType(AtomicType):
         return True
 
     def fromInternal(self, obj: Dict) -> Optional["VariantVal"]:
-        if obj is None or all(key in obj for key in ["value", "metadata"]):
+        if obj is None or not all(key in obj for key in ["value", "metadata"]):
             return None
         return VariantVal(obj["value"], obj["metadata"])
 
