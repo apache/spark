@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchema.{KEY_ROW_SCHEMA, VALUE_ROW_SCHEMA_WITH_TTL}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig}
+import org.apache.spark.util.NextIterator
 
 /**
  * Provides concrete implementation for list of values associated with a state variable
@@ -73,49 +74,27 @@ class ListStateImplWithTTL[S](
 
     val unsafeRowValuesIterator = store.valuesIterator(encodedKey, stateName)
 
-    var currentRow: UnsafeRow = null
+    new NextIterator[S] {
+      private var currentRow: UnsafeRow = _
 
-    new Iterator[S] {
-      override def hasNext: Boolean = {
-        if (currentRow == null) {
-          setNextValidRow()
-        }
-
-        currentRow != null
-      }
-
-      override def next(): S = {
-        if (currentRow == null) {
-          setNextValidRow()
-        }
-        if (currentRow == null) {
-          throw new NoSuchElementException("Iterator is at the end")
-        }
-        val result = stateTypesEncoder.decodeValue(currentRow)
-        currentRow = null
-        result
-      }
-
-      // sets currentRow to a valid state, where we are
-      // pointing to a non-expired row
-      private def setNextValidRow(): Unit = {
-        assert(currentRow == null)
+      override protected def getNext(): S = {
         if (unsafeRowValuesIterator.hasNext) {
           currentRow = unsafeRowValuesIterator.next()
+          while (unsafeRowValuesIterator.hasNext && isExpired(currentRow)) {
+            currentRow = unsafeRowValuesIterator.next()
+          }
+          // in this case, we have iterated to the end, and there are no
+          // non-expired values
+          if (currentRow != null && isExpired(currentRow)) {
+            currentRow = null
+          }
         } else {
-          currentRow = null
-          return
+          finished = true
         }
-        while (unsafeRowValuesIterator.hasNext && isExpired(currentRow)) {
-          currentRow = unsafeRowValuesIterator.next()
-        }
-
-        // in this case, we have iterated to the end, and there are no
-        // non-expired values
-        if (currentRow != null && isExpired(currentRow)) {
-          currentRow = null
-        }
+        if (currentRow != null) stateTypesEncoder.decodeValue(currentRow) else null.asInstanceOf[S]
       }
+
+      override protected def close(): Unit = {}
     }
   }
 
