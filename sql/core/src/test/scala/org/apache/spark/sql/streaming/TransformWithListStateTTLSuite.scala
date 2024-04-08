@@ -71,8 +71,8 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
       }
     } else if (row.action == "get_without_enforcing_ttl") {
       val currState = listState.getWithoutEnforcingTTL()
-      currState.filter(_.isDefined).foreach { v =>
-        results = OutputEvent(key, v.get, isTTLValue = false, -1) :: results
+      currState.foreach { v =>
+        results = OutputEvent(key, v, isTTLValue = false, -1) :: results
       }
     } else if (row.action == "get_ttl_value_from_state") {
       val ttlExpiration = listState.getTTLValues()
@@ -142,6 +142,14 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           OutputEvent("k1", -1, isTTLValue = true, 182000),
           OutputEvent("k1", -1, isTTLValue = true, 182000)
         ),
+        AddData(inputStream, InputEvent("k1", "get", -1, null)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(
+          OutputEvent("k1", 1, isTTLValue = false, -1),
+          OutputEvent("k1", 2, isTTLValue = false, -1),
+          OutputEvent("k1", 3, isTTLValue = false, -1)
+        ),
+        AdvanceManualClock(1 * 1000),
         StopStream
       )
 
@@ -177,8 +185,12 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
         AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(
-          OutputEvent("k1", -1, isTTLValue = true, 180000),
-          OutputEvent("k1", -1, isTTLValue = true, 15000)
+          OutputEvent("k1", -1, isTTLValue = true, 181000),
+          OutputEvent("k1", -1, isTTLValue = true, 182000),
+          OutputEvent("k1", -1, isTTLValue = true, 182000),
+          OutputEvent("k1", -1, isTTLValue = true, 21000),
+          OutputEvent("k1", -1, isTTLValue = true, 21000),
+          OutputEvent("k1", -1, isTTLValue = true, 21000)
         ),
         StopStream
       )

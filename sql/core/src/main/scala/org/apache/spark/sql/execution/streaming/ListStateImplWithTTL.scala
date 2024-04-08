@@ -70,12 +70,15 @@ class ListStateImplWithTTL[S](
    */
   override def get(): Iterator[S] = {
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    val unsafeRowValuesIterator = store.valuesIterator(encodedKey, stateName)
     logError(s"### size: ${store.valuesIterator(encodedKey, stateName).size}")
+
+    val unsafeRowValuesIterator = store.valuesIterator(encodedKey, stateName)
+
     var currentRow: UnsafeRow = null
 
     new Iterator[S] {
       override def hasNext: Boolean = {
+        logError(s"### calling hasNext")
         if (currentRow == null) {
           setNextValidRow()
         }
@@ -84,6 +87,7 @@ class ListStateImplWithTTL[S](
       }
 
       override def next(): S = {
+        logError(s"### calling next()")
         if (currentRow == null) {
           setNextValidRow()
         }
@@ -103,12 +107,14 @@ class ListStateImplWithTTL[S](
         if (unsafeRowValuesIterator.hasNext) {
           logError(s"### set currentRow")
           currentRow = unsafeRowValuesIterator.next()
+          logError(s"### currentRowVal: ${stateTypesEncoder.decodeValue(currentRow)}")
         } else {
           currentRow = null
           return
         }
         while (unsafeRowValuesIterator.hasNext && isExpired(currentRow)) {
           logError(s"### isExpired, ${isExpired(currentRow)}")
+          logError(s"### currentRowVal: ${stateTypesEncoder.decodeValue(currentRow)}")
           currentRow = unsafeRowValuesIterator.next()
         }
 
@@ -205,6 +211,8 @@ class ListStateImplWithTTL[S](
         } else {
           store.merge(encodedGroupingKey, encodedValue, stateName)
         }
+      } else {
+        logError(s"### expired value found")
       }
     }
   }
@@ -225,21 +233,20 @@ class ListStateImplWithTTL[S](
    * in tests to read the state store value, and ensure if its cleaned up at the
    * end of the micro-batch.
    */
-  private[sql] def getWithoutEnforcingTTL(): Iterator[Option[S]] = {
+  private[sql] def getWithoutEnforcingTTL(): Iterator[S] = {
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     val unsafeRowValuesIterator = store.valuesIterator(encodedGroupingKey, stateName)
-    new Iterator[Option[S]] {
+    new Iterator[S] {
       override def hasNext: Boolean = {
         unsafeRowValuesIterator.hasNext
       }
 
-      override def next(): Option[S] = {
+      override def next(): S = {
         val valueUnsafeRow = unsafeRowValuesIterator.next()
         if (valueUnsafeRow != null) {
-          val resState = stateTypesEncoder.decodeValue(valueUnsafeRow)
-          Some(resState)
+          stateTypesEncoder.decodeValue(valueUnsafeRow)
         } else {
-          None
+          null.asInstanceOf[S]
         }
       }
     }
