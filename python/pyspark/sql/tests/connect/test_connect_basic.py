@@ -1155,6 +1155,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             set(spark_df.select("id").crossJoin(other=spark_df.select("name")).toPandas()),
         )
 
+    def test_self_join(self):
+        # SPARK-47713: this query fails in classic spark
+        df1 = self.connect.createDataFrame([(1, "a")], schema=["i", "j"])
+        df1_filter = df1.filter(df1.i > 0)
+        df2 = df1.join(df1_filter, df1.i == 1)
+        self.assertEqual(df2.count(), 1)
+        self.assertEqual(df2.columns, ["i", "j", "i", "j"])
+        self.assertEqual(list(df2.first()), [1, "a", 1, "a"])
+
     def test_with_metadata(self):
         cdf = self.connect.createDataFrame(data=[(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         self.assertEqual(cdf.schema["age"].metadata, {})

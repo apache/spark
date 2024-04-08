@@ -21,6 +21,7 @@ import os
 import functools
 import unittest
 import uuid
+import contextlib
 
 grpc_requirement_message = None
 try:
@@ -45,6 +46,7 @@ except ImportError as e:
 have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
 
 from pyspark import Row, SparkConf
+from pyspark.util import is_remote_only
 from pyspark.testing.utils import PySparkErrorTestUtils
 from pyspark.testing.sqlutils import (
     have_pandas,
@@ -184,7 +186,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
             .remote(cls.master())
             .getOrCreate()
         )
-        cls._legacy_sc = PySparkSession._instantiatedSession._sc
+        cls._legacy_sc = None
+        if not is_remote_only():
+            cls._legacy_sc = PySparkSession._instantiatedSession._sc
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
@@ -203,4 +207,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
     def quiet(self):
         from pyspark.testing.utils import QuietTest
 
-        return QuietTest(self._legacy_sc)
+        if self._legacy_sc is not None:
+            return QuietTest(self._legacy_sc)
+        else:
+            return contextlib.nullcontext()
