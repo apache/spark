@@ -94,6 +94,7 @@ __all__ = [
     "StructField",
     "StructType",
     "VariantType",
+    "VariantVal",
 ]
 
 
