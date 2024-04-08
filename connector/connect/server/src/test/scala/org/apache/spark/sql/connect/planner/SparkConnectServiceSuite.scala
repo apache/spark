@@ -553,7 +553,7 @@ class SparkConnectServiceSuite
       val instance = new SparkConnectService(false)
 
       // Add an always crashing UDF
-      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId).session
+      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId, None).session
       val sleep: Long => Long = { time =>
         Thread.sleep(time)
         time
@@ -624,7 +624,7 @@ class SparkConnectServiceSuite
       val instance = new SparkConnectService(false)
 
       // Add an always crashing UDF
-      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId).session
+      val session = SparkConnectService.getOrCreateIsolatedSession("c1", sessionId, None).session
       val instaKill: Long => Long = { _ =>
         throw new Exception("Kaboom")
       }
@@ -818,7 +818,7 @@ class SparkConnectServiceSuite
             when(restartedQuery.id).thenReturn(DEFAULT_UUID)
             when(restartedQuery.runId).thenReturn(DEFAULT_UUID)
             SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
-              SparkConnectService.getOrCreateIsolatedSession("c1", sessionId),
+              SparkConnectService.getOrCreateIsolatedSession("c1", sessionId, None),
               restartedQuery)
             f(verifyEvents)
           }
@@ -904,7 +904,7 @@ class SparkConnectServiceSuite
         case e: SparkListenerConnectOperationStarted =>
           semaphoreStarted.release()
           val sessionHolder =
-            SparkConnectService.getOrCreateIsolatedSession(e.userId, e.sessionId)
+            SparkConnectService.getOrCreateIsolatedSession(e.userId, e.sessionId, None)
           executeHolder = sessionHolder.executeHolder(e.operationId)
         case _ =>
       }

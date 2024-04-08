@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{Date, UUID}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -28,7 +28,6 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
-import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -37,10 +36,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -400,28 +397,17 @@ object FileFormatWriter extends Logging {
         }
       }
 
-    try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-        // Execute the task to write rows out and commit the task.
-        dataWriter.writeWithIterator(iterator)
-        dataWriter.commit()
-      })(catchBlock = {
-        // If there is an error, abort the task
-        dataWriter.abort()
-        logError(s"Job $jobId aborted.")
-      }, finallyBlock = {
-        dataWriter.close()
-      })
-    } catch {
-      case e: FetchFailedException =>
-        throw e
-      case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
-        // If any output file to write already exists, it does not make sense to re-run this task.
-        // We throw the exception and let Executor throw ExceptionFailure to abort the job.
-        throw new TaskOutputFileAlreadyExistException(f)
-      case t: Throwable =>
-        throw QueryExecutionErrors.taskFailedWhileWritingRowsError(description.path, t)
-    }
+    Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+      // Execute the task to write rows out and commit the task.
+      dataWriter.writeWithIterator(iterator)
+      dataWriter.commit()
+    })(catchBlock = {
+      // If there is an error, abort the task
+      dataWriter.abort()
+      logError(s"Job $jobId aborted.")
+    }, finallyBlock = {
+      dataWriter.close()
+    })
   }
 
   /**

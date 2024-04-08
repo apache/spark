@@ -66,12 +66,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       messageParameters = messageParameters)
   }
 
-  protected def containsMultipleGenerators(exprs: Seq[Expression]): Boolean = {
-    exprs.flatMap(_.collect {
-      case e: Generator => e
-    }).length > 1
-  }
-
   protected def hasMapType(dt: DataType): Boolean = {
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
@@ -543,6 +537,19 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               }
             }
 
+          case Window(_, partitionSpec, _, _) =>
+            // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
+            // for `partitionSpec` here because `orderSpec` has the type check itself.
+            partitionSpec.foreach { p =>
+              if (!RowOrdering.isOrderable(p.dataType)) {
+                p.failAnalysis(
+                  errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+                  messageParameters = Map(
+                    "expr" -> toSQLExpr(p),
+                    "exprType" -> toSQLType(p.dataType)))
+              }
+            }
+
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
           case LocalLimit(limitExpr, child) =>
@@ -668,10 +675,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
                 ))
             }
-
-          case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
-            val generators = exprs.filter(expr => expr.exists(_.isInstanceOf[Generator]))
-            throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "SELECT")
 
           case p @ Project(projectList, _) =>
             projectList.foreach(_.transformDownWithPruning(

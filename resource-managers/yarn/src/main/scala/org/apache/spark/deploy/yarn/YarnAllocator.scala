@@ -39,7 +39,9 @@ import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.Logging
+import org.apache.spark.executor.ExecutorExitCode
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.{CONTAINER_ID, EXECUTOR_ID}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
@@ -168,6 +170,8 @@ private[yarn] class YarnAllocator(
     new YarnAllocatorNodeHealthTracker(sparkConf, amClient, failureTracker)
 
   private val isPythonApp = sparkConf.get(IS_PYTHON_APP)
+
+  private val minMemoryOverhead = sparkConf.get(EXECUTOR_MIN_MEMORY_OVERHEAD)
 
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
@@ -313,7 +317,7 @@ private[yarn] class YarnAllocator(
 
       val resourcesWithDefaults =
         ResourceProfile.getResourcesForClusterManager(rp.id, rp.executorResources,
-          memoryOverheadFactor, sparkConf, isPythonApp, resourceNameMapping)
+          minMemoryOverhead, memoryOverheadFactor, sparkConf, isPythonApp, resourceNameMapping)
       val customSparkResources =
         resourcesWithDefaults.customResources.map { case (name, execReq) =>
           (name, execReq.amount.toString)
@@ -786,7 +790,8 @@ private[yarn] class YarnAllocator(
                 getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()
                 launchingExecutorContainerIds.remove(containerId)
                 if (NonFatal(e)) {
-                  logError(s"Failed to launch executor $executorId on container $containerId", e)
+                  logError(log"Failed to launch executor ${MDC(EXECUTOR_ID, executorId)} " +
+                    log"on container ${MDC(CONTAINER_ID, containerId)}", e)
                   // Assigned container should be released immediately
                   // to avoid unnecessary resource occupation.
                   amClient.releaseAssignedContainer(containerId)
@@ -881,23 +886,26 @@ private[yarn] class YarnAllocator(
               s"$diag Consider boosting ${EXECUTOR_MEMORY_OVERHEAD.key}."
             (true, message)
           case other_exit_status =>
-            // SPARK-26269: follow YARN's behaviour(see https://github
-            // .com/apache/hadoop/blob/228156cfd1b474988bc4fedfbf7edddc87db41e3/had
-            // oop-yarn-project/hadoop-yarn/hadoop-yarn-common/src/main/java/org/ap
-            // ache/hadoop/yarn/util/Apps.java#L273 for details)
+            val exitStatus = completedContainer.getExitStatus
+            // SPARK-46920: Spark defines its own exit codes, which have overlap with
+            // exit codes defined by YARN, thus diagnostics reported by YARN may be
+            // misleading.
+            val sparkExitCodeReason = ExecutorExitCode.explainExitCode(exitStatus)
+            // SPARK-26269: follow YARN's behaviour, see details in
+            // org.apache.hadoop.yarn.util.Apps#shouldCountTowardsNodeBlacklisting
             if (NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS.contains(other_exit_status)) {
-              (false, s"Container marked as failed: $containerId$onHostStr" +
-                s". Exit status: ${completedContainer.getExitStatus}" +
-                s". Diagnostics: ${completedContainer.getDiagnostics}.")
+              (false, s"Container marked as failed: $containerId$onHostStr. " +
+                s"Exit status: $exitStatus. " +
+                s"Possible causes: $sparkExitCodeReason " +
+                s"Diagnostics: ${completedContainer.getDiagnostics}.")
             } else {
               // completed container from a bad node
               allocatorNodeHealthTracker.handleResourceAllocationFailure(hostOpt)
-              (true, s"Container from a bad node: $containerId$onHostStr" +
-                s". Exit status: ${completedContainer.getExitStatus}" +
-                s". Diagnostics: ${completedContainer.getDiagnostics}.")
+              (true, s"Container from a bad node: $containerId$onHostStr. " +
+                s"Exit status: $exitStatus. " +
+                s"Possible causes: $sparkExitCodeReason " +
+                s"Diagnostics: ${completedContainer.getDiagnostics}.")
             }
-
-
         }
         if (exitCausedByApp) {
           logWarning(containerExitReason)

@@ -837,10 +837,15 @@ class CastExpression(Expression):
         self,
         expr: Expression,
         data_type: Union[DataType, str],
+        eval_mode: Optional[str] = None,
     ) -> None:
         super().__init__()
         self._expr = expr
         self._data_type = data_type
+        if eval_mode is not None:
+            assert isinstance(eval_mode, str)
+            assert eval_mode in ["legacy", "ansi", "try"]
+        self._eval_mode = eval_mode
 
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         fun = proto.Expression()
@@ -849,6 +854,15 @@ class CastExpression(Expression):
             fun.cast.type_str = self._data_type
         else:
             fun.cast.type.CopyFrom(pyspark_types_to_proto_types(self._data_type))
+
+        if self._eval_mode is not None:
+            if self._eval_mode == "legacy":
+                fun.cast.eval_mode = proto.Expression.Cast.EvalMode.EVAL_MODE_LEGACY
+            elif self._eval_mode == "ansi":
+                fun.cast.eval_mode = proto.Expression.Cast.EvalMode.EVAL_MODE_ANSI
+            elif self._eval_mode == "try":
+                fun.cast.eval_mode = proto.Expression.Cast.EvalMode.EVAL_MODE_TRY
+
         return fun
 
     def __repr__(self) -> str:

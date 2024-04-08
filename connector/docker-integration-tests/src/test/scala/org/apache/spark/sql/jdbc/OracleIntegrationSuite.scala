@@ -23,7 +23,6 @@ import java.util.{Properties, TimeZone}
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
@@ -68,6 +67,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   override val db = new OracleDatabaseOnDocker
 
   override val connectionTimeout = timeout(7.minutes)
+
+  private val rsOfTsWithTimezone = Seq(
+    Row(BigDecimal.valueOf(1), new Timestamp(944046000000L)),
+    Row(BigDecimal.valueOf(2), new Timestamp(944078400000L))
+  )
 
   override def dataPreparation(conn: Connection): Unit = {
     // In 18.4.0 Express Edition auto commit is enabled by default.
@@ -275,7 +279,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     assert(types(1).equals("class java.sql.Timestamp"))
   }
 
-  test("Column type TIMESTAMP with SESSION_LOCAL_TIMEZONE is different from default") {
+  test("SPARK-47280: Remove timezone limitation for ORACLE TIMESTAMP WITH TIMEZONE") {
     val defaultJVMTimeZone = TimeZone.getDefault
     // Pick the timezone different from the current default time zone of JVM
     val sofiaTimeZone = TimeZone.getTimeZone("Europe/Sofia")
@@ -284,35 +288,20 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       if (defaultJVMTimeZone == shanghaiTimeZone) sofiaTimeZone else shanghaiTimeZone
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> localSessionTimeZone.getID) {
-      checkError(
-        exception = intercept[SparkSQLException] {
-          sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties).collect()
-        },
-        errorClass = "UNRECOGNIZED_SQL_TYPE",
-        parameters = Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "-101"))
+      checkAnswer(
+        sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties),
+        rsOfTsWithTimezone)
     }
   }
 
   test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
-    def checkRow(row: Row, ts: String): Unit = {
-      assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
-    }
-
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
       val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-      withDefaultTimeZone(PST) {
-        assert(dfRead.collect().toSet ===
-          Set(
-            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
-            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
-      }
-
-      withDefaultTimeZone(UTC) {
-        assert(dfRead.collect().toSet ===
-          Set(
-            Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
-            Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 20:00:00"))))
-      }
+      Seq(PST, UTC).foreach(timeZone => {
+        withDefaultTimeZone(timeZone) {
+          checkAnswer(dfRead, rsOfTsWithTimezone)
+        }
+      })
     }
   }
 

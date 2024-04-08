@@ -81,6 +81,8 @@ case class FunctionTableSubqueryArgumentExpression(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): FunctionTableSubqueryArgumentExpression =
     copy(plan = plan)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression])
+  : FunctionTableSubqueryArgumentExpression = copy(outerAttrs = outerAttrs)
   override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()

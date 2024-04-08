@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.sources
 import scala.collection.mutable
 import scala.language.implicitConversions
 
-import org.apache.spark.{ExecutorDeadException, SparkException}
+import org.apache.spark.ExecutorDeadException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.SerializeFromObjectExec
@@ -193,23 +193,26 @@ class ForeachBatchSinkSuite extends StreamTest {
     mem.addData(1, 2, 3, 4, 5)
 
     val funcEx = new IllegalAccessException("access error")
-    val wrapperEx = intercept[StreamingQueryException] {
+    val queryEx = intercept[StreamingQueryException] {
       val query = ds.writeStream.foreachBatch((_: Dataset[Int], _: Long) => throw funcEx).start()
       query.awaitTermination()
-    }.getCause
+    }
+
+    val errClass = "FOREACH_BATCH_USER_FUNCTION_ERROR"
 
     // verify that we classified the exception
-    checkError(wrapperEx.asInstanceOf[SparkException], "FOREACH_BATCH_USER_FUNCTION_ERROR")
-    assert(wrapperEx.getCause == funcEx)
+    assert(queryEx.getMessage.contains(errClass))
+    assert(queryEx.getCause == funcEx)
 
     val sparkEx = ExecutorDeadException("network error")
     val ex = intercept[StreamingQueryException] {
       val query = ds.writeStream.foreachBatch((_: Dataset[Int], _: Long) => throw sparkEx).start()
       query.awaitTermination()
-    }.getCause
+    }
 
     // we didn't wrap the spark exception
-    assert(ex == sparkEx)
+    assert(!ex.getMessage.contains(errClass))
+    assert(ex.getCause == sparkEx)
   }
 
   // ============== Helper classes and methods =================

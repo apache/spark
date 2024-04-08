@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryExecutionErrors}
@@ -135,13 +135,23 @@ class JDBCTableCatalog extends TableCatalog
       val schema = JDBCRDD.resolveTable(optionsWithTableName)
       JDBCTable(ident, schema, optionsWithTableName)
     } catch {
-      case _: SQLException => throw QueryCompilationErrors.noSuchTableError(ident)
+      case e: SQLException =>
+        logWarning("Failed to load table", e)
+        throw QueryCompilationErrors.noSuchTableError(ident)
     }
   }
 
   override def createTable(
       ident: Identifier,
       schema: StructType,
+      partitions: Array[Transform],
+      properties: java.util.Map[String, String]): Table = {
+    throw QueryCompilationErrors.createTableDeprecatedError()
+  }
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
       partitions: Array[Transform],
       properties: java.util.Map[String, String]): Table = {
     checkNamespace(ident.namespace())
@@ -180,6 +190,7 @@ class JDBCTableCatalog extends TableCatalog
 
     val writeOptions = new JdbcOptionsInWrite(tableOptions)
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
+    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.CREATE_TABLE",

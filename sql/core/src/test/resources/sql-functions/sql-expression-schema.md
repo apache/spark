@@ -81,7 +81,7 @@
 | org.apache.spark.sql.catalyst.expressions.Chr | char | SELECT char(65) | struct<char(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Chr | chr | SELECT chr(65) | struct<chr(65):string> |
 | org.apache.spark.sql.catalyst.expressions.Coalesce | coalesce | SELECT coalesce(NULL, 1, NULL) | struct<coalesce(NULL, 1, NULL):int> |
-| org.apache.spark.sql.catalyst.expressions.CollateExpressionBuilder | collate | SELECT COLLATION('Spark SQL' collate 'UCS_BASIC_LCASE') | struct<collation(collate(Spark SQL)):string> |
+| org.apache.spark.sql.catalyst.expressions.CollateExpressionBuilder | collate | SELECT COLLATION('Spark SQL' collate UTF8_BINARY_LCASE) | struct<collation(collate(Spark SQL)):string> |
 | org.apache.spark.sql.catalyst.expressions.Collation | collation | SELECT collation('Spark SQL') | struct<collation(Spark SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.Concat | concat | SELECT concat('Spark', 'SQL') | struct<concat(Spark, SQL):string> |
 | org.apache.spark.sql.catalyst.expressions.ConcatWs | concat_ws | SELECT concat_ws(' ', 'Spark', 'SQL') | struct<concat_ws( , Spark, SQL):string> |
@@ -437,6 +437,8 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | var_samp | SELECT var_samp(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_samp(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | variance | SELECT variance(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<variance(col):double> |
 | org.apache.spark.sql.catalyst.expressions.variant.ParseJson | parse_json | SELECT parse_json('{"a":1,"b":0.8}') | struct<parse_json({"a":1,"b":0.8}):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.TryVariantGetExpressionBuilder | try_variant_get | SELECT try_variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<try_variant_get(parse_json({"a": 1}), $.a):int> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantGetExpressionBuilder | variant_get | SELECT variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathBoolean | xpath_boolean | SELECT xpath_boolean('<a><b>1</b></a>','a/b') | struct<xpath_boolean(<a><b>1</b></a>, a/b):boolean> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathDouble | xpath_double | SELECT xpath_double('<a><b>1</b><b>2</b></a>', 'sum(a/b)') | struct<xpath_double(<a><b>1</b><b>2</b></a>, sum(a/b)):double> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathDouble | xpath_number | SELECT xpath_number('<a><b>1</b><b>2</b></a>', 'sum(a/b)') | struct<xpath_number(<a><b>1</b><b>2</b></a>, sum(a/b)):double> |

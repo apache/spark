@@ -19,7 +19,7 @@ from typing import List, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkValueError
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.streaming.state import GroupStateTimeout
@@ -641,7 +641,7 @@ class PandasCogroupedOps:
         a :class:`DataFrame`.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
-        `pandas.DataFrame`. The column labels of the returned `pandas.DataFrame` must either match
+        `pyarrow.Table`. The column labels of the returned `pyarrow.Table` must either match
         the field names in the defined schema if specified as strings, or match the
         field data types by position if not strings, e.g. integer indices.
         The length of the returned `pyarrow.Table` can be arbitrary.

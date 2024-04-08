@@ -18,26 +18,18 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, Timestamp, Types}
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
 
-private case object OracleDialect extends JdbcDialect {
-  private[jdbc] val BINARY_FLOAT = 100
-  private[jdbc] val BINARY_DOUBLE = 101
-  private[jdbc] val TIMESTAMP_TZ = -101
-  // oracle.jdbc.OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
-  private[jdbc] val TIMESTAMP_LTZ = -102
-
-
+private case class OracleDialect() extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
@@ -80,13 +72,6 @@ private case object OracleDialect extends JdbcDialect {
     }
   }
 
-  private def supportTimeZoneTypes: Boolean = {
-    val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)
-    // TODO: support timezone types when users are not using the JVM timezone, which
-    // is the default value of SESSION_LOCAL_TIMEZONE
-    timeZone == TimeZone.getDefault
-  }
-
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     sqlType match {
@@ -107,11 +92,14 @@ private case object OracleDialect extends JdbcDialect {
           case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
           case _ => None
         }
-      case TIMESTAMP_TZ if supportTimeZoneTypes =>
-        // Value for Timestamp with Time Zone in Oracle
-        Some(TimestampType)
-      case TIMESTAMP_LTZ =>
-        // Value for Timestamp with Local Time Zone in Oracle
+      case TIMESTAMP_TZ | TIMESTAMP_LTZ =>
+        // TIMESTAMP WITH TIME ZONE and TIMESTAMP WITH LOCAL TIME ZONE types can be represented
+        // as standard java.sql.Timestamp type.
+        // The byte representation of TIMESTAMP WITH TIME ZONE and TIMESTAMP WITH LOCAL TIME ZONE
+        // types to java.sql.Timestamp is straight forward.
+        // This is because the internal format of TIMESTAMP WITH TIME ZONE and TIMESTAMP WITH LOCAL
+        // TIME ZONE data types is GMT, and java.sql.Timestamp type objects internally use a
+        // milliseconds time value that is the number of milliseconds since EPOCH.
         Some(TimestampType)
       case BINARY_FLOAT => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
@@ -235,4 +223,12 @@ private case object OracleDialect extends JdbcDialect {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+}
+
+private[jdbc] object OracleDialect {
+  final val BINARY_FLOAT = 100
+  final val BINARY_DOUBLE = 101
+  final val TIMESTAMP_TZ = -101
+  // oracle.jdbc.OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
+  final val TIMESTAMP_LTZ = -102
 }

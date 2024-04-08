@@ -602,4 +602,23 @@ class DataFrameJoinSuite extends QueryTest
       )
     }
   }
+
+  test("SPARK-20359: catalyst outer join optimization should not throw npe") {
+    val df1 = Seq("a", "b", "c").toDF("x")
+      .withColumn("y", udf{ (x: String) => x.substring(0, 1) + "!" }.apply($"x"))
+    val df2 = Seq("a", "b").toDF("x1")
+    df1
+      .join(df2, df1("x") === df2("x1"), "left_outer")
+      .filter($"x1".isNotNull || !$"y".isin("a!"))
+      .count()
+  }
+
+  test("SPARK-16181: outer join with isNull filter") {
+    val left = Seq("x").toDF("col")
+    val right = Seq("y").toDF("col").withColumn("new", lit(true))
+    val joined = left.join(right, left("col") === right("col"), "left_outer")
+
+    checkAnswer(joined, Row("x", null, null))
+    checkAnswer(joined.filter($"new".isNull), Row("x", null, null))
+  }
 }

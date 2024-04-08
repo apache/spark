@@ -33,6 +33,8 @@ import org.codehaus.janino.util.ClassFile
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKey._
+import org.apache.spark.internal.MDC
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
@@ -622,7 +624,7 @@ class CodegenContext extends Logging {
       s"((java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2)"
     case DoubleType =>
       s"((java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2)"
-    case st: StringType if st.isDefaultCollation => s"$c1.binaryEquals($c2)"
+    case st: StringType if st.supportsBinaryOrdering => s"$c1.binaryEquals($c2)"
     case st: StringType => s"$c1.semanticEquals($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
@@ -652,7 +654,7 @@ class CodegenContext extends Logging {
     case FloatType =>
       val clsName = SQLOrderingUtil.getClass.getName.stripSuffix("$")
       s"$clsName.compareFloats($c1, $c2)"
-    case st: StringType if st.isDefaultCollation => s"$c1.binaryCompare($c2)"
+    case st: StringType if st.supportsBinaryOrdering => s"$c1.binaryCompare($c2)"
     case st: StringType => s"$c1.semanticCompare($c2, ${st.collationId})"
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
@@ -660,13 +662,8 @@ class CodegenContext extends Logging {
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
-      val elementA = freshName("elementA")
-      val isNullA = freshName("isNullA")
-      val elementB = freshName("elementB")
-      val isNullB = freshName("isNullB")
       val compareFunc = freshName("compareArray")
       val minLength = freshName("minLength")
-      val jt = javaType(elementType)
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
@@ -679,22 +676,7 @@ class CodegenContext extends Logging {
             int lengthB = b.numElements();
             int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
             for (int i = 0; i < $minLength; i++) {
-              boolean $isNullA = a.isNullAt(i);
-              boolean $isNullB = b.isNullAt(i);
-              if ($isNullA && $isNullB) {
-                // Nothing
-              } else if ($isNullA) {
-                return -1;
-              } else if ($isNullB) {
-                return 1;
-              } else {
-                $jt $elementA = ${getValue("a", elementType, "i")};
-                $jt $elementB = ${getValue("b", elementType, "i")};
-                int comp = ${genComp(elementType, elementA, elementB)};
-                if (comp != 0) {
-                  return comp;
-                }
-              }
+              ${genCompElementsAt("a", "b", "i", elementType)}
             }
 
             if (lengthA < lengthB) {
@@ -722,10 +704,69 @@ class CodegenContext extends Logging {
           }
         """
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
+    case map: MapType =>
+      val compareFunc = freshName("compareMapData")
+      val funcCode = genCompMapData(map.keyType, map.valueType, compareFunc)
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw QueryExecutionErrors.cannotGenerateCodeForIncomparableTypeError("compare", dataType)
+  }
+
+  private def genCompMapData(
+      keyType: DataType,
+      valueType: DataType,
+      compareFunc: String): String = {
+    s"""
+       |public int $compareFunc(MapData a, MapData b) {
+       |  int lengthA = a.numElements();
+       |  int lengthB = b.numElements();
+       |  ArrayData keyArrayA = a.keyArray();
+       |  ArrayData valueArrayA = a.valueArray();
+       |  ArrayData keyArrayB = b.keyArray();
+       |  ArrayData valueArrayB = b.valueArray();
+       |  int minLength = (lengthA > lengthB) ? lengthB : lengthA;
+       |  for (int i = 0; i < minLength; i++) {
+       |    ${genCompElementsAt("keyArrayA", "keyArrayB", "i", keyType)}
+       |    ${genCompElementsAt("valueArrayA", "valueArrayB", "i", valueType)}
+       |  }
+       |
+       |  if (lengthA < lengthB) {
+       |    return -1;
+       |  } else if (lengthA > lengthB) {
+       |    return 1;
+       |  }
+       |  return 0;
+       |}
+     """.stripMargin
+  }
+
+  private def genCompElementsAt(arrayA: String, arrayB: String, i: String,
+    elementType : DataType): String = {
+    val elementA = freshName("elementA")
+    val isNullA = freshName("isNullA")
+    val elementB = freshName("elementB")
+    val isNullB = freshName("isNullB")
+    val jt = javaType(elementType);
+    s"""
+       |boolean $isNullA = $arrayA.isNullAt($i);
+       |boolean $isNullB = $arrayB.isNullAt($i);
+       |if ($isNullA && $isNullB) {
+       |  // Nothing
+       |} else if ($isNullA) {
+       |  return -1;
+       |} else if ($isNullB) {
+       |  return 1;
+       |} else {
+       |  $jt $elementA = ${getValue(arrayA, elementType, i)};
+       |  $jt $elementB = ${getValue(arrayB, elementType, i)};
+       |  int comp = ${genComp(elementType, elementA, elementB)};
+       |  if (comp != 0) {
+       |    return comp;
+       |  }
+       |}
+     """.stripMargin
   }
 
   /**
@@ -1554,7 +1595,8 @@ object CodeGenerator extends Logging {
 
             if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
               logInfo("Generated method too long to be JIT compiled: " +
-                s"${cf.getThisClassName}.${method.getName} is $byteCodeSize bytes")
+                log"${MDC(CLASS_NAME, cf.getThisClassName)}.${MDC(METHOD_NAME, method.getName)} " +
+                log"is ${MDC(BYTECODE_SIZE, byteCodeSize)} bytes")
             }
 
             byteCodeSize
@@ -1599,7 +1641,7 @@ object CodeGenerator extends Logging {
         val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
         CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
         CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
-        logInfo(s"Code generated in $timeMs ms")
+        logInfo(log"Code generated in ${MDC(TOTAL_TIME, timeMs)} ms")
         _compileTime.add(duration)
         result
     }

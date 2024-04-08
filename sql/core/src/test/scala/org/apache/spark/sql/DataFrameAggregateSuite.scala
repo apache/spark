@@ -1666,8 +1666,14 @@ class DataFrameAggregateSuite extends QueryTest
     assert(spark.range(2).where("id > 2").agg(emptyAgg).limit(1).count() == 1)
   }
 
-  test("SPARK-38221: group by stream of complex expressions should not fail") {
+  test("SPARK-45685: group by `LazyList` of complex expressions should not fail") {
     val df = Seq(1).toDF("id").groupBy(LazyList($"id" + 1, $"id" + 2): _*).sum("id")
+    checkAnswer(df, Row(2, 3, 1))
+  }
+
+  test("SPARK-38221: group by `Stream` of complex expressions should not fail") {
+    @scala.annotation.nowarn("cat=deprecation")
+    val df = Seq(1).toDF("id").groupBy(Stream($"id" + 1, $"id" + 2): _*).sum("id")
     checkAnswer(df, Row(2, 3, 1))
   }
 
@@ -2155,8 +2161,8 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
-    val numRows = 50
+  private def assertAggregateOnDataframe(df: DataFrame,
+    expected: Int, aggregateColumn: String): Unit = {
     val configurations = Seq(
       Seq.empty[(String, String)], // hash aggregate is used by default
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
@@ -2168,22 +2174,46 @@ class DataFrameAggregateSuite extends QueryTest
       Seq("spark.sql.test.forceApplySortAggregate" -> "true")
     )
 
+    for (conf <- configurations) {
+      withSQLConf(conf: _*) {
+        assert(createAggregate(df).count() == expected)
+      }
+    }
+
+    def createAggregate(df: DataFrame): DataFrame = df.groupBy(aggregateColumn).agg(count("*"))
+  }
+
+  test("SPARK-47430 Support GROUP BY MapType") {
+    val numRows = 50
+
+    val dfSameInt = (0 until numRows)
+      .map(_ => Tuple1(Map(1 -> 1)))
+      .toDF("m0")
+    assertAggregateOnDataframe(dfSameInt, 1, "m0")
+
+    val dfSameFloat = (0 until numRows)
+      .map(i => Tuple1(Map(if (i % 2 == 0) 1 -> 0.0 else 1 -> -0.0 )))
+      .toDF("m0")
+    assertAggregateOnDataframe(dfSameFloat, 1, "m0")
+
+    val dfDifferent = (0 until numRows)
+      .map(i => Tuple1(Map(i -> i)))
+      .toDF("m0")
+    assertAggregateOnDataframe(dfDifferent, numRows, "m0")
+  }
+
+  test("SPARK-46536 Support GROUP BY CalendarIntervalType") {
+    val numRows = 50
+
     val dfSame = (0 until numRows)
       .map(_ => Tuple1(new CalendarInterval(1, 2, 3)))
       .toDF("c0")
+    assertAggregateOnDataframe(dfSame, 1, "c0")
 
     val dfDifferent = (0 until numRows)
       .map(i => Tuple1(new CalendarInterval(i, i, i)))
       .toDF("c0")
-
-    for (conf <- configurations) {
-      withSQLConf(conf: _*) {
-        assert(createAggregate(dfSame).count() == 1)
-        assert(createAggregate(dfDifferent).count() == numRows)
-      }
-    }
-
-    def createAggregate(df: DataFrame): DataFrame = df.groupBy("c0").agg(count("*"))
+    assertAggregateOnDataframe(dfDifferent, numRows, "c0")
   }
 
   test("SPARK-46779: Group by subquery with a cached relation") {
@@ -2199,6 +2229,115 @@ class DataFrameAggregateSuite extends QueryTest
           |from data d2 group by all""".stripMargin)
       checkAnswer(df, Row(1, 2, 2) :: Row(3, 1, 1) :: Nil)
     }
+  }
+
+  private def assertDecimalSumOverflow(
+      df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row): Unit = {
+    if (!ansiEnabled) {
+      checkAnswer(df, expectedAnswer)
+    } else {
+      val e = intercept[ArithmeticException] {
+        df.collect()
+      }
+      assert(e.getMessage.contains("cannot be represented as Decimal") ||
+        e.getMessage.contains("Overflow in sum of decimals"))
+    }
+  }
+
+  def checkAggResultsForDecimalOverflow(aggFn: Column => Column): Unit = {
+    Seq("true", "false").foreach { wholeStageEnabled =>
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
+        Seq(true, false).foreach { ansiEnabled =>
+          withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+            val df0 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+            val df1 = Seq(
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+            val df = df0.union(df1)
+            val df2 = df.withColumnRenamed("decNum", "decNum2").
+              join(df, "intNum").agg(aggFn($"decNum"))
+
+            val expectedAnswer = Row(null)
+            assertDecimalSumOverflow(df2, ansiEnabled, expectedAnswer)
+
+            val decStr = "1" + "0" * 19
+            val d1 = spark.range(0, 12, 1, 1)
+            val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
+            assertDecimalSumOverflow(d2, ansiEnabled, expectedAnswer)
+
+            val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
+            val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
+            assertDecimalSumOverflow(d4, ansiEnabled, expectedAnswer)
+
+            val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
+              lit(1).as("key")).groupBy("key").agg(aggFn($"d").alias("aggd")).select($"aggd")
+            assertDecimalSumOverflow(d5, ansiEnabled, expectedAnswer)
+
+            val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
+
+            val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
+              toDF("d")
+            assertDecimalSumOverflow(
+              nullsDf.union(largeDecimals).agg(aggFn($"d")), ansiEnabled, expectedAnswer)
+
+            val df3 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("50000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df4 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df5 = Seq(
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("10000000000000000000"), 1),
+              (BigDecimal("20000000000000000000"), 2)).toDF("decNum", "intNum")
+
+            val df6 = df3.union(df4).union(df5)
+            val df7 = df6.groupBy("intNum").agg(sum("decNum"), countDistinct("decNum")).
+              filter("intNum == 1")
+            assertDecimalSumOverflow(df7, ansiEnabled, Row(1, null, 2))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
+    checkAggResultsForDecimalOverflow(c => sum(c))
+  }
+
+  test("SPARK-35955: Aggregate avg should not return wrong results for decimal overflow") {
+    checkAggResultsForDecimalOverflow(c => avg(c))
+  }
+
+  test("SPARK-28224: Aggregate sum big decimal overflow") {
+    val largeDecimals = spark.sparkContext.parallelize(
+      DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
+        DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
+
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+        val structDf = largeDecimals.select("a").agg(sum("a"))
+        assertDecimalSumOverflow(structDf, ansiEnabled, Row(null))
+      }
+    }
+  }
+
+  test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
+     checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }
 }
 

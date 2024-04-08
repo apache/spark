@@ -135,7 +135,7 @@ trait SharedThriftServer extends SharedSparkSession {
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, "0")
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT.varname, "0")
     sqlContext.setConf(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, mode.toString)
-    sqlContext.setConf(ConfVars.SCRATCHDIR.varname, tempScratchDir.getAbsolutePath)
+    sqlContext.setConf("hive.exec.scratchdir", tempScratchDir.getAbsolutePath)
     sqlContext.setConf(ConfVars.HIVE_START_CLEANUP_SCRATCHDIR.varname, "true")
 
     try {

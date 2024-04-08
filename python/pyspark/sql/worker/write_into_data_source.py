@@ -22,7 +22,6 @@ from typing import IO, Iterable, Iterator
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
-from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -37,7 +36,7 @@ from pyspark.sql.types import (
     BinaryType,
     _create_row,
 )
-from pyspark.util import handle_worker_exception
+from pyspark.util import handle_worker_exception, local_connect_and_auth
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -152,11 +151,17 @@ def main(infile: IO, outfile: IO) -> None:
         # Receive the `overwrite` flag.
         overwrite = read_bool(infile)
 
+        is_streaming = read_bool(infile)
+
         # Instantiate a data source.
         data_source = data_source_cls(options=options)  # type: ignore
 
-        # Instantiate the data source writer.
-        writer = data_source.writer(schema, overwrite)
+        if is_streaming:
+            # Instantiate the streaming data source writer.
+            writer = data_source.streamWriter(schema, overwrite)
+        else:
+            # Instantiate the data source writer.
+            writer = data_source.writer(schema, overwrite)  # type: ignore[assignment]
 
         # Create a function that can be used in mapInArrow.
         import pyarrow as pa

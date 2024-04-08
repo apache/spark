@@ -37,6 +37,12 @@ Fail to recognize `<pattern>` pattern in the DateTimeFormatter.
 1) You can set `<config>` to "LEGACY" to restore the behavior before Spark 3.0.
 2) You can form a valid datetime pattern with the guide from '`<docroot>`/sql-ref-datetime-pattern.html'.
 
+## DATETIME_WEEK_BASED_PATTERN
+
+Spark >= 3.0:
+All week-based patterns are unsupported since Spark 3.0, detected week-based character: `<c>`.
+Please use the SQL function EXTRACT instead.
+
 ## PARSE_DATETIME_BY_NEW_PARSER
 
 Spark >= 3.0:

@@ -36,6 +36,9 @@ import com.github.dockerjava.zerodep.ZerodepDockerHttpClient
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.internal.LogKey.CLASS_NAME
+import org.apache.spark.internal.MDC
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{DockerUtils, Utils}
 import org.apache.spark.util.Utils.timeStringAsSeconds
@@ -99,7 +102,7 @@ abstract class DatabaseOnDocker {
 }
 
 abstract class DockerJDBCIntegrationSuite
-  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
+  extends QueryTest with SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
@@ -220,7 +223,8 @@ abstract class DockerJDBCIntegrationSuite
       }
     } catch {
       case NonFatal(e) =>
-        logError(s"Failed to initialize Docker container for ${this.getClass.getName}", e)
+        logError(log"Failed to initialize Docker container for " +
+          log"${MDC(CLASS_NAME, this.getClass.getName)}", e)
         try {
           afterAll()
         } finally {
