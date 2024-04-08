@@ -1348,9 +1348,10 @@ class VariantType(AtomicType):
     def needConversion(self) -> bool:
         return True
 
-    def fromInternal(self, obj: Dict) -> "VariantVal":
-        if obj is not None and all(key in obj for key in ["value", "metadata"]):
-            return VariantVal(obj["value"], obj["metadata"])
+    def fromInternal(self, obj: Dict) -> Optional["VariantVal"]:
+        if obj is None or all(key in obj for key in ["value", "metadata"]):
+            return None
+        return VariantVal(obj["value"], obj["metadata"])
 
 
 class UserDefinedType(DataType):
