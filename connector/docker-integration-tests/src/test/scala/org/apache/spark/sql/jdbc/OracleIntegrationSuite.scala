@@ -19,11 +19,12 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
+import java.time.{Duration, Period}
 import java.util.{Properties, TimeZone}
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -539,5 +540,31 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val df2 = reader.load()
     assert(df.count() === 2)
     assert(df2.collect().forall(_.getTimestamp(0) === row1))
+  }
+
+  test("SPARK-47761: Reading ANSI INTERVAL Types") {
+    val df: String => DataFrame = query => spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+    checkAnswer(df("SELECT INTERVAL '1-2' YEAR(1) TO MONTH as i0 FROM dual"),
+      Row(Period.of(1, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '1-2' YEAR(2) TO MONTH as i1 FROM dual"),
+      Row(Period.of(1, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '12345-2' YEAR(9) TO MONTH as i2 FROM dual"),
+      Row(Period.of(12345, 2, 0)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56' DAY(1) TO SECOND(0) as i3 FROM dual"),
+        Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.12' DAY TO SECOND(2) as i4 FROM dual"),
+        Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(120)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.1234' DAY TO SECOND(4) as i5 FROM dual"),
+        Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+          .plusNanos(400000)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.123456' DAY TO SECOND(6) as i6 FROM dual"),
+        Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+          .plusNanos(456000)))
+    checkAnswer(df("SELECT INTERVAL '1 12:23:56.12345678' DAY TO SECOND(8) as i7 FROM dual"),
+        Row(Duration.ofDays(1).plusHours(12).plusMinutes(23).plusSeconds(56).plusMillis(123)
+          .plusNanos(456000)))
   }
 }
