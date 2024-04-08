@@ -238,10 +238,10 @@ class RangeKeyScanStateEncoder(
   import RocksDBStateEncoder._
 
   private val rangeScanKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
-    orderingOrdinals.map(ordinal => {
+    orderingOrdinals.map { ordinal =>
       val field = keySchema(ordinal)
       (field, ordinal)
-    })
+    }
   }
 
   private def isFixedSize(dataType: DataType): Boolean = dataType match {
@@ -263,10 +263,10 @@ class RangeKeyScanStateEncoder(
   }
 
   private val remainingKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
-    0.to(keySchema.length - 1).diff(orderingOrdinals).map(ordinal => {
+    0.to(keySchema.length - 1).diff(orderingOrdinals).map { ordinal =>
       val field = keySchema(ordinal)
       (field, ordinal)
-    })
+    }
   }
 
   private val rangeScanKeyProjection: UnsafeProjection = {

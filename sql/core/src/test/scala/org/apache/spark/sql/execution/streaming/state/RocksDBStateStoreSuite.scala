@@ -568,7 +568,6 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
         assert(valueRowToData(store.get(keyRow, cfName)) === 1)
       }
 
-      // scalastyle:off
       val result = store
         .iterator(cfName)
         .map { kv =>
