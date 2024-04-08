@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.time.Duration
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.streaming.state.{RangeKeyScanStateEncoderSpec, StateStore}
@@ -81,7 +82,7 @@ abstract class SingleKeyTTLStateImpl(
     stateName: String,
     store: StateStore,
     ttlExpirationMs: Long)
-  extends TTLState {
+  extends TTLState with Logging {
 
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
 
@@ -98,6 +99,7 @@ abstract class SingleKeyTTLStateImpl(
   def upsertTTLForStateKey(
       expirationMs: Long,
       groupingKey: Array[Byte]): Unit = {
+    logError(s"### upsertTTLForStateKey: expirationMs=$expirationMs")
     val encodedTtlKey = ttlKeyEncoder(InternalRow(expirationMs, groupingKey))
     store.put(encodedTtlKey, EMPTY_ROW, ttlColumnFamilyName)
   }
@@ -138,7 +140,7 @@ abstract class SingleKeyTTLStateImpl(
 /**
  * Helper methods for user State TTL.
  */
-object StateTTL {
+object StateTTL extends Logging {
   def calculateExpirationTimeForDuration(
       ttlDuration: Duration,
       batchTtlExpirationMs: Long): Long = {
@@ -148,6 +150,8 @@ object StateTTL {
   def isExpired(
       expirationMs: Long,
       batchTtlExpirationMs: Long): Boolean = {
+    logError(s"### isExpired: expirationMs=$expirationMs," +
+      s" batchTtlExpirationMs=$batchTtlExpirationMs")
     batchTtlExpirationMs >= expirationMs
   }
 }
