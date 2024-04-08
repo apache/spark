@@ -424,7 +424,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // skip allocation if we need to fallback
+    // skip allocation if we need to fallback in case of non-ASCII occurrences
     for (int i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
         // non-ASCII
@@ -476,7 +476,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // skip allocation if we need to fallback
+    // skip allocation if we need to fallback in case of non-ASCII occurrences
     for (int i = 0; i < numBytes; i++) {
       if (getByte(i) < 0) {
         // non-ASCII
@@ -501,7 +501,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (numBytes == 0) {
       return EMPTY_UTF8;
     }
-    // skip allocation if we need to fallback
+    // skip allocation if we need to fallback in case of non-ASCII occurrences
     byte prev = ' ', curr;
     for (int i = 0; i < numBytes; i++) {
       curr = getByte(i);

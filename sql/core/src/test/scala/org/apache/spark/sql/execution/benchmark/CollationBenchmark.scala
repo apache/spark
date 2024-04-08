@@ -34,7 +34,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     val benchmark = new Benchmark(
       "collation unit benchmarks - equalsFunction",
       utf8Strings.size * 10,
-      warmupTime = 4.seconds,
+      warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach(collationType => {
       val collation = CollationFactory.fetchCollation(collationType)
@@ -57,7 +57,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     val benchmark = new Benchmark(
       "collation unit benchmarks - compareFunction",
       utf8Strings.size * 10,
-      warmupTime = 4.seconds,
+      warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach(collationType => {
       val collation = CollationFactory.fetchCollation(collationType)
@@ -83,7 +83,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     val benchmark = new Benchmark(
       "collation unit benchmarks - hashFunction",
       utf8Strings.size * 10,
-      warmupTime = 4.seconds,
+      warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach(collationType => {
       val collation = CollationFactory.fetchCollation(collationType)
