@@ -1351,8 +1351,14 @@ private[sql] object Column {
   }
 
   @DeveloperApi
+  @deprecated("Use forExtension(Array[Byte]) instead", "4.0.0")
   def apply(extension: com.google.protobuf.Any): Column = {
     apply(_.setExtension(extension))
+  }
+
+  @DeveloperApi
+  def forExtension(extension: Array[Byte]): Column = {
+    apply(_.setExtension(com.google.protobuf.Any.parseFrom(extension)))
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {

@@ -29,7 +29,8 @@ import org.eclipse.jetty.servlet.{FilterHolder, FilterMapping, ServletContextHan
 import org.json4s.JsonAST.{JNothing, JValue}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.CLASS_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
@@ -158,7 +159,7 @@ private[spark] abstract class WebUI(
       logInfo(s"Bound $className to $hostName, and started at $webUrl")
     } catch {
       case e: Exception =>
-        logError(s"Failed to bind $className", e)
+        logError(log"Failed to bind ${MDC(CLASS_NAME, className)}", e)
         System.exit(1)
     }
   }

@@ -1250,10 +1250,10 @@ abstract class CSVSuite
         val ex = intercept[SparkException] {
           exp.write.format("csv").option("timestampNTZFormat", pattern).save(path.getAbsolutePath)
         }
-        checkError(
+        checkErrorMatchPVals(
           exception = ex,
           errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> actualPath))
+          parameters = Map("path" -> s"$actualPath.*"))
         val msg = ex.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
