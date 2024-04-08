@@ -699,6 +699,13 @@ class Column(val expr: Expression) extends Logging {
    */
   def plus(other: Any): Column = this + other
 
+  def plusWithPySparkLoggingInfo(
+      other: Any, loggingInfo: java.util.Map[String, String]): Column = {
+    withOrigin(Some(loggingInfo)) {
+      this + other
+    }
+  }
+
   /**
    * Subtraction. Subtract the other expression from this expression.
    * {{{
@@ -728,6 +735,13 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def minus(other: Any): Column = this - other
+
+  def minusWithPySparkLoggingInfo(
+      other: Any, loggingInfo: java.util.Map[String, String]): Column = {
+    withOrigin(Some(loggingInfo)) {
+      this - other
+    }
+  }
 
   /**
    * Multiplication of this expression and another expression.
@@ -759,6 +773,13 @@ class Column(val expr: Expression) extends Logging {
    */
   def multiply(other: Any): Column = this * other
 
+  def multiplyWithPySparkLoggingInfo(
+      other: Any, loggingInfo: java.util.Map[String, String]): Column = {
+    withOrigin(Some(loggingInfo)) {
+      this * other
+    }
+  }
+
   /**
    * Division this expression by another expression.
    * {{{
@@ -788,6 +809,13 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def divide(other: Any): Column = this / other
+
+  def divideWithPySparkLoggingInfo(
+      other: Any, loggingInfo: java.util.Map[String, String]): Column = {
+    withOrigin(Some(loggingInfo)) {
+      this / other
+    }
+  }
 
   /**
    * Modulo (a.k.a. remainder) expression.

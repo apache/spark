@@ -18,6 +18,7 @@
 import sys
 import json
 import warnings
+import inspect
 from typing import (
     cast,
     overload,
@@ -35,7 +36,6 @@ from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark.context import SparkContext
 from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
-from pyspark.errors.utils import with_origin_to_class
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import get_active_spark_context
 
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from pyspark.sql.window import WindowSpec
 
 __all__ = ["Column"]
+SUPPORTED_WITH_PYSPARK_LOGGING_INFO_FUNCTIONS = ["divide", "plus", "minus", "multiply"]
 
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
@@ -173,8 +174,25 @@ def _bin_op(
         self: "Column",
         other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"],
     ) -> "Column":
+        from pyspark.sql import SparkSession
+
+        logging_info = {}
+        spark = SparkSession.getActiveSession()
+        if name in SUPPORTED_WITH_PYSPARK_LOGGING_INFO_FUNCTIONS and spark is not None:
+            assert spark._jvm is not None
+
+            stack = inspect.stack()
+            frame_info = stack[-1]
+            logging_info = {
+                "fragment": name,
+                "callSite": f"{frame_info.filename}:{frame_info.lineno}",
+            }
+
         jc = other._jc if isinstance(other, Column) else other
-        njc = getattr(self._jc, name)(jc)
+        if logging_info:
+            njc = getattr(self._jc, f"{name}WithPySparkLoggingInfo")(jc, logging_info)
+        else:
+            njc = getattr(self._jc, name)(jc)
         return Column(njc)
 
     _.__doc__ = doc
@@ -197,7 +215,6 @@ def _reverse_op(
     return _
 
 
-@with_origin_to_class
 class Column:
 
     """

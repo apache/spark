@@ -111,6 +111,26 @@ package object sql {
     }
   }
 
+  private[sql] def withOrigin[T](
+      pysparkLoggingInfo: Option[java.util.Map[String, String]] = None)(f: => T): T = {
+    if (CurrentOrigin.get.stackTrace.isDefined) {
+      f
+    } else {
+      val st = Thread.currentThread().getStackTrace
+      var i = 0
+      // Find the beginning of Spark code traces
+      while (i < st.length && !sparkCode(st(i))) i += 1
+      // Stop at the end of the first Spark code traces
+      while (i < st.length && sparkCode(st(i))) i += 1
+      val origin = Origin(
+        stackTrace = Some(
+          st.slice(from = i - 1, until = i + SQLConf.get.stackTracesInDataFrameContext)),
+        pysparkLoggingInfo = pysparkLoggingInfo
+      )
+      CurrentOrigin.withOrigin(origin)(f)
+    }
+  }
+
   private val sparkCodePattern = Pattern.compile("(org\\.apache\\.spark\\.sql\\." +
       "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder)" +
       "(?:|\\..*|\\$.*))" +

@@ -16,9 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.trees
 
-import scala.collection.mutable
-import scala.collection.mutable.Queue
-
 import org.apache.spark.QueryContext
 import org.apache.spark.util.ArrayImplicits._
 
@@ -35,10 +32,11 @@ case class Origin(
     sqlText: Option[String] = None,
     objectType: Option[String] = None,
     objectName: Option[String] = None,
-    stackTrace: Option[Array[StackTraceElement]] = None) {
+    stackTrace: Option[Array[StackTraceElement]] = None,
+    pysparkLoggingInfo: Option[java.util.Map[String, String]] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
-    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq)
+    DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkLoggingInfo)
   } else {
     SQLQueryContext(
       line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
@@ -86,44 +84,4 @@ object CurrentOrigin {
     val ret = try f finally { set(previous) }
     ret
   }
-}
-
-/**
- * Provides detailed call site information on PySpark.
- * This information is generated in PySpark and stored as Maps within a queue
- * to maintain the order of operations.
- *
- * The queue structure ensures that multiple call sites can be logged in order, allowing
- * for accurate reconstruction of the sequence of operations in multi-threaded or asynchronous
- * execution environments.
- */
-object PySparkCurrentOrigin {
-  private val pysparkCallSiteQueue = new ThreadLocal[Queue[mutable.Map[String, String]]]() {
-    override def initialValue(): Queue[mutable.Map[String, String]] = Queue.empty
-  }
-
-  /**
-   * Adds a call site information map to the queue.
-   *
-   * @param fragment The method name within the PySpark code.
-   * @param callSite Detailed context, including file name and line number.
-   */
-  def set(fragment: String, callSite: String): Unit = {
-    pysparkCallSiteQueue.get().enqueue(mutable.Map("fragment" -> fragment, "callSite" -> callSite))
-  }
-
-  /**
-   * Retrieves and removes the earliest call site information map from the queue.
-   *
-   * @return An Option containing the first Map if available, or None if the queue is empty.
-   */
-  def pop(): Option[mutable.Map[String, String]] = {
-    if (pysparkCallSiteQueue.get().nonEmpty) {
-      Some(pysparkCallSiteQueue.get().dequeue())
-    } else {
-      None
-    }
-  }
-
-  // clear() is not needed as dequeue() handles removal
 }
