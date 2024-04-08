@@ -198,14 +198,15 @@ class SparkConnectServiceSuite
       assert(done)
 
       // 4 Partitions + Metrics + optional progress messages
-      assert(responses.filter(!_.hasExecutionProgress).size == 6)
+      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      assert(filteredResponses.size == 6)
 
       // Make sure the first response is schema only
-      val head = responses.head
+      val head = filteredResponses.head
       assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
       // Make sure the last response is metrics only
-      val last = responses.last
+      val last = filteredResponses.last
       assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
 
       val allocator = new RootAllocator()
@@ -213,7 +214,7 @@ class SparkConnectServiceSuite
       // Check the 'data' batches
       var expectedId = 0L
       var previousEId = 0.0d
-      responses.tail.dropRight(1).foreach { response =>
+      filteredResponses.tail.dropRight(1).foreach { response =>
         assert(response.hasArrowBatch)
         val batch = response.getArrowBatch
         assert(batch.getData != null)
@@ -298,14 +299,15 @@ class SparkConnectServiceSuite
       assert(done)
 
       // 1 Partitions + Metrics
-      assert(responses.filter(!_.hasExecutionProgress).size == 3)
+      val filteredResponses = responses.filter(!_.hasExecutionProgress)
+      assert(filteredResponses.size == 3)
 
       // Make sure the first response is schema only
-      val head = responses.head
+      val head = filteredResponses.head
       assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
       // Make sure the last response is metrics only
-      val last = responses.last
+      val last = filteredResponses.last
       assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
     }
   }
