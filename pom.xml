@@ -137,7 +137,7 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.6.1</kafka.version>
+    <kafka.version>3.7.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.13.1</parquet.version>
@@ -215,7 +215,7 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.6.0</commons-cli.version>
     <bouncycastle.version>1.77</bouncycastle.version>
-    <tink.version>1.12.0</tink.version>
+    <tink.version>1.13.0</tink.version>
     <datasketches.version>5.0.1</datasketches.version>
     <netty.version>4.1.108.Final</netty.version>
     <netty-tcnative.version>2.0.65.Final</netty-tcnative.version>
@@ -797,7 +797,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-1</version>
+        <version>1.5.6-2</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

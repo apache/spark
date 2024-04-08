@@ -38,6 +38,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from pyspark.conf import SparkConf
 from pyspark.util import is_remote_only
 from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
@@ -67,7 +68,6 @@ from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeEr
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.core.conf import SparkConf
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -221,7 +221,7 @@ class SparkSession(SparkConversionMixin):
             self._options: Dict[str, Any] = {}
 
         @overload
-        def config(self, *, conf: "SparkConf") -> "SparkSession.Builder":
+        def config(self, *, conf: SparkConf) -> "SparkSession.Builder":
             ...
 
         @overload
@@ -236,7 +236,7 @@ class SparkSession(SparkConversionMixin):
             self,
             key: Optional[str] = None,
             value: Optional[Any] = None,
-            conf: Optional["SparkConf"] = None,
+            conf: Optional[SparkConf] = None,
             *,
             map: Optional[Dict[str, "OptionalPrimitiveType"]] = None,
         ) -> "SparkSession.Builder":
@@ -273,7 +273,7 @@ class SparkSession(SparkConversionMixin):
             --------
             For an existing :class:`SparkConf`, use `conf` parameter.
 
-            >>> from pyspark.core.conf import SparkConf
+            >>> from pyspark.conf import SparkConf
             >>> conf = SparkConf().setAppName("example").setMaster("local")
             >>> SparkSession.builder.config(conf=conf)
             <pyspark.sql.session.SparkSession.Builder...
@@ -489,7 +489,6 @@ class SparkSession(SparkConversionMixin):
                 return RemoteSparkSession.builder.config(map=opts).getOrCreate()  # type: ignore
 
             from pyspark.core.context import SparkContext
-            from pyspark.core.conf import SparkConf
 
             with self._lock:
                 if (
@@ -862,7 +861,7 @@ class SparkSession(SparkConversionMixin):
         Create a temp view, show the list, and drop it.
 
         >>> spark.range(1).createTempView("test_view")
-        >>> spark.catalog.listTables()
+        >>> spark.catalog.listTables()  # doctest: +SKIP
         [Table(name='test_view', catalog=None, namespace=[], description=None, ...
         >>> _ = spark.catalog.dropTempView("test_view")
         """
@@ -1213,7 +1212,6 @@ class SparkSession(SparkConversionMixin):
         that script, which would expose those to users.
         """
         import py4j
-        from pyspark.core.conf import SparkConf
         from pyspark.core.context import SparkContext
 
         try:

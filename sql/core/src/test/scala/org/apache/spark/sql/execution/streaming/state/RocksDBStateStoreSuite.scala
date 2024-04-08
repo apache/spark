@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.util.UUID
 
+import scala.collection.immutable
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
@@ -166,7 +167,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     // zero ordering cols
     val ex1 = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 0),
+        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq()),
         colFamiliesEnabled)) { provider =>
         provider.getStore(0)
       }
@@ -180,10 +181,12 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       matchPVals = true
     )
 
-    // ordering cols greater than schema cols
+    // ordering ordinals greater than schema cols
     val ex2 = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, keySchemaWithRangeScan.length + 1),
+        RangeKeyScanStateEncoderSpec(
+          keySchemaWithRangeScan,
+          0.to(keySchemaWithRangeScan.length)),
         colFamiliesEnabled)) { provider =>
         provider.getStore(0)
       }
@@ -205,7 +208,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
     val ex = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithVariableSizeCols,
-        RangeKeyScanStateEncoderSpec(keySchemaWithVariableSizeCols, 1),
+        RangeKeyScanStateEncoderSpec(keySchemaWithVariableSizeCols, Seq(0)),
         colFamiliesEnabled)) { provider =>
         provider.getStore(0)
       }
@@ -221,6 +224,46 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     )
   }
 
+  testWithColumnFamilies("rocksdb range scan validation - variable size data types unsupported",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+    val keySchemaWithSomeUnsupportedTypeCols: StructType = StructType(Seq(
+      StructField("key1", StringType, false),
+      StructField("key2", IntegerType, false),
+      StructField("key3", FloatType, false),
+      StructField("key4", BinaryType, false)
+    ))
+    val allowedRangeOrdinals = Seq(1, 2)
+
+    keySchemaWithSomeUnsupportedTypeCols.fields.zipWithIndex.foreach { case (field, index) =>
+      val isAllowed = allowedRangeOrdinals.contains(index)
+
+      val getStore = () => {
+        tryWithProviderResource(newStoreProvider(keySchemaWithSomeUnsupportedTypeCols,
+            RangeKeyScanStateEncoderSpec(keySchemaWithSomeUnsupportedTypeCols, Seq(index)),
+            colFamiliesEnabled)) { provider =>
+            provider.getStore(0)
+        }
+      }
+
+      if (isAllowed) {
+        getStore()
+      } else {
+        val ex = intercept[SparkUnsupportedOperationException] {
+          getStore()
+        }
+        checkError(
+          ex,
+          errorClass = "STATE_STORE_VARIABLE_SIZE_ORDERING_COLS_NOT_SUPPORTED",
+          parameters = Map(
+            "fieldName" -> field.name,
+            "index" -> index.toString
+          ),
+          matchPVals = true
+        )
+      }
+    }
+  }
+
   testWithColumnFamilies("rocksdb range scan validation - null type columns",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
     val keySchemaWithNullTypeCols: StructType = StructType(
@@ -228,7 +271,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
     val ex = intercept[SparkUnsupportedOperationException] {
       tryWithProviderResource(newStoreProvider(keySchemaWithNullTypeCols,
-        RangeKeyScanStateEncoderSpec(keySchemaWithNullTypeCols, 1),
+        RangeKeyScanStateEncoderSpec(keySchemaWithNullTypeCols, Seq(0)),
         colFamiliesEnabled)) { provider =>
         provider.getStore(0)
       }
@@ -248,7 +291,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
       // use non-default col family if column families are enabled
@@ -256,7 +300,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           keySchemaWithRangeScan, valueSchema,
-          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1))
+          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
       }
 
       val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
@@ -305,14 +349,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
     val schemaProj = UnsafeProjection.create(Array[DataType](DoubleType, StringType))
     tryWithProviderResource(newStoreProvider(testSchema,
-      RangeKeyScanStateEncoderSpec(testSchema, 1), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(testSchema, Seq(0)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, 1))
+          RangeKeyScanStateEncoderSpec(testSchema, Seq(0)))
       }
 
       // Verify that the sort ordering here is as follows:
@@ -355,14 +399,15 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           keySchemaWithRangeScan, valueSchema,
-          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1))
+          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
       }
 
       val timerTimestamps = Seq(931L, 8000L, 452300L, 4200L, 90L, 1L, 2L, 8L, 3L, 35L, 6L, 9L, 5L,
@@ -415,14 +460,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val schemaProj = UnsafeProjection.create(Array[DataType](LongType, IntegerType, StringType))
 
     tryWithProviderResource(newStoreProvider(testSchema,
-      RangeKeyScanStateEncoderSpec(testSchema, 2), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, 2))
+          RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
 
       val timerTimestamps = Seq((931L, 10), (8000L, 40), (452300L, 1), (4200L, 68), (90L, 2000),
@@ -447,6 +492,96 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  testWithColumnFamilies("rocksdb range scan multiple non-contiguous ordering columns",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled ) { colFamiliesEnabled =>
+    val testSchema: StructType = StructType(
+      Seq(
+        StructField("ordering-1", LongType, false),
+        StructField("key2", StringType, false),
+        StructField("ordering-2", IntegerType, false),
+        StructField("string-2", StringType, false),
+        StructField("ordering-3", DoubleType, false)
+      )
+    )
+
+    val testSchemaProj = UnsafeProjection.create(Array[DataType](
+        immutable.ArraySeq.unsafeWrapArray(testSchema.fields.map(_.dataType)): _*))
+    val rangeScanOrdinals = Seq(0, 2, 4)
+
+    tryWithProviderResource(
+      newStoreProvider(
+        testSchema,
+        RangeKeyScanStateEncoderSpec(testSchema, rangeScanOrdinals),
+        colFamiliesEnabled
+      )
+    ) { provider =>
+      val store = provider.getStore(0)
+
+      val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+      if (colFamiliesEnabled) {
+        store.createColFamilyIfAbsent(
+          cfName,
+          testSchema,
+          valueSchema,
+          RangeKeyScanStateEncoderSpec(testSchema, rangeScanOrdinals)
+        )
+      }
+
+      val orderedInput = Seq(
+        // Make sure that the first column takes precedence, even if the
+        // later columns are greater
+        (-2L, 0, 99.0),
+        (-1L, 0, 98.0),
+        (0L, 0, 97.0),
+        (2L, 0, 96.0),
+        // Make sure that the second column takes precedence, when the first
+        // column is all the same
+        (3L, -2, -1.0),
+        (3L, -1, -2.0),
+        (3L, 0, -3.0),
+        (3L, 2, -4.0),
+        // Finally, make sure that the third column takes precedence, when the
+        // first two ordering columns are the same.
+        (4L, -1, -127.0),
+        (4L, -1, 0.0),
+        (4L, -1, 64.0),
+        (4L, -1, 127.0)
+      )
+      val scrambledInput = Random.shuffle(orderedInput)
+
+      scrambledInput.foreach { record =>
+        val keyRow = testSchemaProj.apply(
+          new GenericInternalRow(
+            Array[Any](
+              record._1,
+              UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString),
+              record._2,
+              UTF8String.fromString(Random.alphanumeric.take(Random.nextInt(20) + 1).mkString),
+              record._3
+            )
+          )
+        )
+
+        // The value is just a "dummy" value of 1
+        val valueRow = dataToValueRow(1)
+        store.put(keyRow, valueRow, cfName)
+        assert(valueRowToData(store.get(keyRow, cfName)) === 1)
+      }
+
+      val result = store
+        .iterator(cfName)
+        .map { kv =>
+          val keyRow = kv.key
+          val key = (keyRow.getLong(0), keyRow.getInt(2), keyRow.getDouble(4))
+          (key._1, key._2, key._3)
+        }
+        .toSeq
+
+      assert(result === orderedInput)
+    }
+  }
+
+
   testWithColumnFamilies("rocksdb range scan multiple ordering columns - variable size " +
     s"non-ordering columns with null values in first ordering column",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
@@ -459,14 +594,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val schemaProj = UnsafeProjection.create(Array[DataType](LongType, IntegerType, StringType))
 
     tryWithProviderResource(newStoreProvider(testSchema,
-      RangeKeyScanStateEncoderSpec(testSchema, 2), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, 2))
+          RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
 
       val timerTimestamps = Seq((931L, 10), (null, 40), (452300L, 1),
@@ -522,7 +657,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       if (colFamiliesEnabled) {
         store1.createColFamilyIfAbsent(cfName,
           testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, 2))
+          RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
 
       val timerTimestamps1 = Seq((null, 3), (null, 1), (null, 32),
@@ -559,14 +694,14 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val schemaProj = UnsafeProjection.create(Array[DataType](LongType, IntegerType, StringType))
 
     tryWithProviderResource(newStoreProvider(testSchema,
-      RangeKeyScanStateEncoderSpec(testSchema, 2), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, 2))
+          RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
 
       val timerTimestamps = Seq((931L, 10), (40L, null), (452300L, 1),
@@ -612,20 +747,20 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val schemaProj = UnsafeProjection.create(Array[DataType](ByteType, IntegerType, StringType))
 
     tryWithProviderResource(newStoreProvider(testSchema,
-      RangeKeyScanStateEncoderSpec(testSchema, 2), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           testSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(testSchema, 2))
+          RangeKeyScanStateEncoderSpec(testSchema, Seq(0, 1)))
       }
 
       val timerTimestamps: Seq[(Byte, Int)] = Seq((0x33, 10), (0x1A, 40), (0x1F, 1), (0x01, 68),
         (0x7F, 2000), (0x01, 27), (0x01, 394), (0x01, 5), (0x03, 980), (0x35, 2112),
         (0x11, -190), (0x1A, -69), (0x01, -344245), (0x31, -901),
-        (0x06, 90118), (0x09, 95118), (0x06, 87210))
+        (-0x01, 90118), (-0x7F, 95118), (-0x80, 87210))
       timerTimestamps.foreach { ts =>
         // order by byte col first and then by int col
         val keyRow = schemaProj.apply(new GenericInternalRow(Array[Any](ts._1, ts._2,
@@ -649,13 +784,13 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
     // use the same schema as value schema for single col key schema
     tryWithProviderResource(newStoreProvider(valueSchema,
-      RangeKeyScanStateEncoderSpec(valueSchema, 1), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)), colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           valueSchema, valueSchema,
-          RangeKeyScanStateEncoderSpec(valueSchema, 1))
+          RangeKeyScanStateEncoderSpec(valueSchema, Seq(0)))
       }
 
       val timerTimestamps = Seq(931, 8000, 452300, 4200,
@@ -690,14 +825,15 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
 
     tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
-      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1), colFamiliesEnabled)) { provider =>
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
 
       val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
       if (colFamiliesEnabled) {
         store.createColFamilyIfAbsent(cfName,
           keySchemaWithRangeScan, valueSchema,
-          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, 1))
+          RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
       }
 
       val timerTimestamps = Seq(931L, -1331L, 8000L, 1L, -244L, -8350L, -55L)
