@@ -233,13 +233,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         reader.setHistory(new FileHistory(new File(historyFile)))
       } else {
         logWarning(
-          log"WARNING: Directory for Hive history file: ${MDC(HISTORY_DIR, historyDirectory)}" +
-            log" does not exist.   History will not be available during this session.")
+          log"Directory for Hive history file: ${MDC(HISTORY_DIR, historyDirectory)}" +
+            log" does not exist. History will not be available during this session.")
       }
     } catch {
       case e: Exception =>
-        logWarning("WARNING: Encountered an error while trying to initialize Hive's " +
-                           "history file.  History will not be available during this session.", e)
+        logWarning("Encountered an error while trying to initialize Hive's " +
+                     "history file. History will not be available during this session.", e)
         logWarning(log"${MDC(ERROR, e.getMessage)}", e)
     }
 
@@ -252,7 +252,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
           } catch {
             case e: IOException =>
               logWarning(
-                log"WARNING: Failed to write command history file: ${MDC(ERROR, e.getMessage)}", e)
+                log"Failed to write command history file: ${MDC(ERROR, e.getMessage)}", e)
           }
         case _ =>
       }
