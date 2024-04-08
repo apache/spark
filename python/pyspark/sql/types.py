@@ -1349,9 +1349,8 @@ class VariantType(AtomicType):
         return True
 
     def fromInternal(self, obj: Dict) -> "VariantVal":
-        if obj is None or not all(key in obj for key in ["value", "metadata"]):
-            return
-        return VariantVal(obj["value"], obj["metadata"])
+        if obj is not None and all(key in obj for key in ["value", "metadata"]):
+            return VariantVal(obj["value"], obj["metadata"])
 
 
 class UserDefinedType(DataType):
@@ -1510,7 +1509,7 @@ class VariantVal:
         return VariantUtils.to_json(self.value, self.metadata)
 
     def __repr__(self) -> str:
-        return "VariantVal(%s, %s)" % (self.value, self.metadata)
+        return "VariantVal(%r, %r)" % (self.value, self.metadata)
 
     def toPython(self) -> Any:
         """

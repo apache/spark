@@ -19,7 +19,7 @@ import decimal
 import json
 import struct
 from array import array
-from typing import Any
+from typing import Any, Callable, Dict, List, Tuple
 from pyspark.errors import PySparkValueError
 
 
@@ -120,7 +120,7 @@ class VariantUtils:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
-    def _get_type_info(cls, value: bytes, pos: int):
+    def _get_type_info(cls, value: bytes, pos: int) -> Tuple[int, int]:
         """
         Returns the (basic_type, type_info) pair from the given position in the value.
         """
@@ -221,7 +221,7 @@ class VariantUtils:
         return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
 
     @classmethod
-    def _get_type(cls, value: bytes, pos: int):
+    def _get_type(cls, value: bytes, pos: int) -> Any:
         """
         Returns the Python type of the Variant at the given position.
         """
@@ -261,7 +261,7 @@ class VariantUtils:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
 
-            def handle_object(key_value_pos_list):
+            def handle_object(key_value_pos_list: list[Tuple[str, int]]) -> str:
                 key_value_list = [
                     json.dumps(key) + ":" + cls._to_json(value, metadata, value_pos)
                     for (key, value_pos) in key_value_pos_list
@@ -271,7 +271,7 @@ class VariantUtils:
             return cls._handle_object(value, metadata, pos, handle_object)
         elif variant_type == array:
 
-            def handle_array(value_pos_list):
+            def handle_array(value_pos_list: list[int]) -> str:
                 value_list = [
                     cls._to_json(value, metadata, value_pos) for value_pos in value_pos_list
                 ]
@@ -293,7 +293,7 @@ class VariantUtils:
         variant_type = cls._get_type(value, pos)
         if variant_type == dict:
 
-            def handle_object(key_value_pos_list):
+            def handle_object(key_value_pos_list: list[Tuple[str, int]]) -> Dict[str, Any]:
                 key_value_list = [
                     (key, cls._to_python(value, metadata, value_pos))
                     for (key, value_pos) in key_value_pos_list
@@ -303,7 +303,7 @@ class VariantUtils:
             return cls._handle_object(value, metadata, pos, handle_object)
         elif variant_type == array:
 
-            def handle_array(value_pos_list):
+            def handle_array(value_pos_list: list[int]) -> List[Any]:
                 value_list = [
                     cls._to_python(value, metadata, value_pos) for value_pos in value_pos_list
                 ]
@@ -314,7 +314,7 @@ class VariantUtils:
             return cls._get_scalar(variant_type, value, metadata, pos)
 
     @classmethod
-    def _get_scalar(cls, variant_type, value: bytes, metadata: bytes, pos: int) -> Any:
+    def _get_scalar(cls, variant_type: Any, value: bytes, metadata: bytes, pos: int) -> Any:
         if isinstance(None, variant_type):
             return None
         elif variant_type == bool:
@@ -331,7 +331,9 @@ class VariantUtils:
             raise PySparkValueError(error_class="MALFORMED_VARIANT")
 
     @classmethod
-    def _handle_object(cls, value: bytes, metadata: bytes, pos: int, func):
+    def _handle_object(
+        cls, value: bytes, metadata: bytes, pos: int, func: Callable[[list[Tuple[str, int]]], Any]
+    ) -> Any:
         """
         Parses the variant object at position `pos`.
         Calls `func` with a list of (key, value position) pairs of the object.
@@ -360,7 +362,7 @@ class VariantUtils:
         return func(key_value_pos_list)
 
     @classmethod
-    def _handle_array(cls, value: bytes, pos: int, func):
+    def _handle_array(cls, value: bytes, pos: int, func: Callable[[list[int]], Any]) -> Any:
         """
         Parses the variant array at position `pos`.
         Calls `func` with a list of element positions of the array.
