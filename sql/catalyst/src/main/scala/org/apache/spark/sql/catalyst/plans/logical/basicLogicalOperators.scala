@@ -309,9 +309,8 @@ case class Generate(
 
   def output: Seq[Attribute] = requiredChildOutput ++ qualifiedGeneratorOutput
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): Generate = {
+  override protected def withNewChildInternal(newChild: LogicalPlan): Generate =
     copy(child = newChild)
-  }
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
