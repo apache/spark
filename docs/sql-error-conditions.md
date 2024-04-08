@@ -652,12 +652,6 @@ EXCEPT column `<columnName>` was resolved and expected to be StructType, but fou
 
 Columns in an EXCEPT list must be distinct and non-overlapping, but got (`<columns>`).
 
-### EXECUTE_IMMEDIATE_FAILED_TO_PARSE_STACK_OVERFLOW
-
-SQLSTATE: 07501
-
-EXECUTE IMMEDIATE hit stack overflow while parsing the SQL query. 
-
 ### EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES
 
 [SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -761,6 +755,12 @@ Failed to rename temp file `<srcPath>` to `<dstPath>` as FileSystem.rename retur
 [SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
 
 Failed to convert the row value `<value>` of the class `<class>` to the target SQL type `<sqlType>` in the JSON format.
+
+### FAILED_TO_PARSE_STACK_OVERFLOW
+
+[SQLSTATE: 42907](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Stack overflow was hit while parsing the SQL query. 
 
 ### FIELDS_ALREADY_EXISTS
 

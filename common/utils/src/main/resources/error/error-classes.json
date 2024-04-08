@@ -1083,11 +1083,11 @@
     ],
     "sqlState" : "42702"
   },
-  "EXECUTE_IMMEDIATE_FAILED_TO_PARSE_STACK_OVERFLOW" : {
+  "FAILED_TO_PARSE_STACK_OVERFLOW" : {
     "message" : [
-      "EXECUTE IMMEDIATE hit stack overflow while parsing the SQL query. "
+      "Stack overflow was hit while parsing the SQL query. "
     ],
-    "sqlState" : "07501"
+    "sqlState" : "42907"
   },
   "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES" : {
     "message" : [
