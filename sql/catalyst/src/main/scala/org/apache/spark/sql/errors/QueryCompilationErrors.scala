@@ -3998,12 +3998,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
 
-  def executeImmediateStackOverflow(): Throwable = {
-    throw new AnalysisException(
-      errorClass = "EXECUTE_IMMEDIATE_FAILED_TO_PARSE_STACK_OVERFLOW",
-      messageParameters = Map())
-  }
-
   def dataSourceTableSchemaMismatchError(
       dsSchema: StructType, expectedSchema: StructType): Throwable = {
     new AnalysisException(

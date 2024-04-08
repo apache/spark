@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
@@ -32,24 +32,6 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
       assert(originalQuery.columns sameElements newQuery.columns)
 
       checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
-    } finally {
-      spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
-    }
-  }
-
-  test("EXEC IMMEDIATE STACK OVERFLOW") {
-    try {
-      spark.sql("DECLARE parm = 1;")
-      val query = (1 to 20000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
-      Seq(
-        s"EXECUTE IMMEDIATE '$query'",
-        s"EXECUTE IMMEDIATE '$query' INTO parm").foreach { q =>
-        val e = intercept[AnalysisException] {
-          spark.sql(q)
-        }
-
-        assert(e.errorClass.get == "EXECUTE_IMMEDIATE_FAILED_TO_PARSE_STACK_OVERFLOW")
-      }
     } finally {
       spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
     }
