@@ -238,7 +238,7 @@ object CommandUtils extends Logging {
       // Analyzes a catalog view if the view is cached
       val table = sparkSession.table(tableIdent.quotedString)
       val cacheManager = sparkSession.sharedState.cacheManager
-      if (cacheManager.lookupCachedData(table.logicalPlan).isDefined) {
+      if (cacheManager.lookupCachedData(table.logicalPlan).exists(_.cachedRepresentation.isRight)) {
         if (!noScan) {
           // To collect table stats, materializes an underlying columnar RDD
           table.count()
