@@ -822,8 +822,6 @@ object FunctionRegistry {
     expression[ParseJson]("parse_json"),
     expressionBuilder("variant_get", VariantGetExpressionBuilder),
     expressionBuilder("try_variant_get", TryVariantGetExpressionBuilder),
-    expression[VariantExplode]("variant_explode"),
-    expressionGeneratorOuter[VariantExplode]("variant_explode_outer"),
 
     // cast
     expression[Cast]("cast"),

@@ -303,12 +303,14 @@ class VariantSuite extends QueryTest with SharedSparkSession {
 
   test("variant_explode") {
     def check(input: String, expected: Seq[Row]): Unit = {
-      val df = Seq(input).toDF("json")
-      checkAnswer(df.selectExpr("variant_explode(parse_json(json))")
-        .selectExpr("pos", "key", "to_json(value)"), expected)
-      val expectedOuter = if (expected.isEmpty) Seq(Row(null, null, null)) else expected
-      checkAnswer(df.selectExpr("variant_explode_outer(parse_json(json))")
-        .selectExpr("pos", "key", "to_json(value)"), expectedOuter)
+      withView("v") {
+        Seq(input).toDF("json").createOrReplaceTempView("v")
+        checkAnswer(sql("select pos, key, to_json(value) from v, " +
+          "lateral variant_explode(parse_json(json))"), expected)
+        val expectedOuter = if (expected.isEmpty) Seq(Row(null, null, null)) else expected
+        checkAnswer(sql("select pos, key, to_json(value) from v, " +
+          "lateral variant_explode_outer(parse_json(json))"), expectedOuter)
+      }
     }
 
     Seq("true", "false").foreach { codegenEnabled =>

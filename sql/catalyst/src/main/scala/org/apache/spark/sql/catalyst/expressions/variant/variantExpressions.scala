@@ -410,10 +410,10 @@ object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(fa
   usage = "_FUNC_(expr) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It ignores any input that is not a variant array/object, including SQL NULL, variant null, and any other variant values.",
   examples = """
     Examples:
-      > SELECT _FUNC_(parse_json('["hello", "world"]'));
+      > SELECT * from _FUNC_(parse_json('["hello", "world"]'));
        0	NULL	"hello"
        1	NULL	"world"
-      > SELECT _FUNC_(parse_json('{"a": true, "b": 3.14}'));
+      > SELECT * from _FUNC_(parse_json('{"a": true, "b": 3.14}'));
        0	a	true
        1	b	3.14
   """,
@@ -436,10 +436,10 @@ case class VariantExplode(child: Expression) extends UnaryExpression with Genera
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.genCode(ctx)
+    val cls = classOf[VariantExplode].getName
     val code = code"""
       ${childCode.code}
-      scala.collection.Seq<InternalRow> ${ev.value} =
-        org.apache.spark.sql.catalyst.expressions.variant.VariantExplode.variantExplode(
+      scala.collection.Seq<InternalRow> ${ev.value} = $cls.variantExplode(
           ${childCode.value}, ${childCode.isNull});
     """
     ev.copy(code = code, isNull = FalseLiteral)
