@@ -280,7 +280,7 @@ class VariantUtils:
             return cls._handle_array(value, pos, handle_array)
         else:
             value = cls._get_scalar(variant_type, value, metadata, pos)
-            if value == None:
+            if value is None:
                 return "null"
             if type(value) == bool:
                 return "true" if value else "false"
@@ -315,7 +315,7 @@ class VariantUtils:
 
     @classmethod
     def _get_scalar(cls, variant_type, value: bytes, metadata: bytes, pos: int) -> Any:
-        if variant_type == type(None):
+        if isinstance(None, variant_type):
             return None
         elif variant_type == bool:
             return cls._get_boolean(value, pos)
