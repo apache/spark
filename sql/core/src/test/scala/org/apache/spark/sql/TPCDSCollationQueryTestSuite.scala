@@ -42,6 +42,9 @@ import org.apache.spark.util.Utils
  * ignoring case. We use this method to validate collations are working with arbitrary standard
  * SQL constructs.
  *
+ * Additionally, we perform trims on string data to properly convert it from CharType
+ * to StringType and do sanity checks to verify that results are non-empty as expected.
+ *
  * To run this test suite:
  * {{{
  *   SPARK_TPCDS_DATA=<path of TPCDS SF=1 data>
@@ -128,6 +131,8 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   )
 
   override def createTables(): Unit = {
+    // trim collated strings with udf
+    // this is a workaround until we have proper trim support for collations
     spark.udf.register(
       collateNormalize,
       functions.udf((s: String) => {
@@ -210,14 +215,18 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
     columnType.toUpperCase(Locale.ROOT).contains("CHAR")
   }
 
-  private def runQuery(query: String, conf: Map[String, String]): Unit = {
+  private def runQuery(query: String, conf: Map[String, String], emptyResult: Boolean): Unit = {
     withSQLConf(conf.toSeq: _*) {
       try {
         checks.foreach(batch => {
           val res = batch.map(check =>
             withDB(check.dbName)(getQueryOutput(check.queryTransform(query)).toLowerCase()))
-          res.map(queryOutput => assert(queryOutput.nonEmpty))
-          if (res.nonEmpty) res.foreach(currRes => assertResult(currRes)(res.head))
+          if (!emptyResult) {
+            res.map(queryOutput => assert(queryOutput.nonEmpty))
+          }
+          if (res.nonEmpty) {
+            res.foreach(currRes => assertResult(currRes)(res.head))
+          }
         })
       } catch {
         case e: Throwable =>
@@ -237,19 +246,23 @@ class TPCDSCollationQueryTestSuite extends QueryTest with TPCDSBase with SQLQuer
   // skip q91 due to use of like expression which is not supported with collations yet
   override def excludedTpcdsQueries: Set[String] = super.excludedTpcdsQueries ++ Set("q91")
 
+  // Skip checks on queries which produce empty set of rows
+  val emptyResults: Set[String] = Set("q17", "q23b", "q24a", "q24b", "q25", "q54")
+  val emptyResultsV2_7_0: Set[String] = Set("q24", "q78")
+
   if (tpcdsDataPath.nonEmpty) {
     tpcdsQueries.foreach { name =>
       val queryString = resourceToString(
         s"tpcds/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)
-      test(name)(runQuery(queryString, Map.empty))
+      test(name)(runQuery(queryString, Map.empty, emptyResults.contains(name)))
     }
 
     tpcdsQueriesV2_7_0.foreach { name =>
       val queryString = resourceToString(
         s"tpcds-v2.7.0/$name.sql",
         classLoader = Thread.currentThread().getContextClassLoader)
-      test(s"$name-v2.7")(runQuery(queryString, Map.empty))
+      test(s"$name-v2.7")(runQuery(queryString, Map.empty, emptyResultsV2_7_0.contains(name)))
     }
   } else {
     ignore("skipped because env 'SPARK_TPCDS_DATA' is not set") {}
