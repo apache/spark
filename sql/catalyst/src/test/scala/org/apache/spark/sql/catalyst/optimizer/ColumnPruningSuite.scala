@@ -118,7 +118,7 @@ class ColumnPruningSuite extends PlanTest {
           .where($"explode".isNotNull)
           .analyze
       val optimized = Optimize.execute(query)
-      val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
+      val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized).toSeq
       val aliasedExprs: Seq[String] => Seq[Expression] =
         aliases => Seq($"c".getField("d").as(aliases(0)), $"c".getField("e").as(aliases(1)))
       val replacedGenerator: Seq[String] => Generator =
@@ -153,7 +153,7 @@ class ColumnPruningSuite extends PlanTest {
           .where($"explode".getField("h1").isNotNull)
           .analyze
       val optimized = Optimize.execute(query)
-      val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
+      val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized).toSeq
       val aliasedExprs: Seq[String] => Seq[Expression] =
         aliases => Seq($"c".getField("d").as(aliases(0)), $"c.h.h1".as(aliases(1)))
       val replacedGenerator: Seq[String] => Generator =
