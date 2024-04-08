@@ -30,8 +30,7 @@ abstract class StringTypeCollated extends AbstractDataType {
  * Use StringTypeBinary for expressions supporting only binary collation.
  */
 case object StringTypeBinary extends StringTypeCollated {
-  // TODO (SPARK-47504): Rename this AbstractDataType's simpleString when it is first used
-  override private[sql] def simpleString: String = "string_binary"
+  override private[sql] def simpleString: String = "string"
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && other.asInstanceOf[StringType].supportsBinaryEquality
 }
@@ -40,8 +39,7 @@ case object StringTypeBinary extends StringTypeCollated {
  * Use StringTypeBinaryLcase for expressions supporting only binary and lowercase collation.
  */
 case object StringTypeBinaryLcase extends StringTypeCollated {
-  // TODO (SPARK-47504): Rename this AbstractDataType's simpleString when it is first used
-  override private[sql] def simpleString: String = "string_binary_lcase"
+  override private[sql] def simpleString: String = "string"
   override private[sql] def acceptsType(other: DataType): Boolean =
     other.isInstanceOf[StringType] && (other.asInstanceOf[StringType].supportsBinaryEquality ||
       other.asInstanceOf[StringType].isUTF8BinaryLcaseCollation)
