@@ -65,6 +65,20 @@ in_spark = os.path.isfile("../core/src/main/scala/org/apache/spark/SparkContext.
     os.path.isfile("../RELEASE") and len(glob.glob("../jars/spark*core*.jar")) == 1
 )
 
+test_packages = []
+if "SPARK_TESTING" in os.environ:
+    test_packages = [
+        "pyspark.tests",  # for Memory profiler parity tests
+        "pyspark.testing",
+        "pyspark.sql.tests",
+        "pyspark.sql.tests.connect",
+        "pyspark.sql.tests.connect.streaming",
+        "pyspark.sql.tests.connect.client",
+        "pyspark.sql.tests.connect.shell",
+        "pyspark.sql.tests.pandas",
+        "pyspark.sql.tests.streaming",
+    ]
+
 try:
     if in_spark:
         copyfile("packaging/connect/setup.py", "setup.py")
@@ -136,7 +150,7 @@ try:
         author="Spark Developers",
         author_email="dev@spark.apache.org",
         url="https://github.com/apache/spark/tree/master/python",
-        packages=connect_packages,
+        packages=connect_packages + test_packages,
         license="http://www.apache.org/licenses/LICENSE-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
