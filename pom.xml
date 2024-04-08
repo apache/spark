@@ -171,7 +171,7 @@
     <commons.math3.version>3.6.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <commons.collections4.version>4.4</commons.collections4.version>
+    <commons.collections4.version>4.5.0-M1</commons.collections4.version>
     <scala.version>2.13.13</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
