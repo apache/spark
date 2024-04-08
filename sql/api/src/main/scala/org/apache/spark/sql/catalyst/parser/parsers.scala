@@ -97,7 +97,7 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
       case e: ParseException =>
         throw e.withCommand(command)
       case so: StackOverflowError =>
-        throw QueryParsingErrors.executeImmediateStackOverflow(command)
+        throw QueryParsingErrors.parserStackOverflow(command)
       case e: SparkThrowable with WithOrigin =>
         throw new ParseException(
           command = Option(command),
