@@ -301,11 +301,12 @@ case class PrefixKeyScanStateEncoderSpec(
   }
 }
 
+/** Encodes rows so that they can be range-scanned based on orderingOrdinals */
 case class RangeKeyScanStateEncoderSpec(
     keySchema: StructType,
-    numOrderingCols: Int) extends KeyStateEncoderSpec {
-  if (numOrderingCols == 0 || numOrderingCols > keySchema.length) {
-    throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(numOrderingCols.toString)
+    orderingOrdinals: Seq[Int]) extends KeyStateEncoderSpec {
+  if (orderingOrdinals.isEmpty || orderingOrdinals.length > keySchema.length) {
+    throw StateStoreErrors.incorrectNumOrderingColsForRangeScan(orderingOrdinals.length.toString)
   }
 }
 

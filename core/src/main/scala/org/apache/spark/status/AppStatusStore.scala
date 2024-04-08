@@ -25,7 +25,8 @@ import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.PATH
 import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 import org.apache.spark.status.api.v1
@@ -864,7 +865,7 @@ private[spark] object AppStatusStore extends Logging {
         Some(localDir)
       } catch {
         case e: IOException =>
-          logError(s"Failed to create spark ui store path in $rootDir.", e)
+          logError(log"Failed to create spark ui store path in ${MDC(PATH, rootDir)}.", e)
           None
       }
     }
