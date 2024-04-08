@@ -47,9 +47,9 @@ from py4j.java_collections import JavaMap
 from py4j.protocol import Py4JError
 
 from pyspark import accumulators
+from pyspark.conf import SparkConf
 from pyspark.accumulators import Accumulator
 from pyspark.core.broadcast import Broadcast, BroadcastPickleRegistry
-from pyspark.core.conf import SparkConf
 from pyspark.core.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import (
@@ -2598,7 +2598,6 @@ class SparkContext:
 
 def _test() -> None:
     import doctest
-    from pyspark import SparkConf
 
     globs = globals().copy()
     conf = SparkConf().set("spark.ui.enabled", "True")

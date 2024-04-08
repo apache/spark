@@ -49,6 +49,8 @@ case class MessageWithContext(message: String, context: java.util.HashMap[String
     resultMap.putAll(mdc.context)
     MessageWithContext(message + mdc.message, resultMap)
   }
+
+  def stripMargin: MessageWithContext = copy(message = message.stripMargin)
 }
 
 /**

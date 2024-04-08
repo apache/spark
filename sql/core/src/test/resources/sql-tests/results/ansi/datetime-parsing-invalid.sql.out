@@ -13,13 +13,13 @@ select to_timestamp('1', 'yy')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
+org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'1'"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '1' could not be parsed at index 0"
   }
 }
 
@@ -45,13 +45,13 @@ select to_timestamp('123', 'yy')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
+org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'123'"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '123' could not be parsed, unparsed text found at index 2"
   }
 }
 
@@ -61,13 +61,13 @@ select to_timestamp('1', 'yyy')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
+org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'1'"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '1' could not be parsed at index 0"
   }
 }
 
@@ -110,13 +110,13 @@ select to_timestamp('9', 'DD')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
+org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'9'"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '9' could not be parsed at index 0"
   }
 }
 
@@ -142,13 +142,13 @@ select to_timestamp('9', 'DDD')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
+org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'9'"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '9' could not be parsed at index 0"
   }
 }
 
@@ -158,13 +158,13 @@ select to_timestamp('99', 'DDD')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkUpgradeException
+org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
   "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'99'"
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '99' could not be parsed at index 0"
   }
 }
 
@@ -284,17 +284,9 @@ org.apache.spark.SparkDateTimeException
 -- !query
 select from_csv('2018-366', 'date Date', map('dateFormat', 'yyyy-DDD'))
 -- !query schema
-struct<>
+struct<from_csv(2018-366):struct<date:date>>
 -- !query output
-org.apache.spark.SparkUpgradeException
-{
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER",
-  "sqlState" : "42K0B",
-  "messageParameters" : {
-    "config" : "\"spark.sql.legacy.timeParserPolicy\"",
-    "datetime" : "'2018-366'"
-  }
-}
+{"date":null}
 
 
 -- !query

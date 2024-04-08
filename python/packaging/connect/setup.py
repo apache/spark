@@ -103,6 +103,7 @@ try:
         "pyspark.sql.connect.client",
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.proto",
+        "pyspark.sql.connect.protobuf",
         "pyspark.sql.connect.shell",
         "pyspark.sql.connect.streaming",
         "pyspark.sql.connect.streaming.worker",
