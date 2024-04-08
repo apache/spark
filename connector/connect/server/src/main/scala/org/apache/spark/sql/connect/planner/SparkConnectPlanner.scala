@@ -30,6 +30,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
@@ -200,6 +201,11 @@ class SparkConnectPlanner(
       plan.setTagValue(LogicalPlan.PLAN_ID_TAG, rel.getCommon.getPlanId)
     }
     plan
+  }
+
+  @DeveloperApi
+  def transformRelation(bytes: Array[Byte]): LogicalPlan = {
+    transformRelation(proto.Relation.parseFrom(bytes))
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
@@ -1470,6 +1476,11 @@ class SparkConnectPlanner(
     }
   }
 
+  @DeveloperApi
+  def transformExpression(bytes: Array[Byte]): Expression = {
+    transformExpression(proto.Expression.parseFrom(bytes))
+  }
+
   private def toNamedExpression(expr: Expression): NamedExpression = expr match {
     case named: NamedExpression => named
     case expr => UnresolvedAlias(expr)
@@ -2097,11 +2108,19 @@ class SparkConnectPlanner(
   }
 
   private def transformCast(cast: proto.Expression.Cast): Expression = {
-    cast.getCastToTypeCase match {
-      case proto.Expression.Cast.CastToTypeCase.TYPE =>
-        Cast(transformExpression(cast.getExpr), transformDataType(cast.getType))
-      case _ =>
-        Cast(transformExpression(cast.getExpr), parser.parseDataType(cast.getTypeStr))
+    val dataType = cast.getCastToTypeCase match {
+      case proto.Expression.Cast.CastToTypeCase.TYPE => transformDataType(cast.getType)
+      case _ => parser.parseDataType(cast.getTypeStr)
+    }
+    val mode = cast.getEvalMode match {
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_LEGACY => Some(EvalMode.LEGACY)
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_ANSI => Some(EvalMode.ANSI)
+      case proto.Expression.Cast.EvalMode.EVAL_MODE_TRY => Some(EvalMode.TRY)
+      case _ => None
+    }
+    mode match {
+      case Some(m) => Cast(transformExpression(cast.getExpr), dataType, None, m)
+      case _ => Cast(transformExpression(cast.getExpr), dataType)
     }
   }
 
@@ -2433,25 +2452,13 @@ class SparkConnectPlanner(
         }
 
         val pivotExpr = transformExpression(rel.getPivot.getCol)
-
-        var valueExprs = rel.getPivot.getValuesList.asScala.toSeq.map(transformLiteral)
-        if (valueExprs.isEmpty) {
-          // This is to prevent unintended OOM errors when the number of distinct values is large
-          val maxValues = session.sessionState.conf.dataFramePivotMaxValues
-          // Get the distinct values of the column and sort them so its consistent
-          val pivotCol = Column(pivotExpr)
-          valueExprs = Dataset
-            .ofRows(session, input)
-            .select(pivotCol)
-            .distinct()
-            .limit(maxValues + 1)
-            .sort(pivotCol) // ensure that the output columns are in a consistent logical order
-            .collect()
-            .map(_.get(0))
-            .toImmutableArraySeq
+        val valueExprs = if (rel.getPivot.getValuesCount > 0) {
+          rel.getPivot.getValuesList.asScala.toSeq.map(transformLiteral)
+        } else {
+          RelationalGroupedDataset
+            .collectPivotValues(Dataset.ofRows(session, input), Column(pivotExpr))
             .map(expressions.Literal.apply)
         }
-
         logical.Pivot(
           groupByExprsOpt = Some(groupingExprs.map(toNamedExpression)),
           pivotColumn = pivotExpr,
@@ -2470,6 +2477,7 @@ class SparkConnectPlanner(
               userGivenGroupByExprs = groupingExprs)),
           aggregateExpressions = aliasedAgg,
           child = input)
+
       case other => throw InvalidPlanInput(s"Unknown Group Type $other")
     }
   }

@@ -21,7 +21,7 @@ from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError
-from pyspark.java_gateway import local_connect_and_auth
+from pyspark.util import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,

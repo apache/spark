@@ -32,11 +32,9 @@ try:
 except ImportError:
     has_resource_module = False
 
-from pyspark.accumulators import _accumulatorRegistry
-from pyspark.broadcast import Broadcast, _broadcastRegistry
+from pyspark.util import is_remote_only
 from pyspark.errors import PySparkRuntimeError
-from pyspark.files import SparkFiles
-from pyspark.java_gateway import local_connect_and_auth
+from pyspark.util import local_connect_and_auth
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -59,8 +57,11 @@ def add_path(path: str) -> None:
 
 
 def read_command(serializer: FramedSerializer, file: IO) -> Any:
+    if not is_remote_only():
+        from pyspark.core.broadcast import Broadcast
+
     command = serializer._read_with_length(file)
-    if isinstance(command, Broadcast):
+    if not is_remote_only() and isinstance(command, Broadcast):
         command = serializer.loads(command.value)
     return command
 
@@ -125,8 +126,12 @@ def setup_spark_files(infile: IO) -> None:
     """
     # fetch name of workdir
     spark_files_dir = utf8_deserializer.loads(infile)
-    SparkFiles._root_directory = spark_files_dir
-    SparkFiles._is_running_on_worker = True
+
+    if not is_remote_only():
+        from pyspark.core.files import SparkFiles
+
+        SparkFiles._root_directory = spark_files_dir
+        SparkFiles._is_running_on_worker = True
 
     # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
     add_path(spark_files_dir)  # *.py files that were added will be copied here
@@ -142,6 +147,9 @@ def setup_broadcasts(infile: IO) -> None:
     """
     Set up broadcasted variables.
     """
+    if not is_remote_only():
+        from pyspark.core.broadcast import Broadcast, _broadcastRegistry
+
     # fetch names and values of broadcast variables
     needs_broadcast_decryption_server = read_bool(infile)
     num_broadcast_variables = read_int(infile)
@@ -175,6 +183,11 @@ def send_accumulator_updates(outfile: IO) -> None:
     """
     Send the accumulator updates back to JVM.
     """
-    write_int(len(_accumulatorRegistry), outfile)
-    for aid, accum in _accumulatorRegistry.items():
-        pickleSer._write_with_length((aid, accum._value), outfile)
+    if not is_remote_only():
+        from pyspark.accumulators import _accumulatorRegistry
+
+        write_int(len(_accumulatorRegistry), outfile)
+        for aid, accum in _accumulatorRegistry.items():
+            pickleSer._write_with_length((aid, accum._value), outfile)
+    else:
+        write_int(0, outfile)

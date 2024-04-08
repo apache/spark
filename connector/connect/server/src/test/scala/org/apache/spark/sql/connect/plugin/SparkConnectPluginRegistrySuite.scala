@@ -68,7 +68,7 @@ class ExampleRelationPlugin extends RelationPlugin {
       return Optional.empty()
     }
     val plugin = rel.unpack(classOf[proto.ExamplePluginRelation])
-    Optional.of(planner.transformRelation(plugin.getInput))
+    Optional.of(planner.transformRelation(plugin.getInput.toByteArray))
   }
 }
 
@@ -82,8 +82,7 @@ class ExampleExpressionPlugin extends ExpressionPlugin {
     }
     val exp = rel.unpack(classOf[proto.ExamplePluginExpression])
     Optional.of(
-      Alias(planner.transformExpression(exp.getChild), exp.getCustomField)(explicitMetadata =
-        None))
+      Alias(planner.transformExpression(exp.getChild.toByteArray), exp.getCustomField)())
   }
 }
 

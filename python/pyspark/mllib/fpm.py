@@ -22,7 +22,7 @@ from typing import Any, Generic, List, NamedTuple, TypeVar
 from pyspark import since, SparkContext
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 
 __all__ = ["FPGrowth", "FPGrowthModel", "PrefixSpan", "PrefixSpanModel"]
 

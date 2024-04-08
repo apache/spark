@@ -38,6 +38,7 @@ import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
 import org.apache.spark.status.ElementTrackingStore
@@ -284,6 +285,7 @@ object SparkConnectService extends Logging {
 
   private[connect] var uiTab: Option[SparkConnectServerTab] = None
   private[connect] var listener: SparkConnectServerListener = _
+  private[connect] var executionListener: Option[ConnectProgressExecutionListener] = None
 
   // For testing purpose, it's package level private.
   private[connect] def localPort: Int = {
@@ -330,6 +332,9 @@ object SparkConnectService extends Logging {
     } else {
       None
     }
+    // Add the execution listener needed for query progress.
+    executionListener = Some(new ConnectProgressExecutionListener)
+    sc.addSparkListener(executionListener.get)
   }
 
   /**

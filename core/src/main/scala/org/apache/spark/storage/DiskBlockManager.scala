@@ -30,7 +30,8 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKey.{MERGE_DIR_NAME, PATH}
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
 import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
 import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
@@ -255,7 +256,8 @@ private[spark] class DiskBlockManager(
         Some(localDir)
       } catch {
         case e: IOException =>
-          logError(s"Failed to create local dir in $rootDir. Ignoring this directory.", e)
+          logError(
+            log"Failed to create local dir in ${MDC(PATH, rootDir)}. Ignoring this directory.", e)
           None
       }
     }
@@ -292,7 +294,8 @@ private[spark] class DiskBlockManager(
         } catch {
           case e: IOException =>
             logError(
-              s"Failed to create $mergeDirName dir in $rootDir. Ignoring this directory.", e)
+              log"Failed to create ${MDC(MERGE_DIR_NAME, mergeDirName)} dir in " +
+                log"${MDC(PATH, rootDir)}. Ignoring this directory.", e)
         }
       }
     }
@@ -370,7 +373,7 @@ private[spark] class DiskBlockManager(
             }
           } catch {
             case e: Exception =>
-              logError(s"Exception while deleting local spark dir: $localDir", e)
+              logError(log"Exception while deleting local spark dir: ${MDC(PATH, localDir)}", e)
           }
         }
       }

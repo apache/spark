@@ -98,6 +98,9 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         'PYARROW_IGNORE_TIMEZONE': '1',
     })
 
+    if "SPARK_CONNECT_TESTING_REMOTE" in os.environ:
+        env.update({"SPARK_CONNECT_TESTING_REMOTE": os.environ["SPARK_CONNECT_TESTING_REMOTE"]})
+
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
     # recognized by the tempfile module to override the default system temp directory.
     tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))

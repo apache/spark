@@ -48,7 +48,6 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 import urllib
 
-from pyspark import SparkContext, SparkConf, __version__
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
@@ -103,6 +102,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark.sql.connect.shell.progress import ProgressHandler
     from pyspark.sql.connect.datasource import DataSourceRegistration
 
 
@@ -325,6 +325,21 @@ class SparkSession:
         return DataStreamReader(self)
 
     readStream.__doc__ = PySparkSession.readStream.__doc__
+
+    def registerProgressHandler(self, handler: "ProgressHandler") -> None:
+        self._client.register_progress_handler(handler)
+
+    registerProgressHandler.__doc__ = PySparkSession.registerProgressHandler.__doc__
+
+    def removeProgressHandler(self, handler: "ProgressHandler") -> None:
+        self._client.remove_progress_handler(handler)
+
+    removeProgressHandler.__doc__ = PySparkSession.removeProgressHandler.__doc__
+
+    def clearProgressHandlers(self) -> None:
+        self._client.clear_progress_handlers()
+
+    clearProgressHandlers.__doc__ = PySparkSession.clearProgressHandlers.__doc__
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
@@ -889,6 +904,8 @@ class SparkSession:
         3. Starts a regular Spark session that automatically starts a Spark Connect server
           with JVM via ``spark.plugins`` feature.
         """
+        from pyspark import SparkContext, SparkConf, __version__
+
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
             # Configurations to be overwritten

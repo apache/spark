@@ -55,7 +55,8 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKey.APP_ID
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{JavaModuleOptions, LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -1198,7 +1199,7 @@ private[spark] class Client(
           getApplicationReport()
         } catch {
           case e: ApplicationNotFoundException =>
-            logError(s"Application $appId not found.")
+            logError(log"Application ${MDC(APP_ID, appId)} not found.")
             cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
           case NonFatal(e) if !e.isInstanceOf[InterruptedIOException] =>

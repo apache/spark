@@ -24,6 +24,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -833,9 +834,41 @@ case class KeyGroupedShuffleSpec(
     (left, right) match {
       case (_: LeafExpression, _: LeafExpression) => true
       case (left: TransformExpression, right: TransformExpression) =>
-        left.isSameFunction(right)
+        if (SQLConf.get.v2BucketingPushPartValuesEnabled &&
+          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+          SQLConf.get.v2BucketingAllowCompatibleTransforms) {
+          left.isCompatible(right)
+        } else {
+          left.isSameFunction(right)
+        }
       case _ => false
     }
+
+  /**
+   * Return a set of [[Reducer]] for the partition expressions of this shuffle spec,
+   * on the partition expressions of another shuffle spec.
+   * <p>
+   * A [[Reducer]] exists for a partition expression function of this shuffle spec if it is
+   * 'reducible' on the corresponding partition expression function of the other shuffle spec.
+   * <p>
+   * If a value is returned, there must be one [[Reducer]] per partition expression.
+   * A None value in the set indicates that the particular partition expression is not reducible
+   * on the corresponding expression on the other shuffle spec.
+   * <p>
+   * Returning none also indicates that none of the partition expressions can be reduced on the
+   * corresponding expression on the other shuffle spec.
+   *
+   * @param other other key-grouped shuffle spec
+   */
+  def reducers(other: KeyGroupedShuffleSpec): Option[Seq[Option[Reducer[_, _]]]] = {
+     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
+       case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
+       case (_, _) => None
+     }
+
+    // optimize to not return a value, if none of the partition expressions are reducible
+    if (results.forall(p => p.isEmpty)) None else Some(results)
+  }
 
   override def canCreatePartitioning: Boolean = SQLConf.get.v2BucketingShuffleEnabled &&
     // Only support partition expressions are AttributeReference for now
@@ -843,6 +876,21 @@ case class KeyGroupedShuffleSpec(
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     KeyGroupedPartitioning(clustering, partitioning.numPartitions, partitioning.partitionValues)
+  }
+}
+
+object KeyGroupedShuffleSpec {
+  def reducePartitionValue(
+      row: InternalRow,
+      expressions: Seq[Expression],
+      reducers: Seq[Option[Reducer[_, _]]]):
+    InternalRowComparableWrapper = {
+    val partitionVals = row.toSeq(expressions.map(_.dataType))
+    val reducedRow = partitionVals.zip(reducers).map{
+      case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
+      case (v, _) => v
+    }.toArray
+    InternalRowComparableWrapper(new GenericInternalRow(reducedRow), expressions)
   }
 }
 

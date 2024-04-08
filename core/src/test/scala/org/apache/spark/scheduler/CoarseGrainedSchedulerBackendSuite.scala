@@ -179,6 +179,53 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     }
   }
 
+  // Every item corresponds to (CPU resources per task, GPU resources per task,
+  // and the GPU addresses assigned to all tasks).
+  Seq(
+    (1, 1, Array(Array("0"), Array("1"), Array("2"), Array("3"))),
+    (1, 2, Array(Array("0", "1"), Array("2", "3"))),
+    (1, 4, Array(Array("0", "1", "2", "3"))),
+    (2, 1, Array(Array("0"), Array("1"))),
+    (4, 1, Array(Array("0"))),
+    (4, 2, Array(Array("0", "1"))),
+    (2, 2, Array(Array("0", "1"), Array("2", "3"))),
+    (4, 4, Array(Array("0", "1", "2", "3"))),
+    (1, 3, Array(Array("0", "1", "2"))),
+    (3, 1, Array(Array("0")))
+  ).foreach { case (taskCpus, taskGpus, expectedGpuAddresses) =>
+    test(s"SPARK-47663 end to end test validating if task cpus:${taskCpus} and " +
+      s"task gpus: ${taskGpus} works") {
+      withTempDir { dir =>
+        val discoveryScript = createTempScriptWithExpectedOutput(
+          dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
+        val conf = new SparkConf()
+          .set(CPUS_PER_TASK, taskCpus)
+          .setMaster("local-cluster[1, 4, 1024]")
+          .setAppName("test")
+          .set(WORKER_GPU_ID.amountConf, "4")
+          .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
+          .set(EXECUTOR_GPU_ID.amountConf, "4")
+          .set(TASK_GPU_ID.amountConf, taskGpus.toString)
+
+        sc = new SparkContext(conf)
+        eventually(timeout(executorUpTimeout)) {
+          // Ensure all executors have been launched.
+          assert(sc.getExecutorIds().length == 1)
+        }
+
+        val numPartitions = Seq(4 / taskCpus, 4 / taskGpus).min
+        val ret = sc.parallelize(1 to 20, numPartitions).mapPartitions { _ =>
+          val tc = TaskContext.get()
+          assert(tc.cpus() == taskCpus)
+          val gpus = tc.resources()("gpu").addresses
+          Iterator.single(gpus)
+        }.collect()
+
+        assert(ret === expectedGpuAddresses)
+      }
+    }
+  }
+
   // Here we just have test for one happy case instead of all cases: other cases are covered in
   // FsHistoryProviderSuite.
   test("custom log url for Spark UI is applied") {

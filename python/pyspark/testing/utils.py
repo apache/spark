@@ -52,7 +52,7 @@ except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
@@ -154,6 +154,8 @@ class QuietTest:
 
 class PySparkTestCase(unittest.TestCase):
     def setUp(self):
+        from pyspark import SparkContext
+
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         self.sc = SparkContext("local[4]", class_name)
@@ -173,6 +175,8 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from pyspark import SparkContext
+
         cls.sc = SparkContext("local[4]", cls.__name__, conf=cls.conf())
 
     @classmethod

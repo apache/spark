@@ -22,8 +22,6 @@ A collections of builtin avro functions
 
 from typing import Dict, Optional, TYPE_CHECKING, cast
 
-from py4j.java_gateway import JVMView
-
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.utils import get_active_spark_context, try_remote_avro_functions
 from pyspark.util import _print_missing_jar
@@ -79,6 +77,7 @@ def from_avro(
     >>> avroDf.select(from_avro(avroDf.avro, jsonFormatSchema).alias("value")).collect()
     [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
+    from py4j.java_gateway import JVMView
 
     sc = get_active_spark_context()
     try:
@@ -128,6 +127,7 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     >>> df.select(to_avro(df.value, jsonFormatSchema).alias("suite")).collect()
     [Row(suite=bytearray(b'\\x02\\x00'))]
     """
+    from py4j.java_gateway import JVMView
 
     sc = get_active_spark_context()
     try:
