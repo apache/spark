@@ -110,8 +110,8 @@ class Progress:
         handlers : list of ProgressHandler
           A list of handlers that will be called when the progress bar is updated.
         """
-        self._ticks = None
-        self._tick = None
+        self._ticks: typing.Optional[int] = None
+        self._tick: typing.Optional[int] = None
         x, y = get_terminal_size()
         self._min_width = min_width
         self._char = char
@@ -143,7 +143,7 @@ class Progress:
         exc_type: typing.Optional[typing.Type[BaseException]],
         exception: typing.Optional[BaseException],
         exc_tb: typing.Optional[TracebackType],
-    ) -> bool:
+    ) -> None:
         self.finish()
         return False
 
@@ -165,7 +165,7 @@ class Progress:
             self._ticks = total_tasks
             self._tick = completed_tasks
             self._bytes_read = sum(map(lambda x: x.num_bytes_read, stages))
-            if self._tick >= 0:
+            if self._tick is not None and self._tick >= 0:
                 self.output()
             self._running = inflight_tasks
             self._stages = stages
@@ -180,7 +180,7 @@ class Progress:
 
     def output(self) -> None:
         """Writes the progress bar out."""
-        if self._enabled:
+        if self._enabled and self._tick is not None and self._ticks is not None:
             val = int((self._tick / float(self._ticks)) * self._width)
             bar = self._char * val + "-" * (self._width - val)
             percent_complete = (self._tick / self._ticks) * 100
