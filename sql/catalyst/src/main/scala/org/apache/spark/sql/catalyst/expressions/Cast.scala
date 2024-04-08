@@ -1213,9 +1213,9 @@ case class Cast(
       val dataTypeArg = ctx.addReferenceObj("dataType", to)
       val zoneIdArg = ctx.addReferenceObj("zoneId", timeZoneId)
       val failOnError = evalMode != EvalMode.TRY
+      val cls = classOf[variant.VariantGet].getName
       code"""
-        Object $tmp = org.apache.spark.sql.catalyst.expressions.variant.VariantGet.cast(
-          $c, $dataTypeArg, $failOnError, $zoneIdArg);
+        Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneIdArg);
         if ($tmp == null) {
           $evNull = true;
         } else {
