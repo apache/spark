@@ -135,7 +135,7 @@ class SparkFiles:
 
         Examples
         --------
-        >>> from pyspark.files import SparkFiles
+        >>> from pyspark.core.files import SparkFiles
         >>> SparkFiles.getRootDirectory()  # doctest: +SKIP
         '.../spark-a904728e-08d3-400c-a872-cfd82fd6dcd2/userFiles-648cf6d6-bb2c-4f53-82bd-e658aba0c5de'
         """

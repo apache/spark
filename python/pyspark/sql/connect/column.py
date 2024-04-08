@@ -331,6 +331,23 @@ class Column:
 
     astype = cast
 
+    def try_cast(self, dataType: Union[DataType, str]) -> "Column":
+        if isinstance(dataType, (DataType, str)):
+            return Column(
+                CastExpression(
+                    expr=self._expr,
+                    data_type=dataType,
+                    eval_mode="try",
+                )
+            )
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+            )
+
+    try_cast.__doc__ = PySparkColumn.try_cast.__doc__
+
     def __repr__(self) -> str:
         return "Column<'%s'>" % self._expr.__repr__()
 
@@ -486,6 +503,7 @@ Column.__doc__ = PySparkColumn.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -493,7 +511,9 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.column.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.column tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.column tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

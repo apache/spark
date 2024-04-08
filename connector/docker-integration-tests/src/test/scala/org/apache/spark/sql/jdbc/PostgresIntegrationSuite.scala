@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.util.Properties
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types._
@@ -122,18 +123,19 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE char_types (" +
-      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar(1))"
+      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar(1)," +
+      "c5 bpchar, c6 char)"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO char_types VALUES " +
-      "('abcd', 'efgh', 'ijkl', 'mnop', 'q')").executeUpdate()
+      "('abcd', 'efgh', 'ijkl', 'mnop', 'q', 'eason', 'c' )").executeUpdate()
 
-    // SPARK-42916: character/char/bpchar w/o length specifier defaults to int max value, this will
-    // cause OOM as it will be padded with ' ' to 2147483647.
     conn.prepareStatement("CREATE TABLE char_array_types (" +
-      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[], c4 bpchar(1)[])"
+      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[]," +
+      "c4 bpchar(1)[], c5 bpchar[])"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO char_array_types VALUES " +
-      """('{"a", "bcd"}', '{"ef", "gh"}', '{"i", "j", "kl"}', '{"mnop"}', '{"q", "r"}')"""
+      """('{"a", "bcd"}', '{"ef", "gh"}', '{"i", "j", "kl"}', '{"mnop"}', '{"q", "r"}',
+        | '{"Eason", "Ethan"}')""".stripMargin
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE money_types (" +
@@ -176,6 +178,18 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE test_bit_array (c1 bit(1)[], c2 bit(5)[])").executeUpdate()
     conn.prepareStatement("INSERT INTO test_bit_array VALUES (ARRAY[B'1', B'0'], " +
       "ARRAY[B'00001', B'00010'])").executeUpdate()
+
+    conn.prepareStatement(
+      """
+        |CREATE TYPE complex AS (
+        |    b       bool,
+        |    d       double precision
+        |)""".stripMargin).executeUpdate()
+    conn.prepareStatement("CREATE TABLE complex_table (c1 complex)").executeUpdate()
+    conn.prepareStatement("INSERT INTO complex_table VALUES (ROW(true, 1.0))").executeUpdate()
+    conn.prepareStatement("CREATE DOMAIN myint AS integer CHECK (VALUE > 0)").executeUpdate()
+    conn.prepareStatement("CREATE TABLE domain_table (c1 myint)").executeUpdate()
+    conn.prepareStatement("INSERT INTO domain_table VALUES (1)").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -387,26 +401,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("character type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_types", new Properties)
-    val row = df.collect()
-    assert(row.length == 1)
-    assert(row(0).length === 5)
-    assert(row(0).getString(0) === "abcd")
-    assert(row(0).getString(1) === "efgh")
-    assert(row(0).getString(2) === "ijkl")
-    assert(row(0).getString(3) === "mnop")
-    assert(row(0).getString(4) === "q")
+    checkAnswer(df, Row("abcd", "efgh", "ijkl", "mnop", "q", "eason", "c"))
   }
 
   test("SPARK-32576: character array type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "char_array_types", new Properties)
-    val row = df.collect()
-    assert(row.length == 1)
-    assert(row(0).length === 5)
-    assert(row(0).getSeq[String](0) === Seq("a   ", "bcd "))
-    assert(row(0).getSeq[String](1) === Seq("ef  ", "gh  "))
-    assert(row(0).getSeq[String](2) === Seq("i", "j", "kl"))
-    assert(row(0).getSeq[String](3) === Seq("mnop"))
-    assert(row(0).getSeq[String](4) === Seq("q", "r"))
+    checkAnswer(df, Row(Seq("a   ", "bcd "), Seq("ef  ", "gh  "), Seq("i", "j", "kl"),
+      Seq("mnop"), Seq("q", "r"), Seq("Eason", "Ethan")))
   }
 
   test("SPARK-34333: money type tests") {
@@ -504,5 +505,56 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val expected = Row(Array(true, false), Array(
       Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
     checkAnswer(df, expected)
+  }
+
+  test("SPARK-47691: multiple dimensional array") {
+    sql("select array(1, 2) as col0").write
+      .jdbc(jdbcUrl, "single_dim_array", new Properties)
+    checkAnswer(spark.read.jdbc(jdbcUrl, "single_dim_array", new Properties), Row(Seq(1, 2)))
+
+    sql("select array(array(1, 2), array(3, 4)) as col0").write
+      .jdbc(jdbcUrl, "double_dim_array", new Properties)
+    sql("select array(array(array(1, 2), array(3, 4)), array(array(5, 6), array(7, 8))) as col0")
+      .write.jdbc(jdbcUrl, "triple_dim_array", new Properties)
+    // Reading multi-dimensional array is not supported yet.
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read.jdbc(jdbcUrl, "double_dim_array", new Properties).collect()
+      },
+      errorClass = null)
+    checkError(
+      exception = intercept[SparkException] {
+        spark.read.jdbc(jdbcUrl, "triple_dim_array", new Properties).collect()
+      },
+      errorClass = null)
+  }
+
+  test("SPARK-47701: Reading complex type") {
+    val df = spark.read.jdbc(jdbcUrl, "complex_table", new Properties)
+    checkAnswer(df, Row("(t,1)"))
+    val df2 = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT (c1).b, (c1).d FROM complex_table").load()
+    checkAnswer(df2, Row(true, 1.0d))
+  }
+
+  test("SPARK-47701: Range Types") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT '[3,7)'::int4range")
+      .load()
+    checkAnswer(df, Row("[3,7)"))
+  }
+
+  test("SPARK-47710: Reading Domain Types") {
+    val df = spark.read.jdbc(jdbcUrl, "domain_table", new Properties)
+    checkAnswer(df, Row(1))
+  }
+
+  test("SPARK-47710: Reading Object Identifier Types") {
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT 1::oid, 'bar'::regclass, 'integer'::regtype").load()
+    checkAnswer(df, Row(1, "bar", "integer"))
   }
 }
