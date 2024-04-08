@@ -47,9 +47,9 @@ object LogKey extends Enumeration {
   val COUNT = Value
   val CSV_HEADER_COLUMN_NAME = Value
   val CSV_HEADER_COLUMN_NAMES = Value
+  val CSV_HEADER_LENGTH = Value
   val CSV_SCHEMA_FIELD_NAME = Value
   val CSV_SCHEMA_FIELD_NAMES = Value
-  val CSV_HEADER_LENGTH = Value
   val CSV_SOURCE = Value
   val DRIVER_ID = Value
   val END_POINT = Value
