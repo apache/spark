@@ -51,7 +51,7 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
     val input = Seq(BoundReference(0, IntegerType, nullable = true))
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
       val obj = UnsafeProjection.createObject(input)
-      assert(obj.getClass.getName.contains("GeneratedClass$SpecificUnsafeProjection"))
+      assert(obj.getClass.getName.matches(".*GeneratedClass\\$\\d*\\$SpecificUnsafeProjection"))
     }
 
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> noCodegen) {
@@ -64,7 +64,7 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
     val input = Seq(BoundReference(0, IntegerType, nullable = true))
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
       val obj = MutableProjection.createObject(input)
-      assert(obj.getClass.getName.contains("GeneratedClass$SpecificMutableProjection"))
+      assert(obj.getClass.getName.matches(".*GeneratedClass\\$\\d*\\$SpecificMutableProjection"))
     }
 
     withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> noCodegen) {

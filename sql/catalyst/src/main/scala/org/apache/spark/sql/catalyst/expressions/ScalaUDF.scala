@@ -1192,7 +1192,13 @@ case class ScalaUDF(
 
   private def functionName = udfName.map { uName => s"$uName ($funcCls)" }.getOrElse(funcCls)
 
-  lazy val funcCls = Utils.getSimpleName(function.getClass)
+  lazy val funcCls = {
+    val clsName = Utils.getSimpleName(function.getClass)
+    // remove the random lambda-proxy hash to make generated code stable
+    if (clsName.contains("$$Lambda")) clsName.split("/0x")(0)
+    else clsName
+  }
+
   lazy val inputTypesString = children.map(_.dataType.catalogString).mkString(", ")
   lazy val outputType = dataType.catalogString
 

@@ -412,9 +412,9 @@ class QueryExecutionErrorsSuite
     spark.udf.register("luckyCharOfWord", luckyCharOfWord)
 
     val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
-      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda/\\w+\\)`"
+      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\)`"
     } else {
-      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+\\)`"
+      "`luckyCharOfWord \\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+\\)`"
     }
     val reason = if (Utils.isJavaVersionAtLeast21) {
       "java.lang.StringIndexOutOfBoundsException: Range \\[5, 6\\) out of bounds for length 5"
@@ -443,9 +443,9 @@ class QueryExecutionErrorsSuite
       word.substring(index, index + 1)
     }}
     val functionNameRegex = if (Utils.isJavaVersionAtLeast21) {
-      "`QueryExecutionErrorsSuite\\$\\$Lambda/\\w+`"
+      "`QueryExecutionErrorsSuite\\$\\$Lambda`"
     } else {
-      "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+`"
+      "`QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+`"
     }
     val reason = if (Utils.isJavaVersionAtLeast21) {
       "java.lang.StringIndexOutOfBoundsException: Range \\[5, 6\\) out of bounds for length 5"
