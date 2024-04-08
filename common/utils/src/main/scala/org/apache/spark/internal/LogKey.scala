@@ -45,6 +45,7 @@ object LogKey extends Enumeration {
   val CONTAINER_ID = Value
   val COUNT = Value
   val CSV_HEADER_LENGTH = Value
+  val CSV_SOURCE = Value
   val DRIVER_ID = Value
   val END_POINT = Value
   val ERROR = Value

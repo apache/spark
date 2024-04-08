@@ -288,7 +288,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case a @ _ =>
           logWarning(
             log"Failed to extract state value watermark from condition " +
-              log"${MDC(JOIN_CONDITION, exprToCollectFrom)} due to $a")
+              log"${MDC(JOIN_CONDITION, exprToCollectFrom)} due to ${MDC(JOIN_CONDITION, a)}")
           invalid = true
           Seq.empty
       }

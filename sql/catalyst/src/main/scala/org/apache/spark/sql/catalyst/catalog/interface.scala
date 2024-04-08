@@ -33,7 +33,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKey.COLUMN_NAME
+import org.apache.spark.internal.LogKey._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, Resolver, UnresolvedLeafNode}
@@ -834,7 +834,7 @@ object CatalogColumnStat extends Logging {
     } catch {
       case NonFatal(e) =>
         logWarning(log"Failed to parse column statistics for column " +
-          log"${MDC(COLUMN_NAME, colName)} in table $table", e)
+          log"${MDC(COLUMN_NAME, colName)} in table ${MDC(RELATION_NAME, table)}", e)
         None
     }
   }
