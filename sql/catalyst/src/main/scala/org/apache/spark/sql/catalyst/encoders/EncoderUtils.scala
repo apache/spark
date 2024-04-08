@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, C
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalIntegerType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ObjectType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ObjectType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
 
 /**
  * Helper class for Generating [[ExpressionEncoder]]s.
@@ -122,7 +122,8 @@ object EncoderUtils {
     TimestampType -> classOf[PhysicalLongType.InternalType],
     TimestampNTZType -> classOf[PhysicalLongType.InternalType],
     BinaryType -> classOf[PhysicalBinaryType.InternalType],
-    CalendarIntervalType -> classOf[CalendarInterval]
+    CalendarIntervalType -> classOf[CalendarInterval],
+    VariantType -> classOf[VariantVal]
   )
 
   val typeBoxedJavaMapping: Map[DataType, Class[_]] = Map[DataType, Class[_]](
