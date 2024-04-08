@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Collation, ConcatWs, Expressio
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField}
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class CollationStringExpressionsSuite
   extends QueryTest
